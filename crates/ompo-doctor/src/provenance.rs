@@ -71,6 +71,110 @@ pub struct RegistryProbe {
     pub unregistered: Vec<String>,
 }
 
+/// Exit code for an installed artifact whose verb set exactly matches this source.
+pub const PARITY_EXIT_CURRENT: u8 = 0;
+/// Exit code for an installed artifact whose verb set differs from this source.
+pub const PARITY_EXIT_STALE: u8 = 1;
+/// Exit code when the installed artifact cannot be measured safely.
+pub const PARITY_EXIT_UNMEASURED: u8 = 4;
+const PARITY_DEADLINE: Duration = Duration::from_secs(10);
+
+/// Typed comparison of one installed ompo artifact's advertised verbs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct InstalledVerbParityProbe {
+    pub status: &'static str,
+    pub exit_code: u8,
+    pub reason_code: String,
+    pub message: String,
+    pub detail: String,
+    pub provenance: BuildProvenance,
+    pub installed_path: String,
+    pub installed_verbs: Vec<String>,
+    pub missing: Vec<String>,
+    pub unexpected: Vec<String>,
+}
+
+/// Pure parity result used by the subprocess probe and its unit tests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VerbParityComparison {
+    pub status: &'static str,
+    pub missing: Vec<String>,
+    pub unexpected: Vec<String>,
+}
+
+/// Compare installed verbs with the canonical source umbrella verb set.
+#[must_use]
+pub fn compare_verb_parity(installed: &[String]) -> VerbParityComparison {
+    let expected: BTreeSet<&str> = crate::umbrella::VERBS.iter().copied().collect();
+    let installed_set: BTreeSet<&str> = installed.iter().map(String::as_str).collect();
+    let missing = expected.iter().filter(|verb| !installed_set.contains(**verb)).map(|verb| (*verb).to_owned()).collect::<Vec<_>>();
+    let unexpected = installed_set.iter().filter(|verb| !expected.contains(**verb)).map(|verb| (*verb).to_owned()).collect::<Vec<_>>();
+    let status = if missing.is_empty() && unexpected.is_empty() { "CURRENT" } else { "STALE" };
+    VerbParityComparison { status, missing, unexpected }
+}
+
+/// Parse the exact capabilities envelope emitted by an installed ompo binary.
+pub fn parse_installed_capabilities_verbs(raw: &str) -> Result<Vec<String>, String> {
+    let value: Value = serde_json::from_str(raw).map_err(|error| format!("capabilities response is invalid JSON: {error}"))?;
+    if value.get("schema_version").and_then(Value::as_str) != Some(crate::umbrella::SCHEMA_VERSION) {
+        return Err("capabilities response has an unsupported schema_version".to_owned());
+    }
+    if value.get("command").and_then(Value::as_str) != Some("capabilities") {
+        return Err("capabilities response is not the capabilities command".to_owned());
+    }
+    if value.get("status").and_then(Value::as_str) != Some("OK") {
+        return Err("capabilities response did not report status=OK".to_owned());
+    }
+    let verbs = value.get("data").and_then(Value::as_object).and_then(|data| data.get("verbs")).and_then(Value::as_array).ok_or_else(|| "capabilities response has no data.verbs array".to_owned())?;
+    if verbs.is_empty() {
+        return Err("capabilities response has an empty data.verbs array".to_owned());
+    }
+    let mut parsed = Vec::with_capacity(verbs.len());
+    let mut seen = BTreeSet::new();
+    for verb in verbs {
+        let verb = verb.as_str().filter(|verb| !verb.is_empty()).ok_or_else(|| "capabilities response data.verbs contains a non-string or empty verb".to_owned())?;
+        if !seen.insert(verb) {
+            return Err(format!("capabilities response data.verbs repeats {verb:?}"));
+        }
+        parsed.push(verb.to_owned());
+    }
+    Ok(parsed)
+}
+
+fn parity_result(installed_path: String, status: &'static str, exit_code: u8, reason_code: String, message: String, detail: String, installed_verbs: Vec<String>, missing: Vec<String>, unexpected: Vec<String>) -> InstalledVerbParityProbe {
+    InstalledVerbParityProbe { status, exit_code, reason_code, message, detail, provenance: BuildProvenance::current(), installed_path, installed_verbs, missing, unexpected }
+}
+
+/// Execute an installed ompo path and compare its capabilities verbs with this source.
+#[must_use]
+pub fn probe_installed_verb_parity(installed: &Path) -> InstalledVerbParityProbe {
+    let installed_path = installed.display().to_string();
+    let mut command = Command::new(installed);
+    command.args(["capabilities", "--json"]);
+    let output = match bounded_output(&mut command, PARITY_DEADLINE) {
+        BoundedOutcome::TimedOut => return parity_result(installed_path, "UNMEASURED", PARITY_EXIT_UNMEASURED, "OMPO_VERB_PARITY_TIMEOUT".to_owned(), "installed ompo could not be measured".to_owned(), format!("capabilities probe exceeded {}s", PARITY_DEADLINE.as_secs()), Vec::new(), Vec::new(), Vec::new()),
+        BoundedOutcome::Unspawned(error) => return parity_result(installed_path, "UNMEASURED", PARITY_EXIT_UNMEASURED, "OMPO_VERB_PARITY_UNRUNNABLE".to_owned(), "installed ompo could not be measured".to_owned(), format!("capabilities probe could not be spawned: {error}"), Vec::new(), Vec::new(), Vec::new()),
+        BoundedOutcome::Completed(output) => output,
+    };
+    if !output.status.success() {
+        return parity_result(installed_path, "UNMEASURED", PARITY_EXIT_UNMEASURED, "OMPO_VERB_PARITY_CHILD_FAILED".to_owned(), "installed ompo could not be measured".to_owned(), format!("capabilities probe exited {} detail={}", output.status, first_line(&output.stderr)), Vec::new(), Vec::new(), Vec::new());
+    }
+    let raw = match std::str::from_utf8(&output.stdout) {
+        Ok(raw) => raw,
+        Err(error) => return parity_result(installed_path, "UNMEASURED", PARITY_EXIT_UNMEASURED, "OMPO_VERB_PARITY_INVALID_UTF8".to_owned(), "installed ompo could not be measured".to_owned(), format!("capabilities response is not UTF-8: {error}"), Vec::new(), Vec::new(), Vec::new()),
+    };
+    let installed_verbs = match parse_installed_capabilities_verbs(raw) {
+        Ok(verbs) => verbs,
+        Err(detail) => return parity_result(installed_path, "UNMEASURED", PARITY_EXIT_UNMEASURED, "OMPO_VERB_PARITY_MALFORMED".to_owned(), "installed ompo could not be measured".to_owned(), detail, Vec::new(), Vec::new(), Vec::new()),
+    };
+    let comparison = compare_verb_parity(&installed_verbs);
+    let provenance = BuildProvenance::current();
+    let detail = if comparison.status == "CURRENT" { format!("source_revision={} build_commit={} installed_path={} verbs={}", provenance.source_revision, provenance.build_commit, installed.display(), installed_verbs.len()) } else { format!("source_revision={} build_commit={} installed_path={} missing={:?} unexpected={:?}", provenance.source_revision, provenance.build_commit, installed.display(), comparison.missing, comparison.unexpected) };
+    let message = if comparison.status == "CURRENT" { "installed verb set matches current source" } else { "installed verb set differs from current source" };
+    let (exit_code, reason_code) = if comparison.status == "CURRENT" { (PARITY_EXIT_CURRENT, "OMPO_VERB_PARITY_CURRENT") } else { (PARITY_EXIT_STALE, "OMPO_VERB_PARITY_STALE") };
+    parity_result(installed_path, comparison.status, exit_code, reason_code.to_owned(), message.to_owned(), detail, installed_verbs, comparison.missing, comparison.unexpected)
+}
+
 /// Compare adapter ids in both directions, preserving each offending id.
 #[must_use]
 pub fn registry_parity(
@@ -288,5 +392,30 @@ mod tests {
         )
         .expect("valid metadata");
         assert_eq!(targets.into_iter().collect::<Vec<_>>(), vec!["alpha"]);
+    }
+    #[test]
+    fn installed_verbs_exactly_match_source() {
+        let installed = crate::umbrella::VERBS.iter().map(|verb| (*verb).to_owned()).collect::<Vec<_>>();
+        let comparison = compare_verb_parity(&installed);
+        assert_eq!(comparison.status, "CURRENT");
+        assert!(comparison.missing.is_empty());
+        assert!(comparison.unexpected.is_empty());
+    }
+
+    #[test]
+    fn installed_verbs_report_missing_expected_verb() {
+        let installed = crate::umbrella::VERBS.iter().copied().filter(|verb| *verb != "parity").map(str::to_owned).collect::<Vec<_>>();
+        let comparison = compare_verb_parity(&installed);
+        assert_eq!(comparison.status, "STALE");
+        assert_eq!(comparison.missing, vec!["parity"]);
+        assert!(comparison.unexpected.is_empty());
+    }
+
+    #[test]
+    fn malformed_and_empty_capabilities_responses_are_rejected() {
+        assert!(parse_installed_capabilities_verbs("not-json").is_err());
+        assert!(parse_installed_capabilities_verbs("{}").is_err());
+        let empty = r#"{"schema_version":"omp.umbrella/v1","command":"capabilities","status":"OK","data":{"verbs":[]}}"#;
+        assert!(parse_installed_capabilities_verbs(empty).is_err());
     }
 }

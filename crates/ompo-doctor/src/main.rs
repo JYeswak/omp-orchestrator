@@ -32,6 +32,7 @@ use ompo_doctor::omp_messages;
 use ompo_doctor::omp_process;
 use ompo_doctor::state_triad;
 use ompo_doctor::umbrella::{self, ProbeId};
+use ompo_doctor::provenance;
 use ompo_doctor::{current_repo, run_doctor};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -73,6 +74,7 @@ fn main() -> ExitCode {
         }
         "help" => run_help(rest),
         "capabilities" => run_capabilities(rest),
+        "parity" => run_parity(rest),
         "init" => run_init(rest),
         "start" => run_start(rest),
         "portal" => run_portal(rest),
@@ -728,6 +730,71 @@ fn run_capabilities(rest: &[String]) -> ExitCode {
         );
         ExitCode::SUCCESS
     }
+}
+
+/// `ompo parity --installed PATH [--json]` compares an installed artifact's advertised verbs
+/// against the canonical source umbrella. A malformed or unrunnable artifact is never current.
+fn run_parity(rest: &[String]) -> ExitCode {
+    let mut installed: Option<PathBuf> = None;
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--installed" => {
+                index += 1;
+                let Some(path) = rest.get(index) else {
+                    eprintln!("ompo parity: UAD_MISSING_VALUE flag=--installed");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                installed = Some(PathBuf::from(path));
+            }
+            "--help" | "-h" => {
+                println!("{}", umbrella::usage());
+                return ExitCode::SUCCESS;
+            }
+            other => {
+                eprintln!("ompo parity: unknown argument {other:?} hint=ompo parity --installed PATH [--json]");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+        }
+        index += 1;
+    }
+    let Some(installed) = installed else {
+        eprintln!("ompo parity: UAD_MISSING_VALUE flag=--installed");
+        return ExitCode::from(EXIT_BAD_INVOCATION);
+    };
+    let probe = provenance::probe_installed_verb_parity(&installed);
+    let payload = json!({
+        "status": probe.status,
+        "exit_code": probe.exit_code,
+        "reason_code": &probe.reason_code,
+        "message": &probe.message,
+        "detail": &probe.detail,
+        "installed_path": &probe.installed_path,
+        "source_revision": probe.provenance.source_revision,
+        "build_commit": probe.provenance.build_commit,
+        "provenance": probe.provenance,
+        "installed_verbs": &probe.installed_verbs,
+        "missing": &probe.missing,
+        "unexpected": &probe.unexpected,
+    });
+    if json_output {
+        let envelope = umbrella::envelope("parity", probe.status, payload);
+        match serde_json::to_string(&envelope) {
+            Ok(text) if probe.exit_code == provenance::PARITY_EXIT_CURRENT => println!("{text}"),
+            Ok(text) => eprintln!("{text}"),
+            Err(error) => {
+                eprintln!("ompo parity: UNMEASURED detail=cannot encode report: {error}");
+                return ExitCode::from(provenance::PARITY_EXIT_UNMEASURED);
+            }
+        }
+    } else if probe.exit_code == provenance::PARITY_EXIT_CURRENT {
+        println!("OMPO_PARITY status={} installed_path={} source_revision={} build_commit={} message={} detail={}", probe.status, probe.installed_path, probe.provenance.source_revision, probe.provenance.build_commit, probe.message, probe.detail);
+    } else {
+        eprintln!("OMPO_PARITY status={} installed_path={} source_revision={} build_commit={} message={} detail={}", probe.status, probe.installed_path, probe.provenance.source_revision, probe.provenance.build_commit, probe.message, probe.detail);
+    }
+    ExitCode::from(probe.exit_code)
 }
 
 /// `ompo init` — the missing command surface over `ompo_start::inception::initialize`.

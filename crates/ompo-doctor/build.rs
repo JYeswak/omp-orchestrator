@@ -22,6 +22,9 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const UNKNOWN: &str = "unknown";
 
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
@@ -29,6 +32,10 @@ fn main() {
         .parent()
         .expect("crates/<pkg> has a parent")
         .to_path_buf();
+    let head = git_head(&manifest_dir);
+    println!("cargo:rustc-env=OMPO_BUILD_COMMIT={head}");
+    println!("cargo:rustc-env=OMPO_SOURCE_REVISION={head}");
+    watch_git_inputs(&manifest_dir);
 
     println!("cargo:rerun-if-changed={}", crates_dir.display());
 
@@ -72,6 +79,52 @@ fn main() {
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("adapters.rs");
     std::fs::write(&out, generated)
         .unwrap_or_else(|error| panic!("cannot write {}: {error}", out.display()));
+}
+
+/// Resolve the build's source identity from checkout HEAD, with a deterministic fallback.
+fn git_head(manifest_dir: &Path) -> String {
+    Command::new("git")
+        .arg("-C")
+        .arg(manifest_dir)
+        .args(["rev-parse", "--verify", "HEAD"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            let head = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+            (!head.is_empty()).then_some(head)
+        })
+        .unwrap_or_else(|| UNKNOWN.to_owned())
+}
+
+/// Watch every git input that can change the value returned by git_head.
+fn watch_git_inputs(manifest_dir: &Path) {
+    let git_dir = Command::new("git")
+        .arg("-C")
+        .arg(manifest_dir)
+        .args(["rev-parse", "--git-dir"])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| {
+            let raw = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+            if raw.is_empty() {
+                return None;
+            }
+            let path = PathBuf::from(raw);
+            Some(if path.is_absolute() { path } else { manifest_dir.join(path) })
+        });
+    let Some(git_dir) = git_dir else { return; };
+    for name in ["HEAD", "index", "packed-refs"] {
+        println!("cargo:rerun-if-changed={}", git_dir.join(name).display());
+    }
+    if let Ok(contents) = std::fs::read_to_string(git_dir.join("HEAD")) {
+        if let Some(reference) = contents.strip_prefix("ref: ").map(str::trim) {
+            if !reference.is_empty() {
+                println!("cargo:rerun-if-changed={}", git_dir.join(reference).display());
+            }
+        }
+    }
 }
 
 /// Every bin target name cargo would discover for one package directory.

@@ -159,6 +159,7 @@ pub struct Config {
     command_timeout: Duration,
     max_ticks: Option<u64>,
     tick_monitor: String,
+    ompo: String,
     br: String,
     am: String,
     /// Path to `bv`, the dependency-graph planning brain used for ranked selection.
@@ -225,7 +226,16 @@ struct DispatchRenderRequest {
     why_now: Option<String>,
     traps_file: Option<PathBuf>,
 }
-
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OmpoPsEvidence {
+    Measured {
+        project_scopes: usize,
+        daemon_count: usize,
+    },
+    Unmeasured {
+        reason: &'static str,
+    },
+}
 fn parse_dispatch_render_args(args: &[String]) -> Result<Option<DispatchRenderRequest>, String> {
     if args.first().map(String::as_str) != Some("dispatch") {
         return Ok(None);
@@ -642,6 +652,7 @@ impl Config {
             interval,
             command_timeout,
             max_ticks,
+            ompo: env::var("OMP_OMPO_BIN").unwrap_or_else(|_| "ompo".to_owned()),
             tick_monitor: env::var("OMP_TICK_MONITOR_BIN")
                 .unwrap_or_else(|_| "tick-monitor".to_owned()),
             br: env::var("OMP_BR_BIN").unwrap_or_else(|_| "br".to_owned()),
@@ -761,6 +772,86 @@ fn require_success(program: &str, output: Output) -> Result<Vec<u8>, String> {
     ))
 }
 
+fn classify_ompo_ps_output(output: &Output) -> OmpoPsEvidence {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        let reason = if stdout.contains("UAD_UNKNOWN_VERB") || stderr.contains("UAD_UNKNOWN_VERB") {
+            "old_ompo_unknown_verb"
+        } else {
+            "ompo_ps_command_failed"
+        };
+        return OmpoPsEvidence::Unmeasured { reason };
+    }
+    let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) else {
+        return OmpoPsEvidence::Unmeasured { reason: "ompo_ps_invalid_json" };
+    };
+    let data = value.get("data").unwrap_or(&value);
+    let project_scopes = data
+        .get("project_scope_count")
+        .and_then(Value::as_u64)
+        .and_then(|count| usize::try_from(count).ok())
+        .or_else(|| data.get("project_scopes").and_then(Value::as_array).map(Vec::len));
+    let daemon_count = data
+        .get("daemon_row_count")
+        .and_then(Value::as_u64)
+        .and_then(|count| usize::try_from(count).ok())
+        .or_else(|| {
+            data.get("project_scopes")
+                .and_then(Value::as_array)
+                .map(|scopes| {
+                    scopes
+                        .iter()
+                        .filter_map(|scope| scope.get("daemons").and_then(Value::as_array))
+                        .map(Vec::len)
+                        .sum()
+                })
+        });
+    match (project_scopes, daemon_count) {
+        (Some(project_scopes), Some(daemon_count)) => OmpoPsEvidence::Measured {
+            project_scopes,
+            daemon_count,
+        },
+        _ => OmpoPsEvidence::Unmeasured { reason: "ompo_ps_invalid_shape" },
+    }
+}
+
+async fn observe_ompo_ps(cx: &Cx, config: &Config) -> Result<OmpoPsEvidence, String> {
+    let args = vec![
+        "ps".to_owned(),
+        "--repo".to_owned(),
+        config.repo.display().to_string(),
+        "--json".to_owned(),
+    ];
+    let output = match invoke(cx, config, &config.ompo, &args).await {
+        Ok(output) => output,
+        Err(error) if error.starts_with("CANCELLED supervisor context") => return Err(error),
+        Err(error) => {
+            let reason = if error.starts_with("TIMEOUT ") {
+                "ompo_ps_timeout"
+            } else {
+                "ompo_binary_unavailable"
+            };
+            return Ok(OmpoPsEvidence::Unmeasured { reason });
+        }
+    };
+    Ok(classify_ompo_ps_output(&output))
+}
+
+fn record_ompo_ps_observation(evidence: &OmpoPsEvidence) {
+    match evidence {
+        OmpoPsEvidence::Measured {
+            project_scopes,
+            daemon_count,
+        } => println!(
+            "OMPO_PS_OBSERVATION scope=repo project_scopes={project_scopes} daemon_count={daemon_count}"
+        ),
+        OmpoPsEvidence::Unmeasured { reason } => {
+            println!("OMPO_PS_UNMEASURED scope=repo reason={reason}");
+        }
+    }
+}
+
 fn string_set(value: Option<&Value>) -> BTreeSet<String> {
     value
         .and_then(Value::as_array)
@@ -770,7 +861,6 @@ fn string_set(value: Option<&Value>) -> BTreeSet<String> {
         .map(ToOwned::to_owned)
         .collect()
 }
-
 fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observation, String> {
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|error| format!("MONITOR_BLIND invalid tick-monitor JSON: {error}"))?;
@@ -5192,6 +5282,8 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         &config.tick_monitor,
         invoke(cx, config, &config.tick_monitor, &monitor_args).await?,
     )?;
+    let ompo_ps = observe_ompo_ps(cx, config).await?;
+    record_ompo_ps_observation(&ompo_ps);
     let mut observation = parse_observation(&monitor_bytes, census_gates(&config.repo))?;
     observation.panes.retain(|pane| {
         !config
@@ -6318,11 +6410,12 @@ mod tests {
             reap_finished_panes: "reap-finished-panes".to_owned(),
             omp_quick: false,
             session: "test-session".to_owned(),
+            run_subcommand: false,
             interval: Duration::from_secs(1),
             command_timeout: Duration::from_secs(5),
             max_ticks: Some(1),
+            ompo: "ompo".to_owned(),
             tick_monitor: "tick-monitor".to_owned(),
-            run_subcommand: false,
             br: "br".to_owned(),
             am: String::new(),
             bv: "bv".to_owned(),
