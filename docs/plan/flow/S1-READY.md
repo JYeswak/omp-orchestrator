@@ -768,6 +768,41 @@ the reading, not the subject, every time.**
 
 **S1 IS NOT DONE. Nine static criteria pass; the tenth — did the gate layer actually RUN — FAILS.**
 
+### R10 PROGRESS — part (b) CLOSED 2026-09-08, part (a) IN FLIGHT. The row above stays **FAIL** because R10 needs BOTH.
+
+```
+part (b)  etyur   CLOSED   DONE ALREADY-FIXED/PREMISE-FALSE   graded by %19, non-author
+part (a)  fsu7    in_progress  pane=%7   <- the whole of S1's remainder
+```
+
+**`etyur` did not close on a source reading — it closed on an EXECUTION.** `%19` ran the remote
+`gate-runner --run` and observed per-crate rows, which is the distinction the criterion exists to
+make:
+
+```
+PASS          crate=ack-spine          targets=10
+PASS          crate=ack-stage          targets=7
+FAIL          crate=agent-mail-native
+UNMEASURABLE  crate=finding            reason=MISSING_EXECUTABLE
+... additional PASS/FAIL/UNMEASURABLE rows followed
+```
+
+**A `FAIL` and an `UNMEASURABLE` row in that output are what make the grade admissible.** An
+all-green run would be indistinguishable from a vacuous one; a run that reports
+`MISSING_EXECUTABLE` as its own third outcome class is demonstrably reading real subjects. The
+source readback confirms `main.rs:231-250` iterates the checks and calls `run_declared_check`, and
+`main.rs:287-290` emits `executed` / `failed` / `declared_crates` — so *declared* and *executed*
+are separately reported, which was the premise the bead disputed.
+
+**`%19`'s NO-CLAIM, preserved:** the run is red or unmeasurable for several checks. **This grade
+proves the run half EXECUTES and is NON-VACUOUS — it does not prove every declared check passes.**
+Those are different facts and only the first was ever R10 part (b).
+
+**What part (a) still owes:** a banked verdict for **all 88 roster crates** with PASS / FAIL /
+**UNMEASURABLE** counted separately, the roster denominator re-derived rather than cited, and the
+banking proven durable across an interrupted run (`lib.rs:442`). Chunking is **withdrawn by its own
+proposer** — one `--run` banked all 88 in **1289 s** — and must not be re-proposed.
+
 **The nine were satisfiable without executing anything, and that is a defect in the criteria rather
 than an achievement to preserve.** They were written to catch missing acceptance text, unwired
 edges, false `blocked` strings, unresolved disagreements, gates that name no known-bad leg, a stale
