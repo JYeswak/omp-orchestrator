@@ -3700,10 +3700,13 @@ fn select_ready_skipping_cooldown<'a>(
     ready: &'a [String],
     heartbeat: &str,
     now: u64,
+    cleared_beads: &[String],
 ) -> (Option<&'a str>, Vec<(String, u64)>) {
     let mut skipped = Vec::new();
     let selected = ready.iter().map(String::as_str).find(|id| {
-        if let Some(age) = redispatch_cooldown_age(heartbeat, id, now) {
+        if cleared_beads.iter().any(|cleared| cleared == id) {
+            false
+        } else if let Some(age) = redispatch_cooldown_age(heartbeat, id, now) {
             skipped.push(((*id).to_owned(), age));
             false
         } else {
@@ -5204,7 +5207,8 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     //
     // `Expired` still clears and CONTINUES (the y6v5 fix). `Undatable` still
     // fails closed to a human. Neither is weakened here; both are now per-pane.
-    let marker_blocked_panes: Vec<String> = match process_pending_markers(config, tick)? {
+    let (marker_blocked_panes, marker_cleared_beads): (Vec<String>, Vec<String>) =
+        match process_pending_markers(config, tick)? {
         MarkerFence::Proceed(outcome) => {
             if outcome.cleared.is_empty() && outcome.blocked_panes.is_empty() {
                 write_heartbeat(
@@ -5214,7 +5218,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     "owner=loop next_action=continue",
                 )?;
             }
-            outcome.blocked_panes
+            let cleared_beads = outcome
+                .cleared
+                .iter()
+                .map(|row| row.1.clone())
+                .collect();
+            (outcome.blocked_panes, cleared_beads)
         }
         MarkerFence::StopUndatable {
             detail,
@@ -5620,8 +5629,22 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         }
         SupervisorDecision::Dispatch { pane, .. } => {
             let heartbeat = fs::read_to_string(&config.heartbeat_ledger).unwrap_or_default();
-            let (selected, skipped) =
-                select_ready_skipping_cooldown(&bead_ids, &heartbeat, now_unix());
+            let marker_candidate = select_next_bead(&bead_ids, &marker_cleared_beads);
+            if marker_candidate.is_none() && !marker_cleared_beads.is_empty() {
+                let detail = format!(
+                    "cleared_beads={} next_action=await-new-ready",
+                    marker_cleared_beads.join(",")
+                );
+                write_heartbeat(config, tick, "DISPATCH_MARKER_CLEARED_NO_ALTERNATE", &detail)?;
+                println!("DISPATCH_MARKER_CLEARED_NO_ALTERNATE {detail}");
+                return Ok(());
+            }
+            let (selected, skipped) = select_ready_skipping_cooldown(
+                &bead_ids,
+                &heartbeat,
+                now_unix(),
+                &marker_cleared_beads,
+            );
             for (id, age) in &skipped {
                 let detail = format!("bead={id} age_secs={age} next_action=grade-or-human");
                 write_heartbeat(config, tick, "REDISPATCH_COOLDOWN", &detail)?;
@@ -7022,9 +7045,12 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         assert_eq!(outcome.cleared.len(), 1);
         assert_eq!(outcome.cleared[0].1, latched);
         assert_eq!(outcome.cleared[0].2, "DISPATCH_INTENT_EXPIRED");
-        let ready = vec![next.to_owned(), "omp-orchestrator-third".to_owned()];
+        let ready = vec![latched.to_owned(), next.to_owned(), "omp-orchestrator-third".to_owned()];
         let cleared_beads: Vec<String> = outcome.cleared.iter().map(|row| row.1.clone()).collect();
-        let selected = select_next_bead(&ready, &cleared_beads).expect("ready queue");
+        let (selected, skipped) =
+            select_ready_skipping_cooldown(&ready, "", now_unix(), &cleared_beads);
+        assert!(skipped.is_empty());
+        let selected = selected.expect("ready queue");
         assert_eq!(selected, next);
         assert_ne!(
             selected, latched,
@@ -7175,7 +7201,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         })
         .to_string();
         let ready = vec![claimed.to_owned(), next.to_owned()];
-        let (selected, skipped) = select_ready_skipping_cooldown(&ready, &heartbeat, now);
+        let (selected, skipped) = select_ready_skipping_cooldown(&ready, &heartbeat, now, &[]);
         assert_eq!(skipped[0].0, claimed);
         assert_eq!(selected, Some(next));
         assert!(redispatch_cooldown_age(&heartbeat, claimed, now).is_some());
