@@ -38,7 +38,7 @@
 
 use crate::omp_state::{self, StateOutcome, EXIT_OK, EXIT_REFUSED, EXIT_UNMEASURED};
 use crate::umbrella;
-use omp_rpc_session::{run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY};
+use omp_rpc_session::{RpcRequest, run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -259,12 +259,30 @@ pub fn from_state_outcome(outcome: &StateOutcome) -> MessagesOutcome {
 pub fn classify_error(error: &RpcError) -> MessagesOutcome {
     from_state_outcome(&omp_state::classify_error(error))
 }
+/// The exact request set this verb issues: the handshake plus its own method.
+///
+/// `negotiate_protocol` is not optional -- `RpcSessionReport::ok()` requires
+/// `negotiated == ProtocolVersion::V2`, so it is the precondition for any answer rather
+/// than a method this verb reports on. That is why `ADOPTED_METHOD` names ONE method
+/// while the set carries two.
+#[must_use]
+pub fn request_set() -> [RpcRequest; 2] {
+    [RpcRequest::NegotiateProtocol, RpcRequest::GetMessages]
+}
+
 
 /// Drive one bounded OMP `--mode=rpc` session and read its message list.
 ///
 /// `&Cx` first, per the asupersync contract; cancellation belongs to the caller.
 pub async fn read_messages(cx: &asupersync::Cx, binary: &str) -> MessagesOutcome {
-    let config = RpcSessionConfig::with_command(OmpCommand::new(binary));
+    // NARROWED per pane 1's selector ruling. Requesting only what this verb reports
+    // does two things: it makes `ADOPTED_METHOD` honest BY CONSTRUCTION -- a report can no
+    // longer name a method the session did not issue -- and it removes the `get_messages`
+    // verb from paying a deadline for methods it never asked about. %8 measured that the
+    // four-request sequence TIMES OUT at `get_messages` on a resumed session, so a wide
+    // default is a known-bad wait for every narrow caller.
+    let config = RpcSessionConfig::with_command(OmpCommand::new(binary))
+        .with_requests(request_set());
     match run_session(cx, &config).await {
         Ok(report) => {
             let negotiated = report.negotiated.0;
@@ -526,6 +544,36 @@ mod tests {
         assert_eq!(timed_out.exit_code(), EXIT_UNMEASURED);
         assert_ne!(timed_out.exit_code(), EXIT_OK);
         assert!(timed_out.is_unmeasured());
+    }
+
+    #[test]
+    fn the_request_set_is_narrow_and_names_the_method_this_verb_reports() {
+        // The selector ruling, pinned. A WIDENING is what this leg exists to catch: requesting
+        // `get_messages` plus anything else means the verb pays a deadline for a method it does not
+        // report, and %8 measured the four-request sequence TIMING OUT at `get_messages` on a
+        // resumed session. Two entries, not three, and not four.
+        let set = request_set();
+        assert_eq!(set.len(), 2, "a wider set makes this verb wait on methods it never reports");
+        assert_eq!(set[0], RpcRequest::NegotiateProtocol, "the handshake is the precondition");
+        assert_eq!(set[1], RpcRequest::GetMessages);
+        assert_eq!(
+            set[1].command(),
+            ADOPTED_METHOD,
+            "ADOPTED_METHOD must name the method actually issued -- a report naming a method the \
+             session did not issue is the overclaim this pins shut"
+        );
+    }
+
+    #[test]
+    fn the_request_set_does_not_carry_the_other_verbs_methods() {
+        // Anti-vacuity for the leg above: asserting a length says nothing if the CONTENTS drift.
+        let set = request_set();
+        for forbidden in [RpcRequest::GetState, RpcRequest::GetSessionStats] {
+            assert!(
+                !set.contains(&forbidden),
+                "{forbidden:?} belongs to another verb and its deadline is not this verb's to pay"
+            );
+        }
     }
 
     #[test]
