@@ -277,24 +277,89 @@ fn init_refuses_a_missing_flag_value_by_name() {
     );
 }
 
-/// BOTH addressing axes exist and the unimplemented one REFUSES rather than being ignored.
-/// A flag that is accepted and does nothing is worse than one that refuses: the caller
-/// believes it was scoped.
+/// SUPERSEDED EXPECTATION, recorded rather than silently re-pointed. This leg used to assert
+/// `exit 2` + `UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED`, and it was correct while the flag
+/// was a placeholder. `omp-orchestrator-jplf.7.2` built the executor, so the OLD assertion now
+/// pins behaviour the change deliberately removed — this repo deletes such a test rather than
+/// re-pinning it to new text, and the deletion is the visible half of the decision.
+///
+/// The PROPERTY is preserved: an accepted flag that does nothing is worse than one that
+/// refuses, so the axis must produce a TYPED verdict that NAMES the adapter. What changed is
+/// only which verdicts are admissible.
 #[test]
-fn the_adapter_axis_on_doctor_refuses_instead_of_silently_ignoring() {
+fn the_adapter_axis_on_doctor_executes_and_never_silently_ignores() {
     let out = ompo()
         .args(["doctor", "--adapter", "tick-monitor"])
         .output()
         .expect("runs");
-    assert_eq!(out.status.code(), Some(2));
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    let code = out.status.code();
+    // 0 live · 1 degraded · 4 unmeasurable. NEVER 2: the name IS in the roster, so an
+    // invocation error would mean the roster check rejected a member.
     assert!(
-        stderr.contains("UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED"),
-        "got {stderr:?}"
+        matches!(code, Some(0) | Some(1) | Some(4)),
+        "the axis must EXECUTE a roster member, not refuse it; got {code:?}"
+    );
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
     );
     assert!(
-        stderr.contains("tick-monitor"),
-        "the refusal must name what was asked for; got {stderr:?}"
+        combined.contains("UAD_ADAPTER_"),
+        "a typed reason code is mandatory -- silence is the failure this leg guards; got {combined:?}"
+    );
+    assert!(
+        combined.contains("tick-monitor"),
+        "the verdict must name what was asked for; got {combined:?}"
+    );
+    assert!(
+        !combined.contains("UAD_ADAPTER_SCOPED_DOCTOR_UNIMPLEMENTED"),
+        "the placeholder must be GONE, not merely unreached; got {combined:?}"
+    );
+}
+
+/// KNOWN-BAD, and it is the leg the `--adapter` arm was missing entirely: an adapter absent
+/// from the roster must be refused BY MESSAGE, because `exit 2` is also this binary's answer
+/// to an unknown verb. `help` already satisfied this; `doctor --adapter` did not, and reported
+/// an absent name as merely unimplemented.
+#[test]
+fn doctor_adapter_refuses_a_name_absent_from_the_roster_and_names_it() {
+    let out = ompo()
+        .args(["doctor", "--adapter", "zzz-not-an-adapter"])
+        .output()
+        .expect("runs");
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "an unknown adapter is an INVOCATION error"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("UAD_UNKNOWN_ADAPTER"), "got {stderr:?}");
+    assert!(stderr.contains("absent_from_roster"), "got {stderr:?}");
+    assert!(stderr.contains("zzz-not-an-adapter"), "got {stderr:?}");
+}
+
+/// The positional spelling `docs/plan/07-installability.md:128` prescribes reaches the SAME
+/// executor as the flag, and a typo still reads as an unknown argument rather than being
+/// swallowed into the adapter axis.
+#[test]
+fn the_positional_adapter_spelling_reaches_the_same_executor_and_a_typo_does_not() {
+    let positional = ompo().args(["doctor", "tick-monitor"]).output().expect("runs");
+    let flagged = ompo()
+        .args(["doctor", "--adapter", "tick-monitor"])
+        .output()
+        .expect("runs");
+    assert_eq!(
+        positional.status.code(),
+        flagged.status.code(),
+        "two spellings of one axis must not disagree"
+    );
+    let typo = ompo().args(["doctor", "zzz-not-an-adapter"]).output().expect("runs");
+    assert_eq!(typo.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&typo.stderr);
+    assert!(
+        stderr.contains("unknown argument"),
+        "a non-roster token must stay an unknown ARGUMENT; got {stderr:?}"
     );
 }
 
