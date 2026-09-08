@@ -59,6 +59,7 @@
 //! source; it does not say the remaining 33 should be adopted.
 
 pub mod cli_probe;
+pub mod rpc_probe;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;

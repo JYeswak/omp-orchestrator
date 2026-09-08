@@ -34,4 +34,10 @@ consumes = [
     { kind = "cli", name = "models", call_site = "src/main.rs::run_cli_probe" },
     { kind = "cli", name = "stats", call_site = "src/main.rs::run_cli_probe" },
     { kind = "cli", name = "usage", call_site = "src/main.rs::run_cli_probe" },
+    { kind = "rpc_notification", name = "tool_stream_update", call_site = "src/main.rs::run_rpc_event_probe" },
+    { kind = "rpc_notification", name = "message_update", call_site = "src/main.rs::run_rpc_event_probe" },
+    { kind = "rpc_notification", name = "message_start", call_site = "src/main.rs::run_rpc_event_probe" },
+    { kind = "rpc_notification", name = "message_end", call_site = "src/main.rs::run_rpc_event_probe" },
+    { kind = "rpc_notification", name = "turn_end", call_site = "src/main.rs::run_rpc_event_probe" },
+    { kind = "rpc_notification", name = "agent_end", call_site = "src/main.rs::run_rpc_event_probe" },
 ]

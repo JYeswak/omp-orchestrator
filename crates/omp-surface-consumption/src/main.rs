@@ -12,7 +12,7 @@
 //!      broken scan and must not read as a clean pass
 
 use omp_surface_consumption::{
-    build_table, case_sites, cli_probe, derive_command_set, render_table, DeriveError,
+    build_table, case_sites, cli_probe, derive_command_set, render_table, rpc_probe, DeriveError,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -95,7 +95,22 @@ fn run_cli_probe(name: &str) -> ExitCode {
         }
     }
 }
+fn run_rpc_event_probe() -> ExitCode {
+    match rpc_probe::probe() {
+        Ok(report) => {
+            println!("{}", rpc_probe::summary(&report));
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("OMP_RPC_EVENT_ERROR reason={error}");
+            ExitCode::from(2)
+        }
+    }
+}
 fn main() -> ExitCode {
+    if std::env::args().nth(1).as_deref() == Some("--probe-rpc-events") {
+        return run_rpc_event_probe();
+    }
     if std::env::args().nth(1).as_deref() == Some("--probe-cli") {
         let Some(name) = std::env::args().nth(2) else {
             eprintln!("OMP_CLI_ERROR reason=missing_probe expected=models|stats|usage");
