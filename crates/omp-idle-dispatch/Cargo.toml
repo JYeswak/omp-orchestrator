@@ -24,7 +24,15 @@ subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
 finding = { path = "../finding" }
 loop-queue-filter = { path = "../loop-queue-filter" }
+ompo-doctor = { path = "../ompo-doctor" }
 serde_json = "1"
+
+[package.metadata.gate]
+# Exercises the profile-store parser and its known-good/known-bad legs through the reachable bin.
+checks = [{ bin = "omp-idle-dispatch", args = ["--selftest"] }]
+
+[package.metadata.omp_surface]
+consumes = [{ kind = "rpc_handler", name = "get_state", call_site = "src/profile_store.rs" }]
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -11,6 +11,7 @@ use omp_idle_dispatch::{
     receiver_transition, recently_dispatched, render_packet, IdleDispatchPaneState, TickVerdict,
     DEFAULT_CONFIRM_SECONDS, DEFAULT_COOLDOWN_SECONDS, LANE, QUEUE_WIDTH,
 };
+use omp_idle_dispatch::profile_store::{self, PaneOracleError, PaneRoute};
 use agent_mail_native::identity::{format_sender_header, resolve_pane_identity};
 use agent_mail_native::journey::ProjectKey;
 use agent_mail_native::MailClient;
@@ -18,7 +19,7 @@ use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use serde_json::{json, Value};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -386,6 +387,8 @@ fn status(json_mode: bool) -> u8 {
         "confirm_seconds": env_u64("OMP_DISPATCH_CONFIRM_S", DEFAULT_CONFIRM_SECONDS),
         "gated_on_check_sh": false,
         "process_spawning": "binary_boundary_only",
+        "profile_store_route": true,
+        "legacy_spinner_route": "unprofiled_only",
     });
     if json_mode {
         emit(row);
@@ -420,6 +423,8 @@ fn capabilities(json_mode: bool) -> u8 {
         "gated_on_check_sh": false,
         "subcommands": ["status", "why", "capabilities", "run"],
         "mutation": "ntm robot send (one call per pane; no fallback)",
+        "profile_store_route": true,
+        "legacy_spinner_route": "unprofiled_only",
         "selftest": true,
     });
     if json_mode {
@@ -538,6 +543,251 @@ fn sender_header(repo: &Path, session: &str) -> Result<String, String> {
     Ok(header)
 }
 
+fn read_pane_route(pane: &str, home: &Path, binary: &str) -> Result<PaneRoute, PaneOracleError> {
+    let runtime = RuntimeBuilder::current_thread()
+        .build()
+        .map_err(|error| PaneOracleError::Runtime(error.to_string()))?;
+    runtime.block_on(async {
+        let cx = Cx::current()
+            .ok_or_else(|| PaneOracleError::Runtime("no_runtime_context".to_owned()))?;
+        profile_store::read_pane_state(&cx, pane, home, binary).await
+    })
+}
+
+fn report_profile_store_error(pane: &str, error: &PaneOracleError) {
+    emit(json!({
+        "schema": "omp-idle-dispatch.error.v1",
+        "lane": LANE,
+        "error": "PANE_ORACLE_UNKNOWN",
+        "pane": pane,
+        "detail": error.to_string(),
+        "exit_code": error.exit_code(),
+    }));
+}
+
+fn report_profile_store_mapping(
+    pane: &str,
+    profile: &str,
+    entry: &profile_store::ValidatedSessionEntry,
+) {
+    let entry_shape = match entry.entry.shape {
+        profile_store::EntryShape::TwoLines => "two_lines",
+        profile_store::EntryShape::ThreeLines => "three_lines",
+    };
+    let selected_root = entry
+        .terminal_entry_path
+        .parent()
+        .map_or_else(|| entry.terminal_entry_path.display().to_string(), |path| path.display().to_string());
+    emit(json!({
+        "schema": "omp-idle-dispatch.pane-oracle.v1",
+        "lane": LANE,
+        "pane": pane,
+        "profile": profile,
+        "selected_root": selected_root,
+        "unprofiled_probe": entry.roots.unprofiled.status(),
+        "profiled_probe": entry.roots.profiled.as_ref().map_or("NOT_SELECTED", profile_store::RootProbe::status),
+        "entry_shape": entry_shape,
+        "state_token": entry.entry.state_token.status(),
+    }));
+}
+
+#[derive(Debug)]
+enum PaneSample {
+    Ready {
+        second: String,
+        omp_seen: bool,
+        unprofiled: bool,
+    },
+    Skipped {
+        omp_seen: bool,
+        unprofiled: bool,
+    },
+    OracleError {
+        error: PaneOracleError,
+        omp_seen: bool,
+    },
+}
+
+fn state_outcome_error(outcome: &ompo_doctor::omp_state::StateOutcome) -> PaneOracleError {
+    PaneOracleError::Runtime(format!(
+        "state_outcome={} exit_code={}",
+        outcome.reason_code(),
+        outcome.exit_code()
+    ))
+}
+
+fn typed_idle(outcome: &ompo_doctor::omp_state::StateOutcome) -> Result<bool, PaneOracleError> {
+    match profile_store::idle_from_state(outcome) {
+        Some(value) => Ok(value),
+        None => Err(state_outcome_error(outcome)),
+    }
+}
+
+fn observe_unprofiled(pane: &str, confirm_seconds: u64) -> PaneSample {
+    let first = match capture_pane(pane) {
+        Ok(capture) => capture,
+        Err(_) => {
+            return PaneSample::Skipped {
+                omp_seen: false,
+                unprofiled: true,
+            };
+        }
+    };
+    if !first.contains(omp_idle_dispatch::MODEL_BANNER)
+        || classify_capture(&first) != IdleDispatchPaneState::Idle
+    {
+        return PaneSample::Skipped {
+            omp_seen: first.contains(omp_idle_dispatch::MODEL_BANNER),
+            unprofiled: true,
+        };
+    }
+    thread::sleep(Duration::from_secs(confirm_seconds));
+    let second = match capture_pane(pane) {
+        Ok(capture) => capture,
+        Err(_) => return PaneSample::Skipped { omp_seen: true, unprofiled: true },
+    };
+    if confirm_capture_pair(&first, &second).as_str() != "IDLE" {
+        return PaneSample::Skipped {
+            omp_seen: true,
+            unprofiled: true,
+        };
+    }
+    PaneSample::Ready {
+        second,
+        omp_seen: true,
+        unprofiled: true,
+    }
+}
+
+fn observe_profiled(
+    pane: &str,
+    home: &Path,
+    binary: &str,
+    confirm_seconds: u64,
+    profile: String,
+    entry: profile_store::ValidatedSessionEntry,
+    outcome: ompo_doctor::omp_state::StateOutcome,
+) -> PaneSample {
+    report_profile_store_mapping(pane, &profile, &entry);
+    let first_idle = match typed_idle(&outcome) {
+        Ok(value) => value,
+        Err(error) => return PaneSample::OracleError { error, omp_seen: true },
+    };
+    if !first_idle {
+        return PaneSample::Skipped {
+            omp_seen: true,
+            unprofiled: false,
+        };
+    }
+    thread::sleep(Duration::from_secs(confirm_seconds));
+    let second_route = match read_pane_route(pane, home, binary) {
+        Ok(route) => route,
+        Err(error) => return PaneSample::OracleError { error, omp_seen: true },
+    };
+    let PaneRoute::Profiled {
+        profile: second_profile,
+        entry: second_entry,
+        outcome: second_outcome,
+        ..
+    } = second_route
+    else {
+        return PaneSample::OracleError {
+            error: PaneOracleError::Runtime("profile_route_changed_to_unprofiled".to_owned()),
+            omp_seen: true,
+        };
+    };
+    report_profile_store_mapping(pane, &second_profile, &second_entry);
+    if !match typed_idle(&second_outcome) {
+        Ok(value) => value,
+        Err(error) => return PaneSample::OracleError { error, omp_seen: true },
+    } {
+        return PaneSample::Skipped {
+            omp_seen: true,
+            unprofiled: false,
+        };
+    }
+    let capture = match capture_pane(pane) {
+        Ok(capture) => capture,
+        Err(_) => {
+            return PaneSample::Skipped {
+                omp_seen: true,
+                unprofiled: false,
+            };
+        }
+    };
+    PaneSample::Ready {
+        second: capture,
+        omp_seen: true,
+        unprofiled: false,
+    }
+}
+
+fn observe_pane(
+    pane: &str,
+    home: &Path,
+    binary: &str,
+    confirm_seconds: u64,
+) -> PaneSample {
+    match read_pane_route(pane, home, binary) {
+        Ok(PaneRoute::Unprofiled { .. }) => observe_unprofiled(pane, confirm_seconds),
+        Ok(PaneRoute::Profiled {
+            profile,
+            entry,
+            outcome,
+            ..
+        }) => observe_profiled(pane, home, binary, confirm_seconds, profile, entry, outcome),
+        Err(error) => PaneSample::OracleError {
+            error,
+            omp_seen: false,
+        },
+    }
+}
+
+fn accept_pane_sample(
+    sample: PaneSample,
+    omp_seen: &mut usize,
+    unprofiled_fallbacks: &mut usize,
+    idle_found: &mut usize,
+) -> Result<Option<String>, PaneOracleError> {
+    match sample {
+        PaneSample::Ready {
+            second,
+            omp_seen: observed_omp,
+            unprofiled,
+            ..
+        } => {
+            if observed_omp {
+                *omp_seen += 1;
+            }
+            if unprofiled {
+                *unprofiled_fallbacks += 1;
+            }
+            *idle_found += 1;
+            Ok(Some(second))
+        }
+        PaneSample::Skipped {
+            omp_seen: observed_omp,
+            unprofiled,
+        } => {
+            if observed_omp {
+                *omp_seen += 1;
+            }
+            if unprofiled {
+                *unprofiled_fallbacks += 1;
+            }
+            Ok(None)
+        }
+        PaneSample::OracleError {
+            error,
+            omp_seen: observed_omp,
+        } => {
+            if observed_omp {
+                *omp_seen += 1;
+            }
+            Err(error)
+        }
+    }
+}
 fn run_tick(dry_run: bool, repo: &Path) -> u8 {
     // Resolution before any side effect: a missing repo or `$HOME` must fail loudly
     // here, never mid-tick after panes have been captured.
@@ -577,6 +827,11 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
             return NO_PANES_EXIT;
         }
     };
+    let home = match home_dir() {
+        Ok(home) => home,
+        Err(error) => return config_error_exit(&error),
+    };
+    let omp_binary = std::env::var("OMP_DISPATCH_OMP_BINARY").unwrap_or_else(|_| "omp".to_owned());
     let ready_json = match command_output(finding::BR, &[loop_queue_filter::READY_SUBCOMMAND, "--limit", "0", "--json"], Some(repo)) {
         Ok(output) => output,
         Err(error) => {
@@ -605,27 +860,23 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
     let mut omp_seen = 0usize;
     let mut send_failed = false;
     let mut cursor = 0usize;
+    let mut unprofiled_fallbacks = 0usize;
+    let mut oracle_failed = false;
     for pane in panes {
-        let first = match capture_pane(&pane) {
-            Ok(capture) => capture,
-            Err(_) => continue,
+        let second = match accept_pane_sample(
+            observe_pane(&pane, &home, &omp_binary, confirm_seconds),
+            &mut omp_seen,
+            &mut unprofiled_fallbacks,
+            &mut idle_found,
+        ) {
+            Ok(Some(second)) => second,
+            Ok(None) => continue,
+            Err(error) => {
+                oracle_failed = true;
+                report_profile_store_error(&pane, &error);
+                continue;
+            }
         };
-        if !first.contains(omp_idle_dispatch::MODEL_BANNER) {
-            continue;
-        }
-        omp_seen += 1;
-        if classify_capture(&first) != IdleDispatchPaneState::Idle {
-            continue;
-        }
-        std::thread::sleep(Duration::from_secs(confirm_seconds));
-        let second = match capture_pane(&pane) {
-            Ok(capture) => capture,
-            Err(_) => continue,
-        };
-        if confirm_capture_pair(&first, &second).as_str() != "IDLE" {
-            continue;
-        }
-        idle_found += 1;
         if recently_dispatched(&ledger_text, &pane, SystemTime::now(), cooldown) {
             cooldown_skipped += 1;
             let row = json!({ "ts": utc_timestamp(SystemTime::now()), "lane": LANE, "verdict": "BLOCKED", "external_blocker": "infrastructure:pane-cooldown", "escalation_action": format!("skipped pane={pane} within {}s", cooldown.as_secs()), "pane": pane, "action": "cooldown", "invoker": invoker_name, "invoker_proof": invoker_proof });
@@ -723,7 +974,7 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
             }
         }
     }
-    let verdict = classify_tick(omp_seen, idle_found, dispatched, send_failed);
+    let verdict = classify_tick(omp_seen, idle_found, dispatched, send_failed || oracle_failed);
     if let Some((blocker, escalation)) =
         blocker_fields(verdict, omp_seen, idle_found, ready_count, dispatched)
     {
@@ -733,7 +984,7 @@ fn run_tick(dry_run: bool, repo: &Path) -> u8 {
         );
     }
     emit(
-        json!({ "schema": "omp-idle-dispatch.tick.v1", "lane": LANE, "verdict": verdict.as_str(), "idle": idle_found, "omp_seen": omp_seen, "dispatched": dispatched, "cooldown_skipped": cooldown_skipped, "ready": ready_count, "invoker": invoker_name, "invoker_proof": invoker_proof, "queue_width": QUEUE_WIDTH, "dry_run": dry_run }),
+        json!({ "schema": "omp-idle-dispatch.tick.v1", "lane": LANE, "verdict": verdict.as_str(), "idle": idle_found, "omp_seen": omp_seen, "unprofiled_fallbacks": unprofiled_fallbacks, "oracle_failed": oracle_failed, "dispatched": dispatched, "cooldown_skipped": cooldown_skipped, "ready": ready_count, "invoker": invoker_name, "invoker_proof": invoker_proof, "queue_width": QUEUE_WIDTH, "dry_run": dry_run }),
     );
     if verdict == TickVerdict::RedSendFailed {
         1
@@ -759,6 +1010,12 @@ fn selftest() -> u8 {
         classify_tick(3, 0, 0, false).as_str() == "BLOCKED",
         classify_tick(3, 1, 1, false).as_str() == "BLOCKED",
         classify_tick(3, 1, 0, true).as_str() == "RED",
+        matches!(
+            profile_store::profile_from_command("omp --profile claude"),
+            Ok(profile_store::ProfileSelection::Profiled(profile)) if profile == "claude"
+        ),
+        profile_store::parse_entry("/repo\n/session.jsonl\n").is_ok(),
+        profile_store::parse_entry("only-one-line\n").is_err(),
     ];
     let passed = tests.iter().filter(|value| **value).count();
     emit(
@@ -949,9 +1206,13 @@ mod tests {
 
     impl TempDir {
         fn create(label: &str) -> Self {
+            Self::create_in(&std::env::temp_dir(), label)
+        }
+
+        fn create_in(root: &Path, label: &str) -> Self {
             static COUNTER: AtomicU64 = AtomicU64::new(0);
             let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
+            let path = root.join(format!(
                 "omp-idle-dispatch-test-{}-{}-{}",
                 label,
                 std::process::id(),
@@ -1029,7 +1290,7 @@ mod tests {
         // A temp dir has no .git/.beads and neither do its ancestors up to the temp root
         // boundary we control; use a nested path and assert the typed error, then assert
         // the message names what was searched so the failure is self-describing.
-        let nowhere = TempDir::create("known-bad");
+        let nowhere = TempDir::create_in(Path::new("/tmp"), "known-bad");
         let start = nowhere.path().join("plain");
         fs::create_dir_all(&start).expect("create start directory");
 

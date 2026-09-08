@@ -5,7 +5,9 @@
 //! The shell lane's high-risk rule is intentionally positional: scrollback is not state.
 //! We select the last model-banner line, classify it fail-closed, and require two idle
 //! observations before a reversible packet send is planned. Filesystem, clocks, tmux, and
-//! process spawning stay in the binary so these guards are exercised by deterministic tests.
+//! The pure decision helpers stay here; profile-store resolution and its cancellable subprocess
+//! boundary live in the exported `profile_store` module so the binary can consume typed state.
+pub mod profile_store;
 
 use serde_json::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
