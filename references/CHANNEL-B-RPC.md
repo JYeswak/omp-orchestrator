@@ -110,3 +110,29 @@ repo reference is path-scoped and verified from HEAD; the callback carries the e
 **NO-CLAIM:** These probes run supervisor-spawned RPC sessions and a mutable scratch fixture. They
 do not attach to or control an existing tmux pane, prove non-empty last-assistant text, prove a
 foreign-session cursor continuation, or establish that `abort` cancels a live pane operation.
+
+## Wave 5 delta: dynamic inventory subjects
+
+**CLAIM:** Never copy an OMP surface count into a typed constant; derive the observed rows from
+the live probe, carry the producing command and measured version, and keep LSP mux strings out of
+orchestration inventory. The recursive slash-command collector measures recursive paths, not the
+top-level command count, static bundle literals, or slash aliases.
+
+**COMMAND:**
+
+~~~bash
+omp --version
+p=$(mktemp)
+omp --help >"$p"; printf 'subcommands='; awk '/^COMMANDS$/{seen=1;next} seen && NF==0{exit} seen && $1 ~ /^[a-z][a-z0-9-]*$/{n++} END{print n+0}' "$p"
+find "$B/dist/types" -mindepth 1 -maxdepth 1 -type d -print
+printf '%s\n' '{"id":"n","type":"negotiate_protocol","protocolVersion":2}' '{"id":"1","type":"get_available_commands"}' | omp --mode=rpc
+rm -f "$p"
+~~~
+
+**PROVENANCE:** installed omp/18.1.14; omp/mux* is documented in
+references/CHANNEL-C-MUX.md as LSP plumbing. The dynamic inventory/state-model change is
+committed at 83198a0; the cross-axis cli/ps allowance is b86fdc8. Re-run the commands rather
+than trusting any historical count.
+
+**NO-CLAIM:** This delta does not establish that the live OMP broker is reachable on another host,
+nor does it turn the recursive slash-command count into a CLI-subcommand count.
