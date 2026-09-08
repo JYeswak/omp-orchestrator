@@ -10,6 +10,7 @@
 //! ownership. A missing or malformed probe is represented as `UNKNOWN` and
 //! never upgraded to a healthy result.
 
+pub mod alignment;
 pub mod types_inventory;
 pub mod census_invariants;
 pub mod addressable;
