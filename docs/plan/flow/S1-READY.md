@@ -807,10 +807,29 @@ not prove R10(b), and does not authorize installation or deployment."*
 verdicts would have inflated the proof class — a crate whose single check failed and a crate
 that was never measured are different facts, and the bank keeps them apart.
 
-**THE RESIDUAL, stated loudly because a passing R10 must not hide it:** 17 crates FAIL and 12 are
-UNMEASURABLE against the declared roster. That is a **new, measured, per-crate work list** — the
-first this repo has ever had — and it is downstream of S1, not part of it. It needs its own row;
-it must not be read as S1 debt, and S1 must not be read as clean because it closed.
+**THE RESIDUAL, stated loudly because a passing R10 must not hide it — AND THE FIGURE IS DISPUTED,
+see `pd5ua`.** The banked local run reports **17 crates FAIL and 12 UNMEASURABLE** against the
+declared roster. That is a **new, measured, per-crate work list** — the first this repo has ever
+had — and it is downstream of S1, not part of it. It must not be read as S1 debt, and S1 must not
+be read as clean because it closed.
+
+**⛔ DO NOT ACT ON THAT FIGURE WITHOUT READING `pd5ua` FIRST.** Measured 2026-09-08: CI's latest
+`GATE_RUNNER` line over the **same 88-crate roster** disagrees with the bank:
+
+```
+CI run 34171417882   crates=88  pass=70  fail=16  unmeasurable=2      sum 88
+fsu7's banked rows   crates=88  PASS 59  FAIL 17  UNMEASURABLE 12     sum 88
+delta                pass +11 · fail -1 · UNMEASURABLE -10
+```
+
+**`UNMEASURABLE` maps to a typed `MISSING_EXECUTABLE` reason, so CI measured ten crates the local
+run could not — CI is the STRICTLY MORE COMPLETE reading, and this document was citing the less
+complete one as the work list.** Both figures are kept here on purpose: the local numbers are what
+R10 was closed against, and deleting them would make R10's close unverifiable. `pd5ua` owns
+picking the authoritative reading and enumerating the ten.
+
+**This does NOT retract R10.** R10 asked whether the gate layer RAN, and it ran both times. What
+was wrong is downstream: a work list is only useful if it is the best available one.
 
 
 **`etyur` did not close on a source reading — it closed on an EXECUTION.** `%19` ran the remote
