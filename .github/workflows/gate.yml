@@ -145,3 +145,8 @@ jobs:
         run: cargo run --quiet -p gate-runner -- --plan
       - name: Every gate, one entry point
         run: cargo run --quiet -p gate-runner -- --run
+      - name: Cite gate-runner CI result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: cargo run --quiet -p gate-runner -- --ci-citation "${{ github.run_id }}"

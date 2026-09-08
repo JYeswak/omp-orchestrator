@@ -29,11 +29,10 @@
 //! reintroduce the measured deadlock: undrained stdout+stderr past ~64 KiB with a `try_wait()`
 //! poll hangs at 0% CPU, and a `cargo test` over 88 crates produces far more than 64 KiB.
 
+mod ci_citation;
 use gate_runner::{
     build_report_scoped, check_allowance, derive_checks, derive_roster, parse_ledger, verdict_for,
-    Invocation,
-    Observed, UnmeasurablePrecondition,
-    EXIT_METADATA_UNREADABLE,
+    Invocation, Observed, UnmeasurablePrecondition, EXIT_METADATA_UNREADABLE,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -52,16 +51,20 @@ const LEDGER_PATH: &str = "docs/gate-roster.txt";
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: gate-runner --plan | --run [--only <crate>]\n\
-         \n\
-         omp-orchestrator-fsu7. Derives every workspace gate from `cargo metadata` and runs it\n\
-         through ONE entry point. An empty roster is an ERROR, never a pass."
+        r#"usage: gate-runner --plan | --run [--only <crate>]
+
+omp-orchestrator-fsu7. Derives every workspace gate from cargo metadata and runs it
+through ONE entry point. An empty roster is an ERROR, never a pass.
+gate-runner --ci-citation <run-id|latest> emits a citable CI aggregate with InputManifest."#
     );
     ExitCode::from(2)
 }
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.len() == 2 && args[0] == "--ci-citation" {
+        return ci_citation::run(&args[1]);
+    }
     let mut plan = false;
     let mut run = false;
     let mut only: Option<String> = None;
@@ -176,10 +179,14 @@ fn main() -> ExitCode {
         // The plan is not a verdict. Report drift, because that is knowable without running.
         let report = build_report_scoped(&roster, &full_roster, &BTreeMap::new(), &ledger);
         for name in &report.ledger_only {
-            println!("GATE_RUNNER_LEDGER_DRIFT crate={name} reason=in_ledger_absent_from_workspace");
+            println!(
+                "GATE_RUNNER_LEDGER_DRIFT crate={name} reason=in_ledger_absent_from_workspace"
+            );
         }
         for name in &report.workspace_only {
-            println!("GATE_RUNNER_LEDGER_DRIFT crate={name} reason=in_workspace_absent_from_ledger");
+            println!(
+                "GATE_RUNNER_LEDGER_DRIFT crate={name} reason=in_workspace_absent_from_ledger"
+            );
         }
         if roster.is_empty() {
             eprintln!(
@@ -308,9 +315,13 @@ fn main() -> ExitCode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CheckOutcome {
     Passed,
-    Failed { code: String },
+    Failed {
+        code: String,
+    },
     /// The environment could not host the check. NOT a failure of the check.
-    Unmeasurable { reason: String },
+    Unmeasurable {
+        reason: String,
+    },
     /// A declared SETUP phase, deliberately not executed on a check pass.
     SkippedSetup,
 }
@@ -420,13 +431,15 @@ fn run_declared_check(
 /// (`installer --bin-dir`, `gate-reachability --out`, `head-compiles-gate --receipt`), and a
 /// `mktemp` directory has no session owner and cannot be safely reaped.
 fn scratch_dir(repo: &Path) -> PathBuf {
-    let base = std::env::var("ZS_SCRATCH").map(PathBuf::from).unwrap_or_else(|_| {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
-        Path::new(&home)
-            .join(".local/state/zeststream/scratch")
-            .join("omp-orchestrator")
-            .join("gate-runner")
-    });
+    let base = std::env::var("ZS_SCRATCH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_owned());
+            Path::new(&home)
+                .join(".local/state/zeststream/scratch")
+                .join("omp-orchestrator")
+                .join("gate-runner")
+        });
     let dir = base.join(format!("checks-{}", std::process::id()));
     if let Err(error) = std::fs::create_dir_all(&dir) {
         eprintln!(
@@ -507,17 +520,20 @@ fn repo_root() -> Option<PathBuf> {
 fn cargo_metadata(repo: &Path) -> Result<String, String> {
     let mut command = Command::new("cargo");
     command
-        .args(["metadata", "--no-deps", "--format-version", "1", "--offline"])
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--offline",
+        ])
         .current_dir(repo);
     match bounded_output(&mut command, METADATA_DEADLINE) {
         BoundedOutcome::Completed(output) => {
             if output.status.success() {
                 Ok(String::from_utf8_lossy(&output.stdout).into_owned())
             } else {
-                Err(format!(
-                    "cargo metadata exited {:?}",
-                    output.status.code()
-                ))
+                Err(format!("cargo metadata exited {:?}", output.status.code()))
             }
         }
         BoundedOutcome::TimedOut => Err(format!(
@@ -837,7 +853,11 @@ fn parse_cargo_output(text: &str) -> Observed {
             pending.push(name);
         }
     }
-    if summaries.iter().all(|(passed, failed, _)| *passed + *failed == 0) && !summaries.is_empty() {
+    if summaries
+        .iter()
+        .all(|(passed, failed, _)| *passed + *failed == 0)
+        && !summaries.is_empty()
+    {
         let skipped = summaries.iter().map(|(_, _, skipped)| *skipped).sum();
         return Observed {
             passed,
@@ -902,10 +922,8 @@ fn environment_preconditions_have_typed_bad_and_good_legs() {
             if scheduler == "crontab"
     ));
 
-    let bin_dir = std::env::temp_dir().join(format!(
-        "gate-runner-precondition-{}",
-        std::process::id()
-    ));
+    let bin_dir =
+        std::env::temp_dir().join(format!("gate-runner-precondition-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&bin_dir);
     std::fs::create_dir_all(&bin_dir).expect("fixture directory");
     std::fs::write(bin_dir.join("br"), b"fixture").expect("fixture executable");
@@ -994,7 +1012,9 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out;
         assert_eq!(observed.passed.len(), 1);
         assert_eq!(
             observed.failed,
-            vec!["unattributed_target(failing_tests:real_atomic_install_publishes_complete_binary)"],
+            vec![
+                "unattributed_target(failing_tests:real_atomic_install_publishes_complete_binary)"
+            ],
             "the failing test names its own cause; `unknown` names nothing"
         );
         assert!(
@@ -1100,8 +1120,7 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored
              which is why `grep -c 'Running unittests'` returned 0 for a present subject"
         );
         assert!(
-            strip_ansi(colorized.lines().next().expect("a line"))
-                .contains("Running unittests"),
+            strip_ansi(colorized.lines().next().expect("a line")).contains("Running unittests"),
             "and it is present once the escapes are removed"
         );
     }
@@ -1126,7 +1145,9 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored
         let observed = parse_cargo_output(&format!("{stdout}{stderr}"));
         assert_eq!(
             observed.failed,
-            vec!["unattributed_target(failing_tests:real_atomic_install_publishes_complete_binary)"],
+            vec![
+                "unattributed_target(failing_tests:real_atomic_install_publishes_complete_binary)"
+            ],
             "the failing test is named even though both headers are present but out of order"
         );
         assert!(
@@ -1141,8 +1162,16 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored
     fn strip_ansi_does_not_swallow_ordinary_text() {
         assert_eq!(strip_ansi("plain text"), "plain text");
         assert_eq!(strip_ansi("a\u{1b}[0mb"), "ab");
-        assert_eq!(strip_ansi("a\u{1b}Xb"), "ab", "a non-CSI escape drops only itself");
-        assert_eq!(strip_ansi("a\u{1b}[31"), "a", "a truncated CSI consumes to end of line");
+        assert_eq!(
+            strip_ansi("a\u{1b}Xb"),
+            "ab",
+            "a non-CSI escape drops only itself"
+        );
+        assert_eq!(
+            strip_ansi("a\u{1b}[31"),
+            "a",
+            "a truncated CSI consumes to end of line"
+        );
     }
     #[test]
     fn child_exit_four_is_unmeasurable_not_a_failure() {

@@ -10,9 +10,10 @@ description = "omp-orchestrator-fsu7: ONE derived entry point for every workspac
 workspace = true
 
 [dependencies]
+input-manifest = { path = "../input-manifest" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 subprocess-contract = { path = "../subprocess-contract" }
-
 [[bin]]
 name = "gate-runner"
 path = "src/main.rs"
