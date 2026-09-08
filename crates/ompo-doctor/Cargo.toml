@@ -47,4 +47,5 @@ consumes = [
     { kind = "rpc_handler", name = "get_state", call_site = "src/omp_state.rs" },
     { kind = "rpc_handler", name = "get_session_stats", call_site = "src/omp_stats.rs" },
     { kind = "rpc_handler", name = "get_messages", call_site = "src/omp_messages.rs" },
+    { kind = "daemon_process", name = "omp ps", call_site = "src/omp_process.rs" },
 ]
