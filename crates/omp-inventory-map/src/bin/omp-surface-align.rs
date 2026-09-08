@@ -45,10 +45,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::Duration;
 
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use omp_inventory_map::alignment::{
     self, AlignmentError, AlignmentReport, SurfaceEntry, DELIBERATELY_NOT,
 };
 use omp_inventory_map::{parse_cli_commands, parse_omp_version, parse_transport_modes};
+use ompo_doctor::omp_process::{read_processes, ProcessProbeVerdict};
 use subprocess_contract::{bounded_output, BoundedOutcome};
 
 /// Bounded, because a hanging probe must not stall a gate run.
@@ -139,7 +142,7 @@ fn main() -> ExitCode {
     );
 
     // ---- TIER 2: needs the installed artifact -------------------------------------
-    let (manifest, surface) = derive_surface(omp_hint.as_deref());
+    let (manifest, surface) = derive_surface(omp_hint.as_deref(), &repo);
     println!("{}", manifest.render());
 
     let InputManifest::Full { omp_root, omp_version } = &manifest else {
@@ -241,7 +244,7 @@ fn allowance_integrity() -> Result<(), String> {
 ///
 /// Reuses this crate's existing parsers rather than re-deriving them — the DERIVE half was
 /// already correct and is not rewritten here.
-fn derive_surface(hint: Option<&Path>) -> (InputManifest, Vec<SurfaceEntry>) {
+fn derive_surface(hint: Option<&Path>, repo: &Path) -> (InputManifest, Vec<SurfaceEntry>) {
     let program = hint.map_or_else(|| PathBuf::from("omp"), Path::to_path_buf);
     let help = match probe(&program, &["--help"]) {
         Ok(text) => text,
@@ -273,6 +276,40 @@ fn derive_surface(hint: Option<&Path>) -> (InputManifest, Vec<SurfaceEntry>) {
             surface.push(SurfaceEntry { kind: "transport_mode".to_owned(), name });
         }
     }
+
+    // Channel: daemon_process. Reuse ompo-doctor's Cx-first bounded probe and parser;
+    // this emits one row for the query interface, not one row per daemon in its payload.
+    let daemon_probe = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime.block_on(async {
+            match Cx::current() {
+                Some(cx) => Ok(read_processes(&cx, repo).await),
+                None => Err("no_runtime_context".to_owned()),
+            }
+        }),
+        Err(error) => Err(format!("runtime_build:{error}")),
+    };
+    match daemon_probe {
+        Ok(outcome) => {
+            let exit_code = outcome.exit_code;
+            match outcome.verdict {
+                ProcessProbeVerdict::Answered(scopes) => {
+                    println!(
+                        "ALIGN_DAEMON_PROBE state=ANSWERED scopes={} exit_code={exit_code:?}",
+                        scopes.len()
+                    );
+                    surface.push(SurfaceEntry {
+                        kind: "daemon_process".to_owned(),
+                        name: "omp ps".to_owned(),
+                    });
+                }
+                verdict => println!(
+                    "ALIGN_DAEMON_PROBE state=UNMEASURED exit_code={exit_code:?} verdict={verdict:?}"
+                ),
+            }
+        }
+        Err(detail) => println!("ALIGN_DAEMON_PROBE state=UNMEASURED detail={detail}"),
+    }
+
 
     // The mux {id,type} frame vocabulary, from %7's extractor rather than a second bundle
     // parser of my own. Verified before composing: its ANCHOR_METHOD is `negotiate_protocol`
@@ -533,9 +570,10 @@ mod tests {
     /// `align` would report as an instrument error with no cause.
     #[test]
     fn an_unreachable_omp_is_partial_with_a_named_bound_not_an_empty_surface() {
-        let (manifest, surface) = derive_surface(Some(Path::new(
-            "/nonexistent/zzz-omp-cannot-possibly-exist",
-        )));
+        let (manifest, surface) = derive_surface(
+            Some(Path::new("/nonexistent/zzz-omp-cannot-possibly-exist")),
+            Path::new("."),
+        );
         assert!(surface.is_empty());
         match manifest {
             InputManifest::Partial { bound_kind, .. } => {

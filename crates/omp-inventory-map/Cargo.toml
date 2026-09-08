@@ -21,6 +21,7 @@ serde_json = "1"
 regex = "1"
 text-structure = { path = "../text-structure" }
 subprocess-contract = { path = "../subprocess-contract" }
+ompo-doctor = { path = "../ompo-doctor" }
 # omp-orchestrator-ablcf: %7's extractor supplies the rpc_handler vocabulary. Composed
 # rather than reimplemented -- its ANCHOR_METHOD is `negotiate_protocol`, so it extracts the
 # mux {id,type} frame names, which is the channel %20's declarations actually name. A second
