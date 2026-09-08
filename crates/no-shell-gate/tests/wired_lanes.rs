@@ -32,7 +32,6 @@ use std::process::Command;
 const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
     ("refill-idle-panes", "cron-wired via fast-dispatch at */5; the Rust source scanner cannot see a crontab invocation"),
     ("tick-dispatch", "cron-wired via controller-tick at :18/:38/:58; the Rust source scanner cannot see a crontab invocation"),
-    ("wired-but-inert-guard", "detection pattern table consumed by kernel-only-operator-hook; the hook is disabled pending human certification (cp-nq2s9), so the caller exists in design but not in code yet"),
     ("s1-coverage", "S1 depth suspended under Atlas Arc R1; crate exists as a coverage artifact with no production caller. Dies when S1 build waves consume it"),
 ];
 /// Plan-level gate identifiers are either wired to an existing referent or
@@ -73,14 +72,14 @@ const GATE_IDENTIFIER_REFERENTS: &[GateIdentifier] = &[
     GateIdentifier { id: "GATE-008", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the rights, security, and licensing gate has a retained review receipt and a bead acceptance naming its verifier") },
     GateIdentifier { id: "GATE-009", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the defensibility gate has retained compounding-asset evidence and a bead acceptance naming its verifier") },
     GateIdentifier { id: "GATE-010", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("S3-01-idea-reviewer"), dies_when: Some("Dies when the substitute comparison has a retained evidence row and a bead acceptance naming its verifier") },
-    GateIdentifier { id: "GATE-011", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::no-shell-gate"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-012", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::omp-inventory-map"), known_bad: Some("crates/omp-inventory-map/tests/inventory.rs::surface_map_ghost_is_unknown"), known_good: Some("crates/omp-inventory-map/tests/inventory.rs::subprocess_and_no_shell_positive_controls_are_visible"), anti_vacuity: Some("crates/omp-inventory-map/tests/inventory.rs::empty_metadata_is_a_hard_error"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-013", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::undrained-pipe-lint"), known_bad: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_bad_both_pipes_try_wait_poll_is_flagged"), known_good: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_good_stdout_only_passes"), anti_vacuity: Some("crates/undrained-pipe-lint/tests/specimens.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-014", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::commit-build-fence"), known_bad: Some("crates/commit-build-fence/tests/hook.rs::real_hook_refuses_active_registration_with_actionable_identity"), known_good: Some("crates/commit-build-fence/tests/hook.rs::real_hook_allows_commit_with_valid_empty_store"), anti_vacuity: Some("crates/commit-build-fence/tests/hook.rs::real_hook_treats_missing_store_as_error"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-015", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::state-wildcard-lint"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-016", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::kernel-bypass-gate"), known_bad: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::known_bad_raw_send_keys_outside_kernel_is_flagged"), known_good: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::kernel_own_call_site_is_allowlisted"), anti_vacuity: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::real_workspace_ledger_balances"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-017", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::pre-delete-citation-check"), known_bad: Some("crates/pre-delete-citation-check/tests/killed_child.rs::killed_git_produces_refusal_not_success"), known_good: Some("crates/pre-delete-citation-check/tests/killed_child.rs::working_git_with_no_deletions_passes"), anti_vacuity: Some("NOT_APPLICABLE: an empty staged-deletion set is the valid clean input"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-018", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::path-literal-guard"), known_bad: Some("crates/path-literal-guard/tests/repo_wide.rs::unreadable_input_is_refused_and_restores_to_a_clean_scan"), known_good: Some("crates/path-literal-guard/tests/repo_wide.rs::zero_home_path_literals_across_crates_src"), anti_vacuity: Some("crates/path-literal-guard/tests/repo_wide.rs::staged_mode_over_the_real_repo_equals_the_sweep"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-011", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-012", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/omp-inventory-map/tests/inventory.rs::surface_map_ghost_is_unknown"), known_good: Some("crates/omp-inventory-map/tests/inventory.rs::subprocess_and_no_shell_positive_controls_are_visible"), anti_vacuity: Some("crates/omp-inventory-map/tests/inventory.rs::empty_metadata_is_a_hard_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-013", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_bad_both_pipes_try_wait_poll_is_flagged"), known_good: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_good_stdout_only_passes"), anti_vacuity: Some("crates/undrained-pipe-lint/tests/specimens.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-014", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/commit-build-fence/tests/hook.rs::real_hook_refuses_active_registration_with_actionable_identity"), known_good: Some("crates/commit-build-fence/tests/hook.rs::real_hook_allows_commit_with_valid_empty_store"), anti_vacuity: Some("crates/commit-build-fence/tests/hook.rs::real_hook_treats_missing_store_as_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-015", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-016", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::known_bad_raw_send_keys_outside_kernel_is_flagged"), known_good: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::kernel_own_call_site_is_allowlisted"), anti_vacuity: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::real_workspace_ledger_balances"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-017", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/pre-delete-citation-check/tests/killed_child.rs::killed_git_produces_refusal_not_success"), known_good: Some("crates/pre-delete-citation-check/tests/killed_child.rs::working_git_with_no_deletions_passes"), anti_vacuity: Some("NOT_APPLICABLE: an empty staged-deletion set is the valid clean input"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-018", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/path-literal-guard/tests/repo_wide.rs::unreadable_input_is_refused_and_restores_to_a_clean_scan"), known_good: Some("crates/path-literal-guard/tests/repo_wide.rs::zero_home_path_literals_across_crates_src"), anti_vacuity: Some("crates/path-literal-guard/tests/repo_wide.rs::staged_mode_over_the_real_repo_equals_the_sweep"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-019", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-020", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-021", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/state-wildcard-lint/tests/specimens.rs::mutation_removing_state_wildcard_is_green"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
@@ -148,6 +147,7 @@ const STRIP_TEST_CODE: bool = true;
 enum SourceKind {
     Rust,
     Workflow,
+    Manifest,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,6 +219,7 @@ fn source_kind(path: &Path) -> Option<SourceKind> {
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("rs") => Some(SourceKind::Rust),
         Some("yml" | "yaml") => Some(SourceKind::Workflow),
+        Some("toml") => Some(SourceKind::Manifest),
         _ => None,
     }
 }
@@ -242,6 +243,11 @@ fn collect_sources(root: &Path) -> Result<Vec<CallerSource>, String> {
             let Some(kind) = source_kind(&path) else {
                 continue;
             };
+            if kind == SourceKind::Manifest
+                && path.file_name().and_then(|name| name.to_str()) != Some("Cargo.toml")
+            {
+                continue;
+            }
             let contents = fs::read_to_string(&path)
                 .map_err(|error| format!("ERROR: read {}: {error}", path.display()))?;
             sources.push(CallerSource {
@@ -303,7 +309,7 @@ fn strip_comments(contents: &str, kind: SourceKind) -> String {
                 }
                 continue;
             }
-            if kind == SourceKind::Workflow && byte == b'#' {
+            if (kind == SourceKind::Workflow || kind == SourceKind::Manifest) && byte == b'#' {
                 while index < bytes.len() && bytes[index] != b'\n' {
                     index += 1;
                 }
@@ -1066,6 +1072,21 @@ const COLLISION_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
     ("ScanMode", "path-literal-guard and state-wildcard-lint; dies when ScanMode is shared", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("Stage", "agent-mail-native and tick-monitor lifecycle stage; dies when omp-types owns Stage", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("Verdict", "no-shell-gate / path-literal-guard / state-wildcard-lint; dies when omp-types Verdict exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    ("AppendOutcome", "decision-ledger appends human-decision rows while ntm-fleet-monitor appends lifecycle events; distinct domains", "type-vocabulary-owner", "when omp-types owns the shared append vocabulary"),
+    ("BeadRecord", "blocker-taxonomy and s1-coverage project different tracker row shapes; no shared consumer", "type-vocabulary-owner", "when omp-types owns BeadRecord"),
+    ("BlockerKind", "blocker-taxonomy classifies tracker blockers while ntm-fleet-monitor classifies lifecycle blockers", "type-vocabulary-owner", "when omp-types owns blocker vocabulary"),
+    ("CensusReport", "silent-success-census and worker-oracle-gate report different census populations", "type-vocabulary-owner", "when omp-types owns the shared census report"),
+    ("CheckError", "decision-ledger, r1-breadth-gate, and response-envelope-check have disjoint check domains", "type-vocabulary-owner", "when omp-types owns a shared check error"),
+    ("Classification", "bead-availability, salvage-taxonomy, silent-success-census, and worker-oracle-gate classify different evidence", "type-vocabulary-owner", "when omp-types owns classification vocabulary"),
+    ("ClosedBead", "grader-attribution-gate and pre-delete-citation-check consume different closed-bead projections", "type-vocabulary-owner", "when omp-types owns the closed-bead schema"),
+    ("Config", "cargo-lane-budget, crate-soundness-verify, and omp-orchestrator configs are disjoint boundaries", "type-vocabulary-owner", "when omp-types owns workspace Config"),
+    ("CrateVerdict", "gate-runner and staged-build-gate verdicts cover different execution scopes", "type-vocabulary-owner", "when omp-types owns a shared crate verdict"),
+    ("GateCensus", "no-shell-gate and omp-orchestrator census rows have different gate authorities", "type-vocabulary-owner", "when omp-types owns GateCensus"),
+    ("LifecycleEvent", "lifecycle-event journal records differ from ntm-fleet-monitor lifecycle model events", "type-vocabulary-owner", "when omp-types owns lifecycle events"),
+    ("Predicate", "ompo-start startup predicates differ from silent-success-census oracle predicates", "type-vocabulary-owner", "when omp-types owns predicate vocabulary"),
+    ("Receipt", "dispatch-saga transport receipt differs from orchestration-tick-gate journal receipt", "type-vocabulary-owner", "when omp-types owns receipt vocabulary"),
+    ("RosterError", "extraction-roster errors differ from gate-runner metadata/allowance errors", "type-vocabulary-owner", "when omp-types owns roster errors"),
+    ("TickVerdict", "omp-idle-dispatch decisions differ from orchestration-tick-gate observations", "type-vocabulary-owner", "when omp-types owns tick verdict vocabulary"),
 ];
 
 #[test]

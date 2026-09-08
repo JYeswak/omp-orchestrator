@@ -406,13 +406,16 @@ pub const POSITIVE_CONTROL_FAILED_UNWIRED: &str =
 pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("crate-soundness-verify", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("omp-surface-consumption", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
     ("s1-coverage", "advisory-unreachable: S1 depth is suspended by Atlas Arc R1 and the HD-0012 hook decision pending Joshua approval; no production caller is honest while S1 is frozen. Dies when an approved S1 build wave wires this crate into an in-tree production caller; delete this allowance row then"),
     ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("wired-but-inert-guard", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("m2-grading-lane", "instrument limitation: source caller scan cannot see its launchd trigger; owner=pane=%19; dies_when=reachability consumes launchd metadata or the crate gains an in-tree source caller"),
+    ("named-test-filter-gate", "instrument limitation: source caller scan cannot see its gate-runner manifest check; owner=pane=%19; dies_when=reachability consumes gate metadata or the crate gains an in-tree source caller"),
+    ("omp-inventory-map", "instrument limitation: source caller scan cannot see gate-runner manifest metadata; owner=pane=%19; dies_when=gate-runner metadata-aware reachability lands or this crate acquires an in-tree source caller"),
+    ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
+    ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
 ];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdvisoryRatchetAnchor {

@@ -55,7 +55,7 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 50
+crates_declared = 88
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -520,3 +520,68 @@ classification = "a"
 omp_surface = "none"
 why = "silent-success class census over OUR surfaces"
 
+# S1 crates added after revision 2; no OMP surface is claimed
+[crates.blocker-taxonomy]
+classification = "a"
+omp_surface = "none"
+why = "blocker taxonomy over our orchestration findings; OMP does not own bead policy"
+[crates.dispatch-saga]
+classification = "a"
+omp_surface = "none"
+why = "dispatch lifecycle decisions over our bead tracker; not an OMP surface"
+[crates.fuzz-build-gate]
+classification = "a"
+omp_surface = "none"
+why = "workspace fuzz/build gate; OMP does not own compilation policy"
+[crates.gate-runner]
+classification = "a"
+omp_surface = "none"
+why = "derived workspace gate runner; it executes our crate checks, not OMP methods"
+[crates.grader-attribution-gate]
+classification = "a"
+omp_surface = "none"
+why = "grade attribution policy over our beads; OMP does not own closure authority"
+[crates.input-manifest]
+classification = "a"
+omp_surface = "none"
+why = "evidence input coverage manifest; our gate contract, not OMP"
+[crates.m2-grading-lane]
+classification = "a"
+omp_surface = "none"
+why = "grading lane over our dispatch saga; OMP does not own bead grading"
+[crates.named-test-filter-gate]
+classification = "a"
+omp_surface = "none"
+why = "test selection gate over our workspace; not an OMP surface"
+[crates.ompo-doctor]
+classification = "a"
+omp_surface = "none"
+why = "operator doctor over our repository and daemon adapters; not OMP RPC"
+[crates.ompo-start]
+classification = "a"
+omp_surface = "none"
+why = "operator startup lifecycle for our supervisor; OMP does not own its launch policy"
+[crates.r1-breadth-gate]
+classification = "a"
+omp_surface = "none"
+why = "Atlas breadth gate over our source evidence; not an OMP surface"
+[crates.s2-gate]
+classification = "a"
+omp_surface = "none"
+why = "S2 authorization gate over our plan; OMP does not own S2 policy"
+[crates.salvage-taxonomy]
+classification = "a"
+omp_surface = "none"
+why = "salvage classification over our recovery artifacts; not OMP"
+[crates.text-structure]
+classification = "a"
+omp_surface = "none"
+why = "source structure parser for our gates; OMP does not own it"
+[crates.worker-oracle-gate]
+classification = "a"
+omp_surface = "none"
+why = "worker evidence gate over our fleet; not an OMP method"
+[crates.worker-tag-gate]
+classification = "a"
+omp_surface = "none"
+why = "worker identity tag gate over our fleet; not an OMP surface"

@@ -74,13 +74,13 @@ pub const SCOPES: &[&str] = &["inception"];
 
 /// Severity of one signal, and of the report as a whole.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Severity {
+pub enum DoctorSeverity {
     Green,
     Degraded,
     Critical,
 }
 
-impl Severity {
+impl DoctorSeverity {
     /// The documented exit code. A dictionary, not an ad-hoc number: an agent writing
     /// `case $? in 1) ...; 3) ...; esac` depends on this being stable.
     #[must_use]
@@ -106,7 +106,7 @@ impl Severity {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Signal {
     pub name: &'static str,
-    pub severity: Severity,
+    pub severity: DoctorSeverity,
     /// Stable machine-readable reason. Absence and failure never share a code.
     pub reason_code: String,
     pub detail: String,
@@ -118,7 +118,7 @@ pub struct Signal {
 /// A whole `health` run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HealthReport {
-    pub severity: Severity,
+    pub severity: DoctorSeverity,
     pub signals: Vec<Signal>,
     pub spawns: usize,
 }
@@ -135,7 +135,7 @@ impl HealthReport {
         let mut scopes: Vec<&'static str> = self
             .signals
             .iter()
-            .filter(|signal| signal.severity != Severity::Green)
+            .filter(|signal| signal.severity != DoctorSeverity::Green)
             .filter_map(|signal| signal.repair_scope)
             .collect();
         scopes.dedup();
@@ -180,7 +180,7 @@ pub fn health(repo: &Path) -> HealthReport {
     signals.push(if missing.is_empty() {
         Signal {
             name: "control_files",
-            severity: Severity::Green,
+            severity: DoctorSeverity::Green,
             reason_code: "CONTROL_FILES_COMPLETE".to_owned(),
             detail: format!("{} present", presence.len()),
             repair_scope: None,
@@ -188,7 +188,7 @@ pub fn health(repo: &Path) -> HealthReport {
     } else {
         Signal {
             name: "control_files",
-            severity: Severity::Critical,
+            severity: DoctorSeverity::Critical,
             reason_code: "CONTROL_FILES_MISSING".to_owned(),
             // No repair scope, and that is deliberate: authoring a repository's AGENTS.md
             // is a human decision, not something a doctor may synthesise.
@@ -202,14 +202,14 @@ pub fn health(repo: &Path) -> HealthReport {
     signals.push(match inception::read_inception(&artifact) {
         Ok(_) => Signal {
             name: "inception_artifact",
-            severity: Severity::Green,
+            severity: DoctorSeverity::Green,
             reason_code: "INCEPTION_READABLE".to_owned(),
             detail: artifact.display().to_string(),
             repair_scope: Some("inception"),
         },
         Err(error) => Signal {
             name: "inception_artifact",
-            severity: Severity::Degraded,
+            severity: DoctorSeverity::Degraded,
             reason_code: reason_code_of(&error),
             detail: error.to_string(),
             repair_scope: Some("inception"),
@@ -222,7 +222,7 @@ pub fn health(repo: &Path) -> HealthReport {
     signals.push(if journal.is_file() {
         Signal {
             name: "lifecycle_journal",
-            severity: Severity::Green,
+            severity: DoctorSeverity::Green,
             reason_code: "JOURNAL_PRESENT".to_owned(),
             detail: journal.display().to_string(),
             repair_scope: None,
@@ -230,7 +230,7 @@ pub fn health(repo: &Path) -> HealthReport {
     } else {
         Signal {
             name: "lifecycle_journal",
-            severity: Severity::Degraded,
+            severity: DoctorSeverity::Degraded,
             reason_code: "JOURNAL_ABSENT".to_owned(),
             detail: "no doctor run has journalled here yet".to_owned(),
             repair_scope: None,
@@ -245,7 +245,7 @@ pub fn health(repo: &Path) -> HealthReport {
     signals.push(if stamped {
         Signal {
             name: "build_provenance",
-            severity: Severity::Green,
+            severity: DoctorSeverity::Green,
             reason_code: "PROVENANCE_STAMPED".to_owned(),
             detail: format!("commit={}", provenance.build_commit),
             repair_scope: None,
@@ -253,7 +253,7 @@ pub fn health(repo: &Path) -> HealthReport {
     } else {
         Signal {
             name: "build_provenance",
-            severity: Severity::Degraded,
+            severity: DoctorSeverity::Degraded,
             reason_code: "PROVENANCE_UNSTAMPED".to_owned(),
             detail: "this build cannot state its own origin; staleness is UNMEASURED"
                 .to_owned(),
@@ -265,7 +265,7 @@ pub fn health(repo: &Path) -> HealthReport {
         .iter()
         .map(|signal| signal.severity)
         .max()
-        .unwrap_or(Severity::Green);
+        .unwrap_or(DoctorSeverity::Green);
     HealthReport {
         severity,
         signals,
@@ -744,7 +744,7 @@ mod tests {
         let clean = repair(directory.path(), "inception", RepairMode::Apply).expect("clean");
         assert!(clean.applied.is_empty());
         assert_eq!(clean.reason_code, "REPAIR_NOT_NEEDED_ALREADY_VALID");
-        assert_eq!(health(directory.path()).signals.iter().filter(|s| s.name == "inception_artifact" && s.severity == Severity::Green).count(), 1);
+        assert_eq!(health(directory.path()).signals.iter().filter(|s| s.name == "inception_artifact" && s.severity == DoctorSeverity::Green).count(), 1);
     }
 
     /// ACCEPTANCE F. Nothing to fix is a TYPED no-op. A silent success is
@@ -792,7 +792,7 @@ mod tests {
     fn an_empty_directory_is_critical_not_green() {
         let empty = tempfile::tempdir().expect("empty");
         let report = health(empty.path());
-        assert_eq!(report.severity, Severity::Critical);
+        assert_eq!(report.severity, DoctorSeverity::Critical);
         assert_eq!(report.exit_code(), EXIT_CRITICAL);
         let control = report
             .signals
@@ -809,11 +809,11 @@ mod tests {
     /// The exit dictionary is a contract an agent branches on.
     #[test]
     fn severity_maps_to_the_documented_exit_codes() {
-        assert_eq!(Severity::Green.exit_code(), 0);
-        assert_eq!(Severity::Degraded.exit_code(), 1);
-        assert_eq!(Severity::Critical.exit_code(), 3);
-        assert!(Severity::Critical > Severity::Degraded);
-        assert!(Severity::Degraded > Severity::Green);
+        assert_eq!(DoctorSeverity::Green.exit_code(), 0);
+        assert_eq!(DoctorSeverity::Degraded.exit_code(), 1);
+        assert_eq!(DoctorSeverity::Critical.exit_code(), 3);
+        assert!(DoctorSeverity::Critical > DoctorSeverity::Degraded);
+        assert!(DoctorSeverity::Degraded > DoctorSeverity::Green);
     }
 
     /// The exit vocabulary must stay PAIRWISE DISTINCT across kinds, mirroring
@@ -847,8 +847,8 @@ mod tests {
         // health's severity codes and repair's refusal codes overlap ONLY at 3, and that
         // is deliberate: both mean "the instrument could not complete", not "you asked
         // wrongly". Asserted so a future edit cannot silently widen the overlap.
-        assert_eq!(Severity::Critical.exit_code(), instrument);
-        assert_ne!(Severity::Degraded.exit_code(), usage.max(instrument));
+        assert_eq!(DoctorSeverity::Critical.exit_code(), instrument);
+        assert_ne!(DoctorSeverity::Degraded.exit_code(), usage.max(instrument));
     }
 
     /// Both `--help` surfaces must exit 0 for the canonical probes, and the health usage
