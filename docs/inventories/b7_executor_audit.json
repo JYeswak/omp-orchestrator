@@ -1,6 +1,6 @@
 {
-  "schema_version": "omp.b7-executor-audit.v1",
-  "audited_at_utc": "2026-09-08T04:29:56Z",
+  "schema_version": "omp.b7-executor-audit.v2",
+  "audited_at_utc": "2026-09-08T04:43:16Z",
   "auditor": "FuchsiaDuck pane=%20",
   "bead": "omp-orchestrator-815",
   "roster_source": {
@@ -102,7 +102,12 @@
         "crate": "close-evidence-gate",
         "evidence": "close-evidence-differential/src/main.rs:145-170 and :313-340 can spawn the Rust gate, but close-evidence-differential has no root executor trigger, so the chain is not reachable."
       }
-    ]
+    ],
+    "reverdict_discriminator": {
+      "discriminator": "reachable => LIVE; unreachable plus SUPERSEDED => TERMINAL; unreachable plus NOT_FOUND_IN_AUDITED_SURFACES => INERT; unresolved supersession => UNKNOWN",
+      "compilation_is_separate_axis": true,
+      "correction": "The prior G2 wording incorrectly used compilability to distinguish INERT from TERMINAL. Failed/refused tests remain evidence on compilation_axis only."
+    }
   },
   "remote_correctness_probes": {
     "command_template": "RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p <crate>",
@@ -127,138 +132,273 @@
         "zestgraph-hook-substrates"
       ]
     },
-    "interpretation": "Correctness is not promoted from failed or refused probes. Those rows remain UNKNOWN and are not deletion candidates."
+    "interpretation": "Compilation outcomes are a separate axis. They do not determine LIVE, INERT, TERMINAL, or UNKNOWN; failed/refused probes remain recorded without changing supersession classification."
   },
   "rows": [
     {
       "name": "apfs-wave-guard",
-      "target_bins": ["apfs-wave-guard"],
+      "target_bins": [
+        "apfs-wave-guard"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["bin/gh-runner-provision.sh:45,161-163 uses an installed binary during manual provisioning; not a workflow, git hook, crontab, launchd row, or rooted Command::new chain"],
+      "non_root_references": [
+        "bin/gh-runner-provision.sh:45,161-163 uses an installed binary during manual provisioning; not a workflow, git hook, crontab, launchd row, or rooted Command::new chain"
+      ],
       "git_history_commits_at_head": 5,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; source is present, but the remote correctness probe was refused and no positive dead/superseded evidence exists."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "The provisioning helper uses this binary; that is not a successor."
+      }
     },
     {
       "name": "arc-checkin",
-      "target_bins": ["arc-checkin"],
+      "target_bins": [
+        "arc-checkin"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["loop-coverage/src/lib.rs:415,417 records proof-artifact strings and explicitly says the eventual gate is not wired"],
+      "non_root_references": [
+        "loop-coverage/src/lib.rs:415,417 records proof-artifact strings and explicitly says the eventual gate is not wired"
+      ],
       "git_history_commits_at_head": 2,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "The coverage map names proof artifacts and says the gate is not wired; no replacement path was established."
+      }
     },
     {
       "name": "arc-keepalive",
-      "target_bins": ["arc-keepalive"],
+      "target_bins": [
+        "arc-keepalive"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["loop-coverage/src/lib.rs:379,384 records proof-artifact strings and says the eventual gate is not wired; the crontab /clear row is commented out"],
+      "non_root_references": [
+        "loop-coverage/src/lib.rs:379,384 records proof-artifact strings and says the eventual gate is not wired; the crontab /clear row is commented out"
+      ],
       "git_history_commits_at_head": 7,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote test run failed on missing operational TMUX_TMPDIR."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "FAILED_ENVIRONMENT_TMUX_TMPDIR",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "The shell remains a differential oracle and its cron row is disabled; neither is a proved successor."
+      }
     },
     {
       "name": "bughunt-tick",
-      "target_bins": ["bughunt-tick"],
+      "target_bins": [
+        "bughunt-tick"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["External matches were runtime artifacts and documentation only; no production source trigger"],
+      "non_root_references": [
+        "External matches were runtime artifacts and documentation only; no production source trigger"
+      ],
       "git_history_commits_at_head": 75,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote correctness probe failed because semgrep was unavailable."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "FAILED_MISSING_SEMGREP",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "No replacement was found in the audited production sources or trigger surfaces."
+      }
     },
     {
       "name": "cfs-honesty-tick",
-      "target_bins": ["cfs-honesty-tick"],
+      "target_bins": [
+        "cfs-honesty-tick"
+      ],
       "external_library_callers": [],
-      "root_executor_triggers": ["live crontab: 8,28,48 * * * * /Users/josh/.local/bin/cfs-honesty-tick >> /Users/josh/.local/state/flywheel/cfs-honesty-tick.log 2>&1"],
+      "root_executor_triggers": [
+        "live crontab: 8,28,48 * * * * /Users/josh/.local/bin/cfs-honesty-tick >> /Users/josh/.local/state/flywheel/cfs-honesty-tick.log 2>&1"
+      ],
       "non_root_references": [],
       "git_history_commits_at_head": 4,
       "verdict": "LIVE",
-      "reason": "The exact Rust binary is a reachable crontab executor; remove it from the terminal list."
+      "reason": "The exact Rust binary is a reachable crontab executor; remove it from the terminal list.",
+      "reachability": "LIVE",
+      "compilation_axis": "NOT_RUN",
+      "supersession": {
+        "status": "NOT_APPLICABLE",
+        "successor_paths": [],
+        "basis": "LIVE rows are not deletion candidates; supersession is not a terminality question."
+      }
     },
     {
       "name": "close-evidence-differential",
-      "target_bins": ["close-evidence-differential"],
+      "target_bins": [
+        "close-evidence-differential"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["check-publish/src/tests.rs mentions the shell comparator only in test comments; no production root trigger"],
+      "non_root_references": [
+        "check-publish/src/tests.rs mentions the shell comparator only in test comments; no production root trigger"
+      ],
       "git_history_commits_at_head": 1,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "No replacement was found; its Rust child comparison path is itself unrooted."
+      }
     },
     {
       "name": "close-evidence-gate",
-      "target_bins": ["close-evidence-gate"],
+      "target_bins": [
+        "close-evidence-gate"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["close-evidence-differential/src/main.rs:145-170 selects the Rust binary and :313-340 spawns it, but the differential binary has no rooted executor trigger"],
+      "non_root_references": [
+        "close-evidence-differential/src/main.rs:145-170 selects the Rust binary and :313-340 spawns it, but the differential binary has no rooted executor trigger"
+      ],
       "git_history_commits_at_head": 8,
       "verdict": "UNKNOWN",
-      "reason": "Unrooted child spawn is not a reachable trigger; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "The shell gate is a differential peer, not proven successor; the Rust spawn chain is unrooted."
+      }
     },
     {
       "name": "controller-tick",
-      "target_bins": ["controller-tick"],
+      "target_bins": [
+        "controller-tick"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["fleet-monitor/src/main.rs:1204-1211 invokes controller-tick.sh, not the Rust binary"],
+      "non_root_references": [
+        "fleet-monitor/src/main.rs:1204-1211 invokes controller-tick.sh, not the Rust binary"
+      ],
       "git_history_commits_at_head": 24,
       "verdict": "UNKNOWN",
-      "reason": "No Rust caller or accepted root trigger; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "fleet-monitor invokes controller-tick.sh, while controller-tick source calls the shell lane a differential oracle; supersession is not established."
+      }
     },
     {
       "name": "fleet-arc-report",
-      "target_bins": ["fleet-arc-report"],
+      "target_bins": [
+        "fleet-arc-report"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
       "non_root_references": [],
       "git_history_commits_at_head": 7,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote top-level selftest failed."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "FAILED_TOP_LEVEL_SELFTEST",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "No replacement was found in the audited production sources or trigger surfaces."
+      }
     },
     {
       "name": "harvest-dispatch",
-      "target_bins": ["harvest-dispatch"],
+      "target_bins": [
+        "harvest-dispatch"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
       "non_root_references": [],
       "git_history_commits_at_head": 2,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "No replacement was found in the audited production sources or trigger surfaces."
+      }
     },
     {
       "name": "harvest-triage",
-      "target_bins": ["harvest-triage"],
+      "target_bins": [
+        "harvest-triage"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
       "non_root_references": [],
       "git_history_commits_at_head": 7,
       "verdict": "INERT",
-      "reason": "Source and tests exist, remote tests passed, but no external library caller or accepted root executor trigger exists; wire it rather than delete it."
+      "reason": "Unreachable; no replacement was found in the audited surfaces, so it is INERT and must be wired rather than deleted.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "PASS",
+      "supersession": {
+        "status": "NOT_FOUND_IN_AUDITED_SURFACES",
+        "successor_paths": [],
+        "basis": "No replacement was found in the audited production sources or trigger surfaces; this supports INERT, not TERMINAL."
+      }
     },
     {
       "name": "repo-hygiene-wired-proof",
-      "target_bins": ["repo-hygiene-wired-proof"],
+      "target_bins": [
+        "repo-hygiene-wired-proof"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["live crontab row invokes bin/repo-hygiene-wired-proof.sh, not the Rust binary; check-publish/src/publish.rs:47 also names the shell domain path"],
+      "non_root_references": [
+        "live crontab row invokes bin/repo-hygiene-wired-proof.sh, not the Rust binary; check-publish/src/publish.rs:47 also names the shell domain path"
+      ],
       "git_history_commits_at_head": 2,
       "verdict": "UNKNOWN",
-      "reason": "Shell-name collision is not Rust reachability; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "The active cron row invokes the shell classifier, while the Rust crate is a proof port; replacement is not established."
+      }
     },
     {
       "name": "scheduled-lane-doctor",
-      "target_bins": ["scheduled-lane-doctor"],
+      "target_bins": [
+        "scheduled-lane-doctor"
+      ],
       "external_library_callers": [],
       "root_executor_triggers": [],
       "non_root_references": [],
       "git_history_commits_at_head": 5,
       "verdict": "UNKNOWN",
-      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+      "reason": "Unreachable, but supersession is UNDETERMINED; compilation_axis is separate and does not authorize deletion.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "REFUSED_NO_ADMISSIBLE_WORKER",
+      "supersession": {
+        "status": "UNDETERMINED",
+        "successor_paths": [],
+        "basis": "No replacement was found in the audited production sources or trigger surfaces."
+      }
     },
     {
       "name": "zestgraph-hook-substrates",
@@ -273,10 +413,28 @@
       ],
       "external_library_callers": [],
       "root_executor_triggers": [],
-      "non_root_references": ["launchd plist ai.zeststream.skill-topology-gate invokes ~/.claude/scripts/skill-topology-gate-run.sh, not a target binary"],
+      "non_root_references": [
+        "launchd plist ai.zeststream.skill-topology-gate invokes ~/.claude/scripts/skill-topology-gate-run.sh, not a target binary"
+      ],
       "git_history_commits_at_head": 3,
       "verdict": "TERMINAL",
-      "reason": "No caller or accepted root trigger, and src/lib.rs:3-10 explicitly records the hook entrypoints as retired by the shadow-to-uncertified demotion."
+      "reason": "Unreachable and explicitly retired; successor parity substrates are cited in supersession.successor_paths, so it is TERMINAL.",
+      "reachability": "UNREACHABLE",
+      "compilation_axis": "NOT_RUN",
+      "supersession": {
+        "status": "SUPERSEDED",
+        "successor_paths": [
+          "/Users/josh/.claude/hooks/accretive-write-gate.sh",
+          "/Users/josh/Developer/foundry/loop-kit/danger-gate.sh",
+          "/Users/josh/Developer/foundry/agent-prompts/agent-prompt-drift-stop-hook.sh",
+          "/Users/josh/Developer/foundry/loop-kit/pretooluse-reservation-conflict-gate.sh",
+          "/Users/josh/.local/bin/ee",
+          "/Users/josh/.claude/scripts/skill-topology-gate-run.sh",
+          "/Users/josh/.claude/scripts/skill-topology-gate.selftest.sh",
+          "/Users/josh/.claude/scripts/skill-topology-gate.sh"
+        ],
+        "basis": "src/lib.rs:3-10 explicitly records the hook entrypoints as retired; src/bin/*.rs names the legacy parity substrates."
+      }
     }
   ],
   "summary": {
@@ -288,7 +446,14 @@
     "reclassified_out_of_terminal": 13,
     "deletions_performed": 0,
     "recovery_command_template": "git checkout <sha> -- crates/<name>",
-    "deletion_status": "DEFERRED pending different-pane review of this table; no control-plane files were modified"
+    "deletion_status": "DEFERRED pending different-pane review of this table; no control-plane files were modified",
+    "verdict_rule": "reachable => LIVE; unreachable plus SUPERSEDED => TERMINAL; unreachable plus NOT_FOUND_IN_AUDITED_SURFACES => INERT; unresolved supersession => UNKNOWN",
+    "compilation_axis_separate": true
   },
-  "no_claim": "This artifact proves caller and executor reachability only for the enumerated package metadata, live crontab, launchd, git-hook, workflow, and direct Command::new surfaces. Cargo metadata and source reads used a dirty control-plane worktree. UNKNOWN rows are not deletion candidates. It does not prove behavior for failed/refused test probes, installed-binary parity, or absence of dynamic/manual invocations outside the listed trigger classes."
+  "no_claim": "This re-verdict separates reachability, supersession, and compilation. UNKNOWN means supersession was not established and is not a deletion candidate. It still does not prove absence of dynamic/manual invocations outside the enumerated trigger surfaces, nor clean-HEAD behavior for the dirty control-plane worktree.",
+  "reverdict": {
+    "discriminator": "reachable => LIVE; unreachable plus SUPERSEDED => TERMINAL; unreachable plus NOT_FOUND_IN_AUDITED_SURFACES => INERT; unresolved supersession => UNKNOWN",
+    "compilation_is_separate_axis": true,
+    "correction": "The prior G2 wording incorrectly used compilability to distinguish INERT from TERMINAL. Failed/refused tests remain evidence on compilation_axis only."
+  }
 }
