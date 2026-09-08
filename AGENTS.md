@@ -954,10 +954,17 @@ control-plane is the authority for the RPC machine.
 
 **The bead lifecycle:** `open → in_progress (claimed) → closed (with cited evidence)`, with two
 traps that are ours. **A close reason must start `MUTATION-VERIFIED` / `DONE` / `APPROVED` /
-`WONTFIX`** — a prose reason is refused by policy, the refusal scrolls past, and the agent believes
-it landed. **And a child blocked by its parent epic cannot close**, which inverts the dependency and
+`WONTFIX`** — **but NOTHING REFUSES a prose reason today, and the earlier text here claiming
+otherwise is retired.** `ack-spine` types the four prefixes and names its own bypass; measured
+2026-09-08, **6 of 241 closed beads carry a non-conforming prefix and one is EMPTY.** So the prefix
+is a convention you keep, not a wall that catches you — **always read the status back.** Tracked as
+`uqnut`, whose measured decision is to EXTEND the set: five of those six (`PREMISE-FALSE`,
+`MUTATION-NOT-REQUIRED`, `MUTATION-ATTRIBUTED`) are MORE precise than the four, so forcing them
+behind `WONTFIX` would delete information a grader deliberately recorded.
+**And a child blocked by its parent epic cannot close**, which inverts the dependency and
 makes both permanently unclosable; `--force` with the reason recorded is correct when the epic is the
-only blocker.
+only blocker — **and ONLY then.** Measured the same day: `a92y` and `gfb` were each blocked by a real
+open TASK, two panes refused `--force` on both, and both refusals were right.
 
 ## The four skills, and how they compose here
 
@@ -2004,6 +2011,20 @@ should be unable to emit a row whose only options are the orchestrator's own ver
 > destroy correct history — including the Grok review that caught the malformed ACK token in this
 > file's own dispatch doctrine.
 
+**⛔ ONE CLAUSE INSIDE THAT QUOTE IS FACTUALLY WRONG, AND THE POINTER LANDS HERE RATHER THAN
+DOWNSTREAM.** Line 2006 says *"a prose reason is refused by policy and the refusal scrolls past
+in-pane."* **Nothing refuses it.** `crates/ack-spine/src/close_reason.rs:106-109` documents its own
+bypass, `CloseReason` references outside that crate measure ZERO against a positive control of 14,
+and **6 of 241 closed beads carry a non-conforming prefix — one of them EMPTY.** Corrected in full
+under *Grading gate* below; tracked as `uqnut`.
+
+**The quote is left byte-intact on purpose.** It is a verbatim record of a ruling, and editing a
+quoted ruling to repair a factual error inside it destroys the record. **The pointer sits at the
+original text because this file has already paid for the alternative:** `docs/plan/flow/CONTRACT.md`
+said **BUILD FREEZE** in bold at `:59` while the amendment lifting it for S1 sat at `:101`, and a
+reader who stops at the word FREEZE never reaches the word AUTHORIZED. **That cost a session:** 131
+authorized beads sat claimable while three panes were routed to audits.
+
 **A bead is closed by an agent who did NOT implement it.** Verification runs
 `/beads-compliance-and-completion-verification` against the bead's own acceptance
 criteria, and the close reason cites what the GRADER re-executed — not what the
@@ -2034,10 +2055,33 @@ own bead (that is self-certifying the stage). The grader still closes. Caller: `
 (`impl_to_grading_after_ack`).
 
 
-The close policy REFUSES a prose reason, and the refusal scrolls past in-pane while the
-agent moves on believing the close landed. Always read the status back:
-`br show <id> --json | jq -r '.[0].status'` — note `br show` returns a BARE list, while
-`br list` wraps its rows in `.issues`.
+**CORRECTED 2026-09-08 — THIS PARAGRAPH ASSERTED A REFUSAL THAT DOES NOT HAPPEN, and the code was
+the honest party the whole time.** The retired claim was *"the close policy REFUSES a prose reason,
+and the refusal scrolls past in-pane while the agent moves on believing the close landed."* **There
+is nothing to scroll past on a direct `br close`.** `crates/ack-spine/src/close_reason.rs:106-109`
+says so in its own doc comment on the `PolicyRefused` variant:
+
+> *"The tracker command itself stores arbitrary reasons, so a direct tracker close can bypass this
+> verdict; the status must be read back rather than inferred from the command appearing to succeed."*
+
+**So `ack-spine` types the four prefixes, carries a `CLOSE_REASON_POLICY_REFUSED` verdict, and names
+its own bypass — and `CloseReason` references outside that crate measure ZERO** against a positive
+control of 14. The classifier is correct and INERT: what is missing is a caller on the path a close
+actually takes. **A doctrine row asserting a hole is closed is worse than a missing gate**, because a
+reader checks whether the hole is closed and finds a sentence saying it is. Measured cost: **6 of 241
+closed beads carry a non-conforming prefix**, one of them EMPTY, and nothing refused any of them.
+
+**WHAT IS ACTUALLY TRUE, and it is the only durable half: ALWAYS READ THE STATUS BACK.**
+
+```
+br show <id> --json | jq -r '.[0].status'
+```
+
+`br show` returns a BARE list while `br list` wraps its rows in `.issues` — **and `br list` EXCLUDES
+closed rows by default**, which made a grading-backlog query report `closed today: 0` against a real
+figure of 17. Tracked as `uqnut`, whose measured decision is to EXTEND the prefix set rather than
+force five more-precise verdicts (`PREMISE-FALSE`, `MUTATION-NOT-REQUIRED`, `MUTATION-ATTRIBUTED`)
+behind `WONTFIX`.
 
 ---
 
