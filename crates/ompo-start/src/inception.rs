@@ -12,6 +12,7 @@ use lifecycle_event::{
     default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
 };
 use serde_json::Value;
+use lifecycle_monitor::verify_artifact;
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 use std::fs::{self, File, OpenOptions};
@@ -93,6 +94,15 @@ pub struct InceptionManifest {
 pub struct InceptionReadback {
     pub repo_identity: RepoIdentity,
     pub control_files_complete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InitReport {
+    pub manifest: InceptionManifest,
+    pub actions: usize,
+    pub backup: Option<PathBuf>,
+    pub journal_rows: usize,
+    pub monitor_rows: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -543,6 +553,48 @@ fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
     Ok(readback.lines)
 }
 
+pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
+    let manifest = build_manifest(repo_root)?;
+    let bytes = render_manifest(&manifest).into_bytes();
+    let (actions, backup) = match fs::read(output) {
+        Ok(existing) if existing == bytes => (0, None),
+        Ok(_) => (1, snapshot_existing(output)?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (1, None),
+        Err(error) => {
+            return Err(InceptionError::Readback {
+                path: output.to_owned(),
+                detail: format!("pre-state read failed: {error}"),
+            });
+        }
+    };
+    if actions == 1 {
+        write_atomic(output, &bytes)?;
+    }
+    let readback = read_inception(output)?;
+    if readback.repo_identity != manifest.repo_identity {
+        return Err(InceptionError::Readback {
+            path: output.to_owned(),
+            detail: format!(
+                "repo_identity changed during initialization: expected={} found={}",
+                manifest.repo_identity.canonical_path, readback.repo_identity.canonical_path
+            ),
+        });
+    }
+    let journal_path = default_repo_journal(repo_root);
+    let journal_rows = emit_init_event(repo_root)?;
+    let monitor_rows = verify_artifact(&journal_path).map_err(|error| InceptionError::Readback {
+        path: journal_path,
+        detail: format!("monitor reread failed: {error}"),
+    })?;
+    Ok(InitReport {
+        manifest,
+        actions,
+        backup,
+        journal_rows,
+        monitor_rows,
+    })
+}
+
 pub fn write_inception(
     repo_root: &Path,
     output: &Path,
@@ -621,6 +673,19 @@ mod tests {
             .collect();
         assert_eq!(backups.len(), 1);
         assert_eq!(fs::read(&backups[0]).expect("backup artifact"), before);
+    }
+
+    #[test]
+    fn initialize_reprobes_and_second_run_has_zero_artifact_actions() {
+        let (directory, output) = fixture();
+        let first = initialize(directory.path(), &output).expect("first init");
+        let second = initialize(directory.path(), &output).expect("second init");
+        assert_eq!(first.actions, 1);
+        assert_eq!(second.actions, 0);
+        assert_eq!(second.backup, None);
+        assert_eq!(second.monitor_rows, first.monitor_rows + 1);
+        assert_eq!(second.manifest.repo_identity, first.manifest.repo_identity);
+        assert_eq!(second.monitor_rows, second.journal_rows);
     }
 
     #[test]

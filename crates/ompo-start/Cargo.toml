@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 lifecycle-event = { path = "../lifecycle-event", default-features = false }
+lifecycle-monitor = { path = "../lifecycle-monitor" }
 serde_json = "1"
 sha2 = "0.11"
 
