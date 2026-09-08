@@ -229,10 +229,48 @@ the file said not to, escalated to a human decision row, stood the fleet down tw
 ~40-minute build window. **The remedy was five minutes of work the whole time.**
 
 **THE PROHIBITION IS NARROWER THAN IT LOOKS AND THE ORCHESTRATOR OVER-READ IT.** What is forbidden
-is **provisioning and configuration**: installing packages, adding toolchains, editing
-`workers.toml` or `~/.config/rch/*`, changing DNS, adding shims, `apt-get`, `rch doctor --fix`.
+is **PROVISIONING BY HAND**: installing packages, adding toolchains, hand-editing `workers.toml` or
+`~/.config/rch/*`, changing DNS, adding shims, `apt-get`.
 **Deleting regenerable build artifacts is none of those things.** It is housekeeping, it is demanded,
 and declining to do it is the incompetence.
+
+### ✅ `rch doctor --fix` AND `git push` ARE APPROVED FOR AGENTS (Joshua, 2026-09-08)
+
+Joshua, verbatim: **"rch doctor is approved for agents - or whatever needs - same with pushing"**.
+
+**SUPERSEDES two rows this file carried an hour earlier** — that `rch doctor --fix` was *"FORBIDDEN
+to agents"* and that the reaper-config repair was a `HUMAN DECISION` (`HD-0050`). **Both are agent
+work now. Do not file either as an escalation.**
+
+```
+rch doctor        20 passed · 1 warn · 1 FAILED
+  FAILED  remediation.pooled_target.reaper_pooled_idle_hours   "must be 0 or >= 24"
+  WARN    remediation.pooled_target.remote_base outside RCH-managed roots
+rch doctor --fix  offers auto-repair -- RUN IT, then re-run `rch doctor` and paste both
+```
+
+**This is the root cause of the whole stall class.** An invalid reaper config means pooled dirs are
+never reclaimed, so disk climbs to 90-93 %, so admission refuses `critical_pressure=4`. Repairing it
+converts a manual 154 GB rescue into something the daemon does by itself.
+
+**The distinction that survives:** `rch doctor --fix` is **the tool repairing its own config**, which
+is categorically different from an agent hand-editing `workers.toml`. The first is sanctioned; the
+second is still forbidden.
+
+**`git push` is likewise approved.** `HD-0008` already recorded *"push to public origin/main as-is"*
+and it sat unexecuted while the count grew — **124 commits unpushed as of 2026-09-08**. Everything
+the fleet does is invisible to a fresh clone and to CI until it is pushed, and CI is the strictly
+MORE COMPLETE gate measurement (it measured ten crates the local bank could not). **`HD-0032`
+re-asking this was an execution gap, not a decision gap.**
+
+**The one hazard, unchanged:** commit path-scoped with **BOTH** pathspecs
+(`git add -- <paths> && git commit -- <paths>`). A bare `git commit` takes the WHOLE INDEX and
+sweeps other panes' unfinished work — measured twice here, once sweeping a peer's 220-line taxonomy.
+
+**NO-CLAIM.** `--fix` repairing the config does not prove the reaper then runs. **Verify with a real
+`rch gc --dry-run` before trusting it** — `rch gc` reported `removed=0, freeing 0 MB` on all four
+boxes while they sat at 90-93 % full, which is exactly the shape of an instrument that reports
+success and does nothing. Reclaim stays a standing duty until the reaper is *proven* working.
 
 ### WHY `rch gc` FREES NOTHING — the mechanism, measured, and the old row had it WRONG
 
@@ -284,7 +322,9 @@ plus orphaned `*-mut` mutation worktrees and `grade-*` scratch trees that outliv
 ### DO IT WITHOUT BEING ASKED
 
 **Any worker above ~70 %: reclaim it. Do not file a decision row, do not stand the fleet down, do not
-wait for a human.** Escalate only what genuinely needs `rch doctor --fix` or a config change.
+wait for a human.** `rch doctor --fix` is approved too, so the only remaining escalation is a
+hand-edit of `workers.toml` / `~/.config/rch/*` or provisioning a box — which is forbidden, not
+deferred.
 
 **`dcg` blocks `rm -rf` and `find -delete` as direct tool calls** (`core.filesystem:rm-rf-general`,
 `find-delete-general`) and Joshua's ruling is that **a script is the sanctioned path** — the guard is
