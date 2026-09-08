@@ -341,6 +341,19 @@ pub struct AlignmentReport {
     pub coverage_by_kind: BTreeMap<String, KindCoverage>,
     /// Allowance rows whose `dies_when` condition is now observably true.
     pub stale_allowances: Vec<String>,
+    /// Declarations naming a surface that is NOT in the derived set.
+    ///
+    /// Found the first time this gate reached `FULL`: `%20` declared
+    /// `kind="rpc_handler" name="get_state"` while the deriver emitted only `cli` and
+    /// `transport_mode` kinds, so three well-formed declarations matched nothing and
+    /// **nothing noticed**. A `CONSUMED` row is a citation; a declaration that cites a
+    /// surface which does not exist is a claim about nothing, and silence about it is how
+    /// a coverage report reads healthy while covering none of the declared work.
+    ///
+    /// Reported rather than refused: a declaration may legitimately precede a deriver that
+    /// cannot yet see its kind — which is exactly the state today. Making it LOUD is the
+    /// fix; refusing would punish the consumer for the deriver's gap.
+    pub orphan_declarations: Vec<String>,
 }
 
 /// Coverage for one surface kind.
@@ -547,6 +560,11 @@ pub fn align(
         .map(|row| format!("{}:{} owner={} dies_when={}", row.kind, row.name, row.owner, row.dies_when))
         .collect();
 
+    // Computed unconditionally, and ALSO exposed as `orphan_declarations` so the caller can
+    // report orphans even when `align` refuses -- which is the common case today, and the
+    // case where hiding them would matter most.
+    let orphans = orphan_declarations(surface, consumers);
+
     if !unclassified.is_empty() {
         return Err(AlignmentError::Unclassified(unclassified));
     }
@@ -557,7 +575,37 @@ pub fn align(
         packages_scanned: consumers.packages_scanned,
         coverage_by_kind: coverage,
         stale_allowances,
+        orphan_declarations: orphans,
     })
+}
+
+/// Declarations that name a surface absent from the derived set.
+///
+/// Independent of [`align`] on purpose: `align` returns early when anything is
+/// unclassified, so a caller that only read the `Ok` path would never see an orphan in the
+/// exact situation orphans matter — a refusing run. The bin calls this directly.
+#[must_use]
+pub fn orphan_declarations(
+    surface: &[SurfaceEntry],
+    consumers: &ConsumerIndex,
+) -> Vec<String> {
+    let present: BTreeSet<(&str, &str)> = surface
+        .iter()
+        .map(|entry| (entry.kind.as_str(), entry.name.as_str()))
+        .collect();
+    consumers
+        .declarations
+        .iter()
+        .filter(|declaration| {
+            !present.contains(&(declaration.kind.as_str(), declaration.name.as_str()))
+        })
+        .map(|declaration| {
+            format!(
+                "{}:{} declared_by={} call_site={}",
+                declaration.kind, declaration.name, declaration.crate_name, declaration.call_site
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]

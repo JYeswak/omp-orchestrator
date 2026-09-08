@@ -149,6 +149,14 @@ fn main() -> ExitCode {
         return ExitCode::from(EXIT_OK);
     };
 
+    // BEFORE the verdict, on BOTH paths. `align` returns early when anything is
+    // unclassified, so reporting orphans only on success would hide them in exactly the
+    // situation that produced the finding: three well-formed declarations matching nothing
+    // while the run refused for an unrelated reason.
+    for orphan in alignment::orphan_declarations(&surface, &consumers) {
+        println!("ALIGN_ORPHAN_DECLARATION {orphan}");
+    }
+
     match alignment::align(
         &omp_root.display().to_string(),
         omp_version,
