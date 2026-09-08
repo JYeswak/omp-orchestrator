@@ -21,3 +21,7 @@ unsafe_code = "forbid"
 
 [dependencies]
 subprocess-contract = { path = "../subprocess-contract" }
+
+[package.metadata.gate]
+# Run the existing scanner through gate-runner as an explicit zero-argument phase.
+checks = [{ bin = "omp-surface-consumption", args = [], takes_no_args = true }]
