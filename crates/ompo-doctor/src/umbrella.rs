@@ -24,7 +24,35 @@ pub const SCHEMA_VERSION: &str = "omp.umbrella/v1";
 
 /// Verbs the umbrella dispatches. `start` owns the ordered walkthrough and
 /// `portal` projects liveness and next action into a robot envelope.
-pub const VERBS: &[&str] = &["init", "doctor", "help", "capabilities", "start", "portal", "quickstart", "completion", "upstream-report" "state",];
+///
+/// EVERY entry here MUST appear in [`usage`]. That is not a convention — it is
+/// asserted by `every_verb_appears_in_usage`, because this const and `usage()`
+/// were two sources of truth and had ALREADY drifted: `quickstart`, `completion`
+/// and `upstream-report` all dispatched while appearing nowhere in root `--help`,
+/// so three shipped verbs were invisible to an operator reading help. The test is
+/// the mechanism; a hand-maintained second list is what produced the drift.
+pub const VERBS: &[&str] = &[
+    "init",
+    "doctor",
+    "help",
+    "capabilities",
+    "start",
+    "portal",
+    "quickstart",
+    "completion",
+    "upstream-report",
+    "validate",
+    "audit",
+    "why",
+    "health",
+    "repair",
+    // Added concurrently by %20 while pane 1 held this site. It DOES dispatch
+    // (`main.rs:80  "state" => run_state(rest)`), so it is a legitimate entry --
+    // it was simply missing its usage line, which `every_verb_appears_in_usage`
+    // demanded on the test's first day. That is the parity leg working, not a
+    // collision to revert.
+    "state",
+];
 
 /// The adapter roster. Never empty: `build.rs` refuses to generate an empty one, and
 /// [`roster_or_error`] is the runtime guard for the same property.
@@ -172,12 +200,27 @@ pub fn usage() -> String {
         "usage: ompo <verb> [args]\n\
          \x20 init [--repo PATH] [--output PATH] [--json]      write and read back the inception manifest\n\
          \x20 doctor [--repo PATH] [--scope FAMILY] [--json]   probe tools, emit lifecycle events\n\
+         \x20 doctor --adapter <name>|all [--json]             EXECUTE one adapter, or the whole roster\n\
+         \x20 health [--repo PATH] [--json]                    single-shot state read; spawns nothing\n\
+         \x20 repair --scope <s> [--dry-run] [--apply]         idempotent fix; --dry-run is the DEFAULT\n\
+         \x20 validate <thing> [--repo PATH] [--json]          pure read; verifies without executing\n\
+         \x20 audit [--limit N] [--repo PATH] [--json]         recent state mutations with provenance\n\
+         \x20 why <id> [--repo PATH] [--json]                  provenance trace for one object\n\
          \x20 start [--repo PATH] [--session NAME] [--json]    run the ordered S1 walkthrough\n\
          \x20 portal [--repo PATH] [--session NAME] --json     emit the S1 robot portal envelope\n\
+         \x20 state [--json]                                   project OMP's own state over --mode=rpc\n\
+         \x20 upstream-report <adapter> [--apply] [--json]     draft an upstream issue; --apply gated\n\
+         \x20 quickstart [--json]                              orientation for a new operator or agent\n\
+         \x20 completion <shell>                               emit a completion script for <shell>\n\
          \x20 help <adapter>                                   usage for one of {} workspace adapters\n\
          \x20 capabilities [--json]                            enumerate adapters, verbs, probe ids\n\
          ADDRESSING: a positional <adapter> selects a workspace TARGET; --scope selects a PROBE\n\
-         FAMILY. Both axes exist and neither subsumes the other.",
+         FAMILY. Both axes exist and neither subsumes the other.\n\
+         MUTATION: `repair` and any --apply path default to a dry run. `--dry-run` with `--apply`\n\
+         is a typed refusal, not a precedence rule.\n\
+         EXIT CODES: 0 success · 1 degraded · 2 usage or safety refusal · 3 instrument error ·\n\
+         4 upstream unreachable. `2` and `4` are distinct: a name absent from the roster is a\n\
+         usage error, a roster member absent from PATH is upstream-unreachable.",
         ADAPTERS.len()
     )
 }
@@ -193,6 +236,73 @@ mod tests {
             "an empty roster must be an ERROR, and build.rs must never generate one"
         );
         assert!(adapters().len() >= 2, "roster = {}", adapters().len());
+    }
+
+    /// LEG 2 OF THE VERB CLOSING CONTRACT, in the direction that had already broken.
+    ///
+    /// `VERBS` and [`usage`] were two hand-maintained lists. Measured 2026-09-07:
+    /// `quickstart`, `completion` and `upstream-report` were all in `VERBS`, all
+    /// dispatched from `main.rs`, and NONE appeared in root `--help` — so three
+    /// shipped verbs were invisible to an operator reading help, and the canonical
+    /// `check-cli-scoping` root-help probe for `--dry-run` failed for the same
+    /// reason. A convention did not prevent that. This test does.
+    #[test]
+    fn every_verb_appears_in_usage() {
+        let rendered = usage();
+        let missing: Vec<&str> = VERBS
+            .iter()
+            .copied()
+            .filter(|verb| !rendered.contains(verb))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "these verbs dispatch but are absent from root usage, so an operator \
+             reading --help cannot discover them: {missing:?}"
+        );
+    }
+
+    /// The negative half: usage must not advertise a verb the umbrella does not
+    /// dispatch. An array entry with no dispatch is a lie; a usage line with no
+    /// dispatch is the same lie in prose, and it is the worse failure direction
+    /// because an operator acts on help text.
+    ///
+    /// KEYED ON STRUCTURE, NOT ON CASE. The first version of this test guessed a
+    /// verb line from "starts with a lowercase token" and FAILED on its own
+    /// subject: prose continuation lines inside the same `format!` also begin
+    /// with lowercase words, so it flagged sentence fragments as advertised
+    /// verbs. Verb lines are the ones `\x20` indents; prose lines render flush.
+    /// That is a real discriminator rather than a heuristic — the same lesson
+    /// this crate's peers hit tonight with `^error` against ANSI output and with
+    /// a needle drawn from a commit message instead of from source.
+    #[test]
+    fn usage_advertises_no_verb_outside_the_verb_set() {
+        let rendered = usage();
+        let advertised: Vec<String> = rendered
+            .lines()
+            .filter(|line| line.starts_with(' '))
+            .filter_map(|line| line.split_whitespace().next().map(str::to_owned))
+            .filter(|token| !VERBS.contains(&token.as_str()))
+            .collect();
+        assert!(
+            advertised.is_empty(),
+            "root usage advertises indented tokens that are not dispatchable verbs: \
+             {advertised:?}"
+        );
+    }
+
+    /// The canonical `check-cli-scoping` probe greps ROOT help for `--dry-run`,
+    /// because a mutating CLI whose dry-run is undiscoverable is one an operator
+    /// will not use. Pinned here so the mention cannot be dropped in an edit.
+    #[test]
+    fn root_usage_documents_the_dry_run_default_and_the_exit_dictionary() {
+        let rendered = usage();
+        for needle in ["--dry-run", "--apply", "EXIT CODES", "upstream unreachable"] {
+            assert!(
+                rendered.contains(needle),
+                "root usage must document {needle:?}: the canonical checker probes root \
+                 --help for the mutation and exit-code contract"
+            );
+        }
     }
 
     #[test]
