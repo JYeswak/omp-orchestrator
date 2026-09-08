@@ -866,9 +866,10 @@ unconstructible:
 
 **Of the surface we do not consume, the split that matters** (measured independently and agreeing):
 
-- **(b) reimplemented by scraping — 4:** pane state, dispatch, session, health check. Each has an OMP
-  RPC or CLI alternative *that exists today*. These are not gaps; they are rewrites of shipped
-  surface, done through a terminal.
+- **(b) historical reimplementation by scraping — 4:** pane state, dispatch, session, health check.
+  For profiled OMP panes, pane state now has the typed profile-store route below; scraping remains
+  only for third-party or bare-shell panes with no OMP profile/session mapping.
+  These historical rewrites are not evidence that the corresponding protocol is an attach route.
 - **(c) should use — 2:** `goals`, `collab`. Nothing in `crates/` mentions either.
 
 **CORRECTION 2026-09-08 — the three `omp/*` names above are not pane orchestration.** The
@@ -899,7 +900,8 @@ attach to an already-running pane. A new pane-keyed mux would buy a separately a
 push-capable endpoint, but no current consumer needs that beyond the profile-store reader; adding
 one now would duplicate supervision, socket lifecycle, and recovery without adding observed
 capability. Revisit only when a consumer requires remote subscriptions or control unavailable
-through the reader.
+through the reader. This decision is version-bound to installed OMP 18.1.5 and the observed machine
+state; re-derive it after upgrades or profile changes.
 
 `omp-orchestrator-omp-surface-map-41b` owns turning this into the per-crate table.
 
