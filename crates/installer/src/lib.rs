@@ -165,6 +165,7 @@ impl fmt::Display for InstallError {
     }
 }
 
+
 /// Canonical artifact triple selected from the running platform tuple.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlatformResolution {
@@ -180,33 +181,12 @@ pub fn resolve_platform_triple(
     libc: Option<&str>,
 ) -> Result<PlatformResolution, InstallError> {
     let result = match (os, arch, libc) {
-        ("macos", "aarch64", None) => PlatformResolution {
-            artifact_triple: "aarch64-apple-darwin",
-            fallback: None,
-        },
-        ("macos", "x86_64", None) => PlatformResolution {
-            artifact_triple: "x86_64-apple-darwin",
-            fallback: None,
-        },
-        ("linux", "aarch64", Some("gnu")) => PlatformResolution {
-            artifact_triple: "aarch64-unknown-linux-gnu",
-            fallback: None,
-        },
-        ("linux", "x86_64", Some("gnu")) => PlatformResolution {
-            artifact_triple: "x86_64-unknown-linux-gnu",
-            fallback: None,
-        },
-        ("linux", "x86_64", Some("musl")) => PlatformResolution {
-            artifact_triple: "x86_64-unknown-linux-gnu",
-            fallback: Some("musl-to-gnu"),
-        },
-        _ => {
-            return Err(InstallError::PlatformTripleUnsupported {
-                os: os.to_owned(),
-                arch: arch.to_owned(),
-                libc: libc.map(ToOwned::to_owned),
-            })
-        }
+        ("macos", "aarch64", None) => PlatformResolution { artifact_triple: "aarch64-apple-darwin", fallback: None },
+        ("macos", "x86_64", None) => PlatformResolution { artifact_triple: "x86_64-apple-darwin", fallback: None },
+        ("linux", "aarch64", Some("gnu")) => PlatformResolution { artifact_triple: "aarch64-unknown-linux-gnu", fallback: None },
+        ("linux", "x86_64", Some("gnu")) => PlatformResolution { artifact_triple: "x86_64-unknown-linux-gnu", fallback: None },
+        ("linux", "x86_64", Some("musl")) => PlatformResolution { artifact_triple: "x86_64-unknown-linux-gnu", fallback: Some("musl-to-gnu") },
+        _ => return Err(InstallError::PlatformTripleUnsupported { os: os.to_owned(), arch: arch.to_owned(), libc: libc.map(ToOwned::to_owned) }),
     };
     Ok(result)
 }
@@ -214,11 +194,7 @@ pub fn resolve_platform_triple(
 /// Resolve the platform that will own the installed artifact.
 pub fn current_platform_triple() -> Result<PlatformResolution, InstallError> {
     let libc = match std::env::consts::OS {
-        "linux" => Some(if cfg!(target_env = "musl") {
-            "musl"
-        } else {
-            "gnu"
-        }),
+        "linux" => Some(if cfg!(target_env = "musl") { "musl" } else { "gnu" }),
         _ => None,
     };
     resolve_platform_triple(std::env::consts::OS, std::env::consts::ARCH, libc)
@@ -292,7 +268,10 @@ fn timestamped_backup_path(path: &Path) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("hook");
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("hook");
     path.with_file_name(format!("{name}.bak.{nanos}"))
 }
 
@@ -320,7 +299,10 @@ pub fn merge_hooks(
                 let _ = std::fs::write(path, bytes);
             }
             return Err(InstallError::HookMergeFailed {
-                backups: backups.iter().map(|p| p.display().to_string()).collect(),
+                backups: backups
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect(),
             });
         }
         if let Err(error) = std::fs::write(&write.path, &write.merged) {
@@ -798,7 +780,7 @@ fn parse_build_id(text: &str) -> Option<String> {
             && !token.eq_ignore_ascii_case("absent")
             && !token.eq_ignore_ascii_case("unavailable")
             && !token.eq_ignore_ascii_case("unversioned"))
-        .then(|| token.to_owned())
+            .then(|| token.to_owned())
     })
 }
 
@@ -1037,28 +1019,24 @@ pub fn stage_artifact_stream<R: Read>(
     let dest = dest_dir.join(dest_name);
     let staged_path = staged_install_path(&dest);
     let write = (|| -> Result<PathBuf, InstallError> {
-        let mut file =
-            std::fs::File::create(&staged_path).map_err(|error| InstallError::IoError {
-                path: staged_path.display().to_string(),
-                detail: format!("create staged file failed: {error}"),
-            })?;
+        let mut file = std::fs::File::create(&staged_path).map_err(|error| InstallError::IoError {
+            path: staged_path.display().to_string(),
+            detail: format!("create staged file failed: {error}"),
+        })?;
         let mut buf = [0u8; 8192];
         let mut written = 0u64;
         loop {
-            let n = stream
-                .read(&mut buf)
-                .map_err(|error| InstallError::IoError {
-                    path: staged_path.display().to_string(),
-                    detail: format!("STREAM_INCOMPLETE: {error}"),
-                })?;
+            let n = stream.read(&mut buf).map_err(|error| InstallError::IoError {
+                path: staged_path.display().to_string(),
+                detail: format!("STREAM_INCOMPLETE: {error}"),
+            })?;
             if n == 0 {
                 break;
             }
-            file.write_all(&buf[..n])
-                .map_err(|error| InstallError::IoError {
-                    path: staged_path.display().to_string(),
-                    detail: format!("staged write failed: {error}"),
-                })?;
+            file.write_all(&buf[..n]).map_err(|error| InstallError::IoError {
+                path: staged_path.display().to_string(),
+                detail: format!("staged write failed: {error}"),
+            })?;
             written += n as u64;
             if written > expected_len {
                 return Err(InstallError::IoError {
@@ -1090,7 +1068,11 @@ pub fn stage_artifact_stream<R: Read>(
 
 /// L0-ATOMIC-RENAME. Only a complete same-directory staged temp is renamed.
 /// A staged file mutated after verification (length ≠ expected_len) is refused.
-pub fn publish_atomic(staged: &Path, dest: &Path, expected_len: u64) -> Result<(), InstallError> {
+pub fn publish_atomic(
+    staged: &Path,
+    dest: &Path,
+    expected_len: u64,
+) -> Result<(), InstallError> {
     if staged.parent() != dest.parent() {
         return Err(InstallError::IoError {
             path: dest.display().to_string(),
@@ -1150,15 +1132,17 @@ pub fn install_binary(
         path: source.display().to_string(),
         detail: format!("open source artifact failed: {error}"),
     })?;
-    let expected_len = source_file
-        .metadata()
-        .map_err(|error| InstallError::IoError {
-            path: source.display().to_string(),
-            detail: format!("stat source artifact failed: {error}"),
-        })?
-        .len();
+    let expected_len = source_file.metadata().map_err(|error| InstallError::IoError {
+        path: source.display().to_string(),
+        detail: format!("stat source artifact failed: {error}"),
+    })?.len();
     let install_path = install_dir.join(&binary_name);
-    let staged_path = stage_artifact_stream(install_dir, &binary_name, source_file, expected_len)?;
+    let staged_path = stage_artifact_stream(
+        install_dir,
+        &binary_name,
+        source_file,
+        expected_len,
+    )?;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     #[cfg(unix)]
@@ -1189,7 +1173,8 @@ pub fn install_binary(
         let _ = std::fs::remove_file(&staged_path);
         return Err(InstallError::IoError {
             path: install_path.display().to_string(),
-            detail: "destination already exists; refuse replace of a pre-existing owner".to_owned(),
+            detail: "destination already exists; refuse replace of a pre-existing owner"
+                .to_owned(),
         });
     }
 
@@ -1447,10 +1432,7 @@ exit 0
     #[test]
     fn anonymous_build_identity_is_absent_from_leg_inventory() {
         for value in ["absent", "unavailable", "unversioned"] {
-            assert_eq!(
-                parse_build_id(&format!("installer 0.1.0 build_id={value}")),
-                None
-            );
+            assert_eq!(parse_build_id(&format!("installer 0.1.0 build_id={value}")), None);
         }
         assert_eq!(
             parse_build_id("installer 0.1.0 build_id=0123456789abcdef"),
