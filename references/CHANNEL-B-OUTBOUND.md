@@ -27,7 +27,7 @@ The aligner reports:
 ```text
 ALIGN_SEAM inbound=42 outbound=6 seam_gap_bytes=2206
 ALIGN_MANIFEST state=FULL omp_root=omp omp_version=omp/18.1.14
-ALIGN_COVERAGE kind=rpc_notification total=6 classified=0 classified_bps=0
+ALIGN_COVERAGE kind=rpc_dispatch_seam_outbound total=6 classified=0 classified_bps=0
 ```
 
 The `2206`-byte seam remains an inference. A small seam gap is a reason to inspect the boundary,
@@ -96,6 +96,22 @@ prompt-correlated replies; they are not the event receipt.
 `tool_stream_update` is **UNKNOWN**, not absent, because the probe disabled tools. A tool-enabled
 prompt would be required to exercise it. Do not lower the denominator to five based on this probe.
 
+## Two frame subjects
+
+The aligner denominator is the extracted dispatch seam, not every frame type emitted by the RPC
+process. It should be named `rpc_dispatch_seam_inbound` (42) and
+`rpc_dispatch_seam_outbound` (6). The active-prompt process also emitted six runtime/transport
+frame types outside that 48-name cluster:
+
+```text
+agent_start, turn_start, ready, response, extension_ui_request, available_commands_update
+```
+
+The runtime frame vocabulary is a separate `installed_bundle_surface` subject. Do not add these
+six to the seam outbound denominator or convert them into seam declarations. The five prompt event
+names observed below prove push-per-turn behavior; the startup and response frames are transport
+and control traffic.
+
 ## Seam-versus-declaration test
 
 The seam explanation and the declaration explanation are distinguishable from the installed
@@ -117,9 +133,9 @@ tool_stream_update: cluster_index=42, side=outbound
 outbound: tool_stream_update, message_update, message_start, message_end, turn_end, agent_end
 ```
 
-`tool_stream_update` is a real `case` site immediately after the inferred seam. The denominator
-six is not a seam mis-split. Its absence from the installed declaration tree is the separate
-finding:
+`tool_stream_update` is a real `case` site immediately after the inferred seam. The
+`rpc_dispatch_seam_outbound` denominator is six and is not a seam mis-split. Its absence from the
+installed declaration tree is the separate finding:
 
 ```text
 tool.grep tool_stream_update under dist/types -> matchCount=0
@@ -134,9 +150,9 @@ stream tool updates.
 ## Consumer decision
 
 No Rust consumer exists today. `crates/omp-rpc-session` retains non-response event frames as
-`RpcFrame::Unknown`, and no package metadata declaration names `rpc_notification`. Do not declare
+`RpcFrame::Unknown`, and no package metadata declaration names `rpc_dispatch_seam_outbound`. Do not declare
 a speculative consumer. A future consumer must first define typed event payloads and a real
-callsite, then declare `kind = "rpc_notification"` with the event name and callsite.
+callsite, then declare `kind = "rpc_dispatch_seam_outbound"` with the event name and callsite.
 
 ## Gate status
 
