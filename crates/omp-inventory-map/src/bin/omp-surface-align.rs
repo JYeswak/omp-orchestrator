@@ -179,8 +179,9 @@ fn main() -> ExitCode {
         for (kind, (total, classified)) in by_kind {
             let bps = if total == 0 { 0 } else { (classified * 10_000) / total };
             println!(
-                "ALIGN_COVERAGE kind={kind} total={total} classified={classified} \
-                 classified_bps={bps}"
+                "ALIGN_COVERAGE kind={kind} subject={} total={total} classified={classified} \
+                 classified_bps={bps}",
+                coverage_subject(kind)
             );
         }
     }
@@ -202,11 +203,22 @@ fn main() -> ExitCode {
     }
 }
 
+fn coverage_subject(kind: &str) -> &'static str {
+    if kind == "rpc_handler" {
+        "rpc_dispatch_seam_inbound"
+    } else if kind == "rpc_notification" {
+        "rpc_dispatch_seam_outbound"
+    } else {
+        "installed_bundle_surface"
+    }
+}
+
 fn print_report(report: &AlignmentReport) {
     for (kind, coverage) in &report.coverage_by_kind {
         println!(
-            "ALIGN_COVERAGE kind={kind} total={} consumed={} deliberately_not={} \
+            "ALIGN_COVERAGE kind={kind} subject={} total={} consumed={} deliberately_not={} \
              classified_bps={}",
+            coverage_subject(kind),
             coverage.total,
             coverage.consumed,
             coverage.deliberately_not,
