@@ -421,7 +421,7 @@ fn capabilities(json_mode: bool) -> u8 {
         "observes": true,
         "dispatches": true,
         "gated_on_check_sh": false,
-        "subcommands": ["status", "why", "capabilities", "run"],
+        "subcommands": ["status", "why", "capabilities", "pane-state", "run"],
         "mutation": "ntm robot send (one call per pane; no fallback)",
         "profile_store_route": true,
         "legacy_spinner_route": "unprofiled_only",
@@ -590,6 +590,28 @@ fn report_profile_store_mapping(
         "state_token": entry.entry.state_token.status(),
     }));
 }
+fn report_profile_store_state(
+    pane: &str,
+    profile: &str,
+    outcome: &ompo_doctor::omp_state::StateOutcome,
+) {
+    let idle_projection = match profile_store::idle_from_state(outcome) {
+        Some(true) => "idle",
+        Some(false) => "working",
+        None => "unknown",
+    };
+    emit(json!({
+        "schema": "omp-idle-dispatch.pane-state.v1",
+        "lane": LANE,
+        "pane": pane,
+        "profile": profile,
+        "state_outcome": outcome.reason_code(),
+        "state_status": outcome.envelope_status(),
+        "snapshot_projection": idle_projection,
+        "dispatch_projection": "unknown",
+        "liveness_proof": "UNMEASURED_LAST_OPENED_SESSION",
+    }));
+}
 
 #[derive(Debug)]
 enum PaneSample {
@@ -606,21 +628,6 @@ enum PaneSample {
         error: PaneOracleError,
         omp_seen: bool,
     },
-}
-
-fn state_outcome_error(outcome: &ompo_doctor::omp_state::StateOutcome) -> PaneOracleError {
-    PaneOracleError::Runtime(format!(
-        "state_outcome={} exit_code={}",
-        outcome.reason_code(),
-        outcome.exit_code()
-    ))
-}
-
-fn typed_idle(outcome: &ompo_doctor::omp_state::StateOutcome) -> Result<bool, PaneOracleError> {
-    match profile_store::idle_from_state(outcome) {
-        Some(value) => Ok(value),
-        None => Err(state_outcome_error(outcome)),
-    }
 }
 
 fn observe_unprofiled(pane: &str, confirm_seconds: u64) -> PaneSample {
@@ -661,64 +668,23 @@ fn observe_unprofiled(pane: &str, confirm_seconds: u64) -> PaneSample {
 
 fn observe_profiled(
     pane: &str,
-    home: &Path,
-    binary: &str,
-    confirm_seconds: u64,
     profile: String,
     entry: profile_store::ValidatedSessionEntry,
     outcome: ompo_doctor::omp_state::StateOutcome,
 ) -> PaneSample {
     report_profile_store_mapping(pane, &profile, &entry);
-    let first_idle = match typed_idle(&outcome) {
-        Ok(value) => value,
-        Err(error) => return PaneSample::OracleError { error, omp_seen: true },
+    report_profile_store_state(pane, &profile, &outcome);
+    let snapshot_projection = match profile_store::idle_from_state(&outcome) {
+        Some(true) => "idle",
+        Some(false) => "working",
+        None => "unknown",
     };
-    if !first_idle {
-        return PaneSample::Skipped {
-            omp_seen: true,
-            unprofiled: false,
-        };
-    }
-    thread::sleep(Duration::from_secs(confirm_seconds));
-    let second_route = match read_pane_route(pane, home, binary) {
-        Ok(route) => route,
-        Err(error) => return PaneSample::OracleError { error, omp_seen: true },
-    };
-    let PaneRoute::Profiled {
-        profile: second_profile,
-        entry: second_entry,
-        outcome: second_outcome,
-        ..
-    } = second_route
-    else {
-        return PaneSample::OracleError {
-            error: PaneOracleError::Runtime("profile_route_changed_to_unprofiled".to_owned()),
-            omp_seen: true,
-        };
-    };
-    report_profile_store_mapping(pane, &second_profile, &second_entry);
-    if !match typed_idle(&second_outcome) {
-        Ok(value) => value,
-        Err(error) => return PaneSample::OracleError { error, omp_seen: true },
-    } {
-        return PaneSample::Skipped {
-            omp_seen: true,
-            unprofiled: false,
-        };
-    }
-    let capture = match capture_pane(pane) {
-        Ok(capture) => capture,
-        Err(_) => {
-            return PaneSample::Skipped {
-                omp_seen: true,
-                unprofiled: false,
-            };
-        }
-    };
-    PaneSample::Ready {
-        second: capture,
+    PaneSample::OracleError {
+        error: PaneOracleError::Runtime(format!(
+            "PANE_ORACLE_STATE_UNMEASURED reason=profile_store_is_last_opened_snapshot state_outcome={} snapshot_projection={snapshot_projection}",
+            outcome.reason_code()
+        )),
         omp_seen: true,
-        unprofiled: false,
     }
 }
 
@@ -735,7 +701,7 @@ fn observe_pane(
             entry,
             outcome,
             ..
-        }) => observe_profiled(pane, home, binary, confirm_seconds, profile, entry, outcome),
+        }) => observe_profiled(pane, profile, entry, outcome),
         Err(error) => PaneSample::OracleError {
             error,
             omp_seen: false,
@@ -1030,7 +996,7 @@ fn selftest() -> u8 {
 
 fn usage() {
     println!(
-        "omp-idle-dispatch [status|why|capabilities|run|--dry-run|--selftest] [--json] [--repo <PATH>]\n\n\
+        "omp-idle-dispatch [status|why|capabilities|run|--pane-state %N|--dry-run|--selftest] [--json] [--repo <PATH>]\n\n\
          Repository root precedence: --repo flag > {REPO_ENV} env > upward walk from the cwd\n\
          for a {} marker. No marker and no override is a loud error, never a default.\n\
          Session: {SESSION_ENV} env > repository basename. Ledger: {LEDGER_ENV} env >\n\
@@ -1157,6 +1123,7 @@ fn main() {
         Some("why") | Some("--why") => why(json_mode),
         Some("capabilities") | Some("--capabilities") => capabilities(json_mode),
         Some("--selftest") => selftest(),
+        Some("--pane-state") => pane_state_cli(args.get(1).map(String::as_str)),
         Some("--dry-run") => {
             if let Err(error) = prepare_runtime_environment() {
                 startup_error_exit(&error)
@@ -1193,6 +1160,48 @@ fn dispatch_exit(flag: &Option<String>, dry_run: bool) -> u8 {
     match resolve_repo_root(flag_value, env_value, &start) {
         Ok(repo) => run_tick(dry_run, &repo),
         Err(error) => config_error_exit(&error),
+    }
+}
+
+fn pane_state_cli(pane: Option<&str>) -> u8 {
+    let Some(pane) = pane else {
+        eprintln!("omp-idle-dispatch: --pane-state requires a tmux pane id such as %7");
+        return 2;
+    };
+    if let Err(error) = prepare_runtime_environment() {
+        return startup_error_exit(&error);
+    }
+    let home = match home_dir() {
+        Ok(home) => home,
+        Err(error) => return config_error_exit(&error),
+    };
+    let binary = std::env::var("OMP_DISPATCH_OMP_BINARY").unwrap_or_else(|_| "omp".to_owned());
+    match read_pane_route(pane, &home, &binary) {
+        Ok(PaneRoute::Profiled {
+            profile,
+            entry,
+            outcome,
+            ..
+        }) => {
+            report_profile_store_mapping(pane, &profile, &entry);
+            report_profile_store_state(pane, &profile, &outcome);
+            outcome.exit_code()
+        }
+        Ok(PaneRoute::Unprofiled { command }) => {
+            emit(json!({
+                "schema": "omp-idle-dispatch.pane-state.v1",
+                "lane": LANE,
+                "pane": pane,
+                "route": "UNPROFILED",
+                "command": command,
+                "idle_projection": "legacy_fallback",
+            }));
+            0
+        }
+        Err(error) => {
+            report_profile_store_error(pane, &error);
+            error.exit_code()
+        }
     }
 }
 
