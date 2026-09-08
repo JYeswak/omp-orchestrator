@@ -240,18 +240,53 @@ pub fn exit_code(verdicts: &[AdapterVerdict]) -> Result<u8, String> {
     Ok(EXIT_ALL_LIVE)
 }
 
-/// Adapters that ANSWERED their documented surface and still exited nonzero.
+/// Adapters that ANSWERED and still exited nonzero.
 ///
-/// This is the aggregated form of a figure that was hand-measured until now: eleven adapters
-/// print a usage line while exiting `2`, `64`, `78` or `255`. The executor recorded the exit
-/// on every row from the start, so the count was derivable and simply never derived — a
-/// figure available in the data and stated from a shell census instead.
+/// RENAMED from `usage_with_nonzero_exit` on `%8`'s finding, and the rename IS the fix: the
+/// predicate was right and the NAME overclaimed. `staged-build-gate` exits `1` with
+/// `STAGED_BUILD_GATE_REFUSED … reason=STAGED_…`, and `pre-commit-gate` exits `3` with
+/// `NOTHING_TO_CHECK: no staged files to check` — healthy tools reporting a STATUS through an
+/// exit code, which is not a usage failure and was being counted as one.
+///
+/// What the field measures is now exactly what it says: **a live adapter whose `--help`
+/// exited nonzero.** The defect that makes it worth counting is unchanged and covers the
+/// status-reporting rows too — **an agent branching on `$?` cannot distinguish a usage
+/// request from a failure from a status.** The ambiguity is the defect; the intent behind it
+/// is not measurable from the wire, which is why the name no longer claims to know it.
 #[must_use]
-pub fn usage_with_nonzero_exit(verdicts: &[AdapterVerdict]) -> usize {
+pub fn nonzero_exit_on_help(verdicts: &[AdapterVerdict]) -> usize {
     verdicts
         .iter()
         .filter(|v| v.status == AdapterStatus::Live && !matches!(v.exit, Some(0) | None))
         .count()
+}
+
+/// Of the nonzero-exit rows, those whose captured line CARRIES A USAGE MARKER.
+///
+/// **A FLOOR, not a partition.** Its two measured misclassifications are named in
+/// `the_usage_marker_is_a_floor_with_named_misclassifications`: `omp-idle-dispatch` prints a
+/// bare synopsis with no "usage" word and `pane-dispatch-fence` prints
+/// `unknown argument: --help`, so both are usage complaints this marker misses and the true
+/// usage-shaped count is **>= this value**. A per-adapter declared list would make it exact
+/// and is precisely the hand-maintained second inventory `UAD-NO-SECOND-COUNT` forbids, so
+/// the floor ships with its bound stated rather than being made exact by hand.
+#[must_use]
+pub fn nonzero_exit_with_usage_marker(verdicts: &[AdapterVerdict]) -> usize {
+    verdicts
+        .iter()
+        .filter(|v| {
+            v.status == AdapterStatus::Live
+                && !matches!(v.exit, Some(0) | None)
+                && usage_marker(&v.detail)
+        })
+        .count()
+}
+
+/// True when a captured line reads as a usage/help line. Lowercased substring, so `Usage:`,
+/// `usage error:` and `inbox-monitor: usage:` all match.
+#[must_use]
+pub fn usage_marker(detail: &str) -> bool {
+    detail.to_ascii_lowercase().contains("usage")
 }
 
 /// Every distinct exit code observed, with how many adapters produced it, ascending.
@@ -298,7 +333,8 @@ pub fn envelope(verdicts: &[AdapterVerdict]) -> Result<Value, String> {
             "live": live,
             "degraded": degraded,
             "unmeasurable": unmeasurable,
-            "usage_with_nonzero_exit": usage_with_nonzero_exit(verdicts),
+            "nonzero_exit_on_help": nonzero_exit_on_help(verdicts),
+            "nonzero_exit_with_usage_marker": nonzero_exit_with_usage_marker(verdicts),
             "exit_histogram": exit_histogram(verdicts)
                 .into_iter()
                 .map(|(code, count)| json!({"exit": code, "adapters": count}))
@@ -397,7 +433,7 @@ pub fn run_axis(named: &str, json: bool) -> u8 {
         }
         println!(
             "OMPO_DOCTOR_ADAPTERS executed={} live={} degraded={} unmeasurable={} \
-             usage_with_nonzero_exit={} exit={code}",
+             nonzero_exit_on_help={} usage_marker_floor={} exit={code}",
             verdicts.len(),
             verdicts.iter().filter(|v| v.status == AdapterStatus::Live).count(),
             verdicts
@@ -405,7 +441,8 @@ pub fn run_axis(named: &str, json: bool) -> u8 {
                 .filter(|v| v.status == AdapterStatus::NoHelpContract)
                 .count(),
             verdicts.iter().filter(|v| v.status.is_unmeasurable()).count(),
-            usage_with_nonzero_exit(&verdicts),
+            nonzero_exit_on_help(&verdicts),
+            nonzero_exit_with_usage_marker(&verdicts),
         );
     }
     code
@@ -544,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn the_nonzero_usage_count_is_derived_not_hand_measured() {
+    fn the_nonzero_exit_count_is_derived_not_hand_measured() {
         // The figure this replaces was a shell census: "eleven adapters print usage while
         // exiting nonzero". The executor recorded `exit` on every row from the start, so the
         // count was always derivable and simply never derived.
@@ -557,8 +594,75 @@ mod tests {
             // NOT counted: absent binaries never exited at all.
             AdapterVerdict { adapter: "e".into(), status: AdapterStatus::NotInstalled, resolved: None, exit: None, detail: "absent".into() },
         ];
-        assert_eq!(usage_with_nonzero_exit(&rows), 2);
-        assert_eq!(usage_with_nonzero_exit(&[]), 0);
+        assert_eq!(nonzero_exit_on_help(&rows), 2);
+        assert_eq!(nonzero_exit_on_help(&[]), 0);
+    }
+
+    fn live(adapter: &str, exit: i32, detail: &str) -> AdapterVerdict {
+        AdapterVerdict {
+            adapter: adapter.to_owned(),
+            status: AdapterStatus::Live,
+            resolved: None,
+            exit: Some(exit),
+            detail: detail.to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_status_reported_through_an_exit_code_is_still_counted_and_no_longer_called_usage() {
+        // %8's finding. `pre-commit-gate` exits 3 with NOTHING_TO_CHECK and `staged-build-gate`
+        // exits 1 with STAGED_BUILD_GATE_REFUSED -- healthy tools reporting a STATUS. They are
+        // counted, because an agent branching on `$?` still cannot tell them from a failure,
+        // and the field name no longer claims they are usage failures.
+        let rows = [
+            live("pre-commit-gate", 3, "NOTHING_TO_CHECK: no staged files to check"),
+            live("staged-build-gate", 1, "STAGED_BUILD_GATE_REFUSED crate=x reason=STAGED_WORKTREE"),
+        ];
+        assert_eq!(nonzero_exit_on_help(&rows), 2, "the ambiguity is the defect, so both count");
+        assert_eq!(
+            nonzero_exit_with_usage_marker(&rows),
+            0,
+            "neither carries a usage marker, so neither inflates the usage-shaped floor"
+        );
+    }
+
+    #[test]
+    fn the_usage_marker_is_a_floor_with_named_misclassifications() {
+        // MEASURED on the live roster. The marker catches nine of twelve; these two are usage
+        // complaints it misses, which is why the field is documented as a FLOOR and not as a
+        // partition. Making it exact needs a per-adapter declared list -- the second inventory
+        // UAD-NO-SECOND-COUNT forbids -- so the bound is published instead.
+        let missed = [
+            live("omp-idle-dispatch", 2, "omp-idle-dispatch [status|why|capabilities|run]"),
+            live("pane-dispatch-fence", 78, "pane-dispatch-fence: unknown argument: --help"),
+        ];
+        assert_eq!(nonzero_exit_on_help(&missed), 2);
+        assert_eq!(
+            nonzero_exit_with_usage_marker(&missed),
+            0,
+            "these are the named misses; if this becomes 2 the marker improved and this leg must be re-read"
+        );
+        let caught = [
+            live("fleet-monitor", 2, "usage: fleet-monitor [--all|--self]"),
+            live("installer", 255, "Usage: installer [-help]"),
+            live("fleet-composite", 2, "usage error: unknown command --help"),
+            live("inbox-monitor", 64, "inbox-monitor: usage:"),
+        ];
+        assert_eq!(nonzero_exit_with_usage_marker(&caught), 4, "all four spellings must match");
+    }
+
+    #[test]
+    fn the_marker_floor_never_exceeds_the_total_it_is_drawn_from() {
+        let rows = [
+            live("a", 2, "usage: a"),
+            live("b", 3, "NOTHING_TO_CHECK"),
+            AdapterVerdict { adapter: "c".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "usage: c".into() },
+        ];
+        let total = nonzero_exit_on_help(&rows);
+        let floor = nonzero_exit_with_usage_marker(&rows);
+        assert!(floor <= total, "a floor above its own total is incoherent: {floor} > {total}");
+        assert_eq!(total, 2);
+        assert_eq!(floor, 1, "the exit-0 row carries a usage marker and must NOT be counted");
     }
 
     #[test]
