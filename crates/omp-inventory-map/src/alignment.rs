@@ -171,6 +171,8 @@ pub const DELIBERATELY_NOT: &[DeliberateNonConsumption] = &[
     DeliberateNonConsumption { kind: "rpc_handler", name: "set_todos", owner: "omp-inventory-map", reason: "rpc handler set_todos has no typed in-tree operator caller; retain the visible surface until it is consumed or explicitly wired", dies_when: "a typed caller for set_todos is landed and the row is reclassified as CONSUMED or WIRE", },
     DeliberateNonConsumption { kind: "rpc_handler", name: "steer", owner: "omp-inventory-map", reason: "rpc handler steer has no typed in-tree operator caller; retain the visible surface until it is consumed or explicitly wired", dies_when: "a typed caller for steer is landed and the row is reclassified as CONSUMED or WIRE", },
     DeliberateNonConsumption { kind: "rpc_handler", name: "switch_session", owner: "omp-inventory-map", reason: "rpc handler switch_session has no typed in-tree operator caller; retain the visible surface until it is consumed or explicitly wired", dies_when: "a typed caller for switch_session is landed and the row is reclassified as CONSUMED or WIRE", },
+    DeliberateNonConsumption { kind: "rpc_handler", name: "get_available_commands", owner: "omp-inventory-map", reason: "startup command metadata is parsed, but no typed request caller issues get_available_commands", dies_when: "a typed caller for get_available_commands is landed and the row is reclassified as CONSUMED or WIRE", },
+    DeliberateNonConsumption { kind: "rpc_handler", name: "negotiate_protocol", owner: "omp-inventory-map", reason: "protocol negotiation is a mandatory transport precondition, not an operator-facing capability", dies_when: "the protocol exposes negotiation as a separately consumable operator surface", },
 ];
 
 /// One consumer declaration, read from a crate's manifest.
@@ -855,7 +857,7 @@ mod tests {
     /// deliberate, owned, and retirable.
     #[test]
     fn the_deliberately_not_allowances_are_named_and_retirable() {
-        assert_eq!(DELIBERATELY_NOT.len(), 74);
+        assert_eq!(DELIBERATELY_NOT.len(), 76);
         let cli = DELIBERATELY_NOT
             .iter()
             .find(|row| row.kind == "cli" && row.name == "ps")
@@ -1008,7 +1010,7 @@ mod tests {
         .expect("index");
         let report = align("/opt/omp", "omp/18.0.11", &[entry("transport", "mux")], &consumers)
             .expect("passes");
-        assert_eq!(report.stale_allowances.len(), 74);
+        assert_eq!(report.stale_allowances.len(), 76);
         assert!(report.stale_allowances.iter().any(|row| row.starts_with("cli:ps owner=")));
         assert!(report
             .stale_allowances
