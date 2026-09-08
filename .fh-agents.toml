@@ -1,0 +1,82 @@
+# Nomenclature map for `fh agents --repo .` — omp-orchestrator
+#
+# Authored 2026-09-08 by WildStone (franken-harvest pane %17) at Joshua's direction.
+# ADDITIVE ONLY: this file is new, and nothing in AGENTS.md was modified to create it.
+#
+# WHY THIS FILE IS THE STAMP, and why the audit lies without it.
+#
+# `fh agents` reports three states per canonical section: NAMED (his canonical title is present),
+# UNNAMED (the DOCTRINE is present under YOUR OWN heading), ABSENT (nothing). UNNAMED is
+# reachable ONLY through the 
+# CORRECTED 2026-09-08, same day: rows dropped for FAILING THE OWNERSHIP TEST.
+#
+# Every phrase here was verified to OCCUR before being declared. That was the wrong question.
+# OCCURRENCE IS NOT OWNERSHIP - a generic phrase matches a section that merely MENTIONS the
+# doctrine, and the audit then credits UNNAMED ("present under our own heading") to a heading
+# that owns nothing. Resolved by mapping each UNNAMED row back to the heading whose body matched.
+#
+# Dropped because the resolved home was WRONG, not because the doctrine is absent:
+#     "testing policy" = ["every gate proves it bites", "a timeout is not a verdict"]
+#     "testing" = ["known-bad"]
+#     "morph warp grep" = ["ripwire", "codebase_search"]
+#
+# Bare "known-bad", "mission" and "ripwire" are the offenders - single words appearing in several
+# sections. Re-add only with a phrase distinctive enough to occur in the OWNING section and
+# nowhere else, then verify by resolving the UNNAMED row back to its heading.
+
+[synonyms] table below. With no map, UNNAMED is structurally
+# unreachable and ABSENT absorbs it — so the tool reports doctrine you DO have as missing.
+#
+# Measured on franken-harvest's own AGENTS.md, same bytes, two runs:
+#     without .fh-agents.toml   DISCIPLINE  NAMED 10  UNNAMED 0  ABSENT 7
+#     with    .fh-agents.toml   DISCIPLINE  NAMED 10  UNNAMED 7  ABSENT 0
+# Identical content. Seven rows moved ABSENT -> UNNAMED purely because a map existed. Acting on
+# the un-mapped count would have filed work for seven non-problems.
+#
+# THE RULE FOR EDITING THIS FILE: every phrase below was verified to ACTUALLY OCCUR in this
+# repo's AGENTS.md before being declared. A synonym that does not occur silently downgrades
+# ABSENT to nothing at all — it does not fail, it just stops measuring. One candidate was
+# DROPPED for exactly that reason: "cargo test refuses" does not occur, because the real heading
+# backticks the command (`` `cargo test` refuses to run? ``). "you do not build here" does occur
+# and carries the same doctrine, so that is what is declared.
+
+[headings]
+# INTENTIONALLY EMPTY. No rename in this file is safe, and that is a finding rather than laziness.
+#
+# `## The one rule` is the clearest case: its body is "**No `.sh`. No `.py`.**" plus the measured
+# consequence of the carve-out that let 160 scripts and 60,467 lines accrete. Renaming it to the
+# canonical "No Script-Based Changes" would be TRUE and would still be a loss — "The one rule" is
+# the emphasis, and a repo with exactly one rule should say so in the title. It is declared as a
+# SYNONYM below instead, which is what the UNNAMED state exists to express.
+#
+# Same for the shouted titles: `## ⛔ cargo test refuses to run? YOU DO NOT BUILD HERE` and
+# `## PROVE IT RAN — A REFUSED BUILD EXITS 0` each carry a fact an agent most needs at the moment
+# it reads them. A canonical "Toolchain" or "Verification" deletes that fact.
+#
+# If a rename IS safe later, add it here and read the printed plan before `--apply`. The stamp
+# refuses a stale plan, so reviewing the diff is the whole safety mechanism.
+
+[synonyms]
+# canonical section = [phrases in THIS repo proving the doctrine is present under our own heading]
+
+# `## The one rule` — no shell, no python, enforced by a Rust gate over `git ls-files`.
+"no script-based changes" = ["no `.sh`", "found a missing crate"]
+
+# `## ⛔ cargo test refuses to run? YOU DO NOT BUILD HERE` + THE ONE GUIDED PROCESS.
+"toolchain" = ["you do not build here"]
+
+# `## The zero-worktree policy (binding, Joshua 2026-09-03)`.
+"git branch" = ["zero-worktree"]
+
+# `## Every gate proves it bites` — the known-bad discipline and the timeout rule.
+
+# `## The asupersync contract (binding)`.
+"third-party library usage" = ["asupersync contract"]
+
+# `## The crates — what they are, and WHICH REPOSITORY they are in`.
+"project structure" = ["which repository"]
+
+# `## The fourth rule: file -> claim -> dispatch` — the bead is the spec.
+"beads workflow integration" = ["bead is the spec"]
+
+# Code-search doctrine lives here under our own instruments, not his.
