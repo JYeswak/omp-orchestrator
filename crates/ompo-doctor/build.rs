@@ -32,9 +32,12 @@ fn main() {
         .parent()
         .expect("crates/<pkg> has a parent")
         .to_path_buf();
-    let head = git_head(&manifest_dir);
-    println!("cargo:rustc-env=OMPO_BUILD_COMMIT={head}");
-    println!("cargo:rustc-env=OMPO_SOURCE_REVISION={head}");
+    let build_commit = provenance_value("OMPO_BUILD_COMMIT", &manifest_dir);
+    let source_revision = provenance_value("OMPO_SOURCE_REVISION", &manifest_dir);
+    println!("cargo:rustc-env=OMPO_BUILD_COMMIT={build_commit}");
+    println!("cargo:rustc-env=OMPO_SOURCE_REVISION={source_revision}");
+    println!("cargo:rerun-if-env-changed=OMPO_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=OMPO_SOURCE_REVISION");
     watch_git_inputs(&manifest_dir);
 
     println!("cargo:rerun-if-changed={}", crates_dir.display());
@@ -79,6 +82,14 @@ fn main() {
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("adapters.rs");
     std::fs::write(&out, generated)
         .unwrap_or_else(|error| panic!("cannot write {}: {error}", out.display()));
+}
+
+fn provenance_value(name: &str, manifest_dir: &Path) -> String {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| git_head(manifest_dir))
 }
 
 /// Resolve the build's source identity from checkout HEAD, with a deterministic fallback.
