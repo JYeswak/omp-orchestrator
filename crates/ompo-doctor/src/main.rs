@@ -26,6 +26,7 @@
 use ompo_doctor::liveness::{self, Observation};
 use ompo_doctor::adapter_exec;
 use ompo_doctor::upstream_report;
+use ompo_doctor::state_triad;
 use ompo_doctor::umbrella::{self, ProbeId};
 use ompo_doctor::{current_repo, run_doctor};
 use serde_json::{json, Value};
@@ -54,6 +55,9 @@ fn main() -> ExitCode {
         return ExitCode::from(EXIT_BAD_INVOCATION);
     };
     let rest = &args[1..];
+    if let Some(code) = ompo_doctor::health_repair::dispatch(verb, rest) {
+        return ExitCode::from(code);
+    }
     if let Some(code) = ompo_doctor::selfdoc::dispatch(verb, rest) {
         return ExitCode::from(code);
     }
@@ -68,6 +72,9 @@ fn main() -> ExitCode {
         "init" => run_init(rest),
         "start" => run_start(rest),
         "portal" => run_portal(rest),
+        "validate" => run_validate(rest),
+        "audit" => run_audit(rest),
+        "why" => run_why(rest),
         "upstream-report" => run_upstream_report(rest),
         "doctor" => run_doctor_verb(rest),
         other => {
@@ -386,6 +393,203 @@ fn now_millis() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
+}
+
+fn state_error(command: &'static str, json_output: bool, error: state_triad::StateError) -> ExitCode {
+    let detail = error.to_string();
+    if json_output {
+        let value = umbrella::envelope(
+            command,
+            "ERROR",
+            json!({"reason_code": error.code(), "detail": detail}),
+        );
+        match serde_json::to_string(&value) {
+            Ok(text) => println!("{text}"),
+            Err(encode_error) => eprintln!("ompo {command}: cannot encode refusal: {encode_error}"),
+        }
+    } else {
+        eprintln!("ompo {command}: {} detail={detail}", error.code());
+    }
+    ExitCode::from(EXIT_BAD_INVOCATION)
+}
+
+fn state_repo(command: &str) -> Result<PathBuf, ExitCode> {
+    current_repo().map_err(|error| {
+        eprintln!("ompo {command}: {error}");
+        ExitCode::from(EXIT_INSTRUMENT)
+    })
+}
+
+fn run_validate(rest: &[String]) -> ExitCode {
+    let mut repo = match state_repo("validate") {
+        Ok(path) => path,
+        Err(code) => return code,
+    };
+    let mut thing = None;
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--repo" => {
+                index += 1;
+                let Some(path) = rest.get(index) else {
+                    eprintln!("ompo validate: UAD_MISSING_VALUE flag=--repo");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                repo = PathBuf::from(path);
+            }
+            "--help" | "-h" => {
+                println!("ompo validate <thing> [--repo PATH] [--json]");
+                return ExitCode::SUCCESS;
+            }
+            value if value.starts_with("--") => {
+                eprintln!("ompo validate: UAD_UNKNOWN_ARGUMENT argument={value:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+            value if thing.is_some() => {
+                eprintln!("ompo validate: UAD_UNEXPECTED_ARGUMENT argument={value:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+            value => thing = Some(value),
+        }
+        index += 1;
+    }
+    let Some(thing) = thing else {
+        return state_error(
+            "validate",
+            json_output,
+            state_triad::StateError::MissingValue { command: "validate" },
+        );
+    };
+    match state_triad::validate(&repo, thing) {
+        Ok(report) => emit_state_report("validate", json_output, report),
+        Err(error) => state_error("validate", json_output, error),
+    }
+}
+
+fn run_audit(rest: &[String]) -> ExitCode {
+    let mut repo = match state_repo("audit") {
+        Ok(path) => path,
+        Err(code) => return code,
+    };
+    let mut limit = 20usize;
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--repo" => {
+                index += 1;
+                let Some(path) = rest.get(index) else {
+                    eprintln!("ompo audit: UAD_MISSING_VALUE flag=--repo");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                repo = PathBuf::from(path);
+            }
+            "--help" | "-h" => {
+                println!("ompo audit [--limit N] [--repo PATH] [--json]");
+                return ExitCode::SUCCESS;
+            }
+            "--limit" => {
+                index += 1;
+                let Some(value) = rest.get(index) else {
+                    eprintln!("ompo audit: UAD_MISSING_VALUE flag=--limit");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                limit = match value.parse() {
+                    Ok(limit) => limit,
+                    Err(_) => {
+                        eprintln!("ompo audit: STATE_AUDIT_INVALID_LIMIT value={value:?}");
+                        return ExitCode::from(EXIT_BAD_INVOCATION);
+                    }
+                };
+            }
+            value => {
+                eprintln!("ompo audit: UAD_UNKNOWN_ARGUMENT argument={value:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+        }
+        index += 1;
+    }
+    match state_triad::audit(&repo, limit) {
+        Ok(report) => emit_state_report("audit", json_output, report),
+        Err(error) => state_error("audit", json_output, error),
+    }
+}
+
+fn run_why(rest: &[String]) -> ExitCode {
+    let mut repo = match state_repo("why") {
+        Ok(path) => path,
+        Err(code) => return code,
+    };
+    let mut id = None;
+    let mut json_output = false;
+    let mut index = 0;
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--json" => json_output = true,
+            "--repo" => {
+                index += 1;
+                let Some(path) = rest.get(index) else {
+                    eprintln!("ompo why: UAD_MISSING_VALUE flag=--repo");
+                    return ExitCode::from(EXIT_BAD_INVOCATION);
+                };
+                repo = PathBuf::from(path);
+            }
+            "--help" | "-h" => {
+                println!("ompo why <id> [--repo PATH] [--json]");
+                return ExitCode::SUCCESS;
+            }
+            value if value.starts_with("--") => {
+                eprintln!("ompo why: UAD_UNKNOWN_ARGUMENT argument={value:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+            value if id.is_some() => {
+                eprintln!("ompo why: UAD_UNEXPECTED_ARGUMENT argument={value:?}");
+                return ExitCode::from(EXIT_BAD_INVOCATION);
+            }
+            value => id = Some(value),
+        }
+        index += 1;
+    }
+    let Some(id) = id else {
+        return state_error(
+            "why",
+            json_output,
+            state_triad::StateError::MissingValue { command: "why" },
+        );
+    };
+    match state_triad::why(&repo, id, umbrella::adapters()) {
+        Ok(report) => emit_state_report("why", json_output, report),
+        Err(error) => state_error("why", json_output, error),
+    }
+}
+
+fn emit_state_report<T: serde::Serialize>(
+    command: &'static str,
+    json_output: bool,
+    report: T,
+) -> ExitCode {
+    let data = match serde_json::to_value(report) {
+        Ok(data) => data,
+        Err(error) => {
+            eprintln!("ompo {command}: cannot encode report: {error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    if json_output {
+        match serde_json::to_string(&umbrella::envelope(command, "OK", data)) {
+            Ok(text) => println!("{text}"),
+            Err(error) => {
+                eprintln!("ompo {command}: cannot encode report: {error}");
+                return ExitCode::from(EXIT_INSTRUMENT);
+            }
+        }
+    } else {
+        println!("OMPO_{} OK {}", command.to_ascii_uppercase(), data);
+    }
+    ExitCode::SUCCESS
 }
 
 /// ompo upstream-report <adapter> [--json] [--apply]
