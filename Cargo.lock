@@ -1400,6 +1400,7 @@ dependencies = [
  "asupersync",
  "finding",
  "loop-queue-filter",
+ "ompo-doctor",
  "serde_json",
  "subprocess-contract",
  "tick-monitor",
@@ -2284,6 +2285,7 @@ version = "0.1.0"
 dependencies = [
  "asupersync",
  "futures-lite",
+ "text-structure",
 ]
 
 [[package]]
