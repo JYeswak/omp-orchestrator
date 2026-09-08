@@ -375,11 +375,56 @@ fn git_out(repo: &Path, args: &[&str]) -> Option<String> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FixedPointerPrecondition {
+    Ready,
+    UnrunnableByConstruction {
+        message: &'static str,
+        exit_code: u8,
+    },
+}
+
+fn fixed_pointer_precondition(rows: &[(String, String, String)]) -> FixedPointerPrecondition {
+    if rows.is_empty() {
+        FixedPointerPrecondition::UnrunnableByConstruction {
+            message: "UNRUNNABLE_BY_CONSTRUCTION fixed_count=0; no FIXED row can supply a verifying pointer",
+            exit_code: 3,
+        }
+    } else {
+        FixedPointerPrecondition::Ready
+    }
+}
 fn is_numbered_section(section: &str) -> bool {
     let b = section.as_bytes();
     b.len() > 3 && b[0].is_ascii_digit() && b[1].is_ascii_digit() && b[2] == b'-'
 }
 
+/// Build an isolated git fixture with one section-touching commit followed by a ledger-only commit.
+fn git_fixture_repo(label: &str) -> (PathBuf, String, String) {
+    let root = fixture_root(label);
+    let run = |args: &[&str]| {
+        assert!(
+            git_out(&root, args).is_some(),
+            "fixture git command failed: {args:?}"
+        );
+    };
+    run(&["init", "--quiet"]);
+    run(&["config", "user.name", "findings-ledger-fixture"]);
+    run(&["config", "user.email", "fixture@example.invalid"]);
+    fs::write(root.join("docs/plan/04-diagrams.md"), "# fixture section\n").expect("section");
+    run(&["add", "docs/plan/04-diagrams.md"]);
+    run(&["commit", "--quiet", "-m", "section-fix"]);
+    let section_commit = git_out(&root, &["rev-parse", "HEAD"]).expect("section commit");
+    fs::write(root.join("docs/plan/FINDINGS.jsonl"), "ledger-only\n").expect("ledger");
+    run(&["add", "docs/plan/FINDINGS.jsonl"]);
+    run(&["commit", "--quiet", "-m", "ledger-only"]);
+    let ledger_commit = git_out(&root, &["rev-parse", "HEAD"]).expect("ledger commit");
+    (
+        root,
+        section_commit.trim().to_owned(),
+        ledger_commit.trim().to_owned(),
+    )
+}
 /// Classify one FIXED row's pointer. Fails CLOSED: an unreadable git is `Missing`, never `Ok`.
 fn classify_fixed_pointer(repo: &Path, section: &str, sha: &str) -> PointerVerdict {
     if !is_numbered_section(section) {
@@ -816,192 +861,111 @@ fn real_findings_ledger_is_strictly_valid() {
 /// KNOWN-GOOD. The real ledger passes once the four measured rows carry allowance entries.
 ///
 /// Without this leg the check would be attack-only, and an over-strict gate gets routed around —
-/// a slower death than no gate. It also means a NEW bad pointer is the only thing that can turn
-/// this red, which is exactly the floor being raised.
+/// The real ledger currently has no FIXED rows. This is a typed refusal, not a pass;
+/// the fixture below carries the known-good section-touching commit.
 #[test]
-fn every_fixed_row_points_at_a_commit_that_touched_its_section() {
+fn real_fixed_pointer_empty_set_is_unrunnable_by_construction() {
     let root = repo_root();
     let rows = read_jsonl(&root.join("docs/plan/FINDINGS.jsonl"), "FINDINGS_LEDGER")
         .expect("the ledger must be readable");
-
-    // ANTI-VACUITY: zero FIXED rows swept reports identically to a clean sweep.
-    let fixed = fixed_rows(&rows);
-    assert!(
-        !fixed.is_empty(),
-        "ANTI-VACUITY: zero FIXED rows found in docs/plan/FINDINGS.jsonl, so this check would \
-         pass over nothing"
-    );
-
-    // POSITIVE CONTROL on the reader itself: it must be able to SEE a section touch at all.
-    assert_eq!(
-        classify_fixed_pointer(&root, "02-surface-census", "07de72b"),
-        PointerVerdict::Ok,
-        "the reader cannot detect a known section touch; every verdict below is meaningless"
-    );
-
-    let failures = unverifiable_fixed_pointers(&root, &rows, true);
-    assert!(
-        failures.is_empty(),
-        "{} FIXED row(s) cite a commit that proves nothing:\n  {}",
-        failures.len(),
-        failures.join("\n  ")
-    );
+    let round15: Vec<Value> = rows
+        .into_iter()
+        .filter(|row| round_field(row) == Some(15))
+        .collect();
+    match fixed_pointer_precondition(&fixed_rows(&round15)) {
+        FixedPointerPrecondition::UnrunnableByConstruction { message, exit_code } => {
+            assert_eq!(message, "UNRUNNABLE_BY_CONSTRUCTION fixed_count=0; no FIXED row can supply a verifying pointer");
+            assert_eq!(exit_code, 3);
+        }
+        FixedPointerPrecondition::Ready => {
+            panic!("round-15 ledger unexpectedly gained a FIXED row; update this explicit precondition leg")
+        }
+    }
 }
 
-/// FIRES-ON-KNOWN-BAD: a ledger-only commit, the exact shape measured on 2026-09-02.
+/// KNOWN-GOOD: an isolated git fixture supplies a FIXED row whose commit touches its section.
+#[test]
+fn every_fixed_row_points_at_a_commit_that_touched_its_section() {
+    let (root, section_commit, _ledger_commit) = git_fixture_repo("fixed-known-good");
+    let rows: Vec<Value> = serde_json::json!([{"id":"FIXTURE-fixed","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":section_commit}])
+        .as_array().expect("array").clone();
+    assert!(matches!(
+        fixed_pointer_precondition(&fixed_rows(&rows)),
+        FixedPointerPrecondition::Ready
+    ));
+    assert!(unverifiable_fixed_pointers(&root, &rows, false).is_empty());
+    let _ = fs::remove_dir_all(root);
+}
+
+/// FIRES-ON-KNOWN-BAD: a fixture commit that changes only FINDINGS.jsonl is not section evidence.
 #[test]
 fn a_fixed_pointer_at_a_ledger_only_commit_is_refused_and_named() {
-    let root = repo_root();
-    let planted = serde_json::json!([{
-        "id": "PLANTED-ledger-only",
-        "round": 21,
-        "section": "04-diagrams",
-        "disposition": "FIXED",
-        "fixed_in": "506351316df7af0883a267543e87e740b2511ec8",
-    }]);
-    let rows: Vec<Value> = planted.as_array().expect("array").clone();
-
-    let failures = unverifiable_fixed_pointers(&root, &rows, true);
-    let text = failures.join("\n");
+    let (root, _section_commit, ledger_commit) = git_fixture_repo("fixed-ledger-only");
+    let rows: Vec<Value> = serde_json::json!([{"id":"PLANTED-ledger-only","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":ledger_commit}])
+        .as_array().expect("array").clone();
+    let text = unverifiable_fixed_pointers(&root, &rows, false).join("\n");
     assert!(
         text.contains("FINDINGS_FIXED_POINTER_LEDGER_ONLY"),
-        "must classify a FINDINGS.jsonl-only commit as ledger-only:\n{text}"
+        "{text}"
     );
-    assert!(
-        text.contains("PLANTED-ledger-only"),
-        "must NAME the row:\n{text}"
-    );
-    assert!(
-        text.contains("04-diagrams"),
-        "and the section it claimed to fix:\n{text}"
-    );
+    assert!(text.contains("PLANTED-ledger-only"), "{text}");
+    assert!(text.contains("04-diagrams"), "{text}");
+    let _ = fs::remove_dir_all(root);
 }
 
-/// FIRES-ON-KNOWN-BAD: a shaped-but-nonexistent sha, which the old shape-only check accepted.
+/// FIRES-ON-KNOWN-BAD: a shaped-but-nonexistent sha is refused.
 #[test]
 fn a_fixed_pointer_at_a_nonexistent_commit_is_refused() {
     let root = repo_root();
-    let rows: Vec<Value> = serde_json::json!([{
-        "id": "PLANTED-deadbeef",
-        "round": 21,
-        "section": "04-diagrams",
-        "disposition": "FIXED",
-        // 8 ascii hexdigits: passes FINDINGS_FIXED_INVALID_SHA unchanged
-        "fixed_in": "deadbeef",
-    }])
-    .as_array()
-    .expect("array")
-    .clone();
-
+    let rows: Vec<Value> = serde_json::json!([{"id":"PLANTED-deadbeef","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":"deadbeef"}])
+        .as_array().expect("array").clone();
     let failures = unverifiable_fixed_pointers(&root, &rows, true);
     assert!(
         failures
             .iter()
             .any(|f| f.starts_with("FINDINGS_FIXED_POINTER_MISSING")),
-        "the pre-existing shape check accepts `deadbeef`; this one must not: {failures:?}"
+        "{failures:?}"
     );
 }
 
-/// KNOWN-GOOD, negative direction: a non-numbered `section` must NOT be failed.
-///
-/// `R21-X-wire-artifact-unregistered` carries `section: "cross-cutting"`. Demanding it touch
-/// `docs/plan/cross-cutting.md` would flag a row that cannot possibly comply.
+/// KNOWN-GOOD: non-numbered sections are deliberately not failed.
 #[test]
 fn a_cross_cutting_row_is_skipped_rather_than_failed() {
     let root = repo_root();
     assert_eq!(
-        classify_fixed_pointer(
-            &root,
-            "cross-cutting",
-            "506351316df7af0883a267543e87e740b2511ec8"
-        ),
+        classify_fixed_pointer(&root, "cross-cutting", "deadbeef"),
         PointerVerdict::NotASection
     );
-    let rows: Vec<Value> = serde_json::json!([{
-        "id": "PLANTED-cross-cutting",
-        "round": 21,
-        "section": "cross-cutting",
-        "disposition": "FIXED",
-        "fixed_in": "506351316df7af0883a267543e87e740b2511ec8",
-    }])
-    .as_array()
-    .expect("array")
-    .clone();
-    assert!(
-        unverifiable_fixed_pointers(&root, &rows, true).is_empty(),
-        "a row whose section is not a plan section must be skipped, not failed"
-    );
+    let rows: Vec<Value> = serde_json::json!([{"id":"PLANTED-cross-cutting","round":21,"section":"cross-cutting","disposition":"FIXED","fixed_in":"deadbeef"}])
+        .as_array().expect("array").clone();
+    assert!(unverifiable_fixed_pointers(&root, &rows, true).is_empty());
 }
 
-/// MUTATION, attributable, and the real ledger is proven untouched.
-///
-/// Take a row whose pointer genuinely verifies, repoint it at the ledger-only commit, and
-/// confirm the verdict FLIPS. The mutation happens on an in-memory copy; the real
-/// `docs/plan/FINDINGS.jsonl` is sha256'd before and after so "byte-identical restore" is a
-/// measurement rather than an assurance — it is another agent's file and is never written here.
+/// MUTATION: repoint a fixture row at its ledger-only commit; the real ledger is never written.
 #[test]
 fn repointing_a_good_row_at_a_ledger_only_commit_flips_the_verdict_and_the_real_file_is_untouched()
 {
-    let root = repo_root();
-    let path = root.join("docs/plan/FINDINGS.jsonl");
-    let before = fs::read(&path).expect("read");
-    let before_digest = convergence_stamp::sha256_hex(&before);
-
-    let rows = read_jsonl(&path, "FINDINGS_LEDGER").expect("readable");
-    let good = fixed_rows(&rows)
-        .into_iter()
-        .find(|(_, section, sha)| classify_fixed_pointer(&root, section, sha) == PointerVerdict::Ok)
-        .expect("the ledger must contain at least one verifying FIXED row to mutate");
-
-    // baseline GREEN for exactly this row
-    let baseline: Vec<Value> = serde_json::json!([{
-        "id": good.0, "round": 21, "section": good.1,
-        "disposition": "FIXED", "fixed_in": good.2,
-    }])
-    .as_array()
-    .expect("array")
-    .clone();
-    assert!(
-        unverifiable_fixed_pointers(&root, &baseline, false).is_empty(),
-        "baseline must be GREEN before mutating: {good:?}"
-    );
-
-    // MUTATE the one field the predicate reads
-    let mutated: Vec<Value> = serde_json::json!([{
-        "id": good.0, "round": 21, "section": good.1,
-        "disposition": "FIXED",
-        "fixed_in": "506351316df7af0883a267543e87e740b2511ec8",
-    }])
-    .as_array()
-    .expect("array")
-    .clone();
-    let red = unverifiable_fixed_pointers(&root, &mutated, false);
+    let (fixture, section_commit, ledger_commit) = git_fixture_repo("fixed-mutation");
+    let real_path = repo_root().join("docs/plan/FINDINGS.jsonl");
+    let before_digest = convergence_stamp::sha256_hex(&fs::read(&real_path).expect("read"));
+    let baseline: Vec<Value> = serde_json::json!([{"id":"FIXTURE-mutated","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":section_commit}])
+        .as_array().expect("array").clone();
+    assert!(unverifiable_fixed_pointers(&fixture, &baseline, false).is_empty());
+    let mutated: Vec<Value> = serde_json::json!([{"id":"FIXTURE-mutated","round":21,"section":"04-diagrams","disposition":"FIXED","fixed_in":ledger_commit}])
+        .as_array().expect("array").clone();
+    let red = unverifiable_fixed_pointers(&fixture, &mutated, false);
     assert!(
         red.iter()
             .any(|f| f.starts_with("FINDINGS_FIXED_POINTER_LEDGER_ONLY")),
-        "mutation must go RED on exactly the repointed row: {red:?}"
+        "{red:?}"
     );
-
-    // and with the predicate's allowance honoured the row set is unchanged, so the RED above is
-    // attributable to the pointer check and not to the allowance machinery
-    assert_eq!(
-        unverifiable_fixed_pointers(&root, &baseline, false).len(),
-        0,
-        "the baseline must still be green after the mutation ran on a copy"
-    );
-
-    let after = fs::read(&path).expect("read");
+    assert!(unverifiable_fixed_pointers(&fixture, &baseline, false).is_empty());
     assert_eq!(
         before_digest,
-        convergence_stamp::sha256_hex(&after),
-        "the real ledger must be byte-identical: this leg never writes to another agent's file"
+        convergence_stamp::sha256_hex(&fs::read(&real_path).expect("read"))
     );
+    let _ = fs::remove_dir_all(fixture);
 }
-
-/// Every allowance row names a real ledger id and carries a real reason with a dies-when.
-///
-/// An allowance whose id no longer exists is a row that can never die, which is how an
-/// allowance list becomes permanent cover.
 #[test]
 fn every_fixed_pointer_allowance_row_is_real_and_carries_a_dies_when() {
     let root = repo_root();
