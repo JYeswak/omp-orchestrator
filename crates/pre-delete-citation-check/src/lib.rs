@@ -362,7 +362,142 @@ pub fn check_close_reason_policy(
         violations,
     })
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MirrorBead {
+    pub id: String,
+    pub status: String,
+    pub close_reason: String,
+    pub assignee: Option<String>,
+}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopedCloseReasonViolation {
+    pub bead_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ScopedCloseReasonPolicyReport {
+    pub historical_closed: usize,
+    pub newly_closed: usize,
+    pub verified_new_closes: usize,
+    pub violations: Vec<ScopedCloseReasonViolation>,
+    pub legacy_unrecoverable: Vec<String>,
+}
+
+fn parse_mirror_beads(input: &[u8], surface: &str) -> Result<Vec<MirrorBead>, String> {
+    let text = std::str::from_utf8(input)
+        .map_err(|error| format!("CLOSE_REASON_{surface}_UNREADABLE reason=not_utf8 detail={error}"))?;
+    let mut rows = Vec::new();
+    for (line_index, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = serde_json::from_str(line).map_err(|error| {
+            format!(
+                "CLOSE_REASON_{surface}_UNREADABLE reason=malformed_jsonl line={} detail={error}",
+                line_index + 1
+            )
+        })?;
+        let id = value
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("CLOSE_REASON_{surface}_UNREADABLE reason=id_missing line={}", line_index + 1))?;
+        let status = value
+            .get("status")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("CLOSE_REASON_{surface}_UNREADABLE reason=status_missing line={}", line_index + 1))?;
+        rows.push(MirrorBead {
+            id: id.to_owned(),
+            status: status.to_owned(),
+            close_reason: value
+                .get("close_reason")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            assignee: value
+                .get("assignee")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+        });
+    }
+    if rows.is_empty() {
+        return Err(format!(
+            "CLOSE_REASON_{surface}_EMPTY reason=zero_bead_records_readable"
+        ));
+    }
+    Ok(rows)
+}
+
+fn has_worker_attribution(reason: &str) -> bool {
+    reason
+        .split_whitespace()
+        .any(|token| token == "local" || token.starts_with("worker=") || token.starts_with("worker:"))
+}
+
+/// Check only status transitions to closed in the staged mirror.
+///
+/// Historical missing-worker rows are emitted as a typed, visible disposition and never block a
+/// commit. Newly closed rows remain strict: every one needs a worker/local attribution.
+pub fn check_close_reason_policy_scoped(
+    head_jsonl: &[u8],
+    staged_jsonl: &[u8],
+) -> Result<ScopedCloseReasonPolicyReport, String> {
+    let head = parse_mirror_beads(head_jsonl, "HEAD_MIRROR")?;
+    let staged = parse_mirror_beads(staged_jsonl, "STAGED_MIRROR")?;
+    let head_by_id = head
+        .iter()
+        .map(|row| (row.id.as_str(), row))
+        .collect::<std::collections::BTreeMap<_, _>>();
+
+    let historical_closed = head.iter().filter(|row| row.status == "closed").count();
+    let legacy_unrecoverable = head
+        .iter()
+        .filter(|row| {
+            row.status == "closed"
+                && matches!(
+                    ack_spine::close_reason::classify_close_reason(Some(&row.close_reason)),
+                    ack_spine::close_reason::CloseReasonVerdict::CargoWorkerMissing { .. }
+                )
+                && row
+                    .assignee
+                    .as_deref()
+                    .map_or(true, |assignee| assignee.trim().is_empty())
+        })
+        .map(|row| row.id.clone())
+        .collect::<Vec<_>>();
+
+    let mut newly_closed = 0usize;
+    let mut verified_new_closes = 0usize;
+    let mut violations = Vec::new();
+    for row in staged.iter().filter(|row| {
+        row.status == "closed"
+            && head_by_id
+                .get(row.id.as_str())
+                .map_or(true, |previous| previous.status != "closed")
+    }) {
+        newly_closed += 1;
+        if has_worker_attribution(&row.close_reason) {
+            verified_new_closes += 1;
+        } else {
+            violations.push(ScopedCloseReasonViolation {
+                bead_id: row.id.clone(),
+                reason: format!(
+                    "CLOSE_REASON_WORKER_MISSING bead={} -- new closed rows require worker=<name> or local",
+                    row.id
+                ),
+            });
+        }
+    }
+
+    Ok(ScopedCloseReasonPolicyReport {
+        historical_closed,
+        newly_closed,
+        verified_new_closes,
+        violations,
+        legacy_unrecoverable,
+    })
+}
 /// True when the given repo-root path is inside a git repository with at least one commit.
 pub fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists()

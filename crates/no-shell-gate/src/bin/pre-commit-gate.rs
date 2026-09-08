@@ -842,6 +842,11 @@ fn added_lines_or_all(diff: &str, text: &str) -> Vec<usize> {
 /// before a later commit stages the mirror, and an uncommitted mirror is outside this
 /// hook's input. The mirror reader remains restrictive, so absence and unreadability
 /// cannot turn into a clean zero.
+/// Validate close-reason worker attribution only for beads whose status changes to closed in the staged mirror.
+///
+/// Historical rows are reported as a typed disposition, not a blanket exemption. The staged
+/// mirror is compared against the committed HEAD mirror so a commit that closes nothing passes
+/// even when old rows remain unrecoverable.
 fn validate_staged_close_reason_policy(
     repo_root: &Path,
     staged: &[String],
@@ -853,42 +858,59 @@ fn validate_staged_close_reason_policy(
     }
 
     let detection_scope =
-        "detection_only=true bad direct br close may land first; the next mirror-staging commit detects it; uncommitted closes are outside scope";
-    let closed = match pre_delete_citation_check::read_closed_beads_from_mirror(repo_root) {
-        Ok(beads) => beads,
+        "detection_only=true historical rows are reported, but only newly closed rows can refuse";
+    let head = match bounded_git_text(repo_root, &["show", "HEAD:.beads/issues.jsonl"]) {
+        Ok(text) => text.into_bytes(),
         Err(error) => {
-            let _ = writeln!(
-                io::stderr(),
-                "close-reason-policy: state=ERROR staged_mirror={MIRROR} closed_beads=0 verified=0 conflicts=0 {detection_scope} detail={error}"
-            );
+            refusals.push(format!(
+                "close-reason-policy: CLOSE_REASON_HEAD_MIRROR_UNREADABLE path=HEAD:{MIRROR} detail={error}"
+            ));
+            return;
+        }
+    };
+    let staged_mirror = match staged_blob(repo_root, MIRROR) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            refusals.push(format!(
+                "close-reason-policy: CLOSE_REASON_STAGED_MIRROR_UNREADABLE path={MIRROR} detail={error}"
+            ));
+            return;
+        }
+    };
+    let report = match pre_delete_citation_check::check_close_reason_policy_scoped(
+        &head,
+        &staged_mirror,
+    ) {
+        Ok(report) => report,
+        Err(error) => {
             refusals.push(format!("close-reason-policy: {error}"));
             return;
         }
     };
-    let report = match pre_delete_citation_check::check_close_reason_policy(&closed) {
-        Ok(report) => report,
-        Err(error) => {
-            let _ = writeln!(
-                io::stderr(),
-                "close-reason-policy: state=ERROR staged_mirror={MIRROR} closed_beads=0 verified=0 conflicts=0 {detection_scope} detail={error}"
-            );
-            refusals.push(format!("close-reason-policy: {error}"));
-            return;
-        }
+    let state = if report.violations.is_empty() {
+        "CLEAN"
+    } else {
+        "REFUSED"
     };
     let _ = writeln!(
         io::stderr(),
-        "close-reason-policy: state={} staged_mirror={MIRROR} closed_beads={} verified={} conflicts={} {detection_scope}",
-        if report.violations.is_empty() { "CLEAN" } else { "REFUSED" },
-        report.closed_beads,
-        report.verified,
+        "close-reason-policy: state={state} staged_mirror={MIRROR} historical_closed={} newly_closed={} verified_new_closes={} conflicts={} legacy_unrecoverable={} {detection_scope}",
+        report.historical_closed,
+        report.newly_closed,
+        report.verified_new_closes,
         report.violations.len(),
+        report.legacy_unrecoverable.len(),
     );
+    if !report.legacy_unrecoverable.is_empty() {
+        let _ = writeln!(
+            io::stderr(),
+            "close-reason-policy: state=CLOSE_REASON_WORKER_UNRECOVERABLE count={} ids={}",
+            report.legacy_unrecoverable.len(),
+            report.legacy_unrecoverable.join(","),
+        );
+    }
     for violation in report.violations {
-        refusals.push(format!(
-            "close-reason-policy: bead={} {}",
-            violation.bead_id, violation.verdict
-        ));
+        refusals.push(format!("close-reason-policy: {}", violation.reason));
     }
 }
 fn validate_staged_preregistration(repo_root: &Path, staged: &[String]) -> Result<(), String> {
