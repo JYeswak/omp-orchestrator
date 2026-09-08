@@ -105,7 +105,7 @@ printf '%s\n%s\n' \
 ```
 
 **PROVENANCE:** installed `omp/18.1.14`, bundle path above, probe host state on 2026-09-08;
-repo reference committed after verification. Counts and page ceilings are fixture/version-bound.
+repo reference committed at tree 8e56588; counts and page ceilings are fixture/version-bound.
 
 **NO-CLAIM:** These probes run supervisor-spawned RPC sessions and a mutable scratch fixture. They
 do not attach to or control an existing tmux pane, prove non-empty last-assistant text, prove a
