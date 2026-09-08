@@ -15,6 +15,31 @@ pub enum PacketError {
         line: usize,
         detail: String,
     },
+    BeadNotClaimed {
+        bead: String,
+        expected_pane: String,
+        actual_status: String,
+        actual_assignee: Option<String>,
+    },
+}
+
+impl PacketError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::PacketFieldMissing(_) => "PACKET_FIELD_MISSING",
+            Self::FiledOnlyRecord { .. } => "FILED_ONLY_RECORD",
+            Self::PacketAddsScope { .. } => "PACKET_ADDS_SCOPE",
+            Self::BeadNotClaimed { .. } => "BEAD_NOT_CLAIMED",
+        }
+    }
+
+    pub fn operator_exit_code(&self) -> u8 {
+        match self {
+            Self::BeadNotClaimed { .. } => 3,
+            Self::PacketFieldMissing(_) => 2,
+            Self::FiledOnlyRecord { .. } | Self::PacketAddsScope { .. } => 1,
+        }
+    }
 }
 
 impl fmt::Display for PacketError {
@@ -34,6 +59,16 @@ impl fmt::Display for PacketError {
             } => write!(
                 formatter,
                 "PacketAddsScope bead={bead} line={line} detail={detail} remedy=br update {bead} --acceptance-criteria"
+            ),
+            Self::BeadNotClaimed {
+                bead,
+                expected_pane,
+                actual_status,
+                actual_assignee,
+            } => write!(
+                formatter,
+                "BEAD_NOT_CLAIMED bead={bead} expected_pane={expected_pane} status={actual_status} actual_assignee={} reason=requires_in_progress_claim_on_receiving_pane",
+                actual_assignee.as_deref().unwrap_or("unassigned")
             ),
         }
     }
@@ -209,6 +244,39 @@ fn reject_scope_additions(bead: &str, traps: &str) -> Result<(), PacketError> {
     Ok(())
 }
 
+fn assignee_pane(assignee: &str) -> Option<&str> {
+    if let Some(pane) = assignee
+        .split(';')
+        .find_map(|part| part.strip_prefix("pane="))
+        .filter(|pane| pane.starts_with('%'))
+    {
+        return Some(pane);
+    }
+    assignee.rsplit_once('-').and_then(|(_, pane)| {
+        (pane.starts_with('%') && pane[1..].bytes().all(|byte| byte.is_ascii_digit()))
+            .then_some(pane)
+    })
+}
+
+pub fn validate_bead_claim(
+    snapshot: &BeadSnapshot,
+    expected_pane: &str,
+) -> Result<(), PacketError> {
+    let bead = nonempty(snapshot.id()).ok_or(PacketError::PacketFieldMissing("objective"))?;
+    let expected_pane = nonempty(expected_pane).ok_or(PacketError::PacketFieldMissing("pane"))?;
+    let actual_assignee = snapshot.assignee().map(ToOwned::to_owned);
+    let assigned_pane = snapshot.assignee().and_then(assignee_pane);
+    if snapshot.status_label() == "in_progress" && assigned_pane == Some(expected_pane) {
+        return Ok(());
+    }
+    Err(PacketError::BeadNotClaimed {
+        bead: bead.to_owned(),
+        expected_pane: expected_pane.to_owned(),
+        actual_status: snapshot.status_label().to_owned(),
+        actual_assignee,
+    })
+}
+
 pub fn render(
     snapshot: &BeadSnapshot,
     target: &Path,
@@ -227,6 +295,9 @@ pub fn render_with_pane(
     traps: Option<&str>,
 ) -> Result<String, PacketError> {
     let bead = nonempty(snapshot.id()).ok_or(PacketError::PacketFieldMissing("objective"))?;
+    if let Some(pane) = pane {
+        validate_bead_claim(snapshot, pane)?;
+    }
     if let Some(marker) = filed_only_marker_for(snapshot) {
         return Err(PacketError::FiledOnlyRecord {
             bead: bead.to_owned(),
@@ -324,6 +395,64 @@ pub fn render_grading_packet(
 mod tests {
     use super::*;
 
+    fn claimed_snapshot(assignee: Option<&str>, status: &str) -> BeadSnapshot {
+        BeadSnapshot::new_with_acceptance(
+            "fixture",
+            "packet fixture",
+            "body",
+            "typed acceptance",
+            status,
+            assignee,
+        )
+    }
+
+    #[test]
+    fn unassigned_bead_is_a_distinct_typed_refusal() {
+        let error = render_with_pane(
+            &claimed_snapshot(None, "open"),
+            Path::new("/repo"),
+            Some("%9"),
+            Some("WildStone"),
+            None,
+            None,
+        )
+        .expect_err("unassigned bead must refuse");
+        assert_eq!(error.code(), "BEAD_NOT_CLAIMED");
+        assert_eq!(error.operator_exit_code(), 3);
+        assert_eq!(
+            error.to_string(),
+            "BEAD_NOT_CLAIMED bead=fixture expected_pane=%9 status=open actual_assignee=unassigned reason=requires_in_progress_claim_on_receiving_pane"
+        );
+    }
+
+    #[test]
+    fn different_pane_refuses_even_when_persona_name_matches() {
+        let error = render_with_pane(
+            &claimed_snapshot(Some("pane=%8;incarnation=1;agent=WildStone"), "in_progress"),
+            Path::new("/repo"),
+            Some("%9"),
+            Some("WildStone"),
+            None,
+            None,
+        )
+        .expect_err("a different pane must refuse");
+        assert!(matches!(error, PacketError::BeadNotClaimed { .. }));
+    }
+
+    #[test]
+    fn claimed_receiving_pane_renders_normally() {
+        let packet = render_with_pane(
+            &claimed_snapshot(Some("pane=%9;incarnation=1;agent=WildStone"), "in_progress"),
+            Path::new("/repo"),
+            Some("%9"),
+            Some("WildStone"),
+            None,
+            None,
+        )
+        .expect("the receiving pane's active claim must render");
+        assert!(packet.contains("Pane: %9"));
+        assert!(packet.contains("typed acceptance"));
+    }
     fn snapshot(id: &str, description: &str, acceptance: &str) -> BeadSnapshot {
         BeadSnapshot::new_with_acceptance(
             id,

@@ -6662,15 +6662,25 @@ async fn render_dispatch_command(
     request: &DispatchRenderRequest,
 ) -> Result<String, String> {
     let snapshot = load_bead_snapshot(cx, config, &request.bead).await?;
+    dispatch_packet::validate_bead_claim(&snapshot, &request.pane)
+        .map_err(|error| format!("DISPATCH_PACKET_REFUSED code={} {error}", error.code()))?;
     let identities = load_identity_registries(cx, config).await?;
     let receiver_agent =
         receiver_agent_for_dispatch(config, &request.pane, &request.bead, &snapshot)?;
     ensure_dispatch_receiver_identity(&identities, &request.bead, &request.pane, &receiver_agent)?;
+    let claim_snapshot = BeadSnapshot::new_with_acceptance(
+        snapshot.id(),
+        snapshot.title(),
+        snapshot.description(),
+        snapshot.acceptance_criteria(),
+        snapshot.status_label(),
+        Some(&receiver_agent),
+    );
     authorize_bead_dispatch_as(
         config,
         &request.pane,
         &request.bead,
-        &snapshot,
+        &claim_snapshot,
         &receiver_agent,
         &identities,
     )?;
@@ -6799,8 +6809,13 @@ fn main() -> std::process::ExitCode {
                 std::process::ExitCode::SUCCESS
             }
             Err(error) => {
+                let exit_code = if error.contains("code=BEAD_NOT_CLAIMED") {
+                    3
+                } else {
+                    1
+                };
                 eprintln!("{error}");
-                std::process::ExitCode::from(1)
+                std::process::ExitCode::from(exit_code)
             }
         };
     }
