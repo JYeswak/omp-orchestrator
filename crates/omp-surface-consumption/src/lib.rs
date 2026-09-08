@@ -59,6 +59,7 @@
 //! source; it does not say the remaining 33 should be adopted.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 /// The method any JSON-RPC dispatcher must handle, used as the cluster anchor.
 pub const ANCHOR_METHOD: &str = "negotiate_protocol";
@@ -103,6 +104,17 @@ pub enum DeriveError {
     /// would be indistinguishable from a parse failure.
     ClusterTooSmall { found: usize },
 }
+impl fmt::Display for DeriveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyEnumeration => f.write_str("EMPTY_ENUMERATION"),
+            Self::AnchorAbsent { anchor } => write!(f, "ANCHOR_ABSENT anchor={anchor}"),
+            Self::ClusterTooSmall { found } => write!(f, "CLUSTER_TOO_SMALL found={found}"),
+        }
+    }
+}
+
+impl std::error::Error for DeriveError {}
 
 /// Extract every `case"snake_case"` site. Deliberately a scanner over the minified
 /// bundle rather than a JS parse: the bundle is 21 MB of one-line output and the only
@@ -295,6 +307,13 @@ mod tests {
             derive_command_set(&case_sites("no cases here at all")).unwrap_err(),
             DeriveError::EmptyEnumeration
         );
+        for (error, expected) in [
+            (DeriveError::EmptyEnumeration, "EMPTY_ENUMERATION"),
+            (DeriveError::AnchorAbsent { anchor: ANCHOR_METHOD.to_owned() }, "ANCHOR_ABSENT anchor=negotiate_protocol"),
+            (DeriveError::ClusterTooSmall { found: 1 }, "CLUSTER_TOO_SMALL found=1"),
+        ] {
+            assert_eq!(error.to_string(), expected);
+        }
     }
 
     /// Refuse rather than guess when the anchor is gone — which is exactly how
