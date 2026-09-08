@@ -1,0 +1,294 @@
+{
+  "schema_version": "omp.b7-executor-audit.v1",
+  "audited_at_utc": "2026-09-08T04:29:56Z",
+  "auditor": "FuchsiaDuck pane=%20",
+  "bead": "omp-orchestrator-815",
+  "roster_source": {
+    "path": "docs/inventories/extraction_roster.json",
+    "revision": "97c4898",
+    "roster_terminal_count": 14
+  },
+  "source_scope": {
+    "repository": "/Users/josh/Developer/control-plane",
+    "head": "5cfb33806006c52fb3a9c591f949526b9b2d8f4b",
+    "tracked_worktree_modifications": 33,
+    "relevant_dirty_paths": [
+      "crates/apfs-wave-guard/src/main.rs",
+      "crates/bughunt-tick/Cargo.toml",
+      "crates/controller-tick/tests/observer_timeout_is_not_a_verdict.rs",
+      "crates/controller-tick/tests/pane_liveness.rs",
+      "crates/controller-tick/tests/timeout_kills_the_tree.rs"
+    ],
+    "tree_boundary": "cargo metadata and source reads use the control-plane WORKTREE; git history counts use HEAD. This artifact does not claim a clean-HEAD result."
+  },
+  "method": {
+    "caller_instrument": {
+      "command": "cd /Users/josh/Developer/control-plane && cargo metadata --no-deps --format-version 1 --offline | jq '{absent:[.packages[] | select(any(.targets[]?; any(.kind[]?; . == \"lib\" or . == \"rlib\" or . == \"proc-macro\"))) | select(any(.dependencies[]?; .name == \"zzz-absent-needle\" and .path != null)) | .name], present:[.packages[] | select(any(.targets[]?; any(.kind[]?; . == \"lib\" or . == \"rlib\" or . == \"proc-macro\"))) | select(any(.dependencies[]?; .name == \"oracle-compare\" and .path != null)) | .name]}'",
+      "negative_control": {
+        "needle": "zzz-absent-needle",
+        "callers": []
+      },
+      "positive_control": {
+        "needle": "oracle-compare",
+        "callers": [
+          "codex-fleet-recovery",
+          "fleet-arc-report",
+          "pane-oracle-diff",
+          "oracle-pane-state-differential",
+          "harvest-dispatch",
+          "close-evidence-differential",
+          "tick-dispatch",
+          "repo-hygiene-wired-proof",
+          "docs-staleness-gate",
+          "mutation-verify",
+          "cargo-git-reaper",
+          "prune-cron",
+          "cfs-honesty-tick",
+          "assignment-stuck-send-check",
+          "arc-checkin"
+        ]
+      },
+      "terminal_result": "All 14 roster package names resolved; every terminal package has zero external library callers."
+    },
+    "roster_anti_vacuity": {
+      "command": "cd /Users/josh/Developer/control-plane && cargo metadata --no-deps --format-version 1 --offline | jq --slurpfile roster /Users/josh/Developer/omp-orchestrator/docs/inventories/extraction_roster.json '($roster[0].terminal_crates) as $want | (.packages|map(.name)) as $have | {roster_count:($want|length),resolved_count:([$want[] | select(. as $n | $have | index($n))]|length),missing:[$want[] | select(. as $n | ($have|index($n))|not)]}'",
+      "result": {
+        "roster_count": 14,
+        "resolved_count": 14,
+        "missing": []
+      }
+    },
+    "executor_surfaces": [
+      {
+        "surface": "crontab",
+        "command": "for each target binary: crontab -l | perl -ne 's/#.*//; print if /\\S/' | perl -ne 'print if index(lc($_), lc($ENV{\"NEEDLE\"})) >= 0'",
+        "result": "Exact Rust target match: cfs-honesty-tick only. repo-hygiene-wired-proof matched a row invoking bin/repo-hygiene-wired-proof.sh, not the Rust binary. All other target binaries: NO_MATCH."
+      },
+      {
+        "surface": "launchd",
+        "command": "for each target binary: launchctl list | perl -ne 'print if index(lc($_), lc($ENV{\"NEEDLE\"})) >= 0'; then plutil -p /Users/josh/Library/LaunchAgents/*.plist and apply the same exact-name matcher",
+        "result": "All target binaries: NOT_LOADED and NO_MATCH in launchd plists."
+      },
+      {
+        "surface": "git_hooks",
+        "command": "for each target binary: perl -0777 -pe 's/#.*$//mg' .git/hooks/* | exact-name matcher",
+        "result": "All target binaries: NO_MATCH."
+      },
+      {
+        "surface": "workflows",
+        "command": "if [ -d /Users/josh/Developer/control-plane/.github/workflows ]; then WORKFLOWS_PRESENT; else WORKFLOWS_ABSENT; fi",
+        "result": "WORKFLOWS_ABSENT."
+      },
+      {
+        "surface": "direct_command_new",
+        "command": "tool.grep pattern='Command::new[^\\n]*<target-binary>' path=/Users/josh/Developer/control-plane/crates",
+        "result": "Matches were only package-local test entrypoints for arc-checkin, arc-keepalive, controller-tick, fleet-arc-report, harvest-triage, and scheduled-lane-doctor; no external production direct spawn was found."
+      }
+    ],
+    "supersession_evidence": [
+      {
+        "crate": "zestgraph-hook-substrates",
+        "evidence": "crates/zestgraph-hook-substrates/src/lib.rs:3-10 says the seven hook entrypoints were retired by the 2026-08-21 shadow-to-uncertified demotion and that legacy scripts remain the behavior corpus."
+      },
+      {
+        "crate": "controller-tick",
+        "evidence": "crates/fleet-monitor/src/main.rs:1204-1211 invokes controller-tick.sh, not the Rust controller-tick binary; this is an unrooted shell replacement reference, not proof that the Rust library is retired."
+      },
+      {
+        "crate": "repo-hygiene-wired-proof",
+        "evidence": "The active cron row invokes bin/repo-hygiene-wired-proof.sh, not the Rust binary. This is a shell-name collision and does not establish Rust supersession."
+      },
+      {
+        "crate": "close-evidence-gate",
+        "evidence": "close-evidence-differential/src/main.rs:145-170 and :313-340 can spawn the Rust gate, but close-evidence-differential has no root executor trigger, so the chain is not reachable."
+      }
+    ]
+  },
+  "remote_correctness_probes": {
+    "command_template": "RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p <crate>",
+    "proof_rule": "A run is citable only when both Remote command finished: exit=<N> and test result: are present. A refusal or incomplete async wrapper is not a test result.",
+    "outcomes": {
+      "harvest-triage": "PASS: exit=0 with test result lines; 6, 2, 1, 1 passing groups and zero failures.",
+      "bughunt-tick": "FAIL: Remote command finished: exit=101; 81 passed, 1 failed because semgrep was absent on the worker.",
+      "fleet-arc-report": "FAIL: Remote command finished: exit=101; top_level selftest failed.",
+      "arc-keepalive": "FAIL: deferred remote job completed with an environment test failure; unset TMUX_TMPDIR observed unusable /Users/josh/.tmux-sockets.",
+      "remote_refused": [
+        "apfs-wave-guard",
+        "arc-checkin",
+        "close-evidence-differential",
+        "close-evidence-gate",
+        "controller-tick",
+        "harvest-dispatch",
+        "repo-hygiene-wired-proof",
+        "scheduled-lane-doctor"
+      ],
+      "not_run": [
+        "cfs-honesty-tick",
+        "zestgraph-hook-substrates"
+      ]
+    },
+    "interpretation": "Correctness is not promoted from failed or refused probes. Those rows remain UNKNOWN and are not deletion candidates."
+  },
+  "rows": [
+    {
+      "name": "apfs-wave-guard",
+      "target_bins": ["apfs-wave-guard"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["bin/gh-runner-provision.sh:45,161-163 uses an installed binary during manual provisioning; not a workflow, git hook, crontab, launchd row, or rooted Command::new chain"],
+      "git_history_commits_at_head": 5,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; source is present, but the remote correctness probe was refused and no positive dead/superseded evidence exists."
+    },
+    {
+      "name": "arc-checkin",
+      "target_bins": ["arc-checkin"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["loop-coverage/src/lib.rs:415,417 records proof-artifact strings and explicitly says the eventual gate is not wired"],
+      "git_history_commits_at_head": 2,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+    },
+    {
+      "name": "arc-keepalive",
+      "target_bins": ["arc-keepalive"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["loop-coverage/src/lib.rs:379,384 records proof-artifact strings and says the eventual gate is not wired; the crontab /clear row is commented out"],
+      "git_history_commits_at_head": 7,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote test run failed on missing operational TMUX_TMPDIR."
+    },
+    {
+      "name": "bughunt-tick",
+      "target_bins": ["bughunt-tick"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["External matches were runtime artifacts and documentation only; no production source trigger"],
+      "git_history_commits_at_head": 75,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote correctness probe failed because semgrep was unavailable."
+    },
+    {
+      "name": "cfs-honesty-tick",
+      "target_bins": ["cfs-honesty-tick"],
+      "external_library_callers": [],
+      "root_executor_triggers": ["live crontab: 8,28,48 * * * * /Users/josh/.local/bin/cfs-honesty-tick >> /Users/josh/.local/state/flywheel/cfs-honesty-tick.log 2>&1"],
+      "non_root_references": [],
+      "git_history_commits_at_head": 4,
+      "verdict": "LIVE",
+      "reason": "The exact Rust binary is a reachable crontab executor; remove it from the terminal list."
+    },
+    {
+      "name": "close-evidence-differential",
+      "target_bins": ["close-evidence-differential"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["check-publish/src/tests.rs mentions the shell comparator only in test comments; no production root trigger"],
+      "git_history_commits_at_head": 1,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+    },
+    {
+      "name": "close-evidence-gate",
+      "target_bins": ["close-evidence-gate"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["close-evidence-differential/src/main.rs:145-170 selects the Rust binary and :313-340 spawns it, but the differential binary has no rooted executor trigger"],
+      "git_history_commits_at_head": 8,
+      "verdict": "UNKNOWN",
+      "reason": "Unrooted child spawn is not a reachable trigger; remote correctness probe was refused."
+    },
+    {
+      "name": "controller-tick",
+      "target_bins": ["controller-tick"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["fleet-monitor/src/main.rs:1204-1211 invokes controller-tick.sh, not the Rust binary"],
+      "git_history_commits_at_head": 24,
+      "verdict": "UNKNOWN",
+      "reason": "No Rust caller or accepted root trigger; remote correctness probe was refused."
+    },
+    {
+      "name": "fleet-arc-report",
+      "target_bins": ["fleet-arc-report"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": [],
+      "git_history_commits_at_head": 7,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote top-level selftest failed."
+    },
+    {
+      "name": "harvest-dispatch",
+      "target_bins": ["harvest-dispatch"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": [],
+      "git_history_commits_at_head": 2,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+    },
+    {
+      "name": "harvest-triage",
+      "target_bins": ["harvest-triage"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": [],
+      "git_history_commits_at_head": 7,
+      "verdict": "INERT",
+      "reason": "Source and tests exist, remote tests passed, but no external library caller or accepted root executor trigger exists; wire it rather than delete it."
+    },
+    {
+      "name": "repo-hygiene-wired-proof",
+      "target_bins": ["repo-hygiene-wired-proof"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["live crontab row invokes bin/repo-hygiene-wired-proof.sh, not the Rust binary; check-publish/src/publish.rs:47 also names the shell domain path"],
+      "git_history_commits_at_head": 2,
+      "verdict": "UNKNOWN",
+      "reason": "Shell-name collision is not Rust reachability; remote correctness probe was refused."
+    },
+    {
+      "name": "scheduled-lane-doctor",
+      "target_bins": ["scheduled-lane-doctor"],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": [],
+      "git_history_commits_at_head": 5,
+      "verdict": "UNKNOWN",
+      "reason": "No caller or accepted root trigger; remote correctness probe was refused."
+    },
+    {
+      "name": "zestgraph-hook-substrates",
+      "target_bins": [
+        "zestgraph-accretive-write-gate",
+        "zestgraph-agent-prompt-drift",
+        "zestgraph-danger-gate",
+        "zestgraph-ee-capture",
+        "zestgraph-ee-recall",
+        "zestgraph-reservation-conflict-gate",
+        "zestgraph-skill-topology-gate"
+      ],
+      "external_library_callers": [],
+      "root_executor_triggers": [],
+      "non_root_references": ["launchd plist ai.zeststream.skill-topology-gate invokes ~/.claude/scripts/skill-topology-gate-run.sh, not a target binary"],
+      "git_history_commits_at_head": 3,
+      "verdict": "TERMINAL",
+      "reason": "No caller or accepted root trigger, and src/lib.rs:3-10 explicitly records the hook entrypoints as retired by the shadow-to-uncertified demotion."
+    }
+  ],
+  "summary": {
+    "roster_terminal_count": 14,
+    "derived_terminal_count": 1,
+    "live_count": 1,
+    "inert_count": 1,
+    "unknown_count": 11,
+    "reclassified_out_of_terminal": 13,
+    "deletions_performed": 0,
+    "recovery_command_template": "git checkout <sha> -- crates/<name>",
+    "deletion_status": "DEFERRED pending different-pane review of this table; no control-plane files were modified"
+  },
+  "no_claim": "This artifact proves caller and executor reachability only for the enumerated package metadata, live crontab, launchd, git-hook, workflow, and direct Command::new surfaces. Cargo metadata and source reads used a dirty control-plane worktree. UNKNOWN rows are not deletion candidates. It does not prove behavior for failed/refused test probes, installed-binary parity, or absence of dynamic/manual invocations outside the listed trigger classes."
+}
