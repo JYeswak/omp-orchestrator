@@ -301,6 +301,99 @@ pub fn draft_path(adapter: &str, body: &str) -> PathBuf {
     Path::new(DRAFT_DIR).join(format!("{adapter}-{}.md", content_id(body)))
 }
 
+/// What `--apply` did. `Unchanged` is a first-class outcome, not a silent success: an
+/// operator re-running the probe needs to know the draft was already on disk rather than
+/// wondering whether the write happened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Applied {
+    /// The draft was created.
+    Written(PathBuf),
+    /// A byte-identical draft was already present. Idempotent by content, not by timestamp.
+    Unchanged(PathBuf),
+}
+
+impl Applied {
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Written(path) | Self::Unchanged(path) => path,
+        }
+    }
+
+    #[must_use]
+    pub fn reason_code(&self) -> &'static str {
+        match self {
+            Self::Written(_) => "UPSTREAM_REPORT_WRITTEN",
+            Self::Unchanged(_) => "UPSTREAM_REPORT_UNCHANGED",
+        }
+    }
+}
+
+/// Write the draft under `repo`, and REFUSE when there is nothing to report.
+///
+/// `--apply` is the gated opt-in; printing is the default, so this is never reached by an
+/// operator who only asked to look. The refusal is the anti-vacuity arm and it is typed: **an
+/// empty draft on disk is worse than no draft**, because a directory of empty files trains an
+/// operator to stop reading the directory.
+///
+/// The write is followed by a READBACK compare. A successful `fs::write` is the call
+/// succeeding, not the content persisting — the distinction this repo already records for
+/// commits, applied to a file.
+pub fn apply(
+    verdict: &AdapterVerdict,
+    decision: &Result<Reportable, NotReportable>,
+    repo: &Path,
+) -> Result<Applied, String> {
+    let reportable = match decision {
+        Ok(reportable) => reportable,
+        Err(not) => {
+            return Err(format!(
+                "{} adapter={:?} detail={}",
+                not.reason_code(),
+                verdict.adapter,
+                not.detail()
+            ))
+        }
+    };
+    let body = draft(verdict, reportable);
+    let path = repo.join(draft_path(&verdict.adapter, &body));
+    if let Ok(existing) = std::fs::read_to_string(&path) {
+        if existing == body {
+            return Ok(Applied::Unchanged(path));
+        }
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("UPSTREAM_REPORT_BAD_PATH path={}", path.display()))?;
+    std::fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "UPSTREAM_REPORT_MKDIR_FAILED path={} error={error}",
+            parent.display()
+        )
+    })?;
+    std::fs::write(&path, &body).map_err(|error| {
+        format!(
+            "UPSTREAM_REPORT_WRITE_FAILED path={} error={error}",
+            path.display()
+        )
+    })?;
+    let readback = std::fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "UPSTREAM_REPORT_READBACK_FAILED path={} error={error}",
+            path.display()
+        )
+    })?;
+    if readback != body {
+        return Err(format!(
+            "UPSTREAM_REPORT_READBACK_MISMATCH path={} wrote={} read={}",
+            path.display(),
+            body.len(),
+            readback.len()
+        ));
+    }
+    Ok(Applied::Written(path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,6 +561,77 @@ mod tests {
         assert!(body.contains(provenance.package_version));
         assert!(body.contains(provenance.build_commit));
         assert!(body.contains(provenance.source_revision));
+    }
+
+    #[test]
+    fn apply_refuses_when_there_is_nothing_to_report_and_writes_no_file() {
+        // ANTI-VACUITY: an empty draft on disk is worse than none. A directory of empty files
+        // trains an operator to stop reading the directory.
+        let dir = tempfile::tempdir().expect("fixture dir");
+        let healthy = verdict("tick-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/x"), Some(0), "usage");
+        let decision = classify(&healthy);
+        let error = apply(&healthy, &decision, dir.path()).expect_err("must refuse");
+        assert!(error.contains("UPSTREAM_REPORT_NOTHING_TO_REPORT"), "got {error}");
+        assert!(error.contains("tick-monitor"), "the refusal must name the adapter; got {error}");
+        assert!(
+            !dir.path().join(DRAFT_DIR).exists(),
+            "a refused apply must not even create the directory"
+        );
+    }
+
+    #[test]
+    fn apply_refuses_an_absent_adapter_with_the_local_gap_code_not_the_healthy_one() {
+        let dir = tempfile::tempdir().expect("fixture dir");
+        let absent = verdict("gate-runner", AdapterStatus::NotInstalled, None, None, "no such file");
+        let decision = classify(&absent);
+        let error = apply(&absent, &decision, dir.path()).expect_err("must refuse");
+        assert!(error.contains("UPSTREAM_REPORT_NOT_AN_UPSTREAM_DEFECT"), "got {error}");
+        assert!(!error.contains("UPSTREAM_REPORT_NOTHING_TO_REPORT"), "got {error}");
+    }
+
+    #[test]
+    fn apply_writes_the_draft_reads_it_back_and_is_idempotent_by_content() {
+        let dir = tempfile::tempdir().expect("fixture dir");
+        let broken = verdict(
+            "loop-queue-filter",
+            AdapterStatus::NoHelpContract,
+            Some("/home/operator/.local/bin/loop-queue-filter"),
+            Some(0),
+            "no output on stdout or stderr",
+        );
+        let decision = classify(&broken);
+
+        let first = apply(&broken, &decision, dir.path()).expect("first apply");
+        let path = match &first {
+            Applied::Written(path) => path.clone(),
+            Applied::Unchanged(path) => panic!("a fresh dir cannot be unchanged: {}", path.display()),
+        };
+        assert_eq!(first.reason_code(), "UPSTREAM_REPORT_WRITTEN");
+        let on_disk = std::fs::read_to_string(&path).expect("draft on disk");
+        assert!(on_disk.contains("UPSTREAM_NO_HELP_CONTRACT"), "the file must carry the reason code");
+        assert!(on_disk.contains("loop-queue-filter --help"), "the file must carry the argv");
+
+        // Re-running must NOT churn a second file: the path is content-keyed.
+        let second = apply(&broken, &decision, dir.path()).expect("second apply");
+        assert_eq!(second, Applied::Unchanged(path.clone()));
+        assert_eq!(second.reason_code(), "UPSTREAM_REPORT_UNCHANGED");
+        let count = std::fs::read_dir(dir.path().join(DRAFT_DIR))
+            .expect("draft dir")
+            .count();
+        assert_eq!(count, 1, "a re-run must not create a second draft");
+    }
+
+    #[test]
+    fn a_different_observation_writes_a_different_draft_rather_than_overwriting() {
+        // The content id is the filename, so new evidence must not silently replace old
+        // evidence about the same adapter.
+        let dir = tempfile::tempdir().expect("fixture dir");
+        let first_run = verdict("fleet-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/fleet-monitor"), Some(2), "usage: fleet-monitor");
+        let later_run = verdict("fleet-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/fleet-monitor"), Some(64), "usage: fleet-monitor");
+        apply(&first_run, &classify(&first_run), dir.path()).expect("first");
+        apply(&later_run, &classify(&later_run), dir.path()).expect("second");
+        let count = std::fs::read_dir(dir.path().join(DRAFT_DIR)).expect("dir").count();
+        assert_eq!(count, 2, "two distinct observations must be two drafts");
     }
 
     #[test]

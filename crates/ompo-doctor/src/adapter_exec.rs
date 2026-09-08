@@ -240,6 +240,36 @@ pub fn exit_code(verdicts: &[AdapterVerdict]) -> Result<u8, String> {
     Ok(EXIT_ALL_LIVE)
 }
 
+/// Adapters that ANSWERED their documented surface and still exited nonzero.
+///
+/// This is the aggregated form of a figure that was hand-measured until now: eleven adapters
+/// print a usage line while exiting `2`, `64`, `78` or `255`. The executor recorded the exit
+/// on every row from the start, so the count was derivable and simply never derived — a
+/// figure available in the data and stated from a shell census instead.
+#[must_use]
+pub fn usage_with_nonzero_exit(verdicts: &[AdapterVerdict]) -> usize {
+    verdicts
+        .iter()
+        .filter(|v| v.status == AdapterStatus::Live && !matches!(v.exit, Some(0) | None))
+        .count()
+}
+
+/// Every distinct exit code observed, with how many adapters produced it, ascending.
+///
+/// Keyed on `Option<i32>` rendered as a string so "never exited" is a VISIBLE bucket rather
+/// than being folded into some sentinel integer.
+#[must_use]
+pub fn exit_histogram(verdicts: &[AdapterVerdict]) -> Vec<(String, usize)> {
+    let mut counts: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for verdict in verdicts {
+        let key = verdict
+            .exit
+            .map_or_else(|| "none".to_owned(), |code| format!("{code:03}"));
+        *counts.entry(key).or_default() += 1;
+    }
+    counts.into_iter().collect()
+}
+
 /// The `--json` envelope for one or many adapters, carrying its own denominator so a reader
 /// can tell "executed nothing" from "executed everything".
 pub fn envelope(verdicts: &[AdapterVerdict]) -> Result<Value, String> {
@@ -268,6 +298,11 @@ pub fn envelope(verdicts: &[AdapterVerdict]) -> Result<Value, String> {
             "live": live,
             "degraded": degraded,
             "unmeasurable": unmeasurable,
+            "usage_with_nonzero_exit": usage_with_nonzero_exit(verdicts),
+            "exit_histogram": exit_histogram(verdicts)
+                .into_iter()
+                .map(|(code, count)| json!({"exit": code, "adapters": count}))
+                .collect::<Vec<_>>(),
             "exit": exit,
             "probe_argv": PROBE_ARGS,
             "deadline_secs": PROBE_DEADLINE.as_secs(),
@@ -361,7 +396,8 @@ pub fn run_axis(named: &str, json: bool) -> u8 {
             println!("{}", render(verdict));
         }
         println!(
-            "OMPO_DOCTOR_ADAPTERS executed={} live={} degraded={} unmeasurable={} exit={code}",
+            "OMPO_DOCTOR_ADAPTERS executed={} live={} degraded={} unmeasurable={} \
+             usage_with_nonzero_exit={} exit={code}",
             verdicts.len(),
             verdicts.iter().filter(|v| v.status == AdapterStatus::Live).count(),
             verdicts
@@ -369,6 +405,7 @@ pub fn run_axis(named: &str, json: bool) -> u8 {
                 .filter(|v| v.status == AdapterStatus::NoHelpContract)
                 .count(),
             verdicts.iter().filter(|v| v.status.is_unmeasurable()).count(),
+            usage_with_nonzero_exit(&verdicts),
         );
     }
     code
@@ -504,6 +541,39 @@ mod tests {
     fn all_live_is_the_only_zero() {
         let live = [verdict("a", AdapterStatus::Live), verdict("b", AdapterStatus::Live)];
         assert_eq!(exit_code(&live).expect("code"), EXIT_ALL_LIVE);
+    }
+
+    #[test]
+    fn the_nonzero_usage_count_is_derived_not_hand_measured() {
+        // The figure this replaces was a shell census: "eleven adapters print usage while
+        // exiting nonzero". The executor recorded `exit` on every row from the start, so the
+        // count was always derivable and simply never derived.
+        let rows = [
+            AdapterVerdict { adapter: "a".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "usage".into() },
+            AdapterVerdict { adapter: "b".into(), status: AdapterStatus::Live, resolved: None, exit: Some(78), detail: "usage".into() },
+            AdapterVerdict { adapter: "c".into(), status: AdapterStatus::Live, resolved: None, exit: Some(64), detail: "usage".into() },
+            // NOT counted: it never answered, so it is not "answered AND exited nonzero".
+            AdapterVerdict { adapter: "d".into(), status: AdapterStatus::NoHelpContract, resolved: None, exit: Some(0), detail: "none".into() },
+            // NOT counted: absent binaries never exited at all.
+            AdapterVerdict { adapter: "e".into(), status: AdapterStatus::NotInstalled, resolved: None, exit: None, detail: "absent".into() },
+        ];
+        assert_eq!(usage_with_nonzero_exit(&rows), 2);
+        assert_eq!(usage_with_nonzero_exit(&[]), 0);
+    }
+
+    #[test]
+    fn the_exit_histogram_keeps_never_exited_as_a_visible_bucket() {
+        let rows = [
+            AdapterVerdict { adapter: "a".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "x".into() },
+            AdapterVerdict { adapter: "b".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "x".into() },
+            AdapterVerdict { adapter: "c".into(), status: AdapterStatus::NotInstalled, resolved: None, exit: None, detail: "x".into() },
+        ];
+        let histogram = exit_histogram(&rows);
+        assert_eq!(histogram, vec![("000".to_owned(), 2), ("none".to_owned(), 1)]);
+        assert!(
+            histogram.iter().any(|(code, _)| code == "none"),
+            "never-exited must not be folded into a sentinel integer"
+        );
     }
 
     #[test]
