@@ -1,0 +1,186 @@
+{
+  "schema_version": "omp-stage-gate-reachability/v1",
+  "bead": "omp-orchestrator-6nhj",
+  "consumer": "6nhj grading and the next gate-wiring dispatch",
+  "feature_gated": "semantic stage-gate trigger reachability and verdict observation",
+  "defect_basis": "the prior five-of-six census measured a repository with no remote; the live repository now has a remote and a reachable-but-red CI workflow, while the six semantic stage gates remain untriggered",
+  "deletion_condition": "delete when the production census emits this scope, schema, machine identity, trigger classes, and observation fields from the live executor surfaces",
+  "measured_at_utc": "2026-09-08T18:58:38Z",
+  "machine": "Joshs-Mac-Studio.local",
+  "repository": "/Users/josh/Developer/omp-orchestrator",
+  "head": "280903cdeba08154a5db3d21bdb3c5d2c6cce011",
+  "input_manifest": {
+    "status": "FULL",
+    "population": "six semantic layer gates, adjacent aggregate stage gates, all tracked workflow YAML, all tracked crates/*/src/*.rs, all current .git/hooks files, current comment-stripped crontab, GitHub runs returned by gh run list --limit 100",
+    "sources": [
+      "cargo metadata --no-deps --format-version 1 --offline",
+      "git ls-files -z",
+      "git remote -v",
+      "gh run list --limit 100 --json databaseId,status,conclusion,workflowName,headSha",
+      "gh run view 34171417882 --log-failed",
+      "gh api repos/JYeswak/omp-orchestrator/branches/main/protection",
+      "crontab -l",
+      ".git/hooks/pre-commit"
+    ],
+    "comment_policy": "line and block comments stripped before executor matching; documents, fixtures, bead records, and registry prose are not executor surfaces",
+    "own_source_excluded": true,
+    "executor_surfaces": [
+      ".github/workflows/*.yml and *.yaml",
+      "crates/*/src/*.rs",
+      ".git/hooks/*",
+      "comment-stripped crontab"
+    ]
+  },
+  "population": {
+    "semantic_layer_gates": [
+      {"id": "omp-orchestrator-gate-s1-l0-jtgw", "tracker_status": "open", "classification": "INERT"},
+      {"id": "omp-orchestrator-gate-s1-l1-fnv8", "tracker_status": "open", "classification": "INERT"},
+      {"id": "omp-orchestrator-gate-s1-l2-j5m9", "tracker_status": "open", "classification": "INERT"},
+      {"id": "omp-orchestrator-gate-s1-l3-z8hz", "tracker_status": "open", "classification": "INERT"},
+      {"id": "omp-orchestrator-gate-s1-l4-hs15", "tracker_status": "open", "classification": "INERT"},
+      {"id": "omp-orchestrator-gate-s1-l5-w44h", "tracker_status": "open", "classification": "INERT"}
+    ],
+    "adjacent_aggregate_gates": [
+      {"id": "omp-orchestrator-gate-s1-djn8", "tracker_status": "open", "classification": "INERT"},
+      {"id": "omp-orchestrator-gate-s2-ehx8", "tracker_status": "open", "classification": "INERT"}
+    ],
+    "classification_legend": {
+      "ABSENT": "no declared gate row exists; build it",
+      "INERT": "the declared gate exists but no executor trigger was found; wire it",
+      "UNRUN": "an executor exists but no run verdict exists; run it, never call it a pass"
+    }
+  },
+  "executor_scan": {
+    "semantic_layer_gate_matches": {
+      "workflow": [],
+      "rust_source": [],
+      "crontab": [],
+      "hook_binaries": []
+    },
+    "aggregate_gate_matches": {
+      "workflow": [],
+      "rust_source": [],
+      "crontab": [],
+      "hook_binaries": []
+    },
+    "document_only_examples": [
+      "AGENTS.md",
+      ".beads/issues.jsonl",
+      "docs/contracts/s1_l0_install.md",
+      "docs/contracts/s1_l3_walkthrough.md",
+      "docs/contracts/s1_l4_liveness.md",
+      "docs/contracts/s1_l5_portal.md",
+      "docs/plan/flow/CONTRACT.md",
+      "docs/plan/flow/S1-READY.md",
+      "README.md"
+    ],
+    "document_matches_are_not_triggers": true
+  },
+  "ci_executor": {
+    "remote": "origin https://github.com/JYeswak/omp-orchestrator.git",
+    "workflow": ".github/workflows/gate.yml",
+    "strict_yaml": "PASS",
+    "strict_yaml_duplicate_key_mutation": "RED rc=1 YAML_STRICT_DUPLICATE [[\"$\",\"name\"]]",
+    "jobs": 1,
+    "entry_points": [
+      ".github/workflows/gate.yml:145 cargo run --quiet -p gate-runner -- --plan",
+      ".github/workflows/gate.yml:147 cargo run --quiet -p gate-runner -- --run"
+    ],
+    "roster_derivation": "gate-runner derives all 88 cargo-metadata packages and runs each roster entry before declared checks",
+    "run_window": {
+      "gh_run_list_limit": 100,
+      "runs_returned": 83,
+      "completed": 83,
+      "failure": 71,
+      "cancelled": 12,
+      "success": 0
+    },
+    "latest_run": {
+      "database_id": 34171417882,
+      "workflow": "gate",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "666ec909f16de2967e931708b83f6e051ea977c6",
+      "gate_runner_summary": "crates=88 pass=70 fail=16 unmeasurable=2 short=0 no_tests=0",
+      "failed_crates": [
+        "ack-spine",
+        "admission-reason",
+        "agent-mail-native",
+        "dispatch-silence-watch",
+        "finding",
+        "kernel-bypass-gate",
+        "loop-driver",
+        "loop-queue-filter",
+        "no-shell-gate",
+        "omp-idle-dispatch",
+        "omp-orchestrator",
+        "pane-dispatch-ready",
+        "reap-finished-panes",
+        "silent-success-census",
+        "undrained-pipe-lint",
+        "verify-dispatch"
+      ],
+      "unmeasurable_crates": ["ompo-doctor", "ompo-start"]
+    },
+    "verdict_class": "REACHABLE_RED_UNREAD",
+    "verdict_observed_by": [],
+    "required_status_check": "ABSENT: gh api returned Branch not protected (HTTP 404)",
+    "bead_observation": "ABSENT: neither run id 34171417882 nor head sha 666ec909f16de2967e931708b83f6e051ea977c6 was found in .beads/issues.jsonl"
+  },
+  "gate_crate_latest_rows": {
+    "commit-build-fence": "PASS",
+    "crate-atom-gate": "PASS",
+    "fuzz-build-gate": "PASS",
+    "grader-attribution-gate": "PASS",
+    "kernel-bypass-gate": "FAIL",
+    "named-test-filter-gate": "PASS",
+    "no-shell-gate": "FAIL",
+    "orchestration-tick-gate": "PASS",
+    "path-literal-guard": "PASS",
+    "porting-gate": "PASS",
+    "pre-delete-citation-check": "PASS",
+    "preregistration-gate": "PASS",
+    "r1-breadth-gate": "PASS",
+    "response-envelope-check": "PASS",
+    "s2-gate": "PASS",
+    "staged-build-gate": "PASS",
+    "state-wildcard-lint": "PASS",
+    "undrained-pipe-lint": "FAIL",
+    "worker-oracle-gate": "PASS",
+    "worker-tag-gate": "PASS"
+  },
+  "local_hook_executor": {
+    "path": ".git/hooks/pre-commit",
+    "exists": true,
+    "executable": true,
+    "file": "Mach-O 64-bit executable arm64",
+    "sha256": "bb623ec579e3df23868e26529f54f13d01400af269dfc2d84632c9ce96a02fb8",
+    "positive_control": "PASS: copied current hook to an isolated temporary git repository with staged bad.sh; exit=1 and no-shell-gate reported one tracked shell/python file"
+  },
+  "cron_positive_controls": {
+    "comment_stripped_line_counts": {
+      "ntm": 2,
+      "orchestrator-tick": 1,
+      "zzz-cannot-exist": 0,
+      "refill-idle-panes": 1
+    },
+    "omp_scoped_refill_lines": [],
+    "comment_strip_mutation": "PASS: synthetic commented tick-monitor mention removed while active orchestrator-tick line remained"
+  },
+  "existing_suite_boundary": {
+    "test": "crates/no-shell-gate/tests/wired_lanes.rs",
+    "covered": [
+      "reachability_census_rejects_empty_inputs",
+      "planted_unwired_member_is_red_then_green"
+    ],
+    "not_duplicated": true,
+    "boundary": "that suite measures workspace metadata-member reachability; this artifact measures semantic stage-gate executors and verdict consumers",
+    "current_peer_result": "user-reported independent Contabo run: 31 tests, 26 passed, 5 failed; the peer owns this file and it was not edited here"
+  },
+  "no_claim": [
+    "Static executor reachability proves a trigger exists, not that a gate ran in every cycle.",
+    "The CI workflow is reachable and currently red, but no required status check, merge gate, or bead citation consumes the latest verdict.",
+    "The hook result is for Joshs-Mac-Studio.local only; .git/hooks is untracked and per-clone, so a fresh checkout elsewhere has no hook.",
+    "This measurement did not run cargo, build a binary, or claim semantic correctness of any gate."
+  ]
+}
