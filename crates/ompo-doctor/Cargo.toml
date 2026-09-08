@@ -29,3 +29,22 @@ asupersync = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+# DECLARED CONSUMPTION of OMP's native `--mode=rpc` surface.
+#
+# Read by `omp_inventory_map::alignment::index_consumers` off `cargo metadata`, so this is
+# DERIVED at read time and never transcribed into a second inventory. Schema verified at
+# `crates/omp-inventory-map/src/alignment.rs:372-417`: `metadata.omp_surface.consumes` must be
+# an array of objects each carrying non-empty `kind`, `name` and `call_site` strings; a missing
+# or empty field is an emitted defect, not a silent skip.
+#
+# These three replace the hand-typed 21-name candidate list in `omp-inventory-map`'s
+# `classification_for`, which could only ever name this crate as an owner. Every method below
+# was measured to ANSWER a live omp/18.1.14 before its verb was written, and each is reachable
+# as `ompo <verb>`.
+[package.metadata.omp_surface]
+consumes = [
+    { kind = "rpc_handler", name = "get_state", call_site = "src/omp_state.rs" },
+    { kind = "rpc_handler", name = "get_session_stats", call_site = "src/omp_stats.rs" },
+    { kind = "rpc_handler", name = "get_messages", call_site = "src/omp_messages.rs" },
+]
