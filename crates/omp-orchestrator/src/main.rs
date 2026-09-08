@@ -771,6 +771,47 @@ fn require_success(program: &str, output: Output) -> Result<Vec<u8>, String> {
         String::from_utf8_lossy(&output.stderr).trim()
     ))
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AsupersyncConformanceEvidence {
+    Current { detail: String },
+    Missing { detail: String },
+    Stale { detail: String },
+    Unavailable { detail: String },
+}
+
+fn asupersync_conformance_evidence(
+    result: Result<Output, String>,
+) -> AsupersyncConformanceEvidence {
+    let output = match result {
+        Ok(output) => output,
+        Err(error) => {
+            return AsupersyncConformanceEvidence::Unavailable {
+                detail: one_line_detail(&error),
+            };
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let detail = one_line_detail(&format!(
+        "exit={} stdout={} stderr={}",
+        output
+            .status
+            .code()
+            .map_or_else(|| "signal".to_owned(), |code| code.to_string()),
+        stdout.trim(),
+        stderr.trim()
+    ));
+    if stdout.contains("reason=UNREADABLE") {
+        AsupersyncConformanceEvidence::Missing { detail }
+    } else if stdout.contains("reason=STALE") {
+        AsupersyncConformanceEvidence::Stale { detail }
+    } else if output.status.success() && stdout.contains("ASUPERSYNC_CONFORMANCE_CURRENT") {
+        AsupersyncConformanceEvidence::Current { detail }
+    } else {
+        AsupersyncConformanceEvidence::Unavailable { detail }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct NtmSendAdmission {
@@ -5469,6 +5510,29 @@ fn queue_empty_detail(free_capacity_count: usize) -> String {
 
 async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     write_heartbeat(config, tick, "CYCLE_STARTED", "phase=observe")?;
+    let conformance_args = vec![
+        "--repo".to_owned(),
+        config.repo.display().to_string(),
+        "--check".to_owned(),
+        "ASUPERSYNC-CONFORMANCE.md".to_owned(),
+    ];
+    let conformance = asupersync_conformance_evidence(
+        invoke(cx, config, "asupersync-conformance", &conformance_args).await,
+    );
+    match conformance {
+        AsupersyncConformanceEvidence::Current { detail } => println!(
+            "ASUPERSYNC_CONFORMANCE_EVIDENCE tick={tick} kind=current detail={detail}"
+        ),
+        AsupersyncConformanceEvidence::Missing { detail } => println!(
+            "ASUPERSYNC_CONFORMANCE_EVIDENCE tick={tick} kind=missing no_claim=table_compliance detail={detail}"
+        ),
+        AsupersyncConformanceEvidence::Stale { detail } => println!(
+            "ASUPERSYNC_CONFORMANCE_EVIDENCE tick={tick} kind=stale no_claim=table_compliance detail={detail}"
+        ),
+        AsupersyncConformanceEvidence::Unavailable { detail } => println!(
+            "ASUPERSYNC_CONFORMANCE_EVIDENCE tick={tick} kind=unavailable no_claim=table_compliance detail={detail}"
+        ),
+    }
     recover_pending_findings(cx, config, tick).await?;
     // MOVED HERE AFTER RUNNING IT, and the move is the finding. The first version
     // sat after `decide()`, which reads as "every cycle" and is not: MEASURED

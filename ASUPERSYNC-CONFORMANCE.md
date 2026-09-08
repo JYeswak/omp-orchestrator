@@ -52,7 +52,7 @@ Pinned asupersync revision: `fa3c01aec` (version 0.4.9)
 | fleet-reconcile | Y | . | Y | 0 | 0 | 0 | 9 | - |
 | fleet-truth | Y | . | Y | 0 | 0 | 0 | 13 | - |
 | fuzz-build-gate | Y | . | Y | 0 | 0 | 0 | 1 | - |
-| gate-runner | . | . | Y | 0 | 0 | 0 | 2 | - |
+| gate-runner | . | . | Y | 0 | 0 | 0 | 3 | - |
 | grader-attribution-gate | Y | . | . | 0 | 0 | 0 | 0 | - |
 | inbox-monitor | Y | Y | Y | 4 | 4 | 3 | 4 | - |
 | input-manifest | . | . | . | 0 | 0 | 0 | 0 | - |
@@ -70,13 +70,13 @@ Pinned asupersync revision: `fa3c01aec` (version 0.4.9)
 | named-test-filter-gate | . | . | . | 0 | 0 | 0 | 0 | - |
 | no-shell-gate | Y | . | Y | 0 | 0 | 0 | 18 | - |
 | ntm-fleet-monitor | Y | Y | . | 1 | 1 | 2 | 0 | - |
-| omp-idle-dispatch | Y | Y | Y | 0 | 0 | 0 | 2 | - |
-| omp-inventory-map | Y | Y | Y | 3 | 3 | 3 | 1 | - |
-| omp-orchestrator | Y | Y | Y | 31 | 31 | 4 | 8 | - |
-| omp-rpc-session | Y | Y | . | 7 | 6 | 2 | 3 | - |
-| omp-surface-consumption | Y | . | Y | 0 | 0 | 0 | 3 | - |
+| omp-idle-dispatch | Y | Y | Y | 4 | 4 | 0 | 3 | - |
+| omp-inventory-map | Y | Y | Y | 3 | 3 | 3 | 3 | - |
+| omp-orchestrator | Y | Y | Y | 34 | 34 | 4 | 8 | - |
+| omp-rpc-session | Y | Y | . | 8 | 7 | 2 | 4 | - |
+| omp-surface-consumption | Y | . | Y | 0 | 0 | 0 | 6 | - |
 | omp-types | Y | Y | Y | 0 | 0 | 0 | 0 | - |
-| ompo-doctor | . | . | Y | 0 | 0 | 0 | 1 | - |
+| ompo-doctor | . | Y | Y | 4 | 4 | 0 | 11 | - |
 | ompo-start | . | . | . | 0 | 0 | 0 | 0 | - |
 | oracle-compare | Y | . | Y | 0 | 0 | 0 | 6 | - |
 | oracle-pane-state-differential | Y | . | Y | 0 | 0 | 0 | 3 | - |
@@ -84,7 +84,7 @@ Pinned asupersync revision: `fa3c01aec` (version 0.4.9)
 | pane-dispatch-fence | Y | Y | Y | 1 | 1 | 0 | 2 | - |
 | pane-dispatch-ready | Y | . | Y | 0 | 0 | 0 | 10 | - |
 | pane-oracle-diff | Y | . | Y | 0 | 0 | 0 | 4 | - |
-| pane-truth | Y | . | Y | 0 | 0 | 0 | 4 | - |
+| pane-truth | Y | . | Y | 0 | 0 | 0 | 5 | - |
 | path-literal-guard | Y | . | . | 0 | 0 | 0 | 0 | - |
 | plan-assemble | Y | Y | . | 2 | 0 | 0 | 0 | - |
 | porting-gate | Y | Y | Y | 2 | 2 | 1 | 4 | - |
@@ -113,7 +113,7 @@ Pinned asupersync revision: `fa3c01aec` (version 0.4.9)
 | worker-oracle-gate | Y | . | . | 0 | 0 | 0 | 0 | - |
 | worker-tag-gate | Y | . | . | 0 | 0 | 0 | 0 | - |
 
-Crates scanned: **88**. forbid_unsafe: **75**. dep_asupersync: **24**. async_fns: **118**. cx_first: **97**. checkpoints: **41**. raw_command sites: **281**.
+Crates scanned: **88**. forbid_unsafe: **75**. dep_asupersync: **25**. async_fns: **130**. cx_first: **109**. checkpoints: **41**. raw_command sites: **300**.
 
 ## Raw Command triage
 
@@ -229,6 +229,7 @@ Every discovered site is classified; no `UNTRIAGED` row is emitted. The lexical 
 | fuzz-build-gate | crates/fuzz-build-gate/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | gate-runner | crates/gate-runner/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | gate-runner | crates/gate-runner/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| gate-runner | crates/gate-runner/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | inbox-monitor | crates/inbox-monitor/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | inbox-monitor | crates/inbox-monitor/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | inbox-monitor | crates/inbox-monitor/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
@@ -293,6 +294,9 @@ Every discovered site is classified; no `UNTRIAGED` row is emitted. The lexical 
 | no-shell-gate | crates/no-shell-gate/src/lib.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
 | omp-idle-dispatch | crates/omp-idle-dispatch/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | omp-idle-dispatch | crates/omp-idle-dispatch/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| omp-idle-dispatch | crates/omp-idle-dispatch/src/profile_store.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
+| omp-inventory-map | crates/omp-inventory-map/src/bin/omp-surface-align.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| omp-inventory-map | crates/omp-inventory-map/src/bin/omp-surface-align.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | omp-inventory-map | crates/omp-inventory-map/src/lib.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
 | omp-orchestrator | crates/omp-orchestrator/src/lib.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
 | omp-orchestrator | crates/omp-orchestrator/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
@@ -304,11 +308,25 @@ Every discovered site is classified; no `UNTRIAGED` row is emitted. The lexical 
 | omp-orchestrator | crates/omp-orchestrator/src/target_directory.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | omp-rpc-session | crates/omp-rpc-session/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | omp-rpc-session | crates/omp-rpc-session/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| omp-rpc-session | crates/omp-rpc-session/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | omp-rpc-session | crates/omp-rpc-session/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| omp-surface-consumption | crates/omp-surface-consumption/src/cli_probe.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
 | omp-surface-consumption | crates/omp-surface-consumption/src/main.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
 | omp-surface-consumption | crates/omp-surface-consumption/src/main.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
 | omp-surface-consumption | crates/omp-surface-consumption/src/main.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
+| omp-surface-consumption | crates/omp-surface-consumption/src/main.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
+| omp-surface-consumption | crates/omp-surface-consumption/src/rpc_probe.rs | ROUTED_THROUGH_SUBPROCESS_CONTRACT | the command reaches the repository drain-safe bounded runner |
+| ompo-doctor | crates/ompo-doctor/src/adapter_exec.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | ompo-doctor | crates/ompo-doctor/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/liveness.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/liveness.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/omp_messages.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/omp_process.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/omp_state.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/omp_stats.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/provenance.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/provenance.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| ompo-doctor | crates/ompo-doctor/src/selfdoc.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | oracle-compare | crates/oracle-compare/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | oracle-compare | crates/oracle-compare/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | oracle-compare | crates/oracle-compare/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
@@ -334,6 +352,7 @@ Every discovered site is classified; no `UNTRIAGED` row is emitted. The lexical 
 | pane-oracle-diff | crates/pane-oracle-diff/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | pane-oracle-diff | crates/pane-oracle-diff/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | pane-oracle-diff | crates/pane-oracle-diff/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
+| pane-truth | crates/pane-truth/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | pane-truth | crates/pane-truth/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | pane-truth | crates/pane-truth/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | pane-truth | crates/pane-truth/src/lib.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
@@ -403,7 +422,7 @@ Every discovered site is classified; no `UNTRIAGED` row is emitted. The lexical 
 | wired-but-inert-guard | crates/wired-but-inert-guard/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 | wired-but-inert-guard | crates/wired-but-inert-guard/src/main.rs | DEADLOCK_SAFE_NO_PIPES | the command site does not pipe stdout or stderr |
 
-Raw sites triaged: **281**. undrained-pipe-lint violations: **0**.
+Raw sites triaged: **300**. undrained-pipe-lint violations: **0**.
 
 ## Scope and limits
 
