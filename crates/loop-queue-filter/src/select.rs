@@ -547,14 +547,29 @@ fn pane_scoped_authors(bead: &BeadComments) -> BTreeSet<String> {
     out
 }
 
-/// Count comments for `id`. Positive control: `eg0m` has 17 in production jsonl.
-pub fn comment_count(jsonl: &str, id: &str) -> Result<usize, String> {
+/// Outcome of [`comment_count`]. Absence is a typed variant, never a silent zero,
+/// so no caller can flatten a missing row into a healthy count with `unwrap_or(0)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommentCount {
+    /// Row present with this many comments (0 for a comment-free row).
+    Found(usize),
+    /// No row carries the requested id (includes empty documents).
+    RowAbsent { id: String },
+}
+
+/// Count comments for `id`, distinguishing absence from a present zero.
+///
+/// Returns [`CommentCount::Found`] for a present row and [`CommentCount::RowAbsent`]
+/// when no row carries `id`. Malformed JSONL remains a parse error.
+pub fn comment_count(jsonl: &str, id: &str) -> Result<CommentCount, String> {
     let beads = parse_jsonl(jsonl)?;
     Ok(beads
         .iter()
         .find(|b| b.id == id)
-        .map(|b| b.authors.len().max(b.texts.len()))
-        .unwrap_or(0))
+        .map(|b| CommentCount::Found(b.authors.len().max(b.texts.len())))
+        .unwrap_or_else(|| CommentCount::RowAbsent {
+            id: id.to_owned(),
+        }))
 }
 
 /// Grading priority is an optimisation over an already-correct ranked order.
@@ -1546,13 +1561,13 @@ mod tests {
         );
         assert_eq!(
             comment_count(jsonl, "fx-three").expect("fixture must parse"),
-            3,
+            CommentCount::Found(3),
             "the reader must count every comment on the addressed row"
         );
         assert_eq!(
             comment_count(jsonl, "fx-zero").expect("fixture must parse"),
-            0,
-            "a row with an empty comments array counts zero"
+            CommentCount::Found(0),
+            "a row with an empty comments array is found with zero"
         );
     }
 
@@ -1573,20 +1588,16 @@ mod tests {
         );
     }
 
-    /// ANTI-VACUITY: an EMPTY scan set must not read as a healthy zero. An empty document
-    /// parses cleanly, so this pins the residual honestly -- `comment_count` cannot today
-    /// distinguish "row absent" from "row has no comments", and both answer 0. That
-    /// ambiguity is a separate defect and is filed, not fixed here.
+    /// ANTI-VACUITY: an EMPTY scan set must not read as a healthy zero. Absence is the
+    /// typed [`CommentCount::RowAbsent`] variant carrying the requested id -- never
+    /// `Found(0)`, which is reserved for a present comment-free row.
     #[test]
-    fn an_absent_row_and_a_comment_free_row_both_answer_zero_today() {
-        assert_eq!(comment_count("", "fx-three").expect("empty parses"), 0);
-        assert_eq!(
-            comment_count(r#"{"id":"other","comments":[{"author":"a","text":"x"}]}"#, "fx-three")
-                .expect("parses"),
-            0,
-            "an ABSENT id answers 0, identical to a comment-free row: the signature cannot \
-             express NotFound. Filed as a follow-up rather than changed under 325h."
-        );
+    fn an_absent_row_is_typed_absence_never_found_zero() {
+        for jsonl in ["", r#"{"id":"other","comments":[{"author":"a","text":"x"}]}"#] {
+            let outcome = comment_count(jsonl, "fx-three").expect("absent parses");
+            assert_eq!(outcome, CommentCount::RowAbsent { id: "fx-three".to_owned() });
+            assert_ne!(outcome, CommentCount::Found(0));
+        }
     }
 
     #[test]
