@@ -55,20 +55,24 @@ fn observe(args: &[String]) -> Result<(), String> {
             .ok_or_else(|| format!("no metric row for {}", layer.as_str()))?;
         let v = observe_layer(&journal, layer, stall).map_err(|e| e.to_string())?;
         println!(
-            "layer={} state={} rows={} reason={}",
+            "layer={} state={} rows={} age_ms={} fresh={} reason={}",
             v.layer.as_str(),
             v.state.as_str(),
             v.row_count,
+            v.age_ms,
+            v.fresh,
             v.last_reason
         );
     } else {
         let vs = observe_all(&journal, &specs).map_err(|e| e.to_string())?;
         for v in vs {
             println!(
-                "layer={} state={} rows={} reason={}",
+                "layer={} state={} rows={} age_ms={} fresh={} reason={}",
                 v.layer.as_str(),
                 v.state.as_str(),
                 v.row_count,
+                v.age_ms,
+                v.fresh,
                 v.last_reason
             );
         }

@@ -23,7 +23,7 @@ use serde_json::Value;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayerState {
     Progressing,
-    Stalled,
+    Silent,
     Refusing,
 }
 
@@ -31,7 +31,7 @@ impl LayerState {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Progressing => "progressing",
-            Self::Stalled => "stalled",
+            Self::Silent => "silent",
             Self::Refusing => "refusing",
         }
     }
@@ -43,6 +43,8 @@ pub struct LayerVerdict {
     pub state: LayerState,
     pub row_count: usize,
     pub last_reason: String,
+    pub age_ms: u64,
+    pub fresh: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +53,8 @@ pub enum MonitorError {
     Io { path: PathBuf, detail: String },
     Malformed { line: usize, detail: String },
     MissingReason { line: usize },
+    MissingTimestamp { line: usize },
+    MalformedTimestamp { line: usize, detail: String },
     ReadbackFailed { detail: String },
     MetricsMissing { path: PathBuf },
     MetricsIncomplete { found: usize },
@@ -81,6 +85,13 @@ impl std::fmt::Display for MonitorError {
             Self::MissingReason { line } => write!(
                 f,
                 "LIFECYCLE_MONITOR_MISSING_REASON line={line} — idle and refused must stay distinguishable"
+            ),
+            Self::MissingTimestamp { line } => {
+                write!(f, "LIFECYCLE_MONITOR_MISSING_TIMESTAMP line={line}")
+            }
+            Self::MalformedTimestamp { line, detail } => write!(
+                f,
+                "LIFECYCLE_MONITOR_MALFORMED_TIMESTAMP line={line} detail={detail}"
             ),
             Self::ReadbackFailed { detail } => write!(
                 f,
@@ -256,7 +267,13 @@ fn parse_rows(path: &Path) -> Result<Vec<JournalRow>, MonitorError> {
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_owned();
-        let ts_unix = value.get("ts_unix").and_then(Value::as_u64).unwrap_or(0);
+        let timestamp = value.get("ts_unix").ok_or(MonitorError::MissingTimestamp { line: i + 1 })?;
+        let ts_unix = timestamp
+            .as_u64()
+            .ok_or_else(|| MonitorError::MalformedTimestamp {
+                line: i + 1,
+                detail: timestamp.to_string(),
+            })?;
         rows.push(JournalRow {
             layer,
             outcome,
@@ -273,10 +290,10 @@ fn parse_rows(path: &Path) -> Result<Vec<JournalRow>, MonitorError> {
     Ok(rows)
 }
 
-fn now_unix() -> u64 {
+fn now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|d| d.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
 }
 
@@ -295,11 +312,12 @@ pub fn observe_layer(
         });
     }
     let last = filtered.last().expect("non-empty");
-    let age_ms = now_unix().saturating_sub(last.ts_unix).saturating_mul(1000);
+    let age_ms = now_unix_ms().saturating_sub(last.ts_unix.saturating_mul(1000));
+    let fresh = age_ms <= stall_after_ms;
     let state = if last.outcome == "refused" {
         LayerState::Refusing
-    } else if last.ts_unix > 0 && age_ms > stall_after_ms {
-        LayerState::Stalled
+    } else if !fresh {
+        LayerState::Silent
     } else {
         LayerState::Progressing
     };
@@ -308,6 +326,8 @@ pub fn observe_layer(
         state,
         row_count: filtered.len(),
         last_reason: last.reason.clone(),
+        age_ms,
+        fresh,
     })
 }
 
@@ -433,7 +453,7 @@ mod tests {
         )
         .unwrap();
         let v = observe_layer(&path, Layer::L3, 1000).expect("observe");
-        assert_eq!(v.state, LayerState::Stalled);
+        assert_eq!(v.state, LayerState::Silent);
     }
 
     #[test]
