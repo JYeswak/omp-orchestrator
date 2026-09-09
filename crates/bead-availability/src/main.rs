@@ -3,11 +3,12 @@
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use bead_availability::{
-    classify, collect_live, collect_ready_live, measure_family, parse_graph_json, parse_issues_jsonl,
+    classify, collect_live, collect_ready_live, measure_family, parse_graph_json,
+    parse_issues_jsonl, parse_r7_parent_child_jsonl, R7_DEPENDENCY_SOURCE, R7_S0_EPIC,
     ScanError, FAMILY_NEEDLES, NO_CLAIM,
 };
-
 use std::env;
+use std::fs;
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -145,6 +146,13 @@ fn readiness_report_exit(residual_count: usize) -> ExitCode {
     }
 }
 
+fn load_r7_membership() -> Result<bead_availability::ParentChildMembership, String> {
+    let text = fs::read_to_string(R7_DEPENDENCY_SOURCE).map_err(|error| {
+        format!("R7_SOURCE_READ_FAILED path={R7_DEPENDENCY_SOURCE} detail={error}")
+    })?;
+    parse_r7_parent_child_jsonl(&text, R7_S0_EPIC).map_err(|error| error.to_string())
+}
+
 fn run_readiness(br_program: &str, json: bool) -> ExitCode {
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
@@ -164,11 +172,28 @@ fn run_readiness(br_program: &str, json: bool) -> ExitCode {
     });
     match result {
         Ok(report) => {
+            let r7 = match load_r7_membership() {
+                Ok(value) => value,
+                Err(error) => {
+                    if json {
+                        let value = serde_json::json!({
+                            "schema": "bead-availability/readiness-v1",
+                            "status": "ERROR",
+                            "error": error,
+                        });
+                        println!("{}", serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{\"status\":\"ERROR\"}".to_owned()));
+                    }
+                    eprintln!("BEAD_AVAILABILITY_READINESS_ERROR {error}");
+                    return readiness_error_exit(&error);
+                }
+            };
+            let residual_count = report.residual_count.saturating_add(r7.residual_count());
             if json {
                 let value = serde_json::json!({
                     "schema": report.schema,
-                    "status": if report.residual_count == 0 { "OK" } else { "RESIDUAL" },
+                    "status": if residual_count == 0 { "OK" } else { "RESIDUAL" },
                     "data": report,
+                    "r7": r7,
                 });
                 match serde_json::to_string_pretty(&value) {
                     Ok(output) => println!("{output}"),
@@ -179,8 +204,16 @@ fn run_readiness(br_program: &str, json: bool) -> ExitCode {
                 }
             } else {
                 print!("{}", report.render_text());
+                println!(
+                    "R7 source={} epic={} status={} children={} non_terminal={}",
+                    r7.source,
+                    r7.epic_id,
+                    r7.epic_status.as_str(),
+                    r7.child_ids.len(),
+                    r7.non_terminal_ids.len()
+                );
             }
-            readiness_report_exit(report.residual_count)
+            readiness_report_exit(residual_count)
         }
         Err(error) => {
             if json {
@@ -289,6 +322,8 @@ mod tests {
     #[test]
     fn readiness_exit_codes_keep_domain_and_anti_vacuity_distinct() {
         assert_eq!(readiness_error_exit("EMPTY_READY_SURFACE: br ready returned no candidates"), ExitCode::from(3));
+        assert_eq!(readiness_error_exit("MALFORMED_DEPENDENCY: line=2 missing=depends_on_id"), ExitCode::from(2));
+        assert_eq!(readiness_error_exit("EMPTY_DEPENDENCY_SOURCE: dependency source contained no edges"), ExitCode::from(3));
         assert_eq!(readiness_error_exit("MALFORMED_ISSUES: br blocked response"), ExitCode::from(2));
         assert_eq!(readiness_error_exit("RUN_FAILED command=br detail=timeout"), ExitCode::from(2));
         assert_eq!(readiness_report_exit(0), ExitCode::SUCCESS);

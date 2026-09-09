@@ -30,6 +30,9 @@ pub use definition_quality::{
 
 
 const BR_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+pub const R7_S0_EPIC: &str = "omp-orchestrator-s0-asupersync-misapplication-audit-kvsq";
+pub const R7_DEPENDENCY_SOURCE: &str = ".beads/issues.jsonl";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueStatus {
@@ -37,6 +40,7 @@ pub enum IssueStatus {
     InProgress,
     Grading,
     Blocked,
+    Tombstone,
     Closed,
     Unknown,
 }
@@ -49,6 +53,7 @@ impl IssueStatus {
             "in_progress" => Self::InProgress,
             "grading" => Self::Grading,
             "blocked" => Self::Blocked,
+            "tombstone" => Self::Tombstone,
             "closed" => Self::Closed,
             _ => Self::Unknown,
         }
@@ -56,7 +61,7 @@ impl IssueStatus {
 
     #[must_use]
     pub const fn is_terminal(self) -> bool {
-        matches!(self, Self::Closed)
+        matches!(self, Self::Closed | Self::Tombstone)
     }
 
     #[must_use]
@@ -71,6 +76,7 @@ impl IssueStatus {
             Self::InProgress => "in_progress",
             Self::Grading => "grading",
             Self::Blocked => "blocked",
+            Self::Tombstone => "tombstone",
             Self::Closed => "closed",
             Self::Unknown => "unknown",
         }
@@ -188,6 +194,22 @@ pub struct ReadinessReport {
     pub blocked_count: usize,
     pub residual_count: usize,
     pub projection_gap_count: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParentChildMembership {
+    pub source: &'static str,
+    pub epic_id: String,
+    pub epic_status: IssueStatus,
+    pub child_ids: Vec<String>,
+    pub non_terminal_ids: Vec<String>,
+}
+
+impl ParentChildMembership {
+    #[must_use]
+    pub fn residual_count(&self) -> usize {
+        self.non_terminal_ids.len() + usize::from(!self.epic_status.is_terminal())
+    }
 }
 
 impl ReadinessReport {
@@ -405,6 +427,9 @@ pub enum GraphError {
     EmptyIssueSet,
     EmptyReadySurface,
     EmptyCandidateSet,
+    EmptyDependencySource,
+    EmptyParentChildIntersection(String),
+    MalformedDependency(String),
     DuplicateIssue(String),
     DuplicateQueueIssue(String),
     UnknownQueueIssue(String),
@@ -427,6 +452,15 @@ impl fmt::Display for GraphError {
             }
             Self::EmptyCandidateSet => {
                 formatter.write_str("EMPTY_CANDIDATE_SET: no open unassigned non-epic candidates")
+            }
+            Self::EmptyDependencySource => {
+                formatter.write_str("EMPTY_DEPENDENCY_SOURCE: dependency source contained no edges")
+            }
+            Self::EmptyParentChildIntersection(epic) => {
+                write!(formatter, "EMPTY_PARENT_CHILD_INTERSECTION: epic={epic} has no parent-child in-edges")
+            }
+            Self::MalformedDependency(detail) => {
+                write!(formatter, "MALFORMED_DEPENDENCY: {detail}")
             }
             Self::DuplicateIssue(id) => write!(formatter, "DUPLICATE_ISSUE: {id}"),
             Self::DuplicateQueueIssue(id) => write!(formatter, "DUPLICATE_QUEUE_ISSUE: {id}"),
@@ -580,6 +614,122 @@ pub fn parse_br_issues(value: &Value) -> Result<Vec<IssueRecord>, GraphError> {
         });
     }
     Ok(records)
+}
+
+/// Parse the authoritative JSONL dependency surface used by R7.
+///
+/// Parent-child ownership is an IN-edge: the child row carries
+/// depends_on_id=<epic>. A different surface shape is a typed error, and
+/// an empty parent-child intersection is never treated as a prefix-only pass.
+pub fn parse_r7_parent_child_jsonl(
+    text: &str,
+    epic_id: &str,
+) -> Result<ParentChildMembership, GraphError> {
+    if text.trim().is_empty() {
+        return Err(GraphError::EmptyDependencySource);
+    }
+
+    let mut statuses = BTreeMap::new();
+    let mut children = BTreeSet::new();
+    let mut saw_dependency = false;
+
+    for (index, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let row: Value = serde_json::from_str(line).map_err(|error| {
+            GraphError::MalformedDependency(format!("line={} invalid_json={error}", index + 1))
+        })?;
+        let object = row.as_object().ok_or_else(|| {
+            GraphError::MalformedDependency(format!("line={} row_is_not_object", index + 1))
+        })?;
+        let issue_id = object
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| {
+                GraphError::MalformedDependency(format!("line={} missing=issue_id", index + 1))
+            })?;
+        let status = object
+            .get("status")
+            .and_then(Value::as_str)
+            .map(IssueStatus::parse)
+            .ok_or_else(|| {
+                GraphError::MalformedDependency(format!("line={} missing=status", index + 1))
+            })?;
+        if statuses.insert(issue_id.to_owned(), status).is_some() {
+            return Err(GraphError::DuplicateIssue(issue_id.to_owned()));
+        }
+
+        let Some(dependencies) = object.get("dependencies") else {
+            continue;
+        };
+        let dependencies = dependencies.as_array().ok_or_else(|| {
+            GraphError::MalformedDependency(format!(
+                "line={} dependencies_not_array",
+                index + 1
+            ))
+        })?;
+        for dependency in dependencies {
+            saw_dependency = true;
+            let dependency = dependency.as_object().ok_or_else(|| {
+                GraphError::MalformedDependency(format!(
+                    "line={} dependency_not_object",
+                    index + 1
+                ))
+            })?;
+            let depends_on_id = dependency
+                .get("depends_on_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    GraphError::MalformedDependency(format!(
+                        "line={} missing=depends_on_id",
+                        index + 1
+                    ))
+                })?;
+            let dependency_type = dependency
+                .get("type")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    GraphError::MalformedDependency(format!(
+                        "line={} missing=type",
+                        index + 1
+                    ))
+                })?;
+            if dependency_type == "parent-child" && depends_on_id == epic_id {
+                children.insert(issue_id.to_owned());
+            }
+        }
+    }
+
+    if !saw_dependency {
+        return Err(GraphError::EmptyDependencySource);
+    }
+    let epic_status = statuses
+        .get(epic_id)
+        .copied()
+        .ok_or_else(|| GraphError::MissingGraphIssue(epic_id.to_owned()))?;
+    if children.is_empty() {
+        return Err(GraphError::EmptyParentChildIntersection(epic_id.to_owned()));
+    }
+    let non_terminal_ids = children
+        .iter()
+        .filter(|child_id| {
+            statuses
+                .get(child_id.as_str())
+                .map(|status| status.is_non_terminal())
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect();
+
+    Ok(ParentChildMembership {
+        source: R7_DEPENDENCY_SOURCE,
+        epic_id: epic_id.to_owned(),
+        epic_status,
+        child_ids: children.into_iter().collect(),
+        non_terminal_ids,
+    })
 }
 
 /// Parse the down direction of br dep list. Only blocks edges are blocker

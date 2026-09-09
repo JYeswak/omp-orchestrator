@@ -1,8 +1,9 @@
 #![forbid(unsafe_code)]
 
 use bead_availability::{
-    evaluate_graph, parse_bv_unblocks, reconcile_readiness, Availability, BeadAvailability,
-    BlockerEdge, GraphReport, IssueRecord, IssueStatus, QueueIssue, Unblocks,
+    evaluate_graph, parse_bv_unblocks, parse_r7_parent_child_jsonl, reconcile_readiness,
+    Availability, BeadAvailability, BlockerEdge, GraphReport, IssueRecord, IssueStatus,
+    QueueIssue, R7_S0_EPIC, Unblocks,
 };
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -291,5 +292,96 @@ fn queue_id_parser_accepts_ready_and_blocked_envelopes() {
     assert_eq!(
         bead_availability::parse_queue_ids(&value, "br blocked").expect("issues envelope"),
         vec!["child".to_owned()]
+    );
+}
+
+#[test]
+fn r7_parent_child_jsonl_known_good_has_real_membership() {
+    let text = [
+        json!({"id": R7_S0_EPIC, "status": "closed", "dependencies": []}).to_string(),
+        json!({
+            "id": "child",
+            "status": "closed",
+            "dependencies": [{
+                "issue_id": "child",
+                "depends_on_id": R7_S0_EPIC,
+                "type": "parent-child"
+            }]
+        })
+        .to_string(),
+    ]
+    .join("\n");
+    let report = parse_r7_parent_child_jsonl(&text, R7_S0_EPIC).expect("real parent-child edge");
+    assert_eq!(report.source, ".beads/issues.jsonl");
+    assert_eq!(report.child_ids, vec!["child".to_owned()]);
+    assert!(report.non_terminal_ids.is_empty());
+    assert_eq!(report.residual_count(), 0);
+}
+
+#[test]
+fn r7_parent_child_jsonl_old_surface_is_typed_bad() {
+    let text = [
+        json!({"id": R7_S0_EPIC, "status": "closed"}).to_string(),
+        json!({
+            "id": "child",
+            "status": "closed",
+            "dependencies": [{"id": R7_S0_EPIC, "dependency_type": "parent-child"}]
+        })
+        .to_string(),
+    ]
+    .join("\n");
+    let error = parse_r7_parent_child_jsonl(&text, R7_S0_EPIC).expect_err("old shape must refuse");
+    assert_eq!(
+        error.to_string(),
+        "MALFORMED_DEPENDENCY: line=2 missing=depends_on_id"
+    );
+}
+
+#[test]
+fn r7_parent_child_jsonl_empty_dependency_input_is_error() {
+    let error = parse_r7_parent_child_jsonl(
+        &json!({"id": R7_S0_EPIC, "status": "closed"}).to_string(),
+        R7_S0_EPIC,
+    )
+    .expect_err("empty dependency input must not pass by prefix");
+    assert_eq!(
+        error.to_string(),
+        "EMPTY_DEPENDENCY_SOURCE: dependency source contained no edges"
+    );
+}
+
+#[test]
+fn r7_tombstone_child_is_terminal() {
+    let text = [
+        json!({"id": R7_S0_EPIC, "status": "closed"}).to_string(),
+        json!({
+            "id": "tombstone-child",
+            "status": "tombstone",
+            "dependencies": [{
+                "issue_id": "tombstone-child",
+                "depends_on_id": R7_S0_EPIC,
+                "type": "parent-child"
+            }]
+        })
+        .to_string(),
+    ]
+    .join("\n");
+    let report = parse_r7_parent_child_jsonl(&text, R7_S0_EPIC).expect("tombstone child");
+    assert!(IssueStatus::Tombstone.is_terminal());
+    assert!(report.non_terminal_ids.is_empty());
+}
+
+#[test]
+fn r7_live_jsonl_source_has_parent_child_membership() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.beads/issues.jsonl");
+    let text = fs::read_to_string(path).expect("live dependency source");
+    let report = parse_r7_parent_child_jsonl(&text, R7_S0_EPIC).expect("live R7 graph");
+    assert!(!report.child_ids.is_empty(), "R7 graph membership must be nonempty");
+    println!(
+        "R7 source={} epic={} children={} non_terminal={}",
+        report.source,
+        report.epic_id,
+        report.child_ids.len(),
+        report.non_terminal_ids.len()
     );
 }
