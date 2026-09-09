@@ -15,21 +15,21 @@ use serde::Serialize;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use subprocess_contract::{bounded_output, BoundedOutcome};
 
-pub mod umbrella;
 pub mod adapter_exec;
-pub mod upstream_report;
-pub mod omp_state;
-pub mod omp_messages;
-pub mod omp_stats;
+pub mod health_repair;
 pub mod liveness;
+pub mod omp_messages;
+pub mod omp_process;
+pub mod omp_state;
+pub mod omp_stats;
 pub mod provenance;
 pub mod selfdoc;
 pub mod state_triad;
-pub mod health_repair;
-pub mod omp_process;
+pub mod umbrella;
+pub mod upstream_report;
 
 pub const ARTIFACT_REFERENCE: &str = ".omp-orchestrator/doctor/report.json";
 const PROBE_DEADLINE: Duration = Duration::from_secs(5);
@@ -111,6 +111,7 @@ pub struct ProbeDecision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DoctorSummary {
     pub schema: &'static str,
+    pub run_id: String,
     pub scope: String,
     pub artifact: &'static str,
     pub lifecycle_journal: PathBuf,
@@ -118,6 +119,8 @@ pub struct DoctorSummary {
     pub event_count: usize,
     pub readback_lines: usize,
     pub probes: Vec<ProbeDecision>,
+    pub remediation: Vec<String>,
+    pub next_action: String,
 }
 
 #[derive(Debug)]
@@ -240,16 +243,40 @@ pub fn lifecycle_events(
 }
 
 /// Run the real bounded L1 probe loop and durably emit its lifecycle rows.
+fn doctor_run_id() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    format!("ompo-doctor-{nanos}-{}", std::process::id())
+}
+
+fn remediation_for(decisions: &[ProbeDecision]) -> Vec<String> {
+    decisions
+        .iter()
+        .filter(|decision| decision.status != "OK")
+        .map(|decision| {
+            format!(
+                "rerun probe={} reason={}",
+                decision.name, decision.reason_code
+            )
+        })
+        .collect()
+}
 pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
     if scope != "system" {
         return Err(DoctorError::UnsupportedScope(scope.to_owned()));
     }
+    let run_id = doctor_run_id();
     let decisions: Vec<_> = PROBES.iter().map(run_probe).collect();
+    let remediation = remediation_for(&decisions);
+    let next_action = format!("readback={ARTIFACT_REFERENCE}");
     let events = lifecycle_events(PROBES, &decisions)?;
     let journal = DurableJournal::open(default_repo_journal(repo))?;
     let readback: Readback = emit_host(&journal, &events)?;
     Ok(DoctorSummary {
         schema: "ompo.doctor.v1",
+        run_id,
         scope: scope.to_owned(),
         artifact: ARTIFACT_REFERENCE,
         lifecycle_journal: readback.path,
@@ -257,6 +284,8 @@ pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError
         event_count: events.len(),
         readback_lines: readback.lines,
         probes: decisions,
+        remediation,
+        next_action,
     })
 }
 

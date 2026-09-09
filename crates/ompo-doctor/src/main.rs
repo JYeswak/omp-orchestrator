@@ -23,16 +23,16 @@
 //! `2` alone cannot separate an unknown verb from an unknown adapter, so every refusal below
 //! names what it rejected. AGENTS.md gate rule 7: an exit code is not a message.
 
-use ompo_doctor::liveness::{self, Observation};
 use ompo_doctor::adapter_exec;
-use ompo_doctor::upstream_report;
-use ompo_doctor::omp_state;
-use ompo_doctor::omp_stats;
+use ompo_doctor::liveness::{self, Observation};
 use ompo_doctor::omp_messages;
 use ompo_doctor::omp_process;
+use ompo_doctor::omp_state;
+use ompo_doctor::omp_stats;
+use ompo_doctor::provenance;
 use ompo_doctor::state_triad;
 use ompo_doctor::umbrella::{self, ProbeId};
-use ompo_doctor::provenance;
+use ompo_doctor::upstream_report;
 use ompo_doctor::{current_repo, run_doctor};
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -99,7 +99,6 @@ fn main() -> ExitCode {
         }
     }
 }
-
 
 fn source_json(source: &ompo_start::liveness::SourceVerdict) -> Value {
     json!({
@@ -334,9 +333,15 @@ fn run_portal(rest: &[String]) -> ExitCode {
     }
     let inception_path = repo.join(".omp-orchestrator").join("inception.json");
     let inception = match ompo_start::inception::read_inception(&inception_path) {
-        Ok(_) => json!({"path": inception_path.display().to_string(), "status": "PRESENT", "readback": "PASS"}),
-        Err(error) if !inception_path.exists() => json!({"path": inception_path.display().to_string(), "status": "ABSENT", "readback": "REFUSE", "reason": error.to_string()}),
-        Err(error) => json!({"path": inception_path.display().to_string(), "status": "INVALID", "readback": "REFUSE", "reason": error.to_string()}),
+        Ok(_) => {
+            json!({"path": inception_path.display().to_string(), "status": "PRESENT", "readback": "PASS"})
+        }
+        Err(error) if !inception_path.exists() => {
+            json!({"path": inception_path.display().to_string(), "status": "ABSENT", "readback": "REFUSE", "reason": error.to_string()})
+        }
+        Err(error) => {
+            json!({"path": inception_path.display().to_string(), "status": "INVALID", "readback": "REFUSE", "reason": error.to_string()})
+        }
     };
     let all_sources_fresh = observation
         .verdict
@@ -393,7 +398,11 @@ fn run_portal(rest: &[String]) -> ExitCode {
             }
         }
     } else {
-        println!("OMPO_PORTAL status={} data_hash={}", observation.verdict.status(), row["data_hash"]);
+        println!(
+            "OMPO_PORTAL status={} data_hash={}",
+            observation.verdict.status(),
+            row["data_hash"]
+        );
     }
     ExitCode::SUCCESS
 }
@@ -405,7 +414,11 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
-fn state_error(command: &'static str, json_output: bool, error: state_triad::StateError) -> ExitCode {
+fn state_error(
+    command: &'static str,
+    json_output: bool,
+    error: state_triad::StateError,
+) -> ExitCode {
     let detail = error.to_string();
     if json_output {
         let value = umbrella::envelope(
@@ -469,7 +482,9 @@ fn run_validate(rest: &[String]) -> ExitCode {
         return state_error(
             "validate",
             json_output,
-            state_triad::StateError::MissingValue { command: "validate" },
+            state_triad::StateError::MissingValue {
+                command: "validate",
+            },
         );
     };
     match state_triad::validate(&repo, thing) {
@@ -634,7 +649,11 @@ fn run_upstream_report(rest: &[String]) -> ExitCode {
         };
         return match upstream_report::apply(&verdict, &decision, &repo) {
             Ok(applied) => {
-                println!("{} path={}", applied.reason_code(), applied.path().display());
+                println!(
+                    "{} path={}",
+                    applied.reason_code(),
+                    applied.path().display()
+                );
                 ExitCode::SUCCESS
             }
             Err(error) => {
@@ -662,7 +681,12 @@ fn run_upstream_report(rest: &[String]) -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(not) => {
-                println!("{} adapter={} detail={}", not.reason_code(), adapter, not.detail());
+                println!(
+                    "{} adapter={} detail={}",
+                    not.reason_code(),
+                    adapter,
+                    not.detail()
+                );
                 ExitCode::SUCCESS
             }
         }
@@ -964,12 +988,19 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
 
     match run_doctor(&repo, &scope) {
         Ok(summary) if json => {
+            let verdicts = summary.probes.clone();
             let value = umbrella::envelope(
                 "doctor",
                 "OK",
                 serde_json::json!({
+                    "doctor_schema": summary.schema,
+                    "run_id": summary.run_id,
                     "scope": summary.scope,
-                    "probes": summary.probe_count,
+                    "probe_count": summary.probe_count,
+                    "probes": summary.probes,
+                    "verdicts": verdicts,
+                    "remediation": summary.remediation,
+                    "next_action": summary.next_action,
                     "lifecycle_events": summary.event_count,
                     "readback_lines": summary.readback_lines,
                     "journal": summary.lifecycle_journal.display().to_string(),
@@ -1068,7 +1099,9 @@ fn run_state(rest: &[String]) -> ExitCode {
     };
     let outcome = runtime.block_on(async {
         match asupersync::Cx::current() {
-            Some(cx) => Ok(omp_state::read_state(&cx, "omp", session, session_dir.as_deref()).await),
+            Some(cx) => {
+                Ok(omp_state::read_state(&cx, "omp", session, session_dir.as_deref()).await)
+            }
             None => Err("no runtime context"),
         }
     });
@@ -1224,7 +1257,11 @@ fn run_stats(rest: &[String]) -> ExitCode {
     } else if let omp_stats::StatsOutcome::Answered(stats) = &outcome {
         println!("{}", omp_stats::render(stats));
     } else {
-        eprintln!("ompo stats: {} detail={}", outcome.reason_code(), outcome.detail());
+        eprintln!(
+            "ompo stats: {} detail={}",
+            outcome.reason_code(),
+            outcome.detail()
+        );
     }
     ExitCode::from(outcome.exit_code())
 }
@@ -1277,7 +1314,11 @@ fn run_messages(rest: &[String]) -> ExitCode {
     } else if let omp_messages::MessagesOutcome::Answered(messages) = &outcome {
         println!("{}", omp_messages::render(messages));
     } else {
-        eprintln!("ompo messages: {} detail={}", outcome.reason_code(), outcome.detail());
+        eprintln!(
+            "ompo messages: {} detail={}",
+            outcome.reason_code(),
+            outcome.detail()
+        );
     }
     ExitCode::from(outcome.exit_code())
 }
