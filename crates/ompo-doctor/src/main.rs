@@ -125,6 +125,28 @@ fn liveness_json(observation: &Observation) -> Value {
     })
 }
 
+/// L3 monitor (vyzr): TUI/JSON ordered-ID parity plus the HD-0009 halt state,
+/// computed from the same post-predicate steps the report renders. No second
+/// schema: plain JSON values assembled beside the existing report fields. The
+/// halt is engaged exactly when the L3-HD0009 row sits Blocked.
+fn observability_json(steps: &[ompo_start::Step]) -> Value {
+    let tui_ids: Vec<_> = ompo_start::tui_ordered_ids(steps);
+    let json_ids: Vec<_> = ompo_start::json_ordered_ids(steps);
+    let halt = steps.iter().find(|step| step.id == "L3-HD0009").map(|step| {
+        json!({
+            "engaged": step.status == ompo_start::StepStatus::Blocked,
+            "step": step.id,
+            "reason_code": step.reason_code,
+        })
+    });
+    json!({
+        "parity_ok": tui_ids == json_ids,
+        "tui_ids": tui_ids,
+        "json_ids": json_ids,
+        "halt": halt,
+    })
+}
+
 fn step_json(step: &ompo_start::Step) -> Value {
     json!({
         "id": step.id,
@@ -329,6 +351,7 @@ fn run_start(rest: &[String]) -> ExitCode {
         "steps": steps.iter().map(step_json).collect::<Vec<_>>(),
         "liveness": liveness_json(&observation),
         "spawn": spawn,
+        "observability": observability_json(&steps),
     });
     if json_output {
         match serde_json::to_string(&umbrella::envelope("start", "OK", data)) {
