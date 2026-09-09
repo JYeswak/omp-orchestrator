@@ -203,27 +203,6 @@ fn artifact_staging_complete_same_directory_temp() {
     assert!(!dir.path().join("installer").exists(), "must not publish before rename");
 }
 
-struct CutReader {
-    data: &'static [u8],
-    pos: usize,
-    cut: usize,
-}
-
-impl std::io::Read for CutReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.pos >= self.cut {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "stream interrupted",
-            ));
-        }
-        let n = (self.cut - self.pos).min(buf.len()).min(self.data.len() - self.pos);
-        buf[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
-        self.pos += n;
-        Ok(n)
-    }
-}
-
 #[test]
 fn artifact_staging_interrupt_leaves_no_publishable_temp() {
     let dir = TempDir::new("artifact-staging-interrupt");
@@ -231,11 +210,7 @@ fn artifact_staging_interrupt_leaves_no_publishable_temp() {
     let error = stage_artifact_stream(
         dir.path(),
         "installer",
-        CutReader {
-            data,
-            pos: 0,
-            cut: 4,
-        },
+        std::io::Cursor::new(&data[..4]),
         data.len() as u64,
     )
     .expect_err("interrupted stream must not stage");
