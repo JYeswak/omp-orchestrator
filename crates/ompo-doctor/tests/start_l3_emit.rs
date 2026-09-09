@@ -56,6 +56,13 @@ fn find_s1_l3_row(journal: &Path) -> Result<serde_json::Value, String> {
 #[test]
 fn start_run_emits_one_s1_l3_row() {
     let repo = tempfile::tempdir().expect("fixture repo");
+    // Pre-create the EMPTY journal so an emit deletion lands on the zero-row
+    // diagnostic instead of an unreadable-file refusal: the mutation oracle must
+    // pin L3_SCAN_ZERO_S1_L3_ROWS, not file absence.
+    let journal_path = journal(repo.path());
+    std::fs::create_dir_all(journal_path.parent().expect("journal parent"))
+        .expect("fixture journal dirs");
+    std::fs::write(&journal_path, "").expect("fixture empty journal");
     let output = ompo_start(repo.path(), "hilk-leg");
     assert!(
         output.status.success(),
@@ -70,4 +77,19 @@ fn start_run_emits_one_s1_l3_row() {
     assert_eq!(row["reason_code"], "START_OK");
     assert_eq!(row["actor"], "ompo");
     assert_eq!(row["outcome"], "emitted");
+}
+
+/// Pins the exact zero-row diagnostic the emit-deletion mutation must produce.
+/// An empty journal refuses with L3_SCAN_ZERO_S1_L3_ROWS -- never a silent
+/// pass and never an unreadable-file error for a file that exists.
+#[test]
+fn empty_journal_fails_with_exact_zero_rows_diagnostic() {
+    let dir = tempfile::tempdir().expect("fixture dir");
+    let journal_path = dir.path().join("lifecycle.jsonl");
+    std::fs::write(&journal_path, "").expect("empty journal");
+    let error = find_s1_l3_row(&journal_path).expect_err("empty journal must refuse");
+    assert!(
+        error.starts_with("L3_SCAN_ZERO_S1_L3_ROWS"),
+        "diagnostic must name zero rows: {error}"
+    );
 }
