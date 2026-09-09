@@ -11,6 +11,9 @@ use lifecycle_monitor::{
     gate_claimed_write_readback, gate_freshness_verdict, journal_for_host, load_metrics,
     observe_all, observe_layer, EXPECTED_METRIC_COUNT,
 };
+use lifecycle_monitor::ntm_sources::{
+    gate_ntm_sources, parse_ntm_sources, read_live_snapshot,
+};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -111,11 +114,40 @@ fn gate(args: &[String]) -> Result<(), String> {
     // of this call is a silent pass over stale data -- the exact collapse.
     gate_freshness_verdict(&vs).map_err(|e| e.to_string())?;
     println!("GATE_OK layers={}", vs.len());
+    if args.iter().any(|a| a == "--ntm-sources") {
+        run_ntm_sources_gate(args)?;
+    }
+    Ok(())
+}
+
+/// NTM source freshness as an opt-in tail of the existing gate verb. Default-off:
+/// without `--ntm-sources` this function does not exist on the path and every
+/// existing leg observes byte-identical behavior.
+fn run_ntm_sources_gate(args: &[String]) -> Result<(), String> {
+    let ntm_bin = flag(args, "--ntm-bin").unwrap_or("ntm");
+    let snapshot = read_live_snapshot(ntm_bin).map_err(|e| e.to_string())?;
+    let verdicts = parse_ntm_sources(&snapshot).map_err(|e| e.to_string())?;
+    for mapped in &verdicts {
+        println!(
+            "source={} state={} age_ms={} fresh={} reason={}",
+            mapped.source,
+            mapped.verdict.state.as_str(),
+            mapped.verdict.age_ms,
+            mapped.verdict.fresh,
+            mapped.verdict.last_reason
+        );
+    }
+    gate_ntm_sources(&verdicts).map_err(|e| e.to_string())?;
+    println!("NTM_SOURCES_OK count={}", verdicts.len());
     Ok(())
 }
 fn error_exit_code(error: &str) -> ExitCode {
-    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_SCAN") {
+    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_SCAN")
+        || error.starts_with("NTM_SOURCE_EMPTY_SCAN")
+    {
         ExitCode::from(2)
+    } else if error.starts_with("NTM_SOURCE_UNAVAILABLE") {
+        ExitCode::from(3)
     } else {
         ExitCode::from(1)
     }

@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 lifecycle-event = { path = "../lifecycle-event", default-features = false }
 serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }
 
 [dev-dependencies]
 tempfile = "3"

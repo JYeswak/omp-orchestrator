@@ -19,6 +19,7 @@ use lifecycle_event::{
     EmitError, Layer, LifecycleEvent,
 };
 use serde_json::Value;
+pub mod ntm_sources;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayerState {
