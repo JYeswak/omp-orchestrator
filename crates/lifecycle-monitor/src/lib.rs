@@ -58,6 +58,7 @@ pub enum MonitorError {
     ReadbackFailed { detail: String },
     MetricsMissing { path: PathBuf },
     MetricsIncomplete { found: usize },
+    StaleLayers { layers: Vec<String> },
 }
 
 impl std::fmt::Display for MonitorError {
@@ -103,6 +104,11 @@ impl std::fmt::Display for MonitorError {
             Self::MetricsIncomplete { found } => write!(
                 f,
                 "LIFECYCLE_MONITOR_METRICS_INCOMPLETE found={found} expected=6"
+            ),
+            Self::StaleLayers { layers } => write!(
+                f,
+                "LIFECYCLE_MONITOR_STALE_LAYERS layers={} — stale is ERROR, never a pass",
+                layers.join(",")
             ),
         }
     }
@@ -341,6 +347,27 @@ pub fn observe_all(
         out.push(observe_layer(journal, spec.layer, spec.stall_after_ms)?);
     }
     Ok(out)
+}
+
+/// Freshness gate over observed verdicts (3s6a): every observed layer must be
+/// progressing. One silent or refusing layer fails the gate with the stale set
+/// named -- a single stale layer vetoes a fleet-wide clean, never the reverse.
+pub fn gate_freshness_verdict(verdicts: &[LayerVerdict]) -> Result<(), MonitorError> {
+    let stale: Vec<String> = verdicts
+        .iter()
+        .filter(|verdict| verdict.state != LayerState::Progressing)
+        .map(|verdict| {
+            format!(
+                "{}:{}",
+                verdict.layer.as_str(),
+                verdict.state.as_str()
+            )
+        })
+        .collect();
+    if stale.is_empty() {
+        return Ok(());
+    }
+    Err(MonitorError::StaleLayers { layers: stale })
 }
 
 /// Independent post-fact read of the journal. Does not go through `emit_host`.

@@ -8,8 +8,8 @@
 
 use lifecycle_event::{DurableJournal, Layer, LifecycleEvent, EmitOutcome, ReasonCode};
 use lifecycle_monitor::{
-    gate_claimed_write_readback, journal_for_host, load_metrics, observe_all, observe_layer,
-    EXPECTED_METRIC_COUNT,
+    gate_claimed_write_readback, gate_freshness_verdict, journal_for_host, load_metrics,
+    observe_all, observe_layer, EXPECTED_METRIC_COUNT,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -107,6 +107,9 @@ fn gate(args: &[String]) -> Result<(), String> {
         .unwrap_or_else(|| PathBuf::from("METRICS.toml"));
     let specs = load_metrics(&metrics_path).map_err(|e| e.to_string())?;
     let vs = observe_all(&journal_path, &specs).map_err(|e| e.to_string())?;
+    // Freshness gate (3s6a): a stale layer vetoes the clean verdict. Absence
+    // of this call is a silent pass over stale data -- the exact collapse.
+    gate_freshness_verdict(&vs).map_err(|e| e.to_string())?;
     println!("GATE_OK layers={}", vs.len());
     Ok(())
 }
