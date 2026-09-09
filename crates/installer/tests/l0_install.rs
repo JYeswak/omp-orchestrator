@@ -2,7 +2,7 @@ use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
     git_rev_parse_short, install_binary, merge_hooks, publish_atomic, refuse_path_collisions,
     resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
-    verify_identity, verify_minisign_policy, verify_sha256, verify_sha256_before_install, AgentOutcome, HookWrite, IdentityCheck, InstallError,
+    verify_identity, verify_minisign_policy, verify_sha256, verify_sha256_before_install, AgentOutcome, HookWrite, IdentityCheck, InstallError, Sha256FailureClass,
     RepoOwnership, RestartPostcondition,
 };
 use std::fs;
@@ -289,49 +289,47 @@ fn sha256_one_byte_mutation_refuses_before_destination_write() {
     let destination = dir.path().join("installed");
     fs::write(&source, b"B03 fixed buffer SHA-256 payloae\n").expect("write mutated artifact");
     let error = verify_sha256(&source, Some(B03_DIGEST)).expect_err("mutation must refuse");
+    let message = error.to_string();
     match error {
-        InstallError::Sha256Mismatch { actual, expected, .. } => {
-            assert_eq!(expected, B03_DIGEST);
-            assert_ne!(actual, B03_DIGEST);
-            assert_eq!(actual.len(), 64);
-            assert!(actual.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        InstallError::Sha256Refused { class, detail } => {
+            assert_eq!(class, Sha256FailureClass::Mismatch);
+            assert_eq!(
+                detail,
+                format!("digest mismatch path={} expected={} actual=59bad0e5db3924bd2147190a7cc8f2b9c00a0c16a356c4cb778edac262f55b84", source.display(), B03_DIGEST)
+            );
         }
         other => panic!("expected SHA-256 mismatch, got {other:?}"),
     }
+    assert_eq!(
+        message,
+        format!("L0_SHA256_REFUSED: digest mismatch path={} expected={} actual=59bad0e5db3924bd2147190a7cc8f2b9c00a0c16a356c4cb778edac262f55b84", source.display(), B03_DIGEST)
+    );
     assert!(!destination.exists(), "digest refusal must not write destination");
 }
 
 #[test]
-fn sha256_missing_expected_refuses_with_distinct_class() {
-    let dir = TempDir::new("sha256-missing-expected");
+fn sha256_expected_digest_validation_is_typed_and_exact() {
+    let dir = TempDir::new("sha256-expected-validation");
     let source = dir.path().join("artifact");
     fs::write(&source, B03_PAYLOAD).expect("write artifact");
-    let error = verify_sha256(&source, None).expect_err("missing expected digest must refuse");
-    assert!(matches!(error, InstallError::Sha256MissingExpected));
-    assert_eq!(error.to_string(), "L0_SHA256_REFUSED: missing expected digest");
-}
-
-#[test]
-fn sha256_empty_expected_refuses_with_distinct_class() {
-    let dir = TempDir::new("sha256-empty-expected");
-    let source = dir.path().join("artifact");
-    fs::write(&source, B03_PAYLOAD).expect("write artifact");
-    let error = verify_sha256(&source, Some("  ")).expect_err("empty expected digest must refuse");
-    assert!(matches!(error, InstallError::Sha256EmptyExpected));
-    assert_eq!(error.to_string(), "L0_SHA256_REFUSED: empty expected digest");
-}
-
-#[test]
-fn sha256_malformed_expected_refuses_with_distinct_class() {
-    let dir = TempDir::new("sha256-malformed-expected");
-    let source = dir.path().join("artifact");
-    fs::write(&source, B03_PAYLOAD).expect("write artifact");
-    let error = verify_sha256(&source, Some("abc")).expect_err("malformed digest must refuse");
-    assert!(matches!(error, InstallError::Sha256MalformedExpected { observed_len: 3 }));
-    assert_eq!(
-        error.to_string(),
-        "L0_SHA256_REFUSED: malformed expected digest length=3; expected 64 hexadecimal characters"
-    );
+    let cases = [
+        (None, Sha256FailureClass::MissingExpected, "L0_SHA256_REFUSED: missing expected digest"),
+        (Some("  "), Sha256FailureClass::EmptyExpected, "L0_SHA256_REFUSED: empty expected digest"),
+        (
+            Some("abc"),
+            Sha256FailureClass::MalformedExpected,
+            "L0_SHA256_REFUSED: malformed expected digest length=3; expected 64 hexadecimal characters",
+        ),
+    ];
+    for (expected, expected_class, expected_message) in cases {
+        let error = verify_sha256(&source, expected).expect_err("invalid digest must refuse");
+        let message = error.to_string();
+        match error {
+            InstallError::Sha256Refused { class, .. } => assert_eq!(class, expected_class),
+            other => panic!("expected typed SHA refusal, got {other:?}"),
+        }
+        assert_eq!(message, expected_message);
+    }
 }
 
 #[test]
@@ -341,18 +339,31 @@ fn sha256_missing_source_refuses_with_distinct_class() {
     let error = verify_sha256(&source, Some(B03_DIGEST)).expect_err("missing source must refuse");
     let message = error.to_string();
     match error {
-        InstallError::Sha256SourceMissing { path } => assert_eq!(path, source.display().to_string()),
+        InstallError::Sha256Refused { class, detail } => {
+            assert_eq!(class, Sha256FailureClass::SourceMissing);
+            assert_eq!(detail, format!("source missing path={}", source.display()));
+        }
         other => panic!("expected missing-source refusal, got {other:?}"),
     }
-    assert!(message.starts_with("L0_SHA256_REFUSED: source missing"));
+    assert_eq!(
+        message,
+        format!("L0_SHA256_REFUSED: source missing path={}", source.display())
+    );
 }
 
 #[test]
 fn sha256_read_error_refuses_with_distinct_class() {
     let dir = TempDir::new("sha256-read-error");
     let error = verify_sha256(dir.path(), Some(B03_DIGEST)).expect_err("directory read must refuse");
-    assert!(matches!(error, InstallError::Sha256ReadFailed { .. }));
-    assert!(error.to_string().starts_with("L0_SHA256_REFUSED: read failure"));
+    let message = error.to_string();
+    match error {
+        InstallError::Sha256Refused { class, detail } => {
+            assert_eq!(class, Sha256FailureClass::ReadFailed);
+            assert!(detail.starts_with(&format!("read failure path={}: ", dir.path().display())));
+        }
+        other => panic!("expected read-failure refusal, got {other:?}"),
+    }
+    assert!(message.starts_with("L0_SHA256_REFUSED: read failure"));
 }
 
 #[test]
@@ -371,7 +382,13 @@ fn sha256_verification_seam_blocks_mismatched_install_action() {
             })
     })
     .expect_err("mismatched digest must block install action");
-    assert!(matches!(error, InstallError::Sha256Mismatch { .. }));
+    assert!(matches!(
+        error,
+        InstallError::Sha256Refused {
+            class: Sha256FailureClass::Mismatch,
+            ..
+        }
+    ));
     assert!(!action_called, "install action ran after digest refusal");
     assert!(!destination.exists(), "mismatched digest wrote destination");
 }
@@ -395,6 +412,7 @@ fn sha256_verification_seam_allows_matching_install_action() {
     assert!(action_called, "matching digest did not reach install action");
     assert_eq!(fs::read(&destination).expect("published destination"), b"published");
 }
+
 
 #[test]
 fn minisign_policy_valid_passes() {

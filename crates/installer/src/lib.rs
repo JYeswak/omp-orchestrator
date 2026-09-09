@@ -14,7 +14,15 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use sha2::{Digest, Sha256};
 
-// ── TYPES ──────────────────────────────────────────────────────────────────────
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sha256FailureClass {
+    MissingExpected,
+    EmptyExpected,
+    MalformedExpected,
+    SourceMissing,
+    ReadFailed,
+    Mismatch,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallError {
@@ -65,28 +73,10 @@ pub enum InstallError {
     MinisignRefused {
         detail: String,
     },
-    /// No expected SHA-256 digest was supplied.
-    Sha256MissingExpected,
-    /// The supplied SHA-256 digest was empty.
-    Sha256EmptyExpected,
-    /// The supplied SHA-256 digest was not exactly 64 hexadecimal characters.
-    Sha256MalformedExpected {
-        observed_len: usize,
-    },
-    /// The artifact path does not exist.
-    Sha256SourceMissing {
-        path: String,
-    },
-    /// Reading the artifact failed before verification completed.
-    Sha256ReadFailed {
-        path: String,
+    /// Typed SHA-256 verification failure. Never a warning or skip.
+    Sha256Refused {
+        class: Sha256FailureClass,
         detail: String,
-    },
-    /// The streamed artifact digest differs from the expected digest.
-    Sha256Mismatch {
-        path: String,
-        expected: String,
-        actual: String,
     },
     /// Existing PATH owners of the install name. Non-interactive refuse.
     PathCollision {
@@ -109,6 +99,7 @@ pub enum InstallError {
         libc: Option<String>,
     },
 }
+
 
 impl fmt::Display for InstallError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -165,30 +156,9 @@ impl fmt::Display for InstallError {
             Self::MinisignRefused { detail } => {
                 write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
             }
-            Self::Sha256MissingExpected => {
-                write!(formatter, "L0_SHA256_REFUSED: missing expected digest")
+            Self::Sha256Refused { detail, .. } => {
+                write!(formatter, "L0_SHA256_REFUSED: {detail}")
             }
-            Self::Sha256EmptyExpected => {
-                write!(formatter, "L0_SHA256_REFUSED: empty expected digest")
-            }
-            Self::Sha256MalformedExpected { observed_len } => write!(
-                formatter,
-                "L0_SHA256_REFUSED: malformed expected digest length={observed_len}; expected 64 hexadecimal characters"
-            ),
-            Self::Sha256SourceMissing { path } => {
-                write!(formatter, "L0_SHA256_REFUSED: source missing path={path}")
-            }
-            Self::Sha256ReadFailed { path, detail } => {
-                write!(formatter, "L0_SHA256_REFUSED: read failure path={path}: {detail}")
-            }
-            Self::Sha256Mismatch {
-                path,
-                expected,
-                actual,
-            } => write!(
-                formatter,
-                "L0_SHA256_REFUSED: digest mismatch path={path} expected={expected} actual={actual}"
-            ),
             Self::PathCollision { hits } => {
                 write!(formatter, "L0_PATH_COLLISION: {}", hits.join(" "))
             }
@@ -514,47 +484,21 @@ const BUILD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(600);
 const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
 const SHA256_BUFFER_SIZE: usize = 8192;
 
-/// Verify an artifact against an explicit SHA-256 digest before installation.
+/// Hash a readable artifact through one fixed-size buffer.
 ///
-/// The artifact is read through one fixed-size buffer. The returned digest is
-/// always the canonical lowercase 64-character hexadecimal form.
-#[must_use]
-pub fn verify_sha256(source: &Path, expected: Option<&str>) -> Result<String, InstallError> {
-    let expected = match expected {
-        None => return Err(InstallError::Sha256MissingExpected),
-        Some(value) if value.trim().is_empty() => {
-            return Err(InstallError::Sha256EmptyExpected)
-        }
-        Some(value) => value.trim(),
-    };
-    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(InstallError::Sha256MalformedExpected {
-            observed_len: expected.len(),
-        });
-    }
-    let expected = expected.to_ascii_lowercase();
-    let mut file = match std::fs::File::open(source) {
-        Ok(file) => file,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(InstallError::Sha256SourceMissing {
-                path: source.display().to_string(),
-            })
-        }
-        Err(error) => {
-            return Err(InstallError::Sha256ReadFailed {
-                path: source.display().to_string(),
-                detail: error.to_string(),
-            })
-        }
-    };
+/// The source path is retained for exact typed read-failure diagnostics.
+fn hash_sha256_reader<R: Read>(
+    source: &Path,
+    mut reader: R,
+) -> Result<String, InstallError> {
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; SHA256_BUFFER_SIZE];
     loop {
-        let bytes_read = file
+        let bytes_read = reader
             .read(&mut buffer)
-            .map_err(|error| InstallError::Sha256ReadFailed {
-                path: source.display().to_string(),
-                detail: error.to_string(),
+            .map_err(|error| InstallError::Sha256Refused {
+                class: Sha256FailureClass::ReadFailed,
+                detail: format!("read failure path={}: {}", source.display(), error),
             })?;
         if bytes_read == 0 {
             break;
@@ -566,11 +510,63 @@ pub fn verify_sha256(source: &Path, expected: Option<&str>) -> Result<String, In
     for byte in digest {
         write!(&mut actual, "{byte:02x}").expect("writing a digest to String cannot fail");
     }
+    Ok(actual)
+}
+
+/// Verify an artifact against an explicit SHA-256 digest before installation.
+///
+/// The artifact is read through one fixed-size buffer. The returned digest is
+/// always the canonical lowercase 64-character hexadecimal form.
+#[must_use]
+pub fn verify_sha256(source: &Path, expected: Option<&str>) -> Result<String, InstallError> {
+    let expected = match expected {
+        None => {
+            return Err(InstallError::Sha256Refused {
+                class: Sha256FailureClass::MissingExpected,
+                detail: "missing expected digest".to_owned(),
+            })
+        }
+        Some(value) if value.trim().is_empty() => {
+            return Err(InstallError::Sha256Refused {
+                class: Sha256FailureClass::EmptyExpected,
+                detail: "empty expected digest".to_owned(),
+            })
+        }
+        Some(value) => value.trim(),
+    };
+    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(InstallError::Sha256Refused {
+            class: Sha256FailureClass::MalformedExpected,
+            detail: format!(
+                "malformed expected digest length={}; expected 64 hexadecimal characters",
+                expected.len()
+            ),
+        });
+    }
+    let expected = expected.to_ascii_lowercase();
+    let file = match std::fs::File::open(source) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(InstallError::Sha256Refused {
+                class: Sha256FailureClass::SourceMissing,
+                detail: format!("source missing path={}", source.display()),
+            })
+        }
+        Err(error) => {
+            return Err(InstallError::Sha256Refused {
+                class: Sha256FailureClass::ReadFailed,
+                detail: format!("read failure path={}: {}", source.display(), error),
+            })
+        }
+    };
+    let actual = hash_sha256_reader(source, file)?;
     if actual != expected {
-        return Err(InstallError::Sha256Mismatch {
-            path: source.display().to_string(),
-            expected,
-            actual,
+        return Err(InstallError::Sha256Refused {
+            class: Sha256FailureClass::Mismatch,
+            detail: format!(
+                "digest mismatch path={} expected={} actual={}",
+                source.display(), expected, actual
+            ),
         });
     }
     Ok(actual)
@@ -1614,5 +1610,64 @@ exit 0
             other => panic!("expected inconclusive build, got {other:?}"),
         }
         std::fs::remove_dir_all(root).expect("cleanup");
+    }
+    struct ShortReader {
+        data: Vec<u8>,
+        offset: usize,
+        max_chunk: usize,
+        requested_sizes: Vec<usize>,
+    }
+
+    impl std::io::Read for ShortReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.requested_sizes.push(buffer.len());
+            if self.offset == self.data.len() {
+                return Ok(0);
+            }
+            let remaining = self.data.len() - self.offset;
+            let bytes = remaining.min(self.max_chunk).min(buffer.len());
+            buffer[..bytes].copy_from_slice(&self.data[self.offset..self.offset + bytes]);
+            self.offset += bytes;
+            Ok(bytes)
+        }
+    }
+
+    struct FailingReader;
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "synthetic read failure",
+            ))
+        }
+    }
+
+    #[test]
+    fn sha256_reader_seam_proves_fixed_buffer_short_reads() {
+        let mut reader = ShortReader {
+            data: b"B03 fixed buffer SHA-256 payload\n".to_vec(),
+            offset: 0,
+            max_chunk: 3,
+            requested_sizes: Vec::new(),
+        };
+        let actual = hash_sha256_reader(Path::new("short-reader"), &mut reader)
+            .expect("short reader digest");
+        assert_eq!(actual, "bdd2a7291457c6a5e371324772061f751ba7774d8d7057895f5d5ea8daa773f1");
+        assert!(reader.requested_sizes.len() > 1, "reader must provide short chunks");
+        assert!(
+            reader
+                .requested_sizes
+                .iter()
+                .all(|size| *size == SHA256_BUFFER_SIZE),
+            "all reads must use the fixed buffer: {:?}",
+            reader.requested_sizes
+        );
+        let error = hash_sha256_reader(Path::new("reader-error"), FailingReader)
+            .expect_err("reader error must refuse");
+        assert_eq!(
+            error.to_string(),
+            "L0_SHA256_REFUSED: read failure path=reader-error: synthetic read failure"
+        );
     }
 }

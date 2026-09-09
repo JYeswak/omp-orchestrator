@@ -24,7 +24,11 @@ const BINARIES: &[(&str, &str)] = &[
 
 fn main() -> ExitCode {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
-    let (args, bin_dir, expected_sha256) = match parse_cli_args(raw_args) {
+    let ParsedArgs {
+        positional: args,
+        bin_dir,
+        expected_sha256,
+    } = match parse_cli_args(raw_args) {
         Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
@@ -64,10 +68,17 @@ fn main() -> ExitCode {
     }
 }
 
-fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf, Option<String>), String> {
+struct ParsedArgs {
+    positional: Vec<String>,
+    bin_dir: PathBuf,
+    expected_sha256: Option<String>,
+}
+
+fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
     let mut positional = Vec::new();
     let mut explicit_bin_dir = None;
     let mut expected_sha256 = None;
+    // Repeated digest flags follow --bin-dir: the last occurrence wins.
     let mut args = raw_args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--bin-dir" {
@@ -102,12 +113,16 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf, Option
         })
         .or_else(|| dirs_home().map(|home| home.join(".local/bin")))
         .ok_or_else(|| "INSTALL_BIN_DIR, --bin-dir, or HOME must be set".to_owned())?;
-    Ok((positional, bin_dir, expected_sha256))
+    Ok(ParsedArgs {
+        positional,
+        bin_dir,
+        expected_sha256,
+    })
 }
+
 fn usage() {
     eprintln!("installer [--check | --install TARGET | --version] [--bin-dir PATH] [--sha256 DIGEST]");
 }
-
 fn dirs_home() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
@@ -297,18 +312,87 @@ fn emit_s1(repo_root: &Path, layer: Layer, stage_to: &str, outcome: EmitOutcome,
 mod tests {
     use super::*;
 
+    const DIGEST: &str = "bdd2a7291457c6a5e371324772061f751ba7774d8d7057895f5d5ea8daa773f1";
+    const PAYLOAD: &[u8] = b"B03 fixed buffer SHA-256 payload\n";
+
     #[test]
-    fn bin_dir_and_sha256_flags_are_removed_before_verb_dispatch() {
-        let (args, bin_dir, expected_sha256) = parse_cli_args(vec![
+    fn parser_preserves_dispatch_and_digest_precedence() {
+        let bin_dir = PathBuf::from("scratch-home");
+        let value = parse_cli_args(vec![
             "--install".to_owned(),
             "installer".to_owned(),
             "--bin-dir".to_owned(),
             "scratch-home".to_owned(),
-            "--sha256=abcd".to_owned(),
+            "--sha256".to_owned(),
+            DIGEST.to_owned(),
         ])
-        .expect("bin-dir and sha256 parse");
-        assert_eq!(args, vec!["--install", "installer"]);
-        assert_eq!(bin_dir, PathBuf::from("scratch-home"));
-        assert_eq!(expected_sha256, Some("abcd".to_owned()));
+        .expect("value-form digest parses");
+        let equals = parse_cli_args(vec![
+            "--install".to_owned(),
+            "installer".to_owned(),
+            "--bin-dir".to_owned(),
+            "scratch-home".to_owned(),
+            format!("--sha256={DIGEST}"),
+        ])
+        .expect("equals-form digest parses");
+        assert_eq!(value.positional, vec!["--install", "installer"]);
+        assert_eq!(value.bin_dir, bin_dir);
+        assert_eq!(value.expected_sha256.as_deref(), Some(DIGEST));
+        assert_eq!(equals.expected_sha256, value.expected_sha256);
+
+        let duplicate = parse_cli_args(vec![
+            "--install".to_owned(),
+            "installer".to_owned(),
+            "--bin-dir".to_owned(),
+            "scratch-home".to_owned(),
+            "--sha256".to_owned(),
+            "bad".to_owned(),
+            format!("--sha256={DIGEST}"),
+        ])
+        .expect("duplicate digest flags parse");
+        assert_eq!(duplicate.expected_sha256.as_deref(), Some(DIGEST));
+
+        let check = parse_cli_args(vec![
+            "--check".to_owned(),
+            format!("--sha256={DIGEST}"),
+        ])
+        .expect("check digest parses");
+        assert_eq!(check.positional, vec!["--check"]);
+        assert_eq!(check.expected_sha256.as_deref(), Some(DIGEST));
+        let version = parse_cli_args(vec![
+            "--version".to_owned(),
+            "--sha256".to_owned(),
+            DIGEST.to_owned(),
+        ])
+        .expect("version digest parses");
+        assert_eq!(version.positional, vec!["--version"]);
+        assert_eq!(version.expected_sha256.as_deref(), Some(DIGEST));
+    }
+
+    #[test]
+    fn parsed_digest_reaches_production_verification_action() {
+        let source = std::env::temp_dir().join(format!("omp-installer-b03-cli-{}", std::process::id()));
+        std::fs::write(&source, PAYLOAD).expect("write artifact");
+        let parsed = parse_cli_args(vec![
+            "--install".to_owned(),
+            "installer".to_owned(),
+            "--bin-dir".to_owned(),
+            source.display().to_string(),
+            "--sha256".to_owned(),
+            DIGEST.to_owned(),
+        ])
+        .expect("production arguments parse");
+        let mut action_called = false;
+        installer::verify_sha256_before_install(
+            &source,
+            parsed.expected_sha256.as_deref(),
+            || {
+                action_called = true;
+                Ok::<(), installer::InstallError>(())
+            },
+        )
+        .expect("parsed digest must reach production verification action");
+        assert!(action_called, "matching parsed digest did not reach action");
+        std::fs::remove_file(source).expect("cleanup artifact");
     }
 }
