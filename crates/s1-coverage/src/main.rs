@@ -15,11 +15,7 @@ use subprocess_contract::run_output;
 
 const S1_TOML_PATH: &str = "docs/plan/flow/boxes/S1.toml";
 const BEADS_PATH: &str = ".beads/issues.jsonl";
-const PROVENANCE_PATHS: [&str; 3] = [
-    "docs/plan/flow/S1-COVERAGE.md",
-    "docs/plan/flow/maturity0",
-    ".git/s1_cov.py",
-];
+const PROVENANCE_PATHS: [&str; 5] = ["docs/plan/flow/S1-COVERAGE.md", "docs/plan/flow/maturity0", ".git/s1_cov.py", "crates/s1-coverage/Cargo.toml", "crates/s1-coverage/src/main.rs"];
 
 #[derive(Debug, Clone, Copy)]
 enum Mode {

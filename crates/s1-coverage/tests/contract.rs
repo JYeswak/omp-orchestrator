@@ -83,7 +83,7 @@ fn title_and_acceptance_use_exact_word_boundary() {
             "required `L1-REAL`",
             vec![bead(
                 "omp-orchestrator-generated-id",
-                "omp-orchestrator-l1-real-aaaa",
+                "omp-orchestrator-L1-REAL-aaaa",
                 "",
                 "",
             )],
@@ -199,8 +199,8 @@ fn tree_index_worktree_provenance_is_typed() {
 fn clean_tree_is_consistent() {
     let manifest = InputManifest::new(
         "HEAD",
-        vec!["docs/plan/flow/S1-COVERAGE.md".to_owned()],
-        vec!["docs/plan/flow/S1-COVERAGE.md".to_owned()],
+        vec!["docs/plan/flow/S1-COVERAGE.md".to_owned(), "crates/s1-coverage/Cargo.toml".to_owned(), "crates/s1-coverage/src/main.rs".to_owned()],
+        vec!["docs/plan/flow/S1-COVERAGE.md".to_owned(), "crates/s1-coverage/Cargo.toml".to_owned(), "crates/s1-coverage/src/main.rs".to_owned()],
         Vec::new(),
         Vec::new(),
     );
@@ -213,6 +213,8 @@ fn clean_tree_is_consistent() {
     )
     .expect("clean fixture computes");
     assert_eq!(report.manifest_verdict, ManifestVerdict::DenominatorConsistent);
+    assert!(report.generator_tracked);
+    assert!(render_markdown(&report).contains("GENERATOR_TRACKED=YES"));
     assert!(report.worktree_only.is_empty());
 }
 

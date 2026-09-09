@@ -20,6 +20,8 @@ pub const CONTRACT_PATHS: [&str; 6] = [
     "docs/contracts/s1_l5_portal.md",
 ];
 
+pub const GENERATOR_PATHS: [&str; 2] = ["crates/s1-coverage/Cargo.toml", "crates/s1-coverage/src/main.rs"];
+
 pub const CRATE_ATOM_PARTS: [&str; 9] = [
     "claim",
     "slo",
@@ -235,6 +237,11 @@ impl InputManifest {
     }
 
     #[must_use]
+    pub fn generator_tracked(&self) -> bool {
+        GENERATOR_PATHS.iter().all(|path| self.tree.iter().any(|actual| actual == path))
+    }
+
+    #[must_use]
     pub fn paths(&self, state: InputState) -> &[String] {
         match state {
             InputState::Tree => &self.tree,
@@ -267,6 +274,8 @@ pub struct CoverageReport {
     pub revision: String,
     pub input_manifest: InputManifest,
     pub manifest_verdict: ManifestVerdict,
+    #[serde(default)]
+    pub generator_tracked: bool,
     pub worktree_only: Vec<String>,
     pub growth: usize,
     pub closure: usize,
@@ -490,6 +499,7 @@ pub fn compute_with_manifest(
         revision: revision.into(),
         input_manifest: manifest.clone(),
         manifest_verdict: manifest.verdict(),
+        generator_tracked: manifest.generator_tracked(),
         worktree_only: manifest.worktree_only.clone(),
         growth: 0,
         closure: 0,
@@ -952,6 +962,7 @@ pub fn render_markdown(report: &CoverageReport) -> String {
         report.rev_mode, report.revision
     ));
     output.push_str(&render_manifest_summary(report));
+    output.push_str(&format!("GENERATOR_TRACKED={}\n\n", if report.generator_tracked { "YES" } else { "NO" }));
     output.push_str("WIRED_FROM=s1-coverage-cli\n");
     output.push_str("NO-COVERAGE: this matrix does not prove implementation, wiring, or runtime correctness.\n\n");
     output.push_str(&format!(
