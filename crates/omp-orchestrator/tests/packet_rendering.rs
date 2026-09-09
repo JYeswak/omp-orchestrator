@@ -116,8 +116,8 @@ fn pane_and_supervisor_handoff_are_carried() {
         "packet fixture",
         "body",
         "Run cargo test; expect exit 0",
-        "open",
-        Some("supervisor:123"),
+        "in_progress",
+        Some("supervisor:123;pane=%1414;incarnation=1;agent=WildStone"),
     );
     let packet = render_with_pane(
         &snapshot,
@@ -135,10 +135,13 @@ fn pane_and_supervisor_handoff_are_carried() {
 #[test]
 fn every_rendered_bead_packet_carries_the_ack_instruction() {
     let packet = render_with_pane(
-        &bead(
+        &BeadSnapshot::new_with_acceptance(
             "omp-orchestrator-kxe.4",
+            "packet fixture",
             "body",
             "Run cargo test -p kxe; expect exit 0",
+            "in_progress",
+            Some("pane=%1413;incarnation=1;agent=WildStone"),
         ),
         Path::new("/repo"),
         Some("%1413"),
