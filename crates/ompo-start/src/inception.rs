@@ -73,6 +73,11 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// Init refused over an AGENTS.md that carries no repo ownership stamp.
+    /// Explicit opt-in (`trusted_init`) is the only override.
+    UntrustedAgentsMd { path: PathBuf },
+    /// AGENTS.md exists but is empty: a broken fixture, not a foreign repo.
+    EmptyAgentsMd { path: PathBuf },
 }
 
 impl fmt::Display for InceptionError {
@@ -101,6 +106,16 @@ impl fmt::Display for InceptionError {
             Self::IdentityUnavailable { field, detail } => write!(
                 formatter,
                 "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
+            ),
+            Self::UntrustedAgentsMd { path } => write!(
+                formatter,
+                "HUMAN_HALT refusing init over unstamped foreign AGENTS.md path={} (pass trusted_init=true to opt in)",
+                path.display()
+            ),
+            Self::EmptyAgentsMd { path } => write!(
+                formatter,
+                "INCEPTION_EMPTY_AGENTS_MD path={} — an empty AGENTS.md is a broken fixture, never a foreign repo",
+                path.display()
             ),
         }
     }
@@ -771,9 +786,50 @@ fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
     emit_stage_event(repo_root, Layer::L2, "S1.L1", "S1.L2", "ompo-init", "INIT_REPROBE_OK")
 }
 
+/// Ownership anchor: an AGENTS.md that does not name this repository is foreign.
+/// Heuristic, stated plainly: content cannot prove ownership, so a foreign read
+/// refuses loudly and explicit opt-in (`trusted_init`) is the only override.
+const AGENTS_OWNERSHIP_ANCHOR: &str = "omp-orchestrator";
+
+/// Trust gate (cbl7): refuse init over an unstamped foreign AGENTS.md unless the
+/// caller explicitly opts in. Missing files never reach here (`build_manifest`
+/// refuses them first); unreadable files surface as `RepositoryUnreadable`.
+fn verify_agents_ownership(repo_root: &Path, trusted_init: bool) -> Result<(), InceptionError> {
+    if trusted_init {
+        return Ok(());
+    }
+    let path = repo_root.join("AGENTS.md");
+    let text = fs::read_to_string(&path).map_err(|error| InceptionError::RepositoryUnreadable {
+        path: path.clone(),
+        detail: format!("AGENTS.md unreadable: {error}"),
+    })?;
+    if text.trim().is_empty() {
+        return Err(InceptionError::EmptyAgentsMd { path });
+    }
+    if !text.contains(AGENTS_OWNERSHIP_ANCHOR) {
+        return Err(InceptionError::UntrustedAgentsMd { path });
+    }
+    Ok(())
+}
+
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
+    initialize_inner(repo_root, output, false)
+}
+
+/// Explicit opt-in init over an unstamped foreign AGENTS.md. Identical flow to
+/// [`initialize`], minus the ownership refusal.
+pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
+    initialize_inner(repo_root, output, true)
+}
+
+fn initialize_inner(
+    repo_root: &Path,
+    output: &Path,
+    trusted_init: bool,
+) -> Result<InitReport, InceptionError> {
     let manifest = build_manifest(repo_root)?;
     let bytes = render_manifest(&manifest).into_bytes();
+    verify_agents_ownership(repo_root, trusted_init)?;
     let (actions, backup) = match fs::read(output) {
         Ok(existing) if existing == bytes => (0, None),
         Ok(_) => (1, snapshot_existing(output)?),
@@ -815,11 +871,26 @@ pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, Incepti
     })
 }
 
-pub fn write_inception(
+pub fn write_inception(repo_root: &Path, output: &Path) -> Result<InceptionManifest, InceptionError> {
+    write_inception_inner(repo_root, output, false)
+}
+
+/// Explicit opt-in write over an unstamped foreign AGENTS.md. Identical flow to
+/// [`write_inception`], minus the ownership refusal.
+pub fn write_inception_trusted(
     repo_root: &Path,
     output: &Path,
 ) -> Result<InceptionManifest, InceptionError> {
+    write_inception_inner(repo_root, output, true)
+}
+
+fn write_inception_inner(
+    repo_root: &Path,
+    output: &Path,
+    trusted_init: bool,
+) -> Result<InceptionManifest, InceptionError> {
     let manifest = build_manifest(repo_root)?;
+    verify_agents_ownership(repo_root, trusted_init)?;
     let bytes = render_manifest(&manifest).into_bytes();
     let _backup = snapshot_existing(output)?;
     write_atomic(output, &bytes)?;
@@ -866,6 +937,14 @@ fn fixture() -> (TempDir, PathBuf) {
         }
         fs::write(path, "fixture\n").expect("fixture file");
     }
+    // The fixture mimics a stamped repo: its AGENTS.md carries the ownership
+    // anchor, so untrusted-path legs exercise the gate while every other leg
+    // runs against stamped content. Foreign-content legs overwrite this file.
+    fs::write(
+        directory.path().join("AGENTS.md"),
+        "fixture omp-orchestrator\n",
+    )
+    .expect("fixture stamp");
     run_test_git(directory.path(), &["init", "-q"]);
     run_test_git(directory.path(), &["add", "."]);
     run_test_git(
@@ -993,5 +1072,77 @@ mod tests {
             .to_string()
             .contains("INCEPTION_CONTROL_FILES_MISSING"));
         assert!(!output.exists(), "refusal must not create the artifact");
+    }
+
+    /// Known-bad (cbl7): init over an unstamped foreign AGENTS.md halts with a
+    /// typed refusal and writes nothing -- no artifact, no journal rows.
+    #[test]
+    fn foreign_agents_md_halts_without_writes() {
+        let (directory, output) = fixture();
+        fs::write(directory.path().join("AGENTS.md"), "foreign template\n")
+            .expect("foreign agents file");
+        let error = write_inception(directory.path(), &output).expect_err("must halt");
+        assert!(
+            matches!(error, InceptionError::UntrustedAgentsMd { .. }),
+            "wrong refusal: {error:?}"
+        );
+        assert!(
+            error.to_string().starts_with("HUMAN_HALT"),
+            "halt must name itself: {error}"
+        );
+        assert!(!output.exists(), "halt must not write the artifact");
+        assert!(
+            !default_repo_journal(directory.path()).exists(),
+            "halt must not write journal rows"
+        );
+    }
+
+    /// Opt-in: the trusted variant writes the identical foreign content.
+    #[test]
+    fn trusted_opt_in_writes_foreign_agents_md() {
+        let (directory, output) = fixture();
+        fs::write(directory.path().join("AGENTS.md"), "foreign template\n")
+            .expect("foreign agents file");
+        write_inception_trusted(directory.path(), &output).expect("opt-in writes");
+        assert!(output.exists(), "opt-in must produce the artifact");
+    }
+
+    /// Opt-in covers the `initialize` entry point too: same foreign content,
+    /// trusted flag on, artifact produced.
+    #[test]
+    fn trusted_initialize_writes_foreign_agents_md() {
+        let (directory, output) = fixture();
+        fs::write(directory.path().join("AGENTS.md"), "foreign template\n")
+            .expect("foreign agents file");
+        initialize_trusted(directory.path(), &output).expect("opt-in initializes");
+        assert!(output.exists(), "opt-in must produce the artifact");
+    }
+
+    /// Anti-vacuity: an empty AGENTS.md is its own typed error, never a halt
+    /// for a foreign repo and never a pass.
+    #[test]
+    fn empty_agents_md_is_typed_error() {
+        let (directory, output) = fixture();
+        fs::write(directory.path().join("AGENTS.md"), "   \n").expect("empty agents file");
+        let error = write_inception(directory.path(), &output).expect_err("must refuse");
+        assert!(
+            matches!(error, InceptionError::EmptyAgentsMd { .. }),
+            "wrong refusal: {error:?}"
+        );
+        assert!(!output.exists(), "refusal must not write the artifact");
+    }
+
+    /// The `initialize` entry point shares the gate: foreign content halts there too.
+    #[test]
+    fn initialize_over_foreign_agents_md_halts() {
+        let (directory, output) = fixture();
+        fs::write(directory.path().join("AGENTS.md"), "foreign template\n")
+            .expect("foreign agents file");
+        let error = initialize(directory.path(), &output).expect_err("must halt");
+        assert!(
+            matches!(error, InceptionError::UntrustedAgentsMd { .. }),
+            "wrong refusal: {error:?}"
+        );
+        assert!(!output.exists(), "halt must not write the artifact");
     }
 }
