@@ -8,11 +8,17 @@ L1 defines the scoped system doctor for the S1 human-start path: it probes requi
 
 ## Contract Artifacts
 
-1. Canonical artifact: MISSING today; target .omp-orchestrator/doctor/report.json, schema s1.l1.doctor.v1.
-2. Smoke runner: MISSING today; target ompo doctor --json --scope system.
-3. Invariant suite: MISSING today; target crates/installer/tests/s1_l1_doctor_contract.rs. The Wave-0 validation below is an executable source-and-law stand-in, not production coverage.
+1. Canonical artifact: the current observer emits ompo.doctor.v1 JSON on stdout and durably writes
+   omp.lifecycle_event.v1 rows to the repo journal. The report.json path remains a declared
+   next-artifact reference; this bead does not claim that file is persisted.
+2. Smoke runner: implemented as ompo doctor --json --scope system; its JSON carries a typed
+   two-band exit_code and every probe row carries independent presence and version fields.
+3. Invariant suite: crates/ompo-doctor/tests/l1_doctor.rs plus the production-path unit tests in
+   crates/ompo-doctor/src/lib.rs. The suite exercises healthy, missing-version, unprobeable,
+   absent, mutation, and empty-set outcomes.
 
-A named but missing suite is intentional Wave-0 state, not a passing implementation claim.
+The remaining repair, seven-arm verdict, and idempotence rows below are not claimed by this
+observability slice.
 
 ## L1 Doctor Model
 
@@ -175,18 +181,22 @@ RCH's doctor exposes scoped reliability probes: --scope topology,convergence run
 
 Metric: `MET-L1-REPAIR-ACTION-RATE` = repair action count per doctor run, partitioned by same_observation versus state_drift; the required floor is 0 only for the same-observation partition. A nonzero action rate after drift is not a failure.
 
-## VIOLATION — where shipped code contradicts this law
+## Superseded Wave-0 violation and current slice
 
-- Declared: docs/plan/flow/boxes/S1.toml:36-41 declares L1 ompo doctor with two-signal probes and exists = none.
-- Shipped: docs/plan/flow/boxes/S1.toml:41 says L1 exists is none; no ompo doctor consumer or local L1 contract suite exists in this Wave-0 tree.
-- Consequence: the S1 system check cannot emit a production doctor verdict, cannot perform the conditional idempotence readback, and cannot prove a repair was followed by a fresh probe. This is the explicit pre-build gap, not a green result.
+- Historical: the Wave-0 contract and S1 flow map recorded the doctor as missing. The current
+  ompo-doctor crate now owns the declared L1 probe writer and its umbrella command.
+- Current slice: ompo doctor emits one lifecycle row per declared probe, records independent PATH
+  presence and successful version evidence, and returns the two subject-result bands (0 or 1).
+- Remaining: the full seven-arm verdict enum, repair chokepoint, undo, and conditional idempotence
+  remain outside this observability bead and are not promoted by its tests.
 
 ## Non-Coverage
 
 - This contract does not install or select tool binaries, merge hooks, or write policy files; L2 owns ecosystem trust and initialization.
 - It does not decide HD-0009..HD-0012, OMP pane liveness, Agent Mail roster truth, or dispatch admission.
 - It does not claim the installed br 0.4.1 is byte-identical to the cited mirror beads_rust 0.5.7.
-- It does not claim an existing local ompo doctor implementation; the suite and report are missing until a later build wave.
+- This slice does claim the existing ompo doctor observer and its L1 tests; it does not claim the
+  report.json artifact, seven-arm verdict enum, repair, undo, or idempotence rows above.
 - It does not turn a no-op on one healthy fixture into a global host-health guarantee.
 
 ## Validation

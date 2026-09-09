@@ -38,7 +38,7 @@ name = "system check"
 command = "ompo doctor"
 checks = ["tmux >= 3.6", "ntm built from source (never brew)", "br", "bv", "agent-mail :8765", "socraticode/qdrant", "rch + lane row for this repo", "git", "disk vs mint floor", "frankenmermaid", "toolchain pin present on the lane"]
 rules = ["two signals per probe (PATH presence + version)", "UNPROBEABLE for tools that reject --version (tmux)", "every ABSENT carries a remediation", "two-band exit"]
-exists = "none"
+exists = "crates/ompo-doctor: two-signal L1 probe writer is implemented and wired as ompo doctor --json --scope system; report.json, full seven-arm verdicts, repair, undo, and idempotence remain unclaimed"
 
 [[box.layer]]
 id = "L2"

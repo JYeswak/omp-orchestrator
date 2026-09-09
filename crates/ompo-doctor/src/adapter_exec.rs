@@ -155,7 +155,7 @@ fn first_output_line(output: &std::process::Output) -> String {
         .collect()
 }
 
-fn resolve_on_path(adapter: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_on_path(adapter: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)
         .map(|dir| dir.join(adapter))

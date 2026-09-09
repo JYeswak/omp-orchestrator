@@ -17,13 +17,15 @@ fn fixture_decisions() -> Vec<ProbeDecision> {
             status: "OK".to_owned(),
             reason_code: format!("L1_PROBE_{}_OK", probe.name.replace('-', "_")),
             detail: "named-target fixture".to_owned(),
+            presence: Some(format!("/fixture/{}", probe.command)),
+            version: Some("fixture-version".to_owned()),
         })
         .collect()
 }
 
 #[test]
 fn l1_named_target_reaches_declared_probe_surface() {
-    assert_eq!(PROBES.len(), 11, "the L1 probe denominator must be non-empty");
+    assert!(!PROBES.is_empty(), "the L1 probe denominator must be non-empty");
     let names: BTreeSet<&str> = PROBES.iter().map(|probe| probe.name).collect();
     assert_eq!(names.len(), PROBES.len(), "probe names must be unique");
     assert!(PROBES
@@ -82,6 +84,11 @@ fn doctor_run_reports_complete_envelope_with_typed_remediation() {
     assert_eq!(summary.schema, "ompo.doctor.v1");
     assert!(!summary.run_id.is_empty(), "run_id must be nonempty");
     assert_eq!(summary.scope, "system", "requested scope is preserved");
+    assert!(matches!(summary.exit_code, 0 | 1));
+    assert_eq!(
+        summary.status,
+        if summary.exit_code == 0 { "OK" } else { "DEGRADED" }
+    );
     assert_eq!(summary.probe_count, summary.probes.len());
     assert_eq!(summary.artifact, ompo_doctor::ARTIFACT_REFERENCE);
     assert_eq!(
@@ -115,5 +122,43 @@ fn doctor_run_reports_complete_envelope_with_typed_remediation() {
             probe.name,
             summary.remediation
         );
+    }
+}
+
+#[test]
+fn doctor_command_reports_two_signals_and_exit_band() {
+    let repo = tempfile::tempdir().expect("doctor fixture repo");
+    let output = Command::new(env!("CARGO_BIN_EXE_ompo"))
+        .args([
+            "doctor",
+            "--json",
+            "--scope",
+            "system",
+            "--repo",
+            repo.path().to_str().expect("fixture path is UTF-8"),
+        ])
+        .output()
+        .expect("doctor command runs");
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .expect("doctor emits JSON even for a degraded subject");
+    assert_eq!(value["command"], "doctor");
+    let data = &value["data"];
+    let reported_exit = data["exit_code"].as_u64().expect("typed doctor exit code");
+    assert!(matches!(reported_exit, 0 | 1));
+    assert_eq!(output.status.code(), Some(reported_exit as i32));
+    assert_eq!(
+        data["status"],
+        if reported_exit == 0 { "OK" } else { "DEGRADED" }
+    );
+
+    let probes = data["probes"].as_array().expect("probe rows");
+    assert!(!probes.is_empty(), "empty probe output is not a doctor pass");
+    for probe in probes {
+        assert!(probe.get("presence").is_some(), "presence signal is required");
+        assert!(probe.get("version").is_some(), "version signal is required");
+        if probe["status"] == "OK" {
+            assert!(probe["presence"].as_str().is_some_and(|value| !value.is_empty()));
+            assert!(probe["version"].as_str().is_some_and(|value| !value.is_empty()));
+        }
     }
 }

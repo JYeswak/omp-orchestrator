@@ -106,6 +106,10 @@ pub struct ProbeDecision {
     pub status: String,
     pub reason_code: String,
     pub detail: String,
+    /// Independent PATH evidence. A present executable is not proof that its probe answered.
+    pub presence: Option<String>,
+    /// The successful probe's first non-empty version/identity line. None is not a version.
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -113,6 +117,8 @@ pub struct DoctorSummary {
     pub schema: &'static str,
     pub run_id: String,
     pub scope: String,
+    pub status: &'static str,
+    pub exit_code: u8,
     pub artifact: &'static str,
     pub lifecycle_journal: PathBuf,
     pub probe_count: usize,
@@ -159,18 +165,18 @@ impl From<EmitError> for DoctorError {
     }
 }
 
-fn detail_from_output(output: &std::process::Output) -> String {
+fn first_output_line(output: &std::process::Output) -> Option<String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     stdout
         .lines()
         .chain(stderr.lines())
         .find(|line| !line.trim().is_empty())
-        .unwrap_or("no version output")
-        .trim()
-        .chars()
-        .take(240)
-        .collect()
+        .map(|line| line.trim().chars().take(240).collect())
+}
+
+fn detail_from_output(output: &std::process::Output) -> String {
+    first_output_line(output).unwrap_or_else(|| "no version output".to_owned())
 }
 
 fn reason_code(name: &str, status: &str) -> String {
@@ -182,25 +188,61 @@ fn reason_code(name: &str, status: &str) -> String {
 }
 
 fn run_probe(spec: &ProbeSpec) -> ProbeDecision {
+    let presence = crate::adapter_exec::resolve_on_path(spec.command)
+        .map(|path| path.display().to_string());
     let mut command = Command::new(spec.command);
     command.args(spec.args);
-    let (status, detail) = match bounded_output(&mut command, PROBE_DEADLINE) {
-        BoundedOutcome::Completed(output) if output.status.success() => {
-            ("OK", detail_from_output(&output))
+    let (status, detail, version) = match bounded_output(&mut command, PROBE_DEADLINE) {
+        BoundedOutcome::Completed(output) => {
+            let version = output
+                .status
+                .success()
+                .then(|| first_output_line(&output))
+                .flatten();
+            let detail = format!("exit={} {}", output.status, detail_from_output(&output));
+            if presence.is_some() {
+                match version {
+                    Some(version) => ("OK", version.clone(), Some(version)),
+                    None => ("UNPROBEABLE", detail, None),
+                }
+            } else {
+                ("ABSENT_SPECIFIC", detail, None)
+            }
         }
-        BoundedOutcome::Completed(output) => (
-            "UNPROBEABLE",
-            format!("exit={} {}", output.status, detail_from_output(&output)),
+        BoundedOutcome::TimedOut => ("UNMEASURED", "probe timed out".to_owned(), None),
+        BoundedOutcome::Unspawned(error) => (
+            if presence.is_some() { "UNPROBEABLE" } else { "ABSENT_SPECIFIC" },
+            error.to_string(),
+            None,
         ),
-        BoundedOutcome::TimedOut => ("UNMEASURED", "probe timed out".to_owned()),
-        BoundedOutcome::Unspawned(error) => ("ABSENT_SPECIFIC", error.to_string()),
     };
     ProbeDecision {
         name: spec.name.to_owned(),
         status: status.to_owned(),
         reason_code: reason_code(spec.name, status),
         detail,
+        presence,
+        version,
     }
+}
+/// Map the completed probe set onto the doctor's two subject-result bands.
+///
+/// 0 means every probe established both independent signals. 1 means the doctor ran but at
+/// least one subject was absent, unprobeable, stale, or otherwise not OK. An empty set is an
+/// instrument error, never a healthy result.
+pub fn doctor_exit_code(decisions: &[ProbeDecision]) -> Result<u8, DoctorError> {
+    if decisions.is_empty() {
+        return Err(DoctorError::EmptyProbeSet);
+    }
+    Ok(if decisions.iter().all(|decision| {
+        decision.status == "OK"
+            && decision.presence.as_ref().is_some_and(|value| !value.is_empty())
+            && decision.version.as_ref().is_some_and(|value| !value.is_empty())
+    }) {
+        0
+    } else {
+        1
+    })
 }
 
 /// Build the one-event-per-decision lifecycle batch in declaration order.
@@ -269,6 +311,8 @@ pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError
     }
     let run_id = doctor_run_id();
     let decisions: Vec<_> = PROBES.iter().map(run_probe).collect();
+    let exit_code = doctor_exit_code(&decisions)?;
+    let status = if exit_code == 0 { "OK" } else { "DEGRADED" };
     let remediation = remediation_for(&decisions);
     let next_action = format!("readback={ARTIFACT_REFERENCE}");
     let events = lifecycle_events(PROBES, &decisions)?;
@@ -278,6 +322,8 @@ pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError
         schema: "ompo.doctor.v1",
         run_id,
         scope: scope.to_owned(),
+        status,
+        exit_code,
         artifact: ARTIFACT_REFERENCE,
         lifecycle_journal: readback.path,
         probe_count: decisions.len(),
@@ -306,6 +352,8 @@ mod tests {
                 status: "OK".to_owned(),
                 reason_code: reason_code(spec.name, "OK"),
                 detail: "fixture".to_owned(),
+                presence: Some(format!("/fixture/{}", spec.command)),
+                version: Some("fixture-version".to_owned()),
             })
             .collect()
     }
@@ -348,8 +396,69 @@ mod tests {
     }
 
     #[test]
+    fn probe_requires_presence_and_version_signals() {
+        const EMPTY_ARGS: &[&str] = &[];
+        let good = run_probe(&ProbeSpec {
+            name: "fixture-good",
+            command: "printf",
+            args: &["fixture-version"],
+        });
+        assert_eq!(good.status, "OK");
+        assert!(good.presence.is_some(), "PATH presence must be recorded");
+        assert_eq!(good.version.as_deref(), Some("fixture-version"));
+        assert_eq!(doctor_exit_code(&[good]).expect("non-empty probe set"), 0);
+
+        let no_version = run_probe(&ProbeSpec {
+            name: "fixture-no-version",
+            command: "printf",
+            args: EMPTY_ARGS,
+        });
+        assert_eq!(no_version.status, "UNPROBEABLE");
+        assert!(no_version.presence.is_some());
+        assert!(no_version.version.is_none());
+        assert_eq!(doctor_exit_code(&[no_version]).expect("non-empty probe set"), 1);
+
+        let unprobeable = run_probe(&ProbeSpec {
+            name: "fixture-unprobeable",
+            command: "false",
+            args: EMPTY_ARGS,
+        });
+        assert_eq!(unprobeable.status, "UNPROBEABLE");
+        assert!(unprobeable.presence.is_some());
+        assert!(unprobeable.version.is_none());
+
+        let absent = run_probe(&ProbeSpec {
+            name: "fixture-absent",
+            command: "omp-l1-probe-command-that-is-absent",
+            args: EMPTY_ARGS,
+        });
+        assert_eq!(absent.status, "ABSENT_SPECIFIC");
+        assert!(absent.presence.is_none());
+        assert!(absent.version.is_none());
+    }
+
+    #[test]
+    fn two_band_exit_mutation_is_red_and_restores_green() {
+        let mut decisions = fixture_decisions();
+        assert_eq!(doctor_exit_code(&decisions).expect("non-empty probe set"), 0);
+
+        decisions[0].status = "UNPROBEABLE".to_owned();
+        decisions[0].reason_code = reason_code(&decisions[0].name, "UNPROBEABLE");
+        decisions[0].version = None;
+        assert_eq!(doctor_exit_code(&decisions).expect("mutated probe set"), 1);
+        assert_ne!(decisions[0].status, "OK", "missing version cannot retain OK");
+
+        decisions[0].status = "OK".to_owned();
+        decisions[0].reason_code = reason_code(&decisions[0].name, "OK");
+        decisions[0].version = Some("fixture-version".to_owned());
+        assert_eq!(doctor_exit_code(&decisions).expect("restored probe set"), 0);
+    }
+
+    #[test]
     fn empty_probe_set_is_an_error() {
         let error = lifecycle_events(PROBES, &[]).expect_err("empty set");
+        assert!(error.to_string().contains("L1_DOCTOR_EMPTY_PROBE_SET"));
+        let error = doctor_exit_code(&[]).expect_err("empty exit set");
         assert!(error.to_string().contains("L1_DOCTOR_EMPTY_PROBE_SET"));
     }
 }

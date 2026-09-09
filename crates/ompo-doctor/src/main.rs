@@ -1101,11 +1101,13 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
             let verdicts = summary.probes.clone();
             let value = umbrella::envelope(
                 "doctor",
-                "OK",
+                summary.status,
                 serde_json::json!({
                     "doctor_schema": summary.schema,
                     "run_id": summary.run_id,
                     "scope": summary.scope,
+                    "status": summary.status,
+                    "exit_code": summary.exit_code,
                     "probe_count": summary.probe_count,
                     "probes": summary.probes,
                     "verdicts": verdicts,
@@ -1123,7 +1125,7 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
             match serde_json::to_string(&value) {
                 Ok(text) => {
                     println!("{text}");
-                    ExitCode::SUCCESS
+                    ExitCode::from(summary.exit_code)
                 }
                 Err(error) => {
                     eprintln!("ompo doctor: cannot encode report: {error}");
@@ -1133,14 +1135,16 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
         }
         Ok(summary) => {
             println!(
-                "OMPO_DOCTOR scope={} probes={} lifecycle_events={} readback_lines={} journal={}",
+                "OMPO_DOCTOR scope={} status={} exit_code={} probes={} lifecycle_events={} readback_lines={} journal={}",
                 summary.scope,
+                summary.status,
+                summary.exit_code,
                 summary.probe_count,
                 summary.event_count,
                 summary.readback_lines,
                 summary.lifecycle_journal.display()
             );
-            ExitCode::SUCCESS
+            ExitCode::from(summary.exit_code)
         }
         Err(error) => {
             eprintln!("ompo doctor: {error}");
