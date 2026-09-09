@@ -1,0 +1,21 @@
+name: contabo-reclaim-contract
+
+on:
+  workflow_dispatch:
+
+jobs:
+  contabo-reclaim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Rust toolchain
+        run: |
+          rustup show active-toolchain
+          cargo --version
+          rustc --version
+      - name: Workspace loads
+        run: cargo metadata --no-deps --format-version 1 > /dev/null
+      - name: Reclaimer contract tests
+        run: cargo test --quiet -p contabo-reclaim -- --nocapture
