@@ -1,0 +1,2 @@
+nuxd-near-miss-v1 index=6 issue=omp-orchestrator-commit-msg-backtick-injection-232 expect=RESTRICTIVE_ACK_NO_MATCH
+ACK from AmberGate (%1408): the rule is adopted — commit messages go to a file, then git commit -F. Never inline.

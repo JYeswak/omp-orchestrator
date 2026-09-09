@@ -1,0 +1,2 @@
+nuxd-near-miss-v1 index=2 issue=omp-orchestrator-kernel-gate-census-69i expect=RESTRICTIVE_ACK_NO_MATCH
+ACK 69i on %1408 — I will build the gate-reachability census as a typed decision in the supervisor: classify each gate by TRIGGER REACHABILITY (not caller existence), assert no-shell-gate comes back REACHABLE as the positive control, refuse with GateUnwired when any gate is UNREACHABLE, and state the per-clone .git/hooks/ hole in the output.

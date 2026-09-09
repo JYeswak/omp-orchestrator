@@ -1,0 +1,2 @@
+nuxd-near-miss-v1 index=4 issue=omp-orchestrator-crate-reachability-census-44g expect=RESTRICTIVE_ACK_NO_MATCH
+ACK 44g on %1408 — first step: fix the duplicate gate-census block in decide() (crates/omp-orchestrator/src/lib.rs), then build the reachability census from cargo metadata reverse edges.

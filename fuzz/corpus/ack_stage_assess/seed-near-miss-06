@@ -1,0 +1,2 @@
+nuxd-near-miss-v1 index=5 issue=omp-orchestrator-followup-stage-180 expect=RESTRICTIVE_ACK_NO_MATCH
+ACK 180 on %1409 — SilverWolf. First step: writing the pure follow-up classifier that takes (bead_id, assignee, dispatched_at, now, comments_present, tracker_readable) and classifies VERDICT_POSTED / SILENT_PAST_DEADLINE / REASSIGNED / TRACKER_ERROR. The I/O-bound wrapper reads br comments and br show. The classifier is PURE so the hermetic tests can hit it without a live tracker — the same shape as classify_ack_readback.

@@ -1,0 +1,2 @@
+nuxd-known-good-v1 expect=NONRESTRICTIVE_ACK_MATCH
+ACK nuxd on %9 -- deterministic known-good

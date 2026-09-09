@@ -1,0 +1,2 @@
+nuxd-known-bad-v1 expect=RESTRICTIVE_TMUX_TRANSPORT
+ACK nuxd on %9 -- deterministic tmux known-bad

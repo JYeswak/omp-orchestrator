@@ -1,0 +1,2 @@
+nuxd-near-miss-v1 index=1 issue=omp-orchestrator-gate-no-runner-j58 expect=RESTRICTIVE_ACK_NO_MATCH
+ACK j58 received on %1408 -- I will read the pre-commit hook contract (hook-certification), implement the gate as a Rust pre-commit hook, plant a .sh to prove it bites through the real trigger, and hand registration to Joshua.

@@ -1,0 +1,2 @@
+nuxd-near-miss-v1 index=0 issue=omp-orchestrator-ack-spine-oj6.2 expect=RESTRICTIVE_ACK_NO_MATCH
+ACK DETECTOR LANDED (SilverWolf, pane 5, %1409) — scripts/ack-detector.sh, no build, no install. THREE legs verified:
