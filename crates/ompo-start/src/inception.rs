@@ -18,7 +18,8 @@ use std::fmt::{self, Write as _};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const SCHEMA_VERSION: &str = "inception.v1";
 
@@ -54,6 +55,7 @@ pub fn control_file_presence(repo: &Path) -> BTreeMap<String, bool> {
 }
 
 const REQUIRED_TOOLS: &[&str] = &["git", "cargo", "br", "bv", "ntm", "am", "jq"];
+const IDENTITY_COMMAND_DEADLINE: Duration = Duration::from_secs(10);
 const REQUIRED_KEYS: &[&str] = &[
     "schema_version",
     "project_id",
@@ -70,6 +72,7 @@ pub enum InceptionError {
     MissingControlFiles(Vec<String>),
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
+    IdentityUnavailable { field: &'static str, detail: String },
 }
 
 impl fmt::Display for InceptionError {
@@ -95,6 +98,10 @@ impl fmt::Display for InceptionError {
                 "INCEPTION_READBACK_FAILED path={} detail={detail}",
                 path.display()
             ),
+            Self::IdentityUnavailable { field, detail } => write!(
+                formatter,
+                "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
+            ),
         }
     }
 }
@@ -114,6 +121,7 @@ pub struct InceptionManifest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InceptionReadback {
+    pub project_id: String,
     pub repo_identity: RepoIdentity,
     pub control_files_complete: bool,
 }
@@ -131,6 +139,8 @@ pub struct InitReport {
 pub struct RepoIdentity {
     pub canonical_path: String,
     pub git_marker: String,
+    pub source_revision: String,
+    pub host_identity: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,7 +167,58 @@ fn project_id(path: &str) -> String {
     }
     format!("omp-{hex}")[..20].to_owned()
 }
+fn identity_field(field: &'static str, value: &str) -> Result<String, InceptionError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(InceptionError::IdentityUnavailable {
+            field,
+            detail: "empty value".to_owned(),
+        });
+    }
+    Ok(value.to_owned())
+}
 
+fn run_identity_command(
+    command: &mut Command,
+    field: &'static str,
+) -> Result<String, InceptionError> {
+    match subprocess_contract::bounded_output(command, IDENTITY_COMMAND_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            identity_field(field, &String::from_utf8_lossy(&output.stdout))
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            Err(InceptionError::IdentityUnavailable {
+                field,
+                detail: format!(
+                    "command exited {:?}: {}",
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ),
+            })
+        }
+        subprocess_contract::BoundedOutcome::TimedOut => Err(InceptionError::IdentityUnavailable {
+            field,
+            detail: format!("command exceeded {}s", IDENTITY_COMMAND_DEADLINE.as_secs()),
+        }),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(InceptionError::IdentityUnavailable {
+                field,
+                detail: format!("command could not start: {error}"),
+            })
+        }
+    }
+}
+
+fn source_revision(repo_root: &Path) -> Result<String, InceptionError> {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(repo_root).args(["rev-parse", "HEAD"]);
+    run_identity_command(&mut command, "source_revision")
+}
+
+fn host_identity() -> Result<String, InceptionError> {
+    let mut command = Command::new("hostname");
+    run_identity_command(&mut command, "host_identity")
+}
 fn git_marker(repo_root: &Path) -> Result<String, InceptionError> {
     let marker = repo_root.join(".git");
     if marker.is_dir() {
@@ -199,12 +260,17 @@ fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError>
     }
 
     let canonical_path = canonical.display().to_string();
+    let source_revision = source_revision(&canonical)?;
+    let host_identity = host_identity()?;
+    let project_id = identity_field("project_id", &project_id(&canonical_path))?;
     Ok(InceptionManifest {
         schema_version: SCHEMA_VERSION.to_owned(),
-        project_id: project_id(&canonical_path),
+        project_id,
         repo_identity: RepoIdentity {
             canonical_path,
             git_marker: git_marker(&canonical)?,
+            source_revision,
+            host_identity,
         },
         control_files,
         host_capabilities: HostCapabilities {
@@ -245,6 +311,19 @@ fn json_string(value: &str) -> String {
     escaped
 }
 
+fn render_repo_identity(output: &mut String, identity: &RepoIdentity) {
+    writeln!(output, "  \"repo_identity\": {{").expect("writing to String cannot fail");
+    writeln!(output, "    \"canonical_path\": {},", json_string(&identity.canonical_path))
+        .expect("writing to String cannot fail");
+    writeln!(output, "    \"git_marker\": {},", json_string(&identity.git_marker))
+        .expect("writing to String cannot fail");
+    writeln!(output, "    \"source_revision\": {},", json_string(&identity.source_revision))
+        .expect("writing to String cannot fail");
+    writeln!(output, "    \"host_identity\": {}", json_string(&identity.host_identity))
+        .expect("writing to String cannot fail");
+    writeln!(output, "  }},").expect("writing to String cannot fail");
+}
+
 fn render_manifest(manifest: &InceptionManifest) -> String {
     let mut output = String::from("{\n");
     writeln!(
@@ -259,20 +338,7 @@ fn render_manifest(manifest: &InceptionManifest) -> String {
         json_string(&manifest.project_id)
     )
     .expect("writing to String cannot fail");
-    writeln!(output, "  \"repo_identity\": {{").expect("writing to String cannot fail");
-    writeln!(
-        output,
-        "    \"canonical_path\": {},",
-        json_string(&manifest.repo_identity.canonical_path)
-    )
-    .expect("writing to String cannot fail");
-    writeln!(
-        output,
-        "    \"git_marker\": {}",
-        json_string(&manifest.repo_identity.git_marker)
-    )
-    .expect("writing to String cannot fail");
-    writeln!(output, "  }},").expect("writing to String cannot fail");
+    render_repo_identity(&mut output, &manifest.repo_identity);
 
     writeln!(output, "  \"control_files\": {{").expect("writing to String cannot fail");
     for (index, (path, present)) in manifest.control_files.iter().enumerate() {
@@ -590,6 +656,34 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), InceptionError> {
     result
 }
 
+fn read_repo_identity(value: &Value) -> Result<(String, RepoIdentity), String> {
+    let repo_identity = value
+        .get("repo_identity")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "repo_identity is not an object".to_owned())?;
+    let project_id = value
+        .get("project_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| "project_id is missing".to_owned())?;
+    let field = |name: &str, message: &str| {
+        repo_identity
+            .get(name)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| message.to_owned())
+    };
+    Ok((
+        project_id.to_owned(),
+        RepoIdentity {
+            canonical_path: field("canonical_path", "repo_identity.canonical_path is missing")?.to_owned(),
+            git_marker: field("git_marker", "repo_identity.git_marker is missing")?.to_owned(),
+            source_revision: field("source_revision", "repo_identity.source_revision is missing")?.to_owned(),
+            host_identity: field("host_identity", "repo_identity.host_identity is missing")?.to_owned(),
+        },
+    ))
+}
+
 fn validate_readback(contents: &str) -> Result<InceptionReadback, String> {
     let value: Value = serde_json::from_str(contents)
         .map_err(|error| format!("invalid JSON: {error}"))?;
@@ -604,20 +698,7 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, String> {
     if value.get("schema_version").and_then(Value::as_str) != Some(SCHEMA_VERSION) {
         return Err("schema_version does not match inception.v1".to_owned());
     }
-    let repo_identity = value
-        .get("repo_identity")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "repo_identity is not an object".to_owned())?;
-    let canonical_path = repo_identity
-        .get("canonical_path")
-        .and_then(Value::as_str)
-        .filter(|path| !path.trim().is_empty())
-        .ok_or_else(|| "repo_identity.canonical_path is missing".to_owned())?;
-    let git_marker = repo_identity
-        .get("git_marker")
-        .and_then(Value::as_str)
-        .filter(|marker| !marker.trim().is_empty())
-        .ok_or_else(|| "repo_identity.git_marker is missing".to_owned())?;
+    let (project_id, repo_identity) = read_repo_identity(&value)?;
     let control_files = value
         .get("control_files")
         .and_then(Value::as_object)
@@ -641,10 +722,8 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, String> {
         return Err("required_tools is incomplete".to_owned());
     }
     Ok(InceptionReadback {
-        repo_identity: RepoIdentity {
-            canonical_path: canonical_path.to_owned(),
-            git_marker: git_marker.to_owned(),
-        },
+        project_id,
+        repo_identity,
         control_files_complete,
     })
 }
@@ -706,7 +785,9 @@ pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, Incepti
         write_atomic(output, &bytes)?;
     }
     let readback = read_inception(output)?;
-    if readback.repo_identity != manifest.repo_identity {
+    if readback.project_id != manifest.project_id
+        || readback.repo_identity != manifest.repo_identity
+    {
         return Err(InceptionError::Readback {
             path: output.to_owned(),
             detail: format!(
@@ -739,7 +820,9 @@ pub fn write_inception(
     let _backup = snapshot_existing(output)?;
     write_atomic(output, &bytes)?;
     let readback = read_inception(output)?;
-    if readback.repo_identity != manifest.repo_identity {
+    if readback.project_id != manifest.project_id
+        || readback.repo_identity != manifest.repo_identity
+    {
         return Err(InceptionError::Readback {
             path: output.to_owned(),
             detail: format!(
@@ -753,23 +836,49 @@ pub fn write_inception(
 }
 
 #[cfg(test)]
+use tempfile::TempDir;
+
+#[cfg(test)]
+fn run_test_git(repo: &Path, args: &[&str]) {
+    let mut command = Command::new("git");
+    command.current_dir(repo).args(args);
+    match subprocess_contract::bounded_output(&mut command, Duration::from_secs(10)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {}
+        other => panic!("git fixture command failed: {other:?}"),
+    }
+}
+
+#[cfg(test)]
+fn fixture() -> (TempDir, PathBuf) {
+    let directory = tempfile::tempdir().expect("fixture directory");
+    for relative in REQUIRED_CONTROL_FILES {
+        let path = directory.path().join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("fixture parent");
+        }
+        fs::write(path, "fixture\n").expect("fixture file");
+    }
+    run_test_git(directory.path(), &["init", "-q"]);
+    run_test_git(directory.path(), &["add", "."]);
+    run_test_git(
+        directory.path(),
+        &[
+            "-c",
+            "user.name=ompo-start-test",
+            "-c",
+            "user.email=ompo-start-test@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+    );
+    let output = directory.path().join(".omp-orchestrator/inception.json");
+    (directory, output)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
-
-    fn fixture() -> (TempDir, PathBuf) {
-        let directory = tempfile::tempdir().expect("fixture directory");
-        for relative in REQUIRED_CONTROL_FILES {
-            let path = directory.path().join(relative);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).expect("fixture parent");
-            }
-            fs::write(path, "fixture\n").expect("fixture file");
-        }
-        let output = directory.path().join(".omp-orchestrator/inception.json");
-        (directory, output)
-    }
-
     #[test]
     fn writes_and_reads_all_required_fields() {
         let (directory, output) = fixture();
@@ -783,6 +892,10 @@ mod tests {
             );
         }
         assert_eq!(manifest.schema_version, SCHEMA_VERSION);
+        assert!(!manifest.project_id.is_empty());
+        assert!(!manifest.repo_identity.canonical_path.is_empty());
+        assert!(!manifest.repo_identity.source_revision.is_empty());
+        assert!(!manifest.repo_identity.host_identity.is_empty());
         let journal = fs::read_to_string(default_repo_journal(directory.path()))
             .expect("lifecycle journal");
         assert!(journal.contains("\"layer\":\"L2\""));
@@ -822,6 +935,7 @@ mod tests {
         assert_eq!(second.manifest.repo_identity, first.manifest.repo_identity);
         assert_eq!(second.monitor_rows, second.journal_rows);
     }
+
 
     #[test]
     fn missing_control_file_refuses_before_write() {

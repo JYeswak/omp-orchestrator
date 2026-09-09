@@ -1499,6 +1499,7 @@ dependencies = [
  "serde",
  "lifecycle-event",
  "lifecycle-monitor",
+ "subprocess-contract",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
