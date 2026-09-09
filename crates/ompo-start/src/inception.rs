@@ -11,9 +11,9 @@ use sha2::{Digest, Sha256};
 use lifecycle_event::{
     default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
 };
-use serde_json::Value;
+use serde_json::{Map, Value};
 use lifecycle_monitor::verify_artifact;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Write as _};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write as _;
@@ -65,6 +65,7 @@ const REQUIRED_KEYS: &[&str] = &[
     "required_tools",
     "trust_status",
 ];
+const OPTIONAL_KEYS: &[&str] = &["evidence", "status", "degradations"];
 
 #[derive(Debug)]
 pub enum InceptionError {
@@ -78,6 +79,29 @@ pub enum InceptionError {
     UntrustedAgentsMd { path: PathBuf },
     /// AGENTS.md exists but is empty: a broken fixture, not a foreign repo.
     EmptyAgentsMd { path: PathBuf },
+    /// The artifact is absent: anti-vacuity is a typed refusal, never a pass.
+    ReadbackMissing { path: PathBuf },
+    /// The artifact exists but is not parseable JSON.
+    ReadbackMalformed { path: PathBuf, detail: String },
+    /// A required or nested required field is absent.
+    ReadbackMissingKey { path: PathBuf, key: String },
+    /// The artifact contains evidence outside the current schema contract.
+    ReadbackExtraKey { path: PathBuf, key: String },
+    /// A field has a JSON type other than the contract declares.
+    ReadbackWrongType {
+        path: PathBuf,
+        key: String,
+        expected: &'static str,
+        found: &'static str,
+    },
+    /// A required string or array item is present but empty.
+    ReadbackEmpty { path: PathBuf, key: String },
+    /// A typed field is present but violates its value contract.
+    ReadbackInvalid {
+        path: PathBuf,
+        key: String,
+        detail: String,
+    },
 }
 
 impl fmt::Display for InceptionError {
@@ -117,11 +141,59 @@ impl fmt::Display for InceptionError {
                 "INCEPTION_EMPTY_AGENTS_MD path={} — an empty AGENTS.md is a broken fixture, never a foreign repo",
                 path.display()
             ),
+            Self::ReadbackMissing { path } => {
+                write!(formatter, "INCEPTION_READBACK_MISSING path={}", path.display())
+            }
+            Self::ReadbackMalformed { path, detail } => write!(
+                formatter,
+                "INCEPTION_READBACK_MALFORMED path={} detail={detail}",
+                path.display()
+            ),
+            Self::ReadbackMissingKey { path, key } => write!(
+                formatter,
+                "INCEPTION_READBACK_MISSING_KEY path={} key={key}",
+                path.display()
+            ),
+            Self::ReadbackExtraKey { path, key } => write!(
+                formatter,
+                "INCEPTION_READBACK_EXTRA_KEY path={} key={key}",
+                path.display()
+            ),
+            Self::ReadbackWrongType { path, key, expected, found } => write!(
+                formatter,
+                "INCEPTION_READBACK_WRONG_TYPE path={} key={key} expected={expected} found={found}",
+                path.display()
+            ),
+            Self::ReadbackEmpty { path, key } => write!(
+                formatter,
+                "INCEPTION_READBACK_EMPTY path={} key={key}",
+                path.display()
+            ),
+            Self::ReadbackInvalid { path, key, detail } => write!(
+                formatter,
+                "INCEPTION_READBACK_INVALID path={} key={key} detail={detail}",
+                path.display()
+            ),
         }
     }
 }
 
 impl std::error::Error for InceptionError {}
+
+impl InceptionError {
+    #[must_use]
+    pub const fn exit_code(&self) -> u8 {
+        match self {
+            Self::ReadbackMissing { .. } | Self::ReadbackMalformed { .. } => 2,
+            Self::ReadbackMissingKey { .. }
+            | Self::ReadbackExtraKey { .. }
+            | Self::ReadbackWrongType { .. }
+            | Self::ReadbackEmpty { .. }
+            | Self::ReadbackInvalid { .. } => 3,
+            _ => 2,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InceptionManifest {
@@ -671,86 +743,276 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), InceptionError> {
     result
 }
 
-fn read_repo_identity(value: &Value) -> Result<(String, RepoIdentity), String> {
-    let repo_identity = value
-        .get("repo_identity")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "repo_identity is not an object".to_owned())?;
-    let project_id = value
-        .get("project_id")
-        .and_then(Value::as_str)
-        .filter(|id| !id.trim().is_empty())
-        .ok_or_else(|| "project_id is missing".to_owned())?;
-    let field = |name: &str, message: &str| {
-        repo_identity
-            .get(name)
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| message.to_owned())
-    };
-    Ok((
-        project_id.to_owned(),
-        RepoIdentity {
-            canonical_path: field("canonical_path", "repo_identity.canonical_path is missing")?.to_owned(),
-            git_marker: field("git_marker", "repo_identity.git_marker is missing")?.to_owned(),
-            source_revision: field("source_revision", "repo_identity.source_revision is missing")?.to_owned(),
-            host_identity: field("host_identity", "repo_identity.host_identity is missing")?.to_owned(),
-        },
-    ))
+#[derive(Debug)]
+enum ReadbackValidationError {
+    Malformed(String),
+    MissingKey(String),
+    ExtraKey(String),
+    WrongType {
+        key: String,
+        expected: &'static str,
+        found: &'static str,
+    },
+    Empty(String),
+    Invalid { key: String, detail: String },
 }
 
-fn validate_readback(contents: &str) -> Result<InceptionReadback, String> {
-    let value: Value = serde_json::from_str(contents)
-        .map_err(|error| format!("invalid JSON: {error}"))?;
-    let missing: Vec<&str> = REQUIRED_KEYS
-        .iter()
-        .copied()
-        .filter(|key| value.get(*key).is_none())
+fn value_type(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+fn reject_extra_keys(
+    object: &Map<String, Value>,
+    allowed: &[&str],
+    prefix: &str,
+) -> Result<(), ReadbackValidationError> {
+    let mut extras: Vec<String> = object
+        .keys()
+        .filter(|key| !allowed.iter().any(|allowed| *allowed == key.as_str()))
+        .map(|key| format!("{prefix}{key}"))
         .collect();
-    if !missing.is_empty() {
-        return Err(format!("missing required keys: {}", missing.join(",")));
+    extras.sort();
+    extras
+        .into_iter()
+        .next()
+        .map_or(Ok(()), |key| Err(ReadbackValidationError::ExtraKey(key)))
+}
+
+fn required_value<'a>(
+    object: &'a Map<String, Value>,
+    field: &str,
+    key: &str,
+) -> Result<&'a Value, ReadbackValidationError> {
+    object
+        .get(field)
+        .ok_or_else(|| ReadbackValidationError::MissingKey(key.to_owned()))
+}
+
+fn required_string<'a>(
+    object: &'a Map<String, Value>,
+    field: &str,
+    key: &str,
+) -> Result<&'a str, ReadbackValidationError> {
+    let value = required_value(object, field, key)?;
+    match value {
+        Value::String(text) if !text.trim().is_empty() => Ok(text),
+        Value::String(_) => Err(ReadbackValidationError::Empty(key.to_owned())),
+        other => Err(ReadbackValidationError::WrongType {
+            key: key.to_owned(),
+            expected: "string",
+            found: value_type(other),
+        }),
     }
-    if value.get("schema_version").and_then(Value::as_str) != Some(SCHEMA_VERSION) {
-        return Err("schema_version does not match inception.v1".to_owned());
+}
+
+fn required_object<'a>(
+    object: &'a Map<String, Value>,
+    field: &str,
+    key: &str,
+) -> Result<&'a Map<String, Value>, ReadbackValidationError> {
+    let value = required_value(object, field, key)?;
+    value
+        .as_object()
+        .ok_or_else(|| ReadbackValidationError::WrongType {
+            key: key.to_owned(),
+            expected: "object",
+            found: value_type(value),
+        })
+}
+
+fn required_bool(
+    object: &Map<String, Value>,
+    field: &str,
+    key: &str,
+) -> Result<bool, ReadbackValidationError> {
+    let value = required_value(object, field, key)?;
+    value
+        .as_bool()
+        .ok_or_else(|| ReadbackValidationError::WrongType {
+            key: key.to_owned(),
+            expected: "boolean",
+            found: value_type(value),
+        })
+}
+
+fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValidationError> {
+    let value: Value = serde_json::from_str(contents)
+        .map_err(|error| ReadbackValidationError::Malformed(error.to_string()))?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| ReadbackValidationError::WrongType {
+            key: "$".to_owned(),
+            expected: "object",
+            found: value_type(&value),
+        })?;
+    let allowed: Vec<&str> = REQUIRED_KEYS
+        .iter()
+        .chain(OPTIONAL_KEYS.iter())
+        .copied()
+        .collect();
+    reject_extra_keys(object, &allowed, "")?;
+
+    let schema_version = required_string(object, "schema_version", "schema_version")?;
+    if schema_version != SCHEMA_VERSION {
+        return Err(ReadbackValidationError::Invalid {
+            key: "schema_version".to_owned(),
+            detail: format!("expected={SCHEMA_VERSION} found={schema_version}"),
+        });
     }
-    let (project_id, repo_identity) = read_repo_identity(&value)?;
-    let control_files = value
-        .get("control_files")
-        .and_then(Value::as_object)
-        .ok_or_else(|| "control_files is not an object".to_owned())?;
-    let control_files_complete = REQUIRED_CONTROL_FILES.iter().all(|path| {
-        control_files
-            .get(*path)
-            .and_then(Value::as_bool)
-            == Some(true)
-    });
-    if !control_files_complete {
-        return Err("control_files is incomplete".to_owned());
+    let project_id = required_string(object, "project_id", "project_id")?.to_owned();
+
+    let identity = required_object(object, "repo_identity", "repo_identity")?;
+    reject_extra_keys(
+        identity,
+        &["canonical_path", "git_marker", "source_revision", "host_identity"],
+        "repo_identity.",
+    )?;
+    let repo_identity = RepoIdentity {
+        canonical_path: required_string(
+            identity,
+            "canonical_path",
+            "repo_identity.canonical_path",
+        )?
+        .to_owned(),
+        git_marker: required_string(identity, "git_marker", "repo_identity.git_marker")?
+            .to_owned(),
+        source_revision: required_string(
+            identity,
+            "source_revision",
+            "repo_identity.source_revision",
+        )?
+        .to_owned(),
+        host_identity: required_string(identity, "host_identity", "repo_identity.host_identity")?
+            .to_owned(),
+    };
+
+    let control_files = required_object(object, "control_files", "control_files")?;
+    reject_extra_keys(control_files, REQUIRED_CONTROL_FILES, "control_files.")?;
+    for relative in REQUIRED_CONTROL_FILES {
+        let key = format!("control_files.{relative}");
+        if !required_bool(control_files, relative, &key)? {
+            return Err(ReadbackValidationError::Invalid {
+                key,
+                detail: "expected=true".to_owned(),
+            });
+        }
     }
-    let tools = value
-        .get("required_tools")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "required_tools is not an array".to_owned())?;
-    if REQUIRED_TOOLS.iter().any(|tool| {
-        !tools.iter().any(|value| value.as_str() == Some(tool))
-    }) {
-        return Err("required_tools is incomplete".to_owned());
+
+    let host = required_object(object, "host_capabilities", "host_capabilities")?;
+    reject_extra_keys(host, &["os", "arch", "filesystem"], "host_capabilities.")?;
+    for field in ["os", "arch", "filesystem"] {
+        let key = format!("host_capabilities.{field}");
+        required_string(host, field, &key)?;
     }
+
+    let tools_value = required_value(object, "required_tools", "required_tools")?;
+    let tools = tools_value
+        .as_array()
+        .ok_or_else(|| ReadbackValidationError::WrongType {
+            key: "required_tools".to_owned(),
+            expected: "array",
+            found: value_type(tools_value),
+        })?;
+    let mut seen = BTreeSet::new();
+    for (index, value) in tools.iter().enumerate() {
+        let key = format!("required_tools[{index}]");
+        let tool = match value {
+            Value::String(tool) if !tool.trim().is_empty() => tool,
+            Value::String(_) => return Err(ReadbackValidationError::Empty(key)),
+            other => {
+                return Err(ReadbackValidationError::WrongType {
+                    key,
+                    expected: "string",
+                    found: value_type(other),
+                });
+            }
+        };
+        if !REQUIRED_TOOLS.contains(&tool.as_str()) || !seen.insert(tool.to_owned()) {
+            return Err(ReadbackValidationError::ExtraKey(key));
+        }
+    }
+    for tool in REQUIRED_TOOLS {
+        if !seen.contains(*tool) {
+            return Err(ReadbackValidationError::MissingKey(format!("required_tools.{tool}")));
+        }
+    }
+
+    let trust = required_object(object, "trust_status", "trust_status")?;
+    reject_extra_keys(
+        trust,
+        &["status", "reason_code", "control_files_complete"],
+        "trust_status.",
+    )?;
+    for field in ["status", "reason_code"] {
+        let key = format!("trust_status.{field}");
+        required_string(trust, field, &key)?;
+    }
+    if !required_bool(trust, "control_files_complete", "trust_status.control_files_complete")? {
+        return Err(ReadbackValidationError::Invalid {
+            key: "trust_status.control_files_complete".to_owned(),
+            detail: "expected=true".to_owned(),
+        });
+    }
+
     Ok(InceptionReadback {
         project_id,
         repo_identity,
-        control_files_complete,
+        control_files_complete: true,
     })
 }
 
 pub fn read_inception(output: &Path) -> Result<InceptionReadback, InceptionError> {
-    let contents = fs::read_to_string(output).map_err(|error| InceptionError::Readback {
-        path: output.to_owned(),
-        detail: error.to_string(),
-    })?;
-    validate_readback(&contents).map_err(|detail| InceptionError::Readback {
-        path: output.to_owned(),
-        detail,
+    let contents = match fs::read_to_string(output) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(InceptionError::ReadbackMissing {
+                path: output.to_owned(),
+            });
+        }
+        Err(error) => {
+            return Err(InceptionError::Readback {
+                path: output.to_owned(),
+                detail: error.to_string(),
+            });
+        }
+    };
+    validate_readback(&contents).map_err(|error| match error {
+        ReadbackValidationError::Malformed(detail) => InceptionError::ReadbackMalformed {
+            path: output.to_owned(),
+            detail,
+        },
+        ReadbackValidationError::MissingKey(key) => InceptionError::ReadbackMissingKey {
+            path: output.to_owned(),
+            key,
+        },
+        ReadbackValidationError::ExtraKey(key) => InceptionError::ReadbackExtraKey {
+            path: output.to_owned(),
+            key,
+        },
+        ReadbackValidationError::WrongType { key, expected, found } => {
+            InceptionError::ReadbackWrongType {
+                path: output.to_owned(),
+                key,
+                expected,
+                found,
+            }
+        }
+        ReadbackValidationError::Empty(key) => InceptionError::ReadbackEmpty {
+            path: output.to_owned(),
+            key,
+        },
+        ReadbackValidationError::Invalid { key, detail } => InceptionError::ReadbackInvalid {
+            path: output.to_owned(),
+            key,
+            detail,
+        },
     })
 }
 
@@ -789,7 +1051,7 @@ fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
 /// Ownership anchor: an AGENTS.md that does not name this repository is foreign.
 /// Heuristic, stated plainly: content cannot prove ownership, so a foreign read
 /// refuses loudly and explicit opt-in (`trusted_init`) is the only override.
-const AGENTS_OWNERSHIP_ANCHOR: &str = "omp-orchestrator";
+pub const PROJECT_AGENTS_OWNERSHIP_STAMP: &str = "omp-orchestrator";
 
 /// Trust gate (cbl7): refuse init over an unstamped foreign AGENTS.md unless the
 /// caller explicitly opts in. Missing files never reach here (`build_manifest`
@@ -806,7 +1068,7 @@ fn verify_agents_ownership(repo_root: &Path, trusted_init: bool) -> Result<(), I
     if text.trim().is_empty() {
         return Err(InceptionError::EmptyAgentsMd { path });
     }
-    if !text.contains(AGENTS_OWNERSHIP_ANCHOR) {
+    if !text.contains(PROJECT_AGENTS_OWNERSHIP_STAMP) {
         return Err(InceptionError::UntrustedAgentsMd { path });
     }
     Ok(())
@@ -892,8 +1154,23 @@ fn write_inception_inner(
     let manifest = build_manifest(repo_root)?;
     verify_agents_ownership(repo_root, trusted_init)?;
     let bytes = render_manifest(&manifest).into_bytes();
-    let _backup = snapshot_existing(output)?;
-    write_atomic(output, &bytes)?;
+    let should_write = match fs::read(output) {
+        Ok(existing) if existing == bytes => false,
+        Ok(_) => {
+            snapshot_existing(output)?;
+            true
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+        Err(error) => {
+            return Err(InceptionError::Readback {
+                path: output.to_owned(),
+                detail: format!("pre-state read failed: {error}"),
+            });
+        }
+    };
+    if should_write {
+        write_atomic(output, &bytes)?;
+    }
     let readback = read_inception(output)?;
     if readback.project_id != manifest.project_id
         || readback.repo_identity != manifest.repo_identity
@@ -906,11 +1183,13 @@ fn write_inception_inner(
             ),
         });
     }
-    emit_init_event(repo_root)?;
-    // L5 writer (5iwj): the write+fsync+readback success chokepoint records one
-    // S1.L4 -> S1.L5 row. The source stage matches the supervisor-tick L5 row so
-    // journal readers see one consistent S1.L4 -> S1.L5 transition.
-    emit_stage_event(repo_root, Layer::L5, "S1.L4", "S1.L5", "ompo-init", "INIT_WRITE_OK")?;
+    if should_write {
+        emit_init_event(repo_root)?;
+        // L5 writer (5iwj): the write+fsync+readback success chokepoint records one
+        // S1.L4 -> S1.L5 row. The source stage matches the supervisor-tick L5 row so
+        // journal readers see one consistent S1.L4 -> S1.L5 transition.
+        emit_stage_event(repo_root, Layer::L5, "S1.L4", "S1.L5", "ompo-init", "INIT_WRITE_OK")?;
+    }
     Ok(manifest)
 }
 
@@ -942,7 +1221,7 @@ fn fixture() -> (TempDir, PathBuf) {
     // runs against stamped content. Foreign-content legs overwrite this file.
     fs::write(
         directory.path().join("AGENTS.md"),
-        "fixture omp-orchestrator\n",
+        format!("fixture {PROJECT_AGENTS_OWNERSHIP_STAMP}\n"),
     )
     .expect("fixture stamp");
     run_test_git(directory.path(), &["init", "-q"]);
@@ -1031,11 +1310,11 @@ mod tests {
     }
 
     #[test]
-    fn readback_returns_identity_and_preserves_prior_artifact() {
+    fn readback_returns_identity_and_backups_replaced_artifact() {
         let (directory, output) = fixture();
         let first = write_inception(directory.path(), &output).expect("first write");
-        let before = fs::read(&output).expect("first artifact");
-        let second = write_inception(directory.path(), &output).expect("second write");
+        fs::write(&output, "tampered\n").expect("tamper artifact");
+        let second = write_inception(directory.path(), &output).expect("replacement write");
         let readback = read_inception(&output).expect("readback");
         assert_eq!(readback.repo_identity, second.repo_identity);
         assert!(readback.control_files_complete);
@@ -1046,7 +1325,115 @@ mod tests {
             .map(|entry| entry.expect("backup entry").path())
             .collect();
         assert_eq!(backups.len(), 1);
-        assert_eq!(fs::read(&backups[0]).expect("backup artifact"), before);
+        assert_eq!(fs::read(&backups[0]).expect("backup artifact"), b"tampered\n");
+    }
+
+    #[test]
+    fn writer_second_run_is_idempotent_without_events_or_backup() {
+        let (directory, output) = fixture();
+        write_inception(directory.path(), &output).expect("first write");
+        let before = fs::read(&output).expect("first artifact");
+        let journal_before =
+            fs::read_to_string(default_repo_journal(directory.path())).expect("journal before");
+        write_inception(directory.path(), &output).expect("second write");
+        assert_eq!(fs::read(&output).expect("second artifact"), before);
+        assert_eq!(
+            fs::read_to_string(default_repo_journal(directory.path())).expect("journal after"),
+            journal_before,
+            "unchanged writer emits no lifecycle event"
+        );
+        assert!(
+            !output.parent().unwrap().join("backups").exists(),
+            "unchanged writer creates no backup"
+        );
+    }
+
+    #[test]
+    fn readback_refusal_classes_are_typed_and_distinct() {
+        for kind in ["missing", "extra", "wrong_type", "empty"] {
+            let (directory, output) = fixture();
+            write_inception(directory.path(), &output).expect("write fixture");
+            let mut value: Value =
+                serde_json::from_str(&fs::read_to_string(&output).expect("read fixture"))
+                    .expect("fixture JSON");
+            let object = value.as_object_mut().expect("manifest object");
+            match kind {
+                "missing" => {
+                    object.remove("schema_version");
+                }
+                "extra" => {
+                    object.insert("unexpected".to_owned(), Value::Bool(true));
+                }
+                "wrong_type" => {
+                    object.insert("project_id".to_owned(), Value::Bool(true));
+                }
+                "empty" => {
+                    object.insert("project_id".to_owned(), Value::String(String::new()));
+                }
+                _ => unreachable!("case is enumerated"),
+            }
+            fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
+                .expect("write mutation");
+            let error = read_inception(&output).expect_err("mutation must refuse");
+            match kind {
+                "missing" => {
+                    assert_eq!(error.exit_code(), 3);
+                    assert!(matches!(
+                        error,
+                        InceptionError::ReadbackMissingKey { key, .. } if key == "schema_version"
+                    ));
+                }
+                "extra" => {
+                    assert_eq!(error.exit_code(), 3);
+                    assert!(matches!(
+                        error,
+                        InceptionError::ReadbackExtraKey { key, .. } if key == "unexpected"
+                    ));
+                }
+                "wrong_type" => {
+                    assert_eq!(error.exit_code(), 3);
+                    assert!(matches!(
+                        error,
+                        InceptionError::ReadbackWrongType { key, expected, found, .. }
+                            if key == "project_id" && expected == "string" && found == "boolean"
+                    ));
+                }
+                "empty" => {
+                    assert_eq!(error.exit_code(), 3);
+                    assert!(matches!(
+                        error,
+                        InceptionError::ReadbackEmpty { key, .. } if key == "project_id"
+                    ));
+                }
+                _ => unreachable!("case is enumerated"),
+            }
+        }
+
+        let (directory, output) = fixture();
+        write_inception(directory.path(), &output).expect("write optional fixture");
+        let mut value: Value =
+            serde_json::from_str(&fs::read_to_string(&output).expect("read optional fixture"))
+                .expect("optional fixture JSON");
+        let object = value.as_object_mut().expect("manifest object");
+        for key in OPTIONAL_KEYS {
+            object.insert((*key).to_owned(), Value::String("optional".to_owned()));
+        }
+        fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode optional fixture"))
+            .expect("write optional fixture");
+        read_inception(&output).expect("SCHEMAS optional keys remain allowed");
+    }
+
+    #[test]
+    fn missing_and_malformed_artifacts_are_distinct_anti_vacuity_errors() {
+        let (directory, output) = fixture();
+        let missing = read_inception(&output).expect_err("missing artifact must refuse");
+        assert_eq!(missing.exit_code(), 2);
+        assert!(matches!(missing, InceptionError::ReadbackMissing { .. }));
+
+        fs::write(&output, "{").expect("write malformed artifact");
+        let malformed = read_inception(&output).expect_err("malformed artifact must refuse");
+        assert_eq!(malformed.exit_code(), 2);
+        assert!(matches!(malformed, InceptionError::ReadbackMalformed { .. }));
     }
 
     #[test]

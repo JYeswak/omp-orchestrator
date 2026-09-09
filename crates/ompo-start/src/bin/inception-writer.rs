@@ -63,7 +63,7 @@ fn main() -> ExitCode {
         }
         Err(error) => {
             eprintln!("INCEPTION_ERROR {error}");
-            ExitCode::from(2)
+            ExitCode::from(error.exit_code())
         }
     }
 }

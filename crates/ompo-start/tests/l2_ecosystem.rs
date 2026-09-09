@@ -5,7 +5,9 @@
 //! This target exercises the real inception writer and readback contract with an isolated
 //! repository fixture. It is invoked directly as Cargo's `--test l2_ecosystem` target.
 
-use ompo_start::inception::{initialize, read_inception, InceptionError, SCHEMA_VERSION};
+use ompo_start::inception::{
+    initialize, read_inception, InceptionError, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
+};
 use std::path::Path;
 use std::process::Command;
 use serde_json::Value;
@@ -20,12 +22,19 @@ fn run_git(repo: &Path, args: &[&str]) {
     }
 }
 
+fn write_project_agents_stamp(root: &Path) {
+    let stamp = format!("fixture {}\n", PROJECT_AGENTS_OWNERSHIP_STAMP);
+    assert!(!stamp.trim().is_empty(), "canonical cbl7 project-agent stamp");
+    std::fs::write(root.join("AGENTS.md"), stamp).expect("stamped AGENTS.md");
+}
+
 fn repository_fixture() -> TempDir {
     let directory = tempfile::tempdir().expect("fixture directory");
     std::fs::create_dir(directory.path().join("docs")).expect("docs directory");
-    for name in ["AGENTS.md", "CLAUDE.md", "README.md", "Cargo.toml", "SCHEMAS.toml"] {
+    for name in ["CLAUDE.md", "Cargo.toml", "README.md", "SCHEMAS.toml"] {
         std::fs::write(directory.path().join(name), b"fixture\n").expect("control file");
     }
+    write_project_agents_stamp(directory.path());
     std::fs::write(directory.path().join("docs/decisions.jsonl"), b"{}\n")
         .expect("decision ledger");
     run_git(directory.path(), &["init", "-q"]);
@@ -92,13 +101,13 @@ fn equivalent_symlink_paths_share_identity() {
 #[test]
 fn readback_refuses_empty_and_missing_identity_fields() {
     let fields = [
-        ("project_id", false, "missing required keys: project_id"),
-        ("canonical_path", true, "repo_identity.canonical_path is missing"),
-        ("source_revision", true, "repo_identity.source_revision is missing"),
-        ("git_marker", true, "repo_identity.git_marker is missing"),
-        ("host_identity", true, "repo_identity.host_identity is missing"),
+        ("project_id", false),
+        ("canonical_path", true),
+        ("source_revision", true),
+        ("git_marker", true),
+        ("host_identity", true),
     ];
-    for (field, nested, detail) in fields {
+    for (field, nested) in fields {
         let repository = repository_fixture();
         let output = repository.path().join(".omp-orchestrator/inception.json");
         initialize(repository.path(), &output).expect("write inception");
@@ -121,26 +130,34 @@ fn readback_refuses_empty_and_missing_identity_fields() {
         std::fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
             .expect("write mutation");
         let error = read_inception(&output).expect_err("identity omission must refuse");
-        assert_eq!(
-            error.to_string(),
-            format!("INCEPTION_READBACK_FAILED path={} detail={detail}", output.display())
-        );
+        match (field, error) {
+            ("project_id", InceptionError::ReadbackMissingKey { key, .. }) => {
+                assert_eq!(key, "project_id");
+            }
+            (field, InceptionError::ReadbackEmpty { key, .. }) => {
+                assert_eq!(key, format!("repo_identity.{field}"));
+            }
+            (field, error) => panic!("wrong typed refusal for {field}: {error}"),
+        }
     }
 }
 
 #[test]
 fn readback_refuses_empty_or_missing_manifest_objects() {
-    let cases = ["", "{}"];
-    for contents in cases {
+    for contents in ["", "{}"] {
         let repository = repository_fixture();
         let output = repository.path().join(".omp-orchestrator/inception.json");
         std::fs::create_dir_all(output.parent().expect("artifact parent")).expect("parent");
         std::fs::write(&output, contents).expect("write malformed artifact");
         let error = read_inception(&output).expect_err("empty manifest must refuse");
-        assert!(
-            error.to_string().starts_with("INCEPTION_READBACK_FAILED"),
-            "{error}"
-        );
+        if contents.is_empty() {
+            assert!(matches!(error, InceptionError::ReadbackMalformed { .. }));
+        } else {
+            assert!(matches!(
+                error,
+                InceptionError::ReadbackMissingKey { key, .. } if key == "schema_version"
+            ));
+        }
     }
 
     let repository = repository_fixture();
@@ -157,14 +174,13 @@ fn readback_refuses_empty_or_missing_manifest_objects() {
     std::fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
         .expect("write mutation");
     let error = read_inception(&output).expect_err("null repo identity must refuse");
-    assert_eq!(
-        error.to_string(),
-        format!(
-            "INCEPTION_READBACK_FAILED path={} detail=repo_identity is not an object",
-            output.display()
-        )
-    );
+    assert!(matches!(
+        error,
+        InceptionError::ReadbackWrongType { key, expected, found, .. }
+            if key == "repo_identity" && expected == "object" && found == "null"
+    ));
 }
+
 #[test]
 fn nonexistent_root_refuses_canonicalization() {
     let root = tempfile::tempdir().expect("root parent").path().join("missing");
