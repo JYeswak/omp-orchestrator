@@ -61,6 +61,22 @@ fn usage() -> &'static str {
     "usage: s1-coverage [--repo PATH] [--head REV] [--compare BASE HEAD] [--mode tree|worktree|both] [--json] [--output PATH]\n\nReads six S1 contracts and reports TREE/INDEX/WORKTREE/WORKTREE_ONLY provenance plus relation-based growth and closure."
 }
 
+fn option_value(
+    values: &[String],
+    index: &mut usize,
+    option: &str,
+    inline: Option<&str>,
+) -> Result<String, String> {
+    if let Some(value) = inline {
+        return Ok(value.to_owned());
+    }
+    *index += 1;
+    values
+        .get(*index)
+        .cloned()
+        .ok_or_else(|| format!("S1_COVERAGE_USAGE missing value for {option}"))
+}
+
 fn parse_args() -> Result<Args, String> {
     let mut repo = PathBuf::from(".");
     let mut head = String::from("HEAD");
@@ -71,54 +87,45 @@ fn parse_args() -> Result<Args, String> {
     let values = env::args().skip(1).collect::<Vec<_>>();
     let mut index = 0;
     while index < values.len() {
-        match values[index].as_str() {
-            "--help" | "-h" => {
-                println!("{}", usage());
-                std::process::exit(0);
-            }
-            "--json" => json = true,
-            "--repo" | "--head" | "--rev" | "--mode" | "--output" | "--compare" => {
-                let option = values[index].clone();
-                index += 1;
-                let Some(value) = values.get(index) else {
-                    return Err(format!("S1_COVERAGE_USAGE missing value for {option}"));
-                };
-                match option.as_str() {
-                    "--repo" => repo = PathBuf::from(value),
-                    "--head" | "--rev" => head.clone_from(value),
-                    "--mode" => {
-                        mode = Mode::parse(value).ok_or_else(|| {
-                            format!("S1_COVERAGE_USAGE invalid mode={value}; expected tree|worktree|both")
-                        })?;
-                    }
-                    "--output" => output = Some(PathBuf::from(value)),
-                    "--compare" => {
-                        index += 1;
-                        let Some(compare_head) = values.get(index) else {
-                            return Err("S1_COVERAGE_USAGE --compare requires BASE HEAD".to_owned());
-                        };
-                        compare = Some((value.clone(), compare_head.clone()));
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            value if value.starts_with("--repo=") => repo = PathBuf::from(&value[7..]),
-            value if value.starts_with("--head=") => head = value[7..].to_owned(),
-            value if value.starts_with("--rev=") => head = value[6..].to_owned(),
-            value if value.starts_with("--mode=") => {
-                mode = Mode::parse(&value[7..]).ok_or_else(|| {
-                    format!("S1_COVERAGE_USAGE invalid mode={}; expected tree|worktree|both", &value[7..])
+        let raw = &values[index];
+        if matches!(raw.as_str(), "--help" | "-h") {
+            println!("{}", usage());
+            std::process::exit(0);
+        }
+        if raw == "--json" {
+            json = true;
+            index += 1;
+            continue;
+        }
+        let (option, inline) = raw
+            .split_once('=')
+            .map_or((raw.as_str(), None), |(name, value)| (name, Some(value)));
+        match option {
+            "--repo" => repo = PathBuf::from(option_value(&values, &mut index, option, inline)?),
+            "--head" | "--rev" => head = option_value(&values, &mut index, option, inline)?,
+            "--mode" => {
+                let value = option_value(&values, &mut index, option, inline)?;
+                mode = Mode::parse(&value).ok_or_else(|| {
+                    format!("S1_COVERAGE_USAGE invalid mode={value}; expected tree|worktree|both")
                 })?;
             }
-            value if value.starts_with("--output=") => output = Some(PathBuf::from(&value[9..])),
-            value if value.starts_with("--compare=") => {
-                let pair = &value[10..];
-                let Some((base, compare_head)) = pair.split_once("..") else {
-                    return Err("S1_COVERAGE_USAGE --compare=BASE..HEAD expected".to_owned());
-                };
-                compare = Some((base.to_owned(), compare_head.to_owned()));
+            "--output" => output = Some(PathBuf::from(option_value(&values, &mut index, option, inline)?)),
+            "--compare" => {
+                if let Some(pair) = inline {
+                    let Some((base, compare_head)) = pair.split_once("..") else {
+                        return Err("S1_COVERAGE_USAGE --compare=BASE..HEAD expected".to_owned());
+                    };
+                    compare = Some((base.to_owned(), compare_head.to_owned()));
+                } else {
+                    let base = option_value(&values, &mut index, option, None)?;
+                    index += 1;
+                    let Some(compare_head) = values.get(index) else {
+                        return Err("S1_COVERAGE_USAGE --compare requires BASE HEAD".to_owned());
+                    };
+                    compare = Some((base, compare_head.clone()));
+                }
             }
-            value => return Err(format!("S1_COVERAGE_USAGE unknown argument={value}")),
+            _ => return Err(format!("S1_COVERAGE_USAGE unknown argument={raw}")),
         }
         index += 1;
     }
@@ -178,9 +185,9 @@ fn manifest_args(kind: &str, revision: &str) -> Vec<String> {
 
 fn git_unavailable(error: &str) -> bool {
     let lower = error.to_ascii_lowercase();
-    lower.contains("not a git repository")
-        || lower.contains("invalid object name")
-        || lower.contains("not a valid object name")
+    ["not a git repository", "invalid object name", "not a valid object name"]
+        .into_iter()
+        .any(|needle| lower.contains(needle))
 }
 
 async fn build_manifest(cx: &Cx, repo: &Path, revision: &str) -> Result<InputManifest, String> {
@@ -291,7 +298,7 @@ fn render_comparison(comparison: &CoverageComparison, json: bool) -> Result<Stri
             comparison.head_revision,
             comparison.growth,
             comparison.closure,
-            comparison.decision.as_str()
+            comparison.decision
         ))
     }
 }

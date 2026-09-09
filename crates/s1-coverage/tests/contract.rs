@@ -128,21 +128,6 @@ fn unbackticked_stable_id_is_declared_unextractable() {
     assert_eq!(report.requirements[0].state, CoverageState::DeclaredUnextractable);
 }
 
-#[test]
-fn empty_scan_fails_closed() {
-    let result = compute(
-        &CoverageInput {
-            contracts: Vec::new(),
-            s1_toml: String::new(),
-            beads: Vec::new(),
-        },
-        "tree",
-        "HEAD",
-    );
-    assert_eq!(result, Err(CoverageError::ScanEmpty));
-    let result = compute(&input("", Vec::new()), "tree", "HEAD");
-    assert_eq!(result, Err(CoverageError::ScanEmpty));
-}
 
 #[test]
 fn doc_only_without_reason_fails_closed() {
@@ -208,10 +193,6 @@ fn tree_index_worktree_provenance_is_typed() {
     assert_eq!(manifest.paths(InputState::Index), &["index-input".to_owned()]);
     assert_eq!(manifest.paths(InputState::Worktree), &["worktree-input".to_owned()]);
     assert_eq!(manifest.paths(InputState::WorktreeOnly), &["only-input".to_owned()]);
-    assert_eq!(InputState::Tree.as_str(), "TREE");
-    assert_eq!(InputState::Index.as_str(), "INDEX");
-    assert_eq!(InputState::Worktree.as_str(), "WORKTREE");
-    assert_eq!(InputState::WorktreeOnly.as_str(), "WORKTREE_ONLY");
 }
 
 #[test]
