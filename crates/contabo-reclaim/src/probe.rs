@@ -2,14 +2,16 @@
 
 use crate::model::{
     decide_guards, parse_listing, validate_candidate, ActiveBuild, CandidateSet, ControlSnapshot,
-    EntryKind, GuardDecision, ReclaimError, ReclaimMode, ReclaimRefusal, ReclaimReport,
-    RemoteProcessObservation, RunOutcome, WorkerSpec,
+    EntryKind, FleetReport, GuardDecision, ReclaimError, ReclaimMode, ReclaimRefusal,
+    ReclaimReport, RemoteProcessObservation, RunOutcome, WorkerSpec, WORKERS,
 };
 use asupersync::process::Command;
 use asupersync::time::timeout;
 use asupersync::Cx;
 use serde_json::Value;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::time::Duration;
 use subprocess_contract::{run_output, RunError};
 
@@ -59,7 +61,11 @@ pub async fn run(cx: &Cx, config: &Config) -> Result<ReclaimReport, ReclaimError
     append_process_guard(&mut report, &remote);
     match decide_guards(&control, &remote) {
         GuardDecision::Authorized => {}
-        GuardDecision::SkippedLiveBuild { detail } => {
+        GuardDecision::SkippedLiveBuild {
+            detail,
+            active_build_ids,
+        } => {
+            report.active_build_ids = active_build_ids;
             report.outcome = RunOutcome::SkippedLiveBuild;
             report.detail = detail;
             return Ok(report);
@@ -171,7 +177,11 @@ pub async fn run(cx: &Cx, config: &Config) -> Result<ReclaimReport, ReclaimError
         let remote = remote_processes(cx, config.worker).await;
         match decide_guards(&control, &remote) {
             GuardDecision::Authorized => {}
-            GuardDecision::SkippedLiveBuild { detail } => {
+            GuardDecision::SkippedLiveBuild {
+                detail,
+                active_build_ids,
+            } => {
+                report.active_build_ids = active_build_ids;
                 report.outcome = RunOutcome::SkippedLiveBuild;
                 report.detail = format!("before_delete={detail}");
                 return Ok(report);
@@ -192,6 +202,51 @@ pub async fn run(cx: &Cx, config: &Config) -> Result<ReclaimReport, ReclaimError
     report.outcome = RunOutcome::Reclaimed;
     report.detail = "APPLY: all candidates re-authorized immediately before deletion".to_owned();
     Ok(report)
+}
+pub async fn run_all_workers(
+    cx: &Cx,
+    base: &Path,
+    mode: ReclaimMode,
+) -> Result<FleetReport, ReclaimError> {
+    if WORKERS.is_empty() {
+        return Err(ReclaimError::EmptyFleetReport);
+    }
+    let reports = run_workers_sequentially(cx, base, mode, |cx, config| {
+        Box::pin(async move { run(cx, &config).await })
+    })
+    .await?;
+    FleetReport::from_reports(mode, reports)
+}
+
+pub async fn run_workers_sequentially<F>(
+    cx: &Cx,
+    base: &Path,
+    mode: ReclaimMode,
+    mut runner: F,
+) -> Result<Vec<ReclaimReport>, ReclaimError>
+where
+    F: for<'a> FnMut(
+        &'a Cx,
+        Config,
+    )
+        -> Pin<Box<dyn Future<Output = Result<ReclaimReport, ReclaimError>> + 'a>>,
+{
+    let mut reports = Vec::with_capacity(WORKERS.len());
+    for worker in WORKERS.iter().copied() {
+        cx.checkpoint().map_err(|_| ReclaimError::Runtime {
+            detail: format!("cancelled before worker {}", worker.id),
+        })?;
+        let config = Config {
+            worker,
+            base: base.to_path_buf(),
+            mode,
+        };
+        match runner(cx, config).await {
+            Ok(report) => reports.push(report),
+            Err(error) => reports.push(ReclaimReport::error(worker, mode, error.to_string())),
+        }
+    }
+    Ok(reports)
 }
 
 fn validate_base(base: &Path) -> Result<(), ReclaimError> {
@@ -365,7 +420,8 @@ pub fn parse_control_snapshot(
         }
         let id = value
             .get("id")
-            .map(|id| id.to_string())
+            .and_then(Value::as_str)
+            .map(str::to_owned)
             .unwrap_or_else(|| "<missing-id>".to_owned());
         active_builds.push(ActiveBuild {
             id,

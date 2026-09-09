@@ -3,16 +3,19 @@
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use contabo_reclaim::probe::Config;
-use contabo_reclaim::{worker_by_id, ReclaimError, ReclaimMode};
+use contabo_reclaim::{
+    run_all_workers, worker_by_id, FleetReport, ReclaimError, ReclaimMode, ReclaimReport,
+    WorkerSelection,
+};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 fn usage() -> &'static str {
-    "usage: contabo-reclaim --worker contabo-N --base ABSOLUTE_PATH [--apply] [--json] (or CONTABO_RECLAIM_BASE)"
+    "usage: contabo-reclaim (--worker contabo-N | --all-workers) --base ABSOLUTE_PATH [--apply] [--json] (or CONTABO_RECLAIM_BASE)"
 }
 
-fn parse_args() -> Result<(Config, bool), ReclaimError> {
-    let mut worker = None;
+fn parse_args() -> Result<(WorkerSelection, PathBuf, ReclaimMode, bool), ReclaimError> {
+    let mut selection = None;
     let mut base = None;
     let mut mode = ReclaimMode::DryRun;
     let mut json = false;
@@ -21,17 +24,24 @@ fn parse_args() -> Result<(Config, bool), ReclaimError> {
     while index < args.len() {
         match args[index].as_str() {
             "--worker" => {
-                if worker.is_some() {
+                if selection.is_some() {
                     return Err(ReclaimError::MultipleWorkers);
                 }
                 index += 1;
-                worker = Some(args.get(index).ok_or(ReclaimError::MissingWorker)?.clone());
+                let worker = args.get(index).ok_or(ReclaimError::MissingSelection)?;
+                selection = Some(WorkerSelection::One(worker_by_id(worker)?));
             }
             value if value.starts_with("--worker=") => {
-                if worker.is_some() {
+                if selection.is_some() {
                     return Err(ReclaimError::MultipleWorkers);
                 }
-                worker = Some(value[9..].to_owned());
+                selection = Some(WorkerSelection::One(worker_by_id(&value[9..])?));
+            }
+            "--all-workers" => {
+                if selection.is_some() {
+                    return Err(ReclaimError::MultipleWorkers);
+                }
+                selection = Some(WorkerSelection::All);
             }
             "--base" => {
                 index += 1;
@@ -56,20 +66,18 @@ fn parse_args() -> Result<(Config, bool), ReclaimError> {
         }
         index += 1;
     }
-    let worker = worker.ok_or(ReclaimError::MissingWorker)?;
+    let selection = selection.ok_or(ReclaimError::MissingSelection)?;
     let base = base
         .or_else(|| std::env::var_os("CONTABO_RECLAIM_BASE").map(PathBuf::from))
         .ok_or_else(|| ReclaimError::InvalidBase {
             detail: "BASE_REQUIRED: pass --base or CONTABO_RECLAIM_BASE".to_owned(),
         })?;
-    Ok((
-        Config {
-            worker: worker_by_id(&worker)?,
-            base,
-            mode,
-        },
-        json,
-    ))
+    Ok((selection, base, mode, json))
+}
+
+enum CliReport {
+    Single(ReclaimReport),
+    Fleet(FleetReport),
 }
 
 fn print_error(error: &ReclaimError, json: bool) {
@@ -89,8 +97,62 @@ fn print_error(error: &ReclaimError, json: bool) {
     }
 }
 
+fn print_single_human(report: &ReclaimReport) {
+    println!(
+        "CONTABO_RECLAIM outcome={:?} worker={} host={} mode={:?} bytes={} directories={} active_build_ids={:?} detail={}",
+        report.outcome,
+        report.worker,
+        report.host,
+        report.mode,
+        report.bytes,
+        report.directories,
+        report.active_build_ids,
+        report.detail
+    );
+    for guard in &report.guards {
+        println!("GUARD {guard}");
+    }
+    for candidate in &report.candidates {
+        println!("CANDIDATE {candidate}");
+    }
+    for refusal in &report.refused {
+        println!("{refusal}");
+    }
+}
+
+fn print_fleet_human(report: &FleetReport) {
+    println!(
+        "CONTABO_RECLAIM_FLEET outcome={:?} mode={:?} workers={} deferred_active_workers={} incomplete_workers={} detail={}",
+        report.outcome,
+        report.mode,
+        report.workers.len(),
+        report.deferred_active_workers,
+        report.incomplete_workers,
+        report.detail
+    );
+    for (index, worker) in report.workers.iter().enumerate() {
+        println!(
+            "WORKER index={} outcome={:?} worker={} host={} active_build_ids={:?} bytes={} directories={} detail={}",
+            index,
+            worker.outcome,
+            worker.worker,
+            worker.host,
+            worker.active_build_ids,
+            worker.bytes,
+            worker.directories,
+            worker.detail
+        );
+        for guard in &worker.guards {
+            println!("WORKER_GUARD index={} {guard}", index);
+        }
+        for refusal in &worker.refused {
+            println!("WORKER_REFUSAL index={} {refusal}", index);
+        }
+    }
+}
+
 fn main() -> ExitCode {
-    let (config, json) = match parse_args() {
+    let (selection, base, mode, json) = match parse_args() {
         Ok(value) => value,
         Err(error) => {
             print_error(&error, false);
@@ -111,10 +173,20 @@ fn main() -> ExitCode {
         let cx = Cx::current().ok_or_else(|| ReclaimError::Runtime {
             detail: "no ambient Cx".to_owned(),
         })?;
-        contabo_reclaim::run(&cx, &config).await
+        match selection {
+            WorkerSelection::One(worker) => {
+                let config = Config { worker, base, mode };
+                contabo_reclaim::run(&cx, &config)
+                    .await
+                    .map(CliReport::Single)
+            }
+            WorkerSelection::All => run_all_workers(&cx, &base, mode)
+                .await
+                .map(CliReport::Fleet),
+        }
     });
     match result {
-        Ok(report) => {
+        Ok(CliReport::Single(report)) => {
             if json {
                 println!(
                     "{}",
@@ -122,27 +194,21 @@ fn main() -> ExitCode {
                         .unwrap_or_else(|_| "{\"outcome\":\"ERROR\"}".to_owned())
                 );
             } else {
-                println!(
-                    "CONTABO_RECLAIM outcome={:?} worker={} host={} mode={:?} bytes={} directories={} detail={}",
-                    report.outcome,
-                    report.worker,
-                    report.host,
-                    report.mode,
-                    report.bytes,
-                    report.directories,
-                    report.detail
-                );
-                for guard in &report.guards {
-                    println!("GUARD {guard}");
-                }
-                for candidate in &report.candidates {
-                    println!("CANDIDATE {candidate}");
-                }
-                for refusal in &report.refused {
-                    println!("{refusal}");
-                }
+                print_single_human(&report);
             }
             ExitCode::from(report.outcome.exit_code())
+        }
+        Ok(CliReport::Fleet(report)) => {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report)
+                        .unwrap_or_else(|_| "{\"outcome\":\"ERROR\"}".to_owned())
+                );
+            } else {
+                print_fleet_human(&report);
+            }
+            ExitCode::from(report.exit_code())
         }
         Err(error) => {
             print_error(&error, json);

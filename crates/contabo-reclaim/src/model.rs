@@ -28,6 +28,11 @@ pub struct WorkerSpec {
     pub id: &'static str,
     pub host: &'static str,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerSelection {
+    One(WorkerSpec),
+    All,
+}
 
 pub fn worker_by_id(id: &str) -> Result<WorkerSpec, ReclaimError> {
     WORKERS
@@ -322,9 +327,16 @@ pub enum RemoteProcessObservation {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GuardDecision {
     Authorized,
-    SkippedLiveBuild { detail: String },
-    Unknown { detail: String },
-    Unreachable { detail: String },
+    SkippedLiveBuild {
+        detail: String,
+        active_build_ids: Vec<String>,
+    },
+    Unknown {
+        detail: String,
+    },
+    Unreachable {
+        detail: String,
+    },
 }
 
 pub fn decide_guards(
@@ -338,12 +350,14 @@ pub fn decide_guards(
         {
             GuardDecision::SkippedLiveBuild {
                 detail: format!(
-                    "worker={} used_slots={} active_builds={} remote_processes={}",
+                    "worker={} used_slots={} active_builds={} active_build_ids={:?} remote_processes={}",
                     control.worker_id,
                     control.used_slots,
                     control.active_builds.len(),
+                    control.active_builds.iter().map(|build| &build.id).collect::<Vec<_>>(),
                     lines.len()
                 ),
+                active_build_ids: control.active_builds.iter().map(|build| build.id.clone()).collect(),
             }
         }
         (_, _, RemoteProcessObservation::Unavailable { detail }) => GuardDecision::Unreachable {
@@ -417,7 +431,8 @@ pub enum ReclaimError {
         worker: String,
     },
     MultipleWorkers,
-    MissingWorker,
+    MissingSelection,
+    EmptyFleetReport,
     InvalidBase {
         detail: String,
     },
@@ -444,7 +459,6 @@ pub enum ReclaimError {
         detail: String,
     },
 }
-
 impl fmt::Display for ReclaimError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -452,10 +466,13 @@ impl fmt::Display for ReclaimError {
                 write!(formatter, "CONTABO_RECLAIM_INVALID_WORKER worker={worker}")
             }
             Self::MultipleWorkers => formatter.write_str(
-                "CONTABO_RECLAIM_USAGE reason=ONE_WORKER_REQUIRED; select exactly one --worker contabo-N",
+                "CONTABO_RECLAIM_USAGE reason=ONE_SELECTION_REQUIRED; choose exactly one --worker contabo-N or --all-workers",
             ),
-            Self::MissingWorker => formatter.write_str(
-                "CONTABO_RECLAIM_USAGE reason=WORKER_REQUIRED; select exactly one --worker contabo-N",
+            Self::MissingSelection => formatter.write_str(
+                "CONTABO_RECLAIM_USAGE reason=SELECTION_REQUIRED; choose exactly one --worker contabo-N or --all-workers",
+            ),
+            Self::EmptyFleetReport => formatter.write_str(
+                "CONTABO_RECLAIM_FLEET_ERROR reason=EMPTY_REPORT_SET",
             ),
             Self::InvalidBase { detail } => {
                 write!(formatter, "CONTABO_RECLAIM_INVALID_BASE {detail}")
@@ -517,6 +534,7 @@ pub struct ReclaimReport {
     pub host: String,
     pub mode: ReclaimModeWire,
     pub outcome: RunOutcome,
+    pub active_build_ids: Vec<String>,
     pub guards: Vec<String>,
     pub candidates: Vec<String>,
     pub refused: Vec<String>,
@@ -549,6 +567,7 @@ impl ReclaimReport {
             host: worker.host.to_owned(),
             mode: mode.into(),
             outcome: RunOutcome::Unknown,
+            active_build_ids: Vec::new(),
             guards: Vec::new(),
             candidates: Vec::new(),
             refused: Vec::new(),
@@ -556,6 +575,88 @@ impl ReclaimReport {
             directories: 0,
             detail: String::new(),
         }
+    }
+
+    pub fn error(worker: WorkerSpec, mode: ReclaimMode, detail: String) -> Self {
+        let mut report = Self::new(worker, mode);
+        report.detail = format!("WORKER_ERROR {detail}");
+        report
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum FleetOutcome {
+    Complete,
+    DeferredActiveBuild,
+    Incomplete,
+}
+
+impl FleetOutcome {
+    pub const fn exit_code(self) -> u8 {
+        match self {
+            Self::Complete => 0,
+            Self::DeferredActiveBuild => 3,
+            Self::Incomplete => 2,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FleetReport {
+    pub schema: &'static str,
+    pub mode: ReclaimModeWire,
+    pub outcome: FleetOutcome,
+    pub workers: Vec<ReclaimReport>,
+    pub deferred_active_workers: usize,
+    pub incomplete_workers: usize,
+    pub detail: String,
+}
+
+impl FleetReport {
+    pub fn from_reports(
+        mode: ReclaimMode,
+        workers: Vec<ReclaimReport>,
+    ) -> Result<Self, ReclaimError> {
+        if workers.is_empty() {
+            return Err(ReclaimError::EmptyFleetReport);
+        }
+        let mut deferred_active_workers = 0;
+        let mut incomplete_workers = 0;
+        for report in &workers {
+            match report.outcome {
+                RunOutcome::Planned | RunOutcome::Reclaimed | RunOutcome::AlreadyClean => {}
+                RunOutcome::SkippedLiveBuild => deferred_active_workers += 1,
+                RunOutcome::Unknown | RunOutcome::Unreachable | RunOutcome::Refused => {
+                    incomplete_workers += 1
+                }
+            }
+        }
+        let outcome = if incomplete_workers > 0 {
+            FleetOutcome::Incomplete
+        } else if deferred_active_workers > 0 {
+            FleetOutcome::DeferredActiveBuild
+        } else {
+            FleetOutcome::Complete
+        };
+        let detail = format!(
+            "workers={} deferred_active_workers={} incomplete_workers={}",
+            workers.len(),
+            deferred_active_workers,
+            incomplete_workers
+        );
+        Ok(Self {
+            schema: "contabo-reclaim/fleet-report-v1",
+            mode: mode.into(),
+            outcome,
+            workers,
+            deferred_active_workers,
+            incomplete_workers,
+            detail,
+        })
+    }
+
+    pub const fn exit_code(&self) -> u8 {
+        self.outcome.exit_code()
     }
 }
 

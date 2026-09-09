@@ -11,8 +11,9 @@ pub mod probe;
 
 pub use model::{
     basename_is_whitelisted, decide_guards, parse_listing, validate_candidate, worker_by_id,
-    ActiveBuild, Candidate, CandidateSet, ControlSnapshot, EntryKind, GuardDecision, ReclaimError,
-    ReclaimMode, ReclaimRefusal, ReclaimReport, RefusalReason, RemoteProcessObservation,
-    RunOutcome, ValidatedCandidate, WhitelistRule, WorkerSpec, WHITELIST, WORKERS,
+    ActiveBuild, Candidate, CandidateSet, ControlSnapshot, EntryKind, FleetOutcome, FleetReport,
+    GuardDecision, ReclaimError, ReclaimMode, ReclaimRefusal, ReclaimReport, RefusalReason,
+    RemoteProcessObservation, RunOutcome, ValidatedCandidate, WhitelistRule, WorkerSelection,
+    WorkerSpec, WHITELIST, WORKERS,
 };
-pub use probe::{run, Config};
+pub use probe::{run, run_all_workers, Config};
