@@ -1,6 +1,7 @@
 use s1_coverage::{
-    compute, render_markdown, validate_doc_only_reason, BeadRecord, CoverageError, CoverageInput,
-    CoverageState, SourceText,
+    compare_reports, compute, compute_with_manifest, parse_beads_jsonl, render_markdown,
+    validate_doc_only_reason, validate_manifest, BeadRecord, ConvergenceDecision, CoverageError, CoverageInput, CoverageState,
+    InputManifest, InputState, ManifestVerdict, SourceText,
 };
 
 fn input(contract: &str, beads: Vec<BeadRecord>) -> CoverageInput {
@@ -193,4 +194,122 @@ branches = ["one", "two"]
         .iter()
         .all(|row| !row.predicate.is_empty()));
     assert!(render_markdown(&report).contains("DECLARED-UNEXTRACTABLE"));
+}
+#[test]
+fn tree_index_worktree_provenance_is_typed() {
+    let manifest = InputManifest::new(
+        "HEAD",
+        vec!["tree-input".to_owned()],
+        vec!["index-input".to_owned()],
+        vec!["worktree-input".to_owned()],
+        vec!["only-input".to_owned()],
+    );
+    assert_eq!(manifest.paths(InputState::Tree), &["tree-input".to_owned()]);
+    assert_eq!(manifest.paths(InputState::Index), &["index-input".to_owned()]);
+    assert_eq!(manifest.paths(InputState::Worktree), &["worktree-input".to_owned()]);
+    assert_eq!(manifest.paths(InputState::WorktreeOnly), &["only-input".to_owned()]);
+    assert_eq!(InputState::Tree.as_str(), "TREE");
+    assert_eq!(InputState::Index.as_str(), "INDEX");
+    assert_eq!(InputState::Worktree.as_str(), "WORKTREE");
+    assert_eq!(InputState::WorktreeOnly.as_str(), "WORKTREE_ONLY");
+}
+
+#[test]
+fn clean_tree_is_consistent() {
+    let manifest = InputManifest::new(
+        "HEAD",
+        vec!["docs/plan/flow/S1-COVERAGE.md".to_owned()],
+        vec!["docs/plan/flow/S1-COVERAGE.md".to_owned()],
+        Vec::new(),
+        Vec::new(),
+    );
+    assert_eq!(validate_manifest(&manifest), Ok(ManifestVerdict::DenominatorConsistent));
+    let report = compute_with_manifest(
+        &input("required `L1-REAL`", Vec::new()),
+        "tree",
+        "HEAD",
+        manifest,
+    )
+    .expect("clean fixture computes");
+    assert_eq!(report.manifest_verdict, ManifestVerdict::DenominatorConsistent);
+    assert!(report.worktree_only.is_empty());
+}
+
+#[test]
+fn worktree_only_requirement_is_restrictive() {
+    let mut manifest = InputManifest::new(
+        "HEAD",
+        vec!["tracked".to_owned()],
+        vec!["tracked".to_owned()],
+        Vec::new(),
+        Vec::new(),
+    );
+    let original = manifest.clone();
+    manifest.worktree_only.push(".git/s1_cov.py".to_owned());
+    let error = validate_manifest(&manifest).expect_err("worktree-only input must refuse");
+    assert_eq!(error.exit_code(), 2);
+    assert_eq!(
+        error.to_string(),
+        "DENOMINATOR_WORKTREE_ONLY: paths=.git/s1_cov.py"
+    );
+    manifest = original.clone();
+    assert_eq!(manifest, original);
+    assert_eq!(validate_manifest(&manifest), Ok(ManifestVerdict::DenominatorConsistent));
+}
+
+#[test]
+fn empty_input_is_error() {
+    let error = compute(
+        &CoverageInput {
+            contracts: Vec::new(),
+            s1_toml: String::new(),
+            beads: Vec::new(),
+        },
+        "tree",
+        "HEAD",
+    )
+    .expect_err("empty input must refuse");
+    assert_eq!(error.exit_code(), 3);
+    assert_eq!(
+        error.to_string(),
+        "DENOMINATOR_EMPTY_SCAN_SET: no requirement inputs were provided"
+    );
+}
+
+#[test]
+fn growth_and_closure_use_relation_not_absolute_size() {
+    let base = compute(&input("required `L1-REAL`", Vec::new()), "tree", "base").unwrap();
+    let closed = compute(
+        &input(
+            "required `L1-REAL`",
+            vec![bead("closed", "L1-REAL", "", "")],
+        ),
+        "tree",
+        "closed",
+    )
+    .unwrap();
+    let closure = compare_reports(&base, &closed);
+    assert_eq!(closure.base_revision, "base");
+    assert_eq!(closure.head_revision, "closed");
+    assert_eq!(closure.growth, 0);
+    assert_eq!(closure.closure, 1);
+    assert_eq!(closure.decision, ConvergenceDecision::Converging);
+
+    let expanded = compute(
+        &input("required `L1-REAL`\nrequired `L1-NEW`", Vec::new()),
+        "tree",
+        "expanded",
+    )
+    .unwrap();
+    let growth = compare_reports(&base, &expanded);
+    assert_eq!(growth.growth, 1);
+    assert_eq!(growth.closure, 0);
+    assert_eq!(growth.decision, ConvergenceDecision::NonConverging);
+}
+
+#[test]
+fn malformed_jsonl_is_a_distinct_named_error() {
+    let error = parse_beads_jsonl("{not-json").expect_err("malformed JSONL must refuse");
+    assert_eq!(error, CoverageError::MalformedBead { line: 1 });
+    assert_eq!(error.to_string(), "BEAD_JSON_INVALID: line=1");
 }

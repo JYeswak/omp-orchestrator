@@ -157,11 +157,133 @@ pub struct SourceSummary {
     pub declared_unextractable: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InputState {
+    Tree,
+    Index,
+    Worktree,
+    WorktreeOnly,
+}
+
+impl InputState {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tree => "TREE",
+            Self::Index => "INDEX",
+            Self::Worktree => "WORKTREE",
+            Self::WorktreeOnly => "WORKTREE_ONLY",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum HistoricalClaim {
+    Unreproduced,
+    IndependentlyProven,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ConvergenceDecision {
+    Converging,
+    NonConverging,
+}
+
+impl ConvergenceDecision {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Converging => "CONVERGING",
+            Self::NonConverging => "NON_CONVERGING",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ManifestVerdict {
+    DenominatorConsistent,
+    DenominatorWorktreeOnly,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputManifest {
+    pub revision: String,
+    pub tree: Vec<String>,
+    pub index: Vec<String>,
+    pub worktree: Vec<String>,
+    pub worktree_only: Vec<String>,
+    pub historical: HistoricalClaim,
+}
+
+impl InputManifest {
+    #[must_use]
+    pub fn new(
+        revision: impl Into<String>,
+        tree: Vec<String>,
+        index: Vec<String>,
+        worktree: Vec<String>,
+        worktree_only: Vec<String>,
+    ) -> Self {
+        Self {
+            revision: revision.into(),
+            tree,
+            index,
+            worktree,
+            worktree_only,
+            historical: HistoricalClaim::Unreproduced,
+        }
+    }
+
+    #[must_use]
+    pub fn verdict(&self) -> ManifestVerdict {
+        if self.worktree_only.is_empty() {
+            ManifestVerdict::DenominatorConsistent
+        } else {
+            ManifestVerdict::DenominatorWorktreeOnly
+        }
+    }
+
+    #[must_use]
+    pub fn paths(&self, state: InputState) -> &[String] {
+        match state {
+            InputState::Tree => &self.tree,
+            InputState::Index => &self.index,
+            InputState::Worktree => &self.worktree,
+            InputState::WorktreeOnly => &self.worktree_only,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CoverageComparison {
+    pub schema: String,
+    pub base_revision: String,
+    pub head_revision: String,
+    pub input_manifest: InputManifest,
+    pub worktree_only: Vec<String>,
+    pub growth: usize,
+    pub closure: usize,
+    pub decision: ConvergenceDecision,
+    pub no_claim: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct CoverageReport {
     pub schema: String,
     pub rev_mode: String,
     pub revision: String,
+    pub input_manifest: InputManifest,
+    pub manifest_verdict: ManifestVerdict,
+    pub worktree_only: Vec<String>,
+    pub growth: usize,
+    pub closure: usize,
+    pub decision: ConvergenceDecision,
     pub totals: Totals,
     pub source_breakdown: Vec<SourceSummary>,
     pub requirements: Vec<Requirement>,
@@ -173,21 +295,63 @@ pub enum CoverageError {
     ScanEmpty,
     InvalidDocOnlyReason,
     MalformedBead { line: usize },
+    WorktreeOnly { paths: Vec<String> },
 }
 
 impl fmt::Display for CoverageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ScanEmpty => f.write_str("SCAN_EMPTY: no contract requirements were extracted"),
+            Self::ScanEmpty => f.write_str("DENOMINATOR_EMPTY_SCAN_SET: no requirement inputs were provided"),
             Self::InvalidDocOnlyReason => {
                 f.write_str("DOC_ONLY_REASON_MISSING: DOC_ONLY requires a non-empty reason")
             }
             Self::MalformedBead { line } => write!(f, "BEAD_JSON_INVALID: line={line}"),
+            Self::WorktreeOnly { paths } => {
+                write!(f, "DENOMINATOR_WORKTREE_ONLY: paths={}", paths.join(","))
+            }
+        }
+    }
+}
+
+impl CoverageError {
+    #[must_use]
+    pub const fn exit_code(&self) -> u8 {
+        match self {
+            Self::ScanEmpty => 3,
+            Self::WorktreeOnly { .. } => 2,
+            Self::InvalidDocOnlyReason | Self::MalformedBead { .. } => 2,
         }
     }
 }
 
 impl std::error::Error for CoverageError {}
+
+#[must_use]
+pub fn validate_manifest(manifest: &InputManifest) -> Result<ManifestVerdict, CoverageError> {
+    if manifest.worktree_only.is_empty() {
+        Ok(ManifestVerdict::DenominatorConsistent)
+    } else {
+        Err(CoverageError::WorktreeOnly {
+            paths: manifest.worktree_only.clone(),
+        })
+    }
+}
+
+#[must_use]
+pub const fn classify_convergence(growth: usize, closure: usize) -> ConvergenceDecision {
+    if closure > growth {
+        ConvergenceDecision::Converging
+    } else {
+        ConvergenceDecision::NonConverging
+    }
+}
+
+#[must_use]
+pub fn manifest_for_input(revision: impl Into<String>, input: &CoverageInput) -> InputManifest {
+    let tree: Vec<String> = input.contracts.iter().map(|source| source.path.clone()).collect();
+    InputManifest::new(revision, tree.clone(), tree, Vec::new(), Vec::new())
+}
+
 
 #[must_use]
 pub fn validate_doc_only_reason(
@@ -245,6 +409,19 @@ pub fn compute(
     input: &CoverageInput,
     rev_mode: impl Into<String>,
     revision: impl Into<String>,
+) -> Result<CoverageReport, CoverageError> {
+    let rev_mode = rev_mode.into();
+    let revision = revision.into();
+    let manifest = manifest_for_input(revision.clone(), input);
+    compute_with_manifest(input, rev_mode, revision, manifest)
+}
+
+/// Compute a report while carrying the exact input provenance manifest.
+pub fn compute_with_manifest(
+    input: &CoverageInput,
+    rev_mode: impl Into<String>,
+    revision: impl Into<String>,
+    manifest: InputManifest,
 ) -> Result<CoverageReport, CoverageError> {
     if input.contracts.is_empty() {
         return Err(CoverageError::ScanEmpty);
@@ -324,6 +501,12 @@ pub fn compute(
         schema: "s1-coverage/v1".to_owned(),
         rev_mode: rev_mode.into(),
         revision: revision.into(),
+        input_manifest: manifest.clone(),
+        manifest_verdict: manifest.verdict(),
+        worktree_only: manifest.worktree_only.clone(),
+        growth: 0,
+        closure: 0,
+        decision: classify_convergence(0, 0),
         totals,
         source_breakdown,
         requirements,
@@ -334,6 +517,44 @@ pub fn compute(
             "NO-COVERAGE: this matrix does not prove implementation, wiring, or runtime correctness.".to_owned(),
         ],
     })
+}
+#[must_use]
+pub fn compare_reports(base: &CoverageReport, head: &CoverageReport) -> CoverageComparison {
+    let base_states: BTreeMap<String, CoverageState> = base
+        .requirements
+        .iter()
+        .map(|row| (format!("{}::{}", row.source.as_str(), row.stable_id), row.state))
+        .collect();
+    let head_states: BTreeMap<String, CoverageState> = head
+        .requirements
+        .iter()
+        .map(|row| (format!("{}::{}", row.source.as_str(), row.stable_id), row.state))
+        .collect();
+    let growth = head_states
+        .keys()
+        .filter(|key| !base_states.contains_key(*key))
+        .count();
+    let closure = base_states
+        .iter()
+        .filter(|(key, state)| {
+            *state != &CoverageState::Covered
+                && head_states.get(*key) == Some(&CoverageState::Covered)
+        })
+        .count();
+    CoverageComparison {
+        schema: "s1-coverage/comparison-v1".to_owned(),
+        base_revision: base.revision.clone(),
+        head_revision: head.revision.clone(),
+        input_manifest: head.input_manifest.clone(),
+        worktree_only: head.worktree_only.clone(),
+        growth,
+        closure,
+        decision: classify_convergence(growth, closure),
+        no_claim: vec![
+            "growth counts newly declared requirement keys; closure counts prior non-covered keys that become covered.".to_owned(),
+            "The relation-based decision does not prove requirement correctness, implementation, or deployment authorization.".to_owned(),
+        ],
+    }
 }
 
 fn push_requirement(
@@ -727,6 +948,21 @@ pub fn render_markdown(report: &CoverageReport) -> String {
     output.push_str(&format!(
         "Generated by s1-coverage. REV_MODE={} REVISION={}\n\n",
         report.rev_mode, report.revision
+    ));
+    output.push_str(&format!(
+        "INPUT_MANIFEST TREE={} INDEX={} WORKTREE={} WORKTREE_ONLY={} HISTORICAL={:?}\n",
+        report.input_manifest.paths(InputState::Tree).len(),
+        report.input_manifest.paths(InputState::Index).len(),
+        report.input_manifest.paths(InputState::Worktree).len(),
+        report.input_manifest.paths(InputState::WorktreeOnly).len(),
+        report.input_manifest.historical,
+    ));
+    output.push_str(&format!(
+        "MANIFEST_VERDICT={:?} GROWTH={} CLOSURE={} DECISION={}\n\n",
+        report.manifest_verdict,
+        report.growth,
+        report.closure,
+        report.decision.as_str(),
     ));
     output.push_str("WIRED_FROM=s1-coverage-cli\n");
     output.push_str("NO-COVERAGE: this matrix does not prove implementation, wiring, or runtime correctness.\n\n");

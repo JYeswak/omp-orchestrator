@@ -138,6 +138,8 @@ jobs:
         # workspace LOADING, so `-p <crate>` cannot dodge it and every command returns an
         # identical 101 with a completely different cause.
         run: cargo metadata --no-deps --format-version 1 > /dev/null
+      - name: S1 coverage provenance
+        run: cargo run --quiet -p s1-coverage -- --repo . --head HEAD --json
       - name: Gate roster is not vacuous
         # An empty roster is an ERROR with its own exit code, never a pass. Runs BEFORE
         # the gates so a filtered or unreadable workspace is named as such rather than
