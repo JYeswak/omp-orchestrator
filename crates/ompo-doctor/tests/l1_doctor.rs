@@ -69,3 +69,51 @@ fn l1_named_target_exercises_real_umbrella_capabilities() {
         .as_array()
         .is_some_and(|adapters| !adapters.is_empty()));
 }
+
+/// The `run_doctor` envelope contract (25u5): required keys exist, remediation is
+/// nonempty exactly when a probe is non-OK with one explicit rerun row per
+/// non-OK probe, and `next_action` is the report readback -- never a placeholder.
+/// Runs the production probes against an isolated fixture repo, so the probe mix
+/// varies by machine and every assertion below is mix-invariant.
+#[test]
+fn doctor_run_reports_complete_envelope_with_typed_remediation() {
+    let repo = tempfile::tempdir().expect("doctor fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    assert_eq!(summary.schema, "ompo.doctor.v1");
+    assert!(!summary.run_id.is_empty(), "run_id must be nonempty");
+    assert_eq!(summary.scope, "system", "requested scope is preserved");
+    assert_eq!(summary.probe_count, summary.probes.len());
+    assert_eq!(summary.artifact, ompo_doctor::ARTIFACT_REFERENCE);
+    assert_eq!(
+        summary.next_action,
+        format!("readback={}", ompo_doctor::ARTIFACT_REFERENCE),
+        "next_action must be the report readback"
+    );
+    assert!(
+        summary.lifecycle_journal.exists(),
+        "journal must exist: {}",
+        summary.lifecycle_journal.display()
+    );
+    let non_ok: Vec<_> = summary
+        .probes
+        .iter()
+        .filter(|probe| probe.status != "OK")
+        .collect();
+    assert_eq!(
+        !summary.remediation.is_empty(),
+        !non_ok.is_empty(),
+        "remediation is nonempty exactly when a probe is non-OK"
+    );
+    assert_eq!(summary.remediation.len(), non_ok.len());
+    for probe in non_ok {
+        assert!(
+            summary
+                .remediation
+                .iter()
+                .any(|row| row.contains("rerun") && row.contains(&probe.name)),
+            "non-OK probe {} lacks an explicit rerun row: {:?}",
+            probe.name,
+            summary.remediation
+        );
+    }
+}
