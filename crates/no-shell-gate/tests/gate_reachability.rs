@@ -2,8 +2,8 @@
 
 //! Conformance legs for the gate-trigger reachability census.
 //!
-//! The production census is exercised through its binary output, not by duplicating its scan
-//! algorithm here. Fixtures are deliberately tiny and make every expected trigger explicit.
+//! The production census is exercised through its binary output. Fixtures keep executor triggers,
+//! document mentions, comments, YAML parsing, read-state exclusions, and anti-vacuity observable.
 
 use serde_json::Value;
 use std::fs;
@@ -71,59 +71,66 @@ fn rows(report: &Value) -> &Vec<Value> {
         .expect("machine report rows")
 }
 
+fn row<'a>(report: &'a Value, name: &str, kind: &str) -> &'a Value {
+    rows(report)
+        .iter()
+        .find(|candidate| candidate["name"] == name && candidate["kind"] == kind)
+        .unwrap_or_else(|| panic!("missing row {kind}:{name}"))
+}
+
 #[test]
-fn known_good_fixture_reports_ci_trigger_and_unwired_gate() {
+fn known_good_fixture_separates_executors_documents_and_controls() {
     let root = fixture_root("good");
     write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
-    write_fixture(
-        &root,
-        "crates/foo-gate/tests/gate.rs",
-        "// KNOWN-GOOD\n#[test] fn gate() {}\n",
-    );
+    write_fixture(&root, "crates/foo-gate/tests/gate.rs", "#[test] fn gate() {}\n");
     write_fixture(&root, "crates/bar-lint/src/lib.rs", "pub fn lint() {}\n");
     write_fixture(&root, "crates/plain/src/lib.rs", "pub fn plain() {}\n");
-    write_fixture(
-        &root,
-        "crates/plain/tests/mutation.rs",
-        "// MUTATION\n#[test] fn mutation() {}\n",
-    );
+    write_fixture(&root, "crates/plain/tests/gate_mutation.rs", "#[test] fn mutation() {}\n");
     write_fixture(
         &root,
         ".github/workflows/gate.yml",
         "jobs:\n  foo:\n    steps:\n      - run: cargo test -p foo-gate\n  plain:\n    steps:\n      - run: cargo test -p plain\n",
+    );
+    write_fixture(&root, ".flywheel/NOTE.txt", "foo-gate is documented here, not executed.\n");
+    write_fixture(
+        &root,
+        ".omp/crontab",
+        "* * * * * ntm --robot-send\n* * * * * ntm --robot-tail\n* * * * * orchestrator-tick --apply\n# ntm foo-gate\n",
     );
 
     let output = run_census(&root);
     assert!(output.status.success(), "{output:?}");
     let report = json_output(&output);
     assert_eq!(report["status"], "ok");
-    let foo = rows(&report)
-        .iter()
-        .find(|row| row["name"] == "foo-gate" && row["kind"] == "crate")
-        .expect("foo-gate row");
+    let foo = row(&report, "foo-gate", "crate");
     assert_eq!(foo["reachable"], true);
-    assert!(foo["triggers"][0]
-        .as_str()
-        .unwrap_or_default()
-        .contains("CI"));
-    let bar = rows(&report)
-        .iter()
-        .find(|row| row["name"] == "bar-lint" && row["kind"] == "crate")
-        .expect("bar-lint row");
+    assert_eq!(foo["verdict"], "UNRUN");
+    assert_eq!(foo["read_state"], "UNREAD");
+    assert!(foo["triggers"].as_array().is_some_and(|items| {
+        items.iter().any(|item| item.as_str().unwrap_or_default().contains("CI"))
+    }));
+    assert!(foo["documents"].as_array().is_some_and(|items| {
+        items.iter().any(|item| item == ".flywheel/NOTE.txt")
+    }));
+    assert!(!foo["documents"].as_array().unwrap().iter().any(|item| {
+        foo["triggers"].as_array().unwrap().contains(item)
+    }));
+
+    let bar = row(&report, "bar-lint", "crate");
     assert_eq!(bar["reachable"], false);
-    let plain = rows(&report)
-        .iter()
-        .find(|row| row["name"] == "plain/tests/mutation.rs" && row["kind"] == "test_gate")
-        .expect("plain mutation test gate row");
-    assert_eq!(plain["reachable"], true);
-    assert!(plain["proof_command"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("cargo test -p plain"));
+    assert_eq!(bar["verdict"], "INERT");
+    let plain = row(&report, "plain/tests/gate_mutation.rs", "test_gate");
+    assert_eq!(plain["verdict"], "UNRUN");
+    assert!(plain["proof_command"].as_str().unwrap_or_default().contains("cargo test -p plain"));
+
+    assert_eq!(report["controls"]["ntm"], 2);
+    assert_eq!(report["controls"]["orchestrator_tick"], 1);
+    assert_eq!(report["controls"]["zzz_cannot_exist"], 0);
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
+
 #[test]
-fn removing_ci_trigger_flips_gate_to_unreachable() {
+fn removing_ci_trigger_flips_gate_to_inert() {
     let root = fixture_root("mutation");
     write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
     write_fixture(
@@ -133,27 +140,18 @@ fn removing_ci_trigger_flips_gate_to_unreachable() {
     );
 
     let reachable = json_output(&run_census(&root));
-    let row = rows(&reachable)
-        .iter()
-        .find(|row| row["name"] == "foo-gate" && row["kind"] == "crate")
-        .expect("foo-gate row");
-    assert_eq!(row["reachable"], true);
-
+    assert_eq!(row(&reachable, "foo-gate", "crate")["verdict"], "UNRUN");
     fs::remove_file(root.join(".github/workflows/gate.yml")).expect("remove trigger");
-    let unreachable = json_output(&run_census(&root));
-    let row = rows(&unreachable)
-        .iter()
-        .find(|row| row["name"] == "foo-gate" && row["kind"] == "crate")
-        .expect("foo-gate row after mutation");
-    assert_eq!(row["reachable"], false);
+    let inert = json_output(&run_census(&root));
+    assert_eq!(row(&inert, "foo-gate", "crate")["verdict"], "INERT");
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
 
 #[test]
-fn empty_gate_set_is_an_error_not_a_pass() {
+fn empty_gate_set_is_typed_error_exit_two() {
     let root = fixture_root("empty");
     let output = run_census(&root);
-    assert!(!output.status.success(), "empty gate set must refuse");
+    assert_eq!(output.status.code(), Some(2), "empty gate set must refuse");
     let report = json_output(&output);
     assert_eq!(report["status"], "error");
     assert_eq!(report["error"], "EMPTY_GATE_SET");
@@ -161,70 +159,75 @@ fn empty_gate_set_is_an_error_not_a_pass() {
 }
 
 #[test]
-fn report_excludes_its_own_source_and_has_a_no_shell_positive_control() {
-    let output = run_census(&repo_root());
-    assert!(output.status.success(), "{output:?}");
+fn duplicate_yaml_is_strict_parse_error_exit_one() {
+    let root = fixture_root("duplicate-yaml");
+    write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
+    write_fixture(
+        &root,
+        ".github/workflows/gate.yml",
+        "jobs:\n  foo:\n    steps: []\njobs:\n  duplicate:\n    steps: []\n",
+    );
+    let output = run_census(&root);
+    assert_eq!(output.status.code(), Some(1), "strict YAML mutation must be a violation");
     let report = json_output(&output);
-    assert_eq!(report["status"], "ok");
-    assert!(report["machine"].as_str().is_some_and(|machine| !machine.is_empty()));
-    let excluded = report["excluded_paths"].as_array().expect("excluded paths");
-    assert!(excluded.iter().any(|path| {
-        path.as_str() == Some("crates/no-shell-gate/src/bin/gate-reachability.rs")
-    }));
-    assert!(excluded
-        .iter()
-        .any(|path| { path.as_str() == Some("crates/no-shell-gate/tests/gate_reachability.rs") }));
-    assert!(!rows(&report)
-        .iter()
-        .any(|row| row["name"] == "no-shell-gate/tests/gate_reachability.rs"));
-    let positive = &report["positive_control"];
-    assert_eq!(positive["name"], "no-shell-gate");
-    assert_eq!(positive["reachable"], true);
-    assert!(positive["proof_command"]
-        .as_str()
-        .unwrap_or_default()
-        .contains(".git/hooks/pre-commit"));
-    let path_guard = rows(&report)
-        .iter()
-        .find(|row| row["name"] == "path-literal-guard" && row["kind"] == "crate")
-        .expect("path-literal-guard row");
-    assert_eq!(path_guard["reachable"], true);
-    assert!(path_guard["triggers"]
-        .as_array()
-        .expect("path-literal-guard triggers")
-        .iter()
-        .any(|trigger| trigger == "git pre-commit hook"));
+    assert_eq!(report["status"], "error");
+    assert!(report["error"].as_str().unwrap_or_default().starts_with("STRICT_YAML_PARSE"));
+    fs::remove_dir_all(root).expect("fixture cleanup");
 }
 
 #[test]
-fn positive_control_runs_real_hook_and_refuses_staged_shell() {
-    let root = fixture_root("hook");
-    let hook = repo_root().join(".git/hooks/pre-commit");
-    assert!(hook.is_file(), "installed pre-commit hook must exist");
-    write_fixture(&root, "bad.sh", "#!/bin/sh\necho bad\n");
-    let git_init = Command::new("git")
-        .args(["init", "--quiet"])
-        .current_dir(&root)
-        .output()
-        .expect("git init");
-    assert!(git_init.status.success(), "git init: {git_init:?}");
-    fs::create_dir_all(root.join(".git/hooks")).expect("hook directory");
-    fs::copy(&hook, root.join(".git/hooks/pre-commit")).expect("copy hook");
-    let git_add = Command::new("git")
-        .args(["add", "bad.sh"])
-        .current_dir(&root)
-        .output()
-        .expect("git add");
-    assert!(git_add.status.success(), "git add: {git_add:?}");
-    let hook_output = Command::new(root.join(".git/hooks/pre-commit"))
-        .current_dir(&root)
-        .output()
-        .expect("run copied pre-commit hook");
-    let stderr = String::from_utf8_lossy(&hook_output.stderr);
-    assert_eq!(hook_output.status.code(), Some(1), "hook stderr={stderr}");
-    assert!(
-        stderr.contains("no-shell-gate"),
-        "hook must name positive-control gate: {stderr}"
+fn comments_do_not_create_executors() {
+    let root = fixture_root("comments");
+    write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
+    write_fixture(&root, ".github/workflows/gate.yml", "# cargo test -p foo-gate\n");
+    write_fixture(&root, "crates/no-shell-gate/src/bin/pre-commit-gate.rs", "// foo-gate\n");
+    write_fixture(&root, ".git/hooks/pre-commit", "#!/bin/sh\n# foo-gate\n");
+    write_fixture(&root, ".omp/crontab", "# foo-gate ntm orchestrator-tick\n");
+    let report = json_output(&run_census(&root));
+    let foo = row(&report, "foo-gate", "crate");
+    assert_eq!(foo["verdict"], "INERT");
+    assert!(foo["triggers"].as_array().unwrap().is_empty());
+    assert_eq!(report["controls"]["ntm"], 0);
+    assert_eq!(report["controls"]["orchestrator_tick"], 0);
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+#[test]
+fn read_state_excludes_self_and_reports_full_population() {
+    let root = fixture_root("read-state");
+    write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
+    write_fixture(&root, ".github/workflows/gate.yml", "jobs:\n  foo:\n    steps:\n      - run: cargo test -p foo-gate\n");
+    write_fixture(
+        &root,
+        ".beads/issues.jsonl",
+        "{\"id\":\"omp-orchestrator-6nhj\",\"title\":\"foo-gate gate-reachability observed status check\"}\n{\"id\":\"external-row\",\"title\":\"foo-gate gate-reachability observed status check\"}\n",
     );
+    let report = json_output(&run_census(&root));
+    assert_eq!(report["read_state"]["population"], "full-file");
+    assert_eq!(report["read_state"]["window"], "full-file");
+    assert!(report["read_state"]["bytes"].as_u64().unwrap_or_default() > 0);
+    assert_eq!(report["read_state"]["excluded_bead_ids"][0], "omp-orchestrator-6nhj");
+    assert_eq!(report["read_state"]["observed_rows"], serde_json::json!(["external-row"]));
+    let foo = row(&report, "foo-gate", "crate");
+    assert_eq!(foo["verdict_observed"], true);
+    assert_eq!(foo["read_state"], "OBSERVED");
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+#[test]
+fn portable_no_shell_positive_control_does_not_require_hooks() {
+    let root = fixture_root("portable");
+    write_fixture(&root, "crates/no-shell-gate/src/lib.rs", "pub fn gate() {}\n");
+    write_fixture(
+        &root,
+        ".github/workflows/gate.yml",
+        "jobs:\n  no_shell:\n    steps:\n      - run: cargo test -p no-shell-gate\n",
+    );
+    let good = json_output(&run_census(&root));
+    assert_eq!(good["positive_control"]["reachable"], true);
+    assert!(!good["positive_control"]["proof_command"].as_str().unwrap_or_default().contains(".git/hooks"));
+    fs::remove_file(root.join(".github/workflows/gate.yml")).expect("remove known-good trigger");
+    let bad = json_output(&run_census(&root));
+    assert_eq!(row(&bad, "no-shell-gate", "crate")["verdict"], "INERT");
     fs::remove_dir_all(root).expect("fixture cleanup");
 }

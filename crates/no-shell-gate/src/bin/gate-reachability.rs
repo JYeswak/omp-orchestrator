@@ -1,21 +1,59 @@
 #![forbid(unsafe_code)]
 
-//! Machine-readable census of gate crates and test gates against their real triggers.
+//! Machine-readable census of gate mechanisms, executable triggers, document mentions, and read state.
 //!
-//! This is a reachability report, not a semantic proof. A row can be reachable while its gate is
-//! weak, and an unreachable row is not made healthy by having a caller somewhere in the tree.
+//! This is a reachability measurement, not a semantic proof. A gate row can be executable and
+//! still fail; an observed verdict is evidence that a reader saw it, not that it was correct.
 
+use serde_yaml_ng::Value as YamlValue;
+use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+
+const SELF_SOURCE: &str = "crates/no-shell-gate/src/bin/gate-reachability.rs";
+const SELF_TEST: &str = "crates/no-shell-gate/tests/gate_reachability.rs";
+const SELF_OUTPUT: &str = ".flywheel/6nhj-stage-gate-census.json";
+const SELF_BEAD: &str = "omp-orchestrator-6nhj";
 
 #[derive(Debug, Clone)]
 struct Row {
     name: String,
     kind: &'static str,
     triggers: Vec<String>,
+    documents: Vec<String>,
     reachable: bool,
+    verdict: &'static str,
+    verdict_observed: bool,
+    read_state: &'static str,
     proof_command: String,
+}
+
+#[derive(Debug, Clone)]
+struct ReadState {
+    population: &'static str,
+    bytes: usize,
+    lines: usize,
+    window: &'static str,
+    excluded_bead_ids: Vec<String>,
+    observed_rows: Vec<String>,
+    observed_subjects: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Controls {
+    ntm: usize,
+    orchestrator_tick: usize,
+    guaranteed_absent: usize,
+}
+
+#[derive(Debug)]
+struct Census {
+    rows: Vec<Row>,
+    excluded_paths: Vec<String>,
+    read_state: ReadState,
+    controls: Controls,
 }
 
 fn json_string(value: &str) -> String {
@@ -49,11 +87,15 @@ fn json_array(values: &[String]) -> String {
 
 fn json_row(row: &Row) -> String {
     format!(
-        "{{\"name\":{},\"kind\":{},\"triggers\":{},\"reachable\":{},\"proof_command\":{}}}",
+        "{{\"name\":{},\"kind\":{},\"triggers\":{},\"documents\":{},\"reachable\":{},\"verdict\":{},\"verdict_observed\":{},\"read_state\":{},\"proof_command\":{}}}",
         json_string(&row.name),
         json_string(row.kind),
         json_array(&row.triggers),
+        json_array(&row.documents),
         row.reachable,
+        json_string(row.verdict),
+        row.verdict_observed,
+        json_string(row.read_state),
         json_string(&row.proof_command),
     )
 }
@@ -61,7 +103,7 @@ fn json_row(row: &Row) -> String {
 fn json_rows(rows: &[Row]) -> String {
     format!(
         "[{}]",
-        rows.iter().map(json_row).collect::<Vec<_>>().join(","),
+        rows.iter().map(json_row).collect::<Vec<_>>().join(",")
     )
 }
 
@@ -77,80 +119,172 @@ fn machine_name() -> String {
     "unknown".to_owned()
 }
 
-fn gate_crates(root: &Path) -> Vec<String> {
-    let mut names = fs::read_dir(root.join("crates"))
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let path = entry.path();
-            if !path.is_dir() {
-                return None;
+fn strip_comments(text: &str, markers: &[&str]) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut output = String::with_capacity(text.len());
+    let mut block_marker: Option<&str> = None;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let mut index = 0;
+    while index < chars.len() {
+        if let Some(marker) = block_marker {
+            if chars[index..].starts_with(&marker.chars().collect::<Vec<_>>()) {
+                index += marker.chars().count();
+                block_marker = None;
+            } else {
+                if chars[index] == '\n' {
+                    output.push('\n');
+                }
+                index += 1;
             }
-            let name = path.file_name()?.to_str()?.to_owned();
-            (name.ends_with("-gate")
-                || name.ends_with("-lint")
-                || name.ends_with("-check")
-                || name == "path-literal-guard"
-                || name == "commit-build-fence")
-                .then_some(name)
-        })
-        .collect::<Vec<_>>();
-    names.sort();
-    names
+            continue;
+        }
+        if let Some(quote_char) = quote {
+            let ch = chars[index];
+            output.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == quote_char {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+        let ch = chars[index];
+        if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+            output.push(ch);
+            index += 1;
+            continue;
+        }
+        let matched = markers.iter().find(|marker| {
+            let marker_chars: Vec<char> = marker.chars().collect();
+            chars[index..].starts_with(&marker_chars)
+        });
+        if let Some(marker) = matched {
+            if *marker == "/*" {
+                block_marker = Some(marker);
+                index += marker.chars().count();
+            } else {
+                while index < chars.len() {
+                    let current = chars[index];
+                    index += 1;
+                    if current == '\n' {
+                        output.push('\n');
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        output.push(ch);
+        index += 1;
+    }
+    output
 }
 
-fn workspace_packages(root: &Path) -> Vec<String> {
-    let mut names = fs::read_dir(root.join("crates"))
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter_map(|entry| {
-            let path = entry.path();
-            if !path.is_dir() {
-                return None;
-            }
-            path.file_name()?.to_str().map(ToOwned::to_owned)
-        })
-        .collect::<Vec<_>>();
-    names.sort();
-    names
+fn json_row_value(line: &str) -> Option<serde_json::Value> {
+    serde_json::from_str(line).ok()
 }
 
-fn workflow_triggers(root: &Path, package: &str) -> Vec<String> {
+fn read_state(root: &Path) -> ReadState {
+    let excluded_bead_ids = vec![SELF_BEAD.to_owned()];
+    let path = root.join(".beads/issues.jsonl");
+    let Ok(text) = fs::read_to_string(path) else {
+        return ReadState {
+            population: "full-file",
+            bytes: 0,
+            lines: 0,
+            window: "unavailable",
+            excluded_bead_ids,
+            observed_rows: Vec::new(),
+            observed_subjects: Vec::new(),
+        };
+    };
+    let mut observed_rows = BTreeSet::new();
+    let mut observed_subjects = BTreeSet::new();
+    for line in text.lines() {
+        let Some(value) = json_row_value(line) else {
+            continue;
+        };
+        let Some(id) = value.get("id").and_then(serde_json::Value::as_str) else {
+            continue;
+        };
+        if excluded_bead_ids.iter().any(|excluded| excluded == id) {
+            continue;
+        }
+        let body = value.to_string().to_ascii_lowercase();
+        if body.contains("verdict_observed")
+            || (body.contains("gate-reachability")
+                && ["status check", "merge gate", "acts on", "observed"]
+                    .iter()
+                    .any(|needle| body.contains(needle)))
+        {
+            observed_rows.insert(id.to_owned());
+            observed_subjects.insert(body.clone());
+        }
+    }
+    ReadState {
+        population: "full-file",
+        bytes: text.len(),
+        lines: text.lines().count(),
+        window: "full-file",
+        excluded_bead_ids,
+        observed_rows: observed_rows.into_iter().collect(),
+        observed_subjects: observed_subjects.into_iter().collect(),
+    }
+}
+
+fn strict_workflow_parse(path: &Path, text: &str) -> Result<(), String> {
+    serde_yaml_ng::from_str::<YamlValue>(text)
+        .map(|_| ())
+        .map_err(|error| format!("STRICT_YAML_PARSE path={} detail={error}", path.display()))
+}
+
+fn workflow_triggers(root: &Path, package: &str) -> Result<Vec<String>, String> {
     let mut triggers = Vec::new();
     let Ok(entries) = fs::read_dir(root.join(".github/workflows")) else {
-        return triggers;
+        return Ok(triggers);
     };
     let mut files = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| {
-            matches!(
-                path.extension().and_then(|ext| ext.to_str()),
-                Some("yml" | "yaml")
-            )
-        })
+        .filter(|path| matches!(path.extension().and_then(|ext| ext.to_str()), Some("yml" | "yaml")))
         .collect::<Vec<_>>();
     files.sort();
     for file in files {
-        let Ok(text) = fs::read_to_string(&file) else {
+        let text = fs::read_to_string(&file)
+            .map_err(|error| format!("WORKFLOW_READ_FAILED path={} detail={error}", file.display()))?;
+        strict_workflow_parse(&file, &text)?;
+        let code = strip_comments(&text, &["#"]);
+        let package_flag = format!("-p {package}");
+        let package_equals = format!("-p={package}");
+        if code.lines().any(|line| line.contains(&package_flag) || line.contains(&package_equals)) {
+            triggers.push(format!("CI {}", file.strip_prefix(root).unwrap_or(&file).display()));
+        }
+    }
+    triggers.sort();
+    triggers.dedup();
+    Ok(triggers)
+}
+
+fn launchd_triggers(root: &Path, package: &str) -> Vec<String> {
+    let mut triggers = Vec::new();
+    let Ok(entries) = fs::read_dir(root.join("launchd")) else {
+        return triggers;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        for (line_index, line) in text.lines().enumerate() {
-            if line.trim_start().starts_with('#') {
-                continue;
-            }
-            let package_flag = format!("-p {package}");
-            if line.contains(&package_flag) || line.contains(&format!("-p={package}")) {
-                triggers.push(format!(
-                    "CI {}:{}",
-                    file.strip_prefix(root).unwrap_or(&file).display(),
-                    line_index + 1
-                ));
-            }
+        if strip_comments(&text, &["#", "//"]).contains(package) {
+            triggers.push(format!("launchd {}", path.strip_prefix(root).unwrap_or(&path).display()));
         }
     }
     triggers.sort();
@@ -165,9 +299,48 @@ fn hook_trigger(root: &Path, package: &str) -> Option<String> {
         return None;
     }
     let source_text = fs::read_to_string(source).ok()?;
+    let source_text = strip_comments(&source_text, &["//", "/*"]);
     let hyphen = source_text.contains(package);
     let underscore = source_text.contains(&package.replace('-', "_"));
     (hyphen || underscore).then(|| "git pre-commit hook".to_owned())
+}
+
+fn crontab_text(root: &Path) -> String {
+    let fixture = root.join(".omp/crontab");
+    if let Ok(text) = fs::read_to_string(fixture) {
+        return text;
+    }
+    Command::new("crontab")
+        .arg("-l")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap_or_default()
+}
+
+fn crontab_matches(text: &str, token: &str) -> Vec<String> {
+    strip_comments(text, &["#"])
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.split_whitespace().any(|field| field == token) || line.contains(token))
+        .map(|(index, line)| format!("crontab:{}:{}", index + 1, line.trim()))
+        .collect()
+}
+
+fn document_mentions(root: &Path, package: &str) -> Vec<String> {
+    let mut paths = vec![root.join("README.md"), root.join("AGENTS.md"), root.join("CLAUDE.md")];
+    if let Ok(entries) = fs::read_dir(root.join(".flywheel")) {
+        paths.extend(entries.filter_map(Result::ok).map(|entry| entry.path()).filter(|path| path.is_file()));
+    }
+    paths.sort();
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let text = fs::read_to_string(&path).ok()?;
+            text.contains(package).then(|| path.strip_prefix(root).unwrap_or(&path).display().to_string())
+        })
+        .collect()
 }
 
 fn test_gate_files(root: &Path, package: &str) -> Vec<String> {
@@ -189,77 +362,159 @@ fn test_gate_files(root: &Path, package: &str) -> Vec<String> {
                 return None;
             }
             let text = fs::read_to_string(&path).ok()?;
+            let code = strip_comments(&text, &["//", "/*"]);
             let marker = filename.contains("gate")
                 || filename.contains("ledger")
                 || filename.contains("census")
                 || filename.contains("reachability")
                 || ["KNOWN-GOOD", "KNOWN-BAD", "ANTI-VACUITY", "MUTATION"]
                     .iter()
-                    .any(|marker| text.contains(marker));
+                    .any(|mark| code.contains(mark));
             marker.then_some(filename)
         })
         .collect()
 }
 
-fn add_test_gate_rows(root: &Path, package: &str, rows: &mut Vec<Row>) {
-    let mut test_triggers = workflow_triggers(root, package);
-    test_triggers.sort();
-    test_triggers.dedup();
-    for filename in test_gate_files(root, package) {
-        rows.push(Row {
-            name: format!("{package}/tests/{filename}"),
-            kind: "test_gate",
-            reachable: !test_triggers.is_empty(),
-            proof_command: format!(
-                "cargo test -p {package} --test {}",
-                filename.trim_end_matches(".rs")
-            ),
-            triggers: test_triggers.clone(),
-        });
+fn workspace_packages(root: &Path) -> Vec<String> {
+    let mut names = fs::read_dir(root.join("crates"))
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            if !path.is_dir() {
+                return None;
+            }
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(ToOwned::to_owned)
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+
+fn gate_crates(root: &Path) -> Vec<String> {
+    let mut names = workspace_packages(root)
+        .into_iter()
+        .filter(|name| {
+            name.ends_with("-gate")
+                || name.ends_with("-lint")
+                || name.ends_with("-check")
+                || name == "path-literal-guard"
+                || name == "commit-build-fence"
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
+}
+fn read_state_for(package: &str, read_state: &ReadState) -> (bool, &'static str) {
+    let observed = read_state
+        .observed_subjects
+        .iter()
+        .any(|subject| subject.contains(package));
+    (observed, if observed { "OBSERVED" } else { "UNREAD" })
+}
+
+fn row(
+    name: String,
+    kind: &'static str,
+    triggers: Vec<String>,
+    documents: Vec<String>,
+    observed: bool,
+    proof_command: String,
+) -> Row {
+    let reachable = !triggers.is_empty();
+    let (verdict, read_state) = if kind == "negative_control" {
+        ("ABSENT", "NOT_APPLICABLE")
+    } else if reachable {
+        ("UNRUN", if observed { "OBSERVED" } else { "UNREAD" })
+    } else {
+        ("INERT", "NOT_APPLICABLE")
+    };
+    Row {
+        name,
+        kind,
+        triggers,
+        documents,
+        reachable,
+        verdict,
+        verdict_observed: observed,
+        read_state,
+        proof_command,
     }
 }
 
-fn census(root: &Path) -> Result<(Vec<Row>, Vec<String>), String> {
+fn census(root: &Path) -> Result<Census, String> {
     let gate_names = gate_crates(root);
     if gate_names.is_empty() {
         return Err("EMPTY_GATE_SET".to_owned());
     }
+    let read_state = read_state(root);
+    let crontab = crontab_text(root);
     let mut rows = Vec::new();
-    let mut excluded = vec![
-        "crates/no-shell-gate/src/bin/gate-reachability.rs".to_owned(),
-        "crates/no-shell-gate/tests/gate_reachability.rs".to_owned(),
-    ];
+    let mut excluded = vec![SELF_SOURCE.to_owned(), SELF_TEST.to_owned(), SELF_OUTPUT.to_owned()];
     for package in &gate_names {
-        let mut triggers = workflow_triggers(root, package);
+        let mut triggers = workflow_triggers(root, package)?;
         if let Some(trigger) = hook_trigger(root, package) {
             triggers.push(trigger);
         }
+        triggers.extend(launchd_triggers(root, package));
+        triggers.extend(crontab_matches(&crontab, package));
         triggers.sort();
         triggers.dedup();
+        let documents = document_mentions(root, package);
+        let (observed, _) = read_state_for(package, &read_state);
         let proof_command = triggers
             .first()
-            .map(|trigger| {
-                if trigger.starts_with("CI ") {
-                    format!("cargo test -p {package}")
-                } else {
-                    "git commit (pre-commit hook)".to_owned()
-                }
-            })
+            .cloned()
             .unwrap_or_else(|| format!("cargo test -p {package}"));
-        rows.push(Row {
-            name: package.clone(),
-            kind: "crate",
-            reachable: !triggers.is_empty(),
-            triggers,
-            proof_command,
-        });
+        rows.push(row(package.clone(), "crate", triggers, documents, observed, proof_command));
     }
     for package in workspace_packages(root) {
-        add_test_gate_rows(root, &package, &mut rows);
+        let mut triggers = workflow_triggers(root, &package)?;
+        if let Some(trigger) = hook_trigger(root, &package) {
+            triggers.push(trigger);
+        }
+        triggers.extend(launchd_triggers(root, &package));
+        triggers.extend(crontab_matches(&crontab, &package));
+        triggers.sort();
+        triggers.dedup();
+        let documents = document_mentions(root, &package);
+        let (observed, _) = read_state_for(&package, &read_state);
+        for filename in test_gate_files(root, &package) {
+            rows.push(row(
+                format!("{package}/tests/{filename}"),
+                "test_gate",
+                triggers.clone(),
+                documents.clone(),
+                observed,
+                format!("cargo test -p {package} --test {}", filename.trim_end_matches(".rs")),
+            ));
+        }
     }
+    rows.push(row(
+        "zzz-cannot-exist".to_owned(),
+        "negative_control",
+        Vec::new(),
+        Vec::new(),
+        false,
+        "guaranteed absent control".to_owned(),
+    ));
     excluded.sort();
     excluded.dedup();
-    Ok((rows, excluded))
+    let controls = Controls {
+        ntm: crontab_matches(&crontab, "ntm").len(),
+        orchestrator_tick: crontab_matches(&crontab, "orchestrator-tick").len(),
+        guaranteed_absent: crontab_matches(&crontab, "zzz-cannot-exist").len(),
+    };
+    Ok(Census {
+        rows,
+        excluded_paths: excluded,
+        read_state,
+        controls,
+    })
 }
 
 fn parse_args() -> Result<(PathBuf, Option<PathBuf>), String> {
@@ -271,9 +526,7 @@ fn parse_args() -> Result<(PathBuf, Option<PathBuf>), String> {
             "--root" => root = PathBuf::from(args.next().ok_or("MISSING_ROOT")?),
             "--out" => output = Some(PathBuf::from(args.next().ok_or("MISSING_OUTPUT")?)),
             "--help" | "-h" => {
-                println!(
-                    "{{\"status\":\"ok\",\"usage\":\"gate-reachability --root <repo> [--out <json>]\"}}"
-                );
+                println!("{{\"status\":\"ok\",\"usage\":\"gate-reachability --root <repo> [--out <json>]\"}}");
                 return Ok((root, output));
             }
             other => return Err(format!("UNKNOWN_ARGUMENT:{other}")),
@@ -291,33 +544,69 @@ fn main() {
         }
     };
     let root = fs::canonicalize(&root).unwrap_or(root);
-    let (status, rows, excluded, error) = match census(&root) {
-        Ok((rows, excluded)) => ("ok", rows, excluded, None),
-        Err(error) => ("error", Vec::new(), Vec::new(), Some(error)),
+    let (status, census, error) = match census(&root) {
+        Ok(census) => ("ok", Some(census), None),
+        Err(error) => ("error", None, Some(error)),
     };
-    let reachable = rows.iter().filter(|row| row.reachable).count();
-    let unreachable = rows.len() - reachable;
-    let positive = Row {
-        name: "no-shell-gate".to_owned(),
-        kind: "positive_control",
-        triggers: vec!["git pre-commit hook".to_owned()],
-        reachable: root.join(".git/hooks/pre-commit").is_file(),
-        proof_command: "stage a .sh and run .git/hooks/pre-commit; expect exit 1".to_owned(),
+    let empty = Census {
+        rows: Vec::new(),
+        excluded_paths: vec![SELF_SOURCE.to_owned(), SELF_TEST.to_owned(), SELF_OUTPUT.to_owned()],
+        read_state: ReadState {
+            population: "full-file",
+            bytes: 0,
+            lines: 0,
+            window: "unavailable",
+            excluded_bead_ids: vec![SELF_BEAD.to_owned()],
+            observed_rows: Vec::new(),
+            observed_subjects: Vec::new(),
+        },
+        controls: Controls {
+            ntm: 0,
+            orchestrator_tick: 0,
+            guaranteed_absent: 0,
+        },
     };
+    let census = census.unwrap_or(empty);
+    let reachable = census.rows.iter().filter(|row| row.reachable).count();
+    let unreachable = census.rows.len() - reachable;
+    let positive = row(
+        "no-shell-gate".to_owned(),
+        "positive_control",
+        census
+            .rows
+            .iter()
+            .find(|row| row.name == "no-shell-gate")
+            .map(|row| row.triggers.clone())
+            .unwrap_or_default(),
+        Vec::new(),
+        false,
+        "run gate-reachability against a real no-shell trigger".to_owned(),
+    );
     let machine = machine_name();
+    let read_state_excluded = json_array(&census.read_state.excluded_bead_ids);
+    let read_state_observed = json_array(&census.read_state.observed_rows);
     let mut report = format!(
-        "{{\"schema_version\":\"omp-gate-reachability/v1\",\"status\":{},\"machine\":{},\"root\":{},\"rows\":{},\"excluded_paths\":{},\"positive_control\":{},\"summary\":{{\"rows\":{},\"reachable\":{},\"unreachable\":{}}}",
+        "{{\"schema_version\":\"omp-gate-reachability/v1\",\"status\":{},\"machine\":{},\"root\":{},\"rows\":{},\"excluded_paths\":{},\"positive_control\":{},\"controls\":{{\"ntm\":{},\"orchestrator_tick\":{},\"zzz_cannot_exist\":{}}},\"read_state\":{{\"population\":{},\"bytes\":{},\"lines\":{},\"window\":{},\"excluded_bead_ids\":{},\"observed_rows\":{} }},\"summary\":{{\"rows\":{},\"reachable\":{},\"unreachable\":{}}}",
         json_string(status),
         json_string(&machine),
         json_string(&root.display().to_string()),
-        json_rows(&rows),
-        json_array(&excluded),
+        json_rows(&census.rows),
+        json_array(&census.excluded_paths),
         json_row(&positive),
-        rows.len(),
+        census.controls.ntm,
+        census.controls.orchestrator_tick,
+        census.controls.guaranteed_absent,
+        json_string(census.read_state.population),
+        census.read_state.bytes,
+        census.read_state.lines,
+        json_string(census.read_state.window),
+        read_state_excluded,
+        read_state_observed,
+        census.rows.len(),
         reachable,
         unreachable,
     );
-    if let Some(error) = error {
+    if let Some(ref error) = error {
         report.push_str(&format!(",\"error\":{}", json_string(&error)));
     }
     report.push('}');
@@ -332,6 +621,10 @@ fn main() {
         }
     }
     if status != "ok" {
-        std::process::exit(2);
+        let code = error
+            .as_deref()
+            .filter(|reason| reason.starts_with("STRICT_YAML_PARSE"))
+            .map_or(2, |_| 1);
+        std::process::exit(code);
     }
 }
