@@ -24,7 +24,7 @@ const BINARIES: &[(&str, &str)] = &[
 
 fn main() -> ExitCode {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
-    let (args, bin_dir) = match parse_cli_args(raw_args) {
+    let (args, bin_dir, expected_sha256) = match parse_cli_args(raw_args) {
         Ok(parsed) => parsed,
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
@@ -39,7 +39,9 @@ fn main() -> ExitCode {
 
     match args.first().map(String::as_str) {
         Some("--check") if args.len() == 1 => run_check(&repo_root, &bin_dir),
-        Some("--install") if args.len() == 2 => run_install(&repo_root, &bin_dir, &args[1]),
+        Some("--install") if args.len() == 2 => {
+            run_install(&repo_root, &bin_dir, &args[1], expected_sha256.as_deref())
+        }
         Some("--install") => {
             eprintln!("INSTALLER ERROR: --install requires exactly one target");
             usage();
@@ -62,9 +64,10 @@ fn main() -> ExitCode {
     }
 }
 
-fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf), String> {
+fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf, Option<String>), String> {
     let mut positional = Vec::new();
     let mut explicit_bin_dir = None;
+    let mut expected_sha256 = None;
     let mut args = raw_args.into_iter();
     while let Some(arg) = args.next() {
         if arg == "--bin-dir" {
@@ -80,6 +83,13 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf), Strin
                 return Err("--bin-dir requires a non-empty path".to_owned());
             }
             explicit_bin_dir = Some(PathBuf::from(value));
+        } else if arg == "--sha256" {
+            let value = args
+                .next()
+                .ok_or_else(|| "--sha256 requires a digest".to_owned())?;
+            expected_sha256 = Some(value);
+        } else if let Some(value) = arg.strip_prefix("--sha256=") {
+            expected_sha256 = Some(value.to_owned());
         } else {
             positional.push(arg);
         }
@@ -92,10 +102,10 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<(Vec<String>, PathBuf), Strin
         })
         .or_else(|| dirs_home().map(|home| home.join(".local/bin")))
         .ok_or_else(|| "INSTALL_BIN_DIR, --bin-dir, or HOME must be set".to_owned())?;
-    Ok((positional, bin_dir))
+    Ok((positional, bin_dir, expected_sha256))
 }
 fn usage() {
-    eprintln!("installer [--check | --install TARGET | --version] [--bin-dir PATH]");
+    eprintln!("installer [--check | --install TARGET | --version] [--bin-dir PATH] [--sha256 DIGEST]");
 }
 
 fn dirs_home() -> Option<PathBuf> {
@@ -171,7 +181,12 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode {
+fn run_install(
+    repo_root: &PathBuf,
+    bin_dir: &PathBuf,
+    target: &str,
+    expected_sha256: Option<&str>,
+) -> ExitCode {
     if let Err(error) = installer::check_build_fence(repo_root) {
         eprintln!("INSTALLER BLOCKED: {error}");
         return ExitCode::from(75);
@@ -220,7 +235,9 @@ fn run_install(repo_root: &PathBuf, bin_dir: &PathBuf, target: &str) -> ExitCode
         return ExitCode::from(2);
     }
     let source = repo_root.join("target/release").join(binary_name);
-    match installer::install_binary(&source, bin_dir, &head, &ownership) {
+    match installer::verify_sha256_before_install(&source, expected_sha256, || {
+        installer::install_binary(&source, bin_dir, &head, &ownership)
+    }) {
         Ok(check) => println!("  INSTALLED {binary_name}: {check}"),
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
@@ -281,15 +298,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bin_dir_flag_is_removed_before_verb_dispatch() {
-        let (args, bin_dir) = parse_cli_args(vec![
+    fn bin_dir_and_sha256_flags_are_removed_before_verb_dispatch() {
+        let (args, bin_dir, expected_sha256) = parse_cli_args(vec![
             "--install".to_owned(),
             "installer".to_owned(),
             "--bin-dir".to_owned(),
             "scratch-home".to_owned(),
+            "--sha256=abcd".to_owned(),
         ])
-        .expect("bin-dir parses");
+        .expect("bin-dir and sha256 parse");
         assert_eq!(args, vec!["--install", "installer"]);
         assert_eq!(bin_dir, PathBuf::from("scratch-home"));
+        assert_eq!(expected_sha256, Some("abcd".to_owned()));
     }
 }

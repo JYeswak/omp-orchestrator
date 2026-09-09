@@ -8,9 +8,11 @@
 //! Install FAILS if any pair disagrees.
 
 use std::fmt;
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use sha2::{Digest, Sha256};
 
 // ── TYPES ──────────────────────────────────────────────────────────────────────
 
@@ -62,6 +64,29 @@ pub enum InstallError {
     /// Required minisign check failed. Never a warning.
     MinisignRefused {
         detail: String,
+    },
+    /// No expected SHA-256 digest was supplied.
+    Sha256MissingExpected,
+    /// The supplied SHA-256 digest was empty.
+    Sha256EmptyExpected,
+    /// The supplied SHA-256 digest was not exactly 64 hexadecimal characters.
+    Sha256MalformedExpected {
+        observed_len: usize,
+    },
+    /// The artifact path does not exist.
+    Sha256SourceMissing {
+        path: String,
+    },
+    /// Reading the artifact failed before verification completed.
+    Sha256ReadFailed {
+        path: String,
+        detail: String,
+    },
+    /// The streamed artifact digest differs from the expected digest.
+    Sha256Mismatch {
+        path: String,
+        expected: String,
+        actual: String,
     },
     /// Existing PATH owners of the install name. Non-interactive refuse.
     PathCollision {
@@ -140,6 +165,30 @@ impl fmt::Display for InstallError {
             Self::MinisignRefused { detail } => {
                 write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
             }
+            Self::Sha256MissingExpected => {
+                write!(formatter, "L0_SHA256_REFUSED: missing expected digest")
+            }
+            Self::Sha256EmptyExpected => {
+                write!(formatter, "L0_SHA256_REFUSED: empty expected digest")
+            }
+            Self::Sha256MalformedExpected { observed_len } => write!(
+                formatter,
+                "L0_SHA256_REFUSED: malformed expected digest length={observed_len}; expected 64 hexadecimal characters"
+            ),
+            Self::Sha256SourceMissing { path } => {
+                write!(formatter, "L0_SHA256_REFUSED: source missing path={path}")
+            }
+            Self::Sha256ReadFailed { path, detail } => {
+                write!(formatter, "L0_SHA256_REFUSED: read failure path={path}: {detail}")
+            }
+            Self::Sha256Mismatch {
+                path,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "L0_SHA256_REFUSED: digest mismatch path={path} expected={expected} actual={actual}"
+            ),
             Self::PathCollision { hits } => {
                 write!(formatter, "L0_PATH_COLLISION: {}", hits.join(" "))
             }
@@ -463,8 +512,87 @@ const GIT_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
 const BUILD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(600);
 /// Identity probes run a local binary; 10s is a ceiling, not a race.
 const PROBE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+const SHA256_BUFFER_SIZE: usize = 8192;
 
-/// Run a git read under the bounded-spawn contract (bead m3c's
+/// Verify an artifact against an explicit SHA-256 digest before installation.
+///
+/// The artifact is read through one fixed-size buffer. The returned digest is
+/// always the canonical lowercase 64-character hexadecimal form.
+#[must_use]
+pub fn verify_sha256(source: &Path, expected: Option<&str>) -> Result<String, InstallError> {
+    let expected = match expected {
+        None => return Err(InstallError::Sha256MissingExpected),
+        Some(value) if value.trim().is_empty() => {
+            return Err(InstallError::Sha256EmptyExpected)
+        }
+        Some(value) => value.trim(),
+    };
+    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(InstallError::Sha256MalformedExpected {
+            observed_len: expected.len(),
+        });
+    }
+    let expected = expected.to_ascii_lowercase();
+    let mut file = match std::fs::File::open(source) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(InstallError::Sha256SourceMissing {
+                path: source.display().to_string(),
+            })
+        }
+        Err(error) => {
+            return Err(InstallError::Sha256ReadFailed {
+                path: source.display().to_string(),
+                detail: error.to_string(),
+            })
+        }
+    };
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; SHA256_BUFFER_SIZE];
+    loop {
+        let bytes_read = file
+            .read(&mut buffer)
+            .map_err(|error| InstallError::Sha256ReadFailed {
+                path: source.display().to_string(),
+                detail: error.to_string(),
+            })?;
+        if bytes_read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
+    let digest = hasher.finalize();
+    let mut actual = String::with_capacity(64);
+    for byte in digest {
+        write!(&mut actual, "{byte:02x}").expect("writing a digest to String cannot fail");
+    }
+    if actual != expected {
+        return Err(InstallError::Sha256Mismatch {
+            path: source.display().to_string(),
+            expected,
+            actual,
+        });
+    }
+    Ok(actual)
+}
+
+/// Verify an artifact before invoking the action that publishes it.
+///
+/// The action is never called when digest verification refuses, which gives
+/// callers a testable seam for the no-write-before-verification invariant.
+#[must_use]
+pub fn verify_sha256_before_install<T, F>(
+    source: &Path,
+    expected: Option<&str>,
+    install: F,
+) -> Result<T, InstallError>
+where
+    F: FnOnce() -> Result<T, InstallError>,
+{
+    verify_sha256(source, expected)?;
+    install()
+}
+
 /// bounded_output): its own process group, both pipes drained on dedicated
 /// readers, deadline enforced, group TERM+grace+KILL on expiry. A timeout
 /// maps to the typed [`InstallError::InstallTimeout`] - never to a partial
