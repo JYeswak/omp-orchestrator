@@ -170,6 +170,56 @@ fn emit_s1_l3_start(repo: &std::path::Path) {
     }
 }
 
+/// L4 observability writer (tt62): records the live-verdict / spawn terminal of
+/// `ompo start` as one S1.L3 -> S1.L4 row beside the S1.L3 start row. `spawn` is
+/// the terminal object the spawn chain above computed; every arm sets `status`,
+/// so an unrecognized value is a bug and refuses loudly rather than emitting fiction.
+/// Shape copied from `emit_s1_l3_start`, pointed at the L4 transition.
+fn emit_s1_l4_verdict(repo: &std::path::Path, spawn: &serde_json::Value) {
+    let status = spawn
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("UNKNOWN");
+    let exit_code = spawn
+        .get("exit_code")
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|code| i32::try_from(code).ok());
+    let reason = match (status, exit_code) {
+        ("NOT_REQUESTED", _) => "SPAWN_NOT_REQUESTED",
+        ("NOT_NEEDED", _) => "LIVE",
+        ("EXECUTED", _) => "SPAWN_EXECUTED",
+        ("FAILED", _) => "SPAWN_FAILED",
+        _ => {
+            eprintln!(
+                "LIFECYCLE_EVENT_EMIT_FAILED layer=L4 detail=unknown start terminal status={status:?}"
+            );
+            return;
+        }
+    };
+    let code = match lifecycle_event::ReasonCode::new(reason) {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L4 detail={error}");
+            return;
+        }
+    };
+    let event = lifecycle_event::LifecycleEvent::new(
+        lifecycle_event::Layer::L4,
+        "S1.L3",
+        "S1.L4",
+        "ompo",
+        lifecycle_event::EmitOutcome::Emitted,
+        code,
+    );
+    let path = lifecycle_event::default_repo_journal(repo);
+    match lifecycle_event::DurableJournal::open(&path)
+        .and_then(|journal| lifecycle_event::emit_one_host(&journal, event))
+    {
+        Ok(_) => {}
+        Err(error) => eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L4 detail={error}"),
+    }
+}
+
 fn run_start(rest: &[String]) -> ExitCode {
     let mut repo = match current_repo() {
         Ok(path) => path,
@@ -268,6 +318,7 @@ fn run_start(rest: &[String]) -> ExitCode {
     };
 
     emit_s1_l3_start(&repo);
+    emit_s1_l4_verdict(&repo, &spawn);
     let data = json!({
         "repo": repo.display().to_string(),
         "session": session,
