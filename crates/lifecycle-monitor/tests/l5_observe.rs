@@ -91,7 +91,7 @@ fn empty_l5_journal_is_typed_refusal() {
 
     let output = observe(&journal);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
     assert!(stderr.contains("LIFECYCLE_MONITOR_EMPTY_SCAN"), "{stderr}");
     assert!(!stderr.contains("state=silent"), "{stderr}");
 }
@@ -115,7 +115,11 @@ fn missing_and_malformed_l5_timestamps_are_typed_refusals() {
     std::fs::write(&malformed, malformed_row).expect("write malformed timestamp");
     let malformed_output = observe(&malformed);
     let malformed_stderr = String::from_utf8_lossy(&malformed_output.stderr);
-    assert_eq!(malformed_output.status.code(), Some(1), "{malformed_stderr}");
+    assert_eq!(
+        malformed_output.status.code(),
+        Some(1),
+        "{malformed_stderr}"
+    );
     assert!(
         malformed_stderr.contains("LIFECYCLE_MONITOR_MALFORMED_TIMESTAMP"),
         "{malformed_stderr}"

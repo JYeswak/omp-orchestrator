@@ -6,7 +6,7 @@
 
 #![forbid(unsafe_code)]
 
-use lifecycle_event::{DurableJournal, Layer, LifecycleEvent, EmitOutcome, ReasonCode};
+use lifecycle_event::{DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode};
 use lifecycle_monitor::{
     gate_claimed_write_readback, gate_freshness_verdict, journal_for_host, load_metrics,
     observe_all, observe_layer, EXPECTED_METRIC_COUNT,
@@ -113,13 +113,20 @@ fn gate(args: &[String]) -> Result<(), String> {
     println!("GATE_OK layers={}", vs.len());
     Ok(())
 }
+fn error_exit_code(error: &str) -> ExitCode {
+    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_SCAN") {
+        ExitCode::from(2)
+    } else {
+        ExitCode::from(1)
+    }
+}
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("{error}");
-            ExitCode::from(1)
+            return error_exit_code(&error);
         }
     }
 }
