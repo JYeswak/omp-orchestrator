@@ -47,13 +47,39 @@ fn start_json_reports_parity_and_halt() {
     assert_eq!(report["command"], "start");
     assert_eq!(report["status"], "OK");
     let obs = observability(&report);
+    // Halt first: a parity divergence must leave these green, proving the
+    // mutation under grade touches only the ID paths, never the halt signal.
+    assert_eq!(obs["halt"]["engaged"], true);
+    assert_eq!(obs["halt"]["step"], "L3-HD0009");
+    assert_eq!(obs["halt"]["reason_code"], "HD-0009");
     assert_eq!(obs["parity_ok"], true, "id lists: {obs}");
     assert_eq!(
         obs["tui_ids"].as_array().map(Vec::len),
         obs["json_ids"].as_array().map(Vec::len),
         "both lists present with equal length: {obs}"
     );
-    assert_eq!(obs["halt"]["engaged"], true);
-    assert_eq!(obs["halt"]["step"], "L3-HD0009");
-    assert_eq!(obs["halt"]["reason_code"], "HD-0009");
+}
+
+/// Known-bad legs for the parity gate itself (yto0): the typed contract is
+/// asserted directly, without running the binary. Misorder, absence, and
+/// vacuity each refuse with their own variant.
+#[test]
+fn parity_gate_names_tui_only_and_refuses_empty() {
+    use ompo_start::{check_id_parity, ParityMismatch};
+    assert_eq!(check_id_parity(&["a", "b"], &["a", "b"]), Ok(()));
+    assert_eq!(
+        check_id_parity(&["a", "b"], &["b", "a"]),
+        Err(ParityMismatch::TuiOnly {
+            id: "a",
+            tui_index: 0
+        })
+    );
+    assert_eq!(
+        check_id_parity(&["a"], &[]),
+        Err(ParityMismatch::TuiOnly {
+            id: "a",
+            tui_index: 0
+        })
+    );
+    assert_eq!(check_id_parity(&[], &[]), Err(ParityMismatch::Empty));
 }

@@ -75,6 +75,37 @@ pub fn json_ordered_ids(steps: &[Step]) -> Vec<&'static str> {
     ordered_ids(view(steps))
 }
 
+/// Parity-gate failure: a TUI step missing or misordered in JSON, or vacuous input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParityMismatch {
+    /// TUI shows `id` at `tui_index` but JSON lacks it there. Covers absence
+    /// and misordering: either way the TUI-visible step is not where JSON says.
+    TuiOnly { id: &'static str, tui_index: usize },
+    /// Both lists empty: a vacuous pass is refused, never reported clean.
+    Empty,
+}
+
+/// Gate: every TUI id must appear in the JSON ids at the same index. The two
+/// renderers derive from the same post-predicate steps, so any divergence is
+/// a renderer bug (LAW-L3-ORDERED-IDS trap), never legitimate skew.
+pub fn check_id_parity(
+    tui_ids: &[&'static str],
+    json_ids: &[&'static str],
+) -> Result<(), ParityMismatch> {
+    if tui_ids.is_empty() && json_ids.is_empty() {
+        return Err(ParityMismatch::Empty);
+    }
+    for (index, id) in tui_ids.iter().enumerate() {
+        if json_ids.get(index) != Some(id) {
+            return Err(ParityMismatch::TuiOnly {
+                id: *id,
+                tui_index: index,
+            });
+        }
+    }
+    Ok(())
+}
+
 fn elapsed(status: StepStatus) -> bool {
     matches!(status, StepStatus::Passed | StepStatus::Skipped)
 }

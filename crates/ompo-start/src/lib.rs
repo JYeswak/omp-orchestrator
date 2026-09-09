@@ -21,6 +21,7 @@ pub use spawn::{
     PaneId, SpawnReceipt, SpawnWaveError,
 };
 pub use steps::{
-    apply_predicates, fixture_steps, json_next_command, json_ordered_ids, next_command, next_step,
-    ordered_ids, tui_next_command, tui_ordered_ids, view, Predicate, Step, StepStatus,
+    apply_predicates, check_id_parity, fixture_steps, json_next_command, json_ordered_ids,
+    next_command, next_step, ordered_ids, tui_next_command, tui_ordered_ids, view, ParityMismatch,
+    Predicate, Step, StepStatus,
 };

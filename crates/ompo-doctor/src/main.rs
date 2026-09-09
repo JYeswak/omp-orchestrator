@@ -132,6 +132,9 @@ fn liveness_json(observation: &Observation) -> Value {
 fn observability_json(steps: &[ompo_start::Step]) -> Value {
     let tui_ids: Vec<_> = ompo_start::tui_ordered_ids(steps);
     let json_ids: Vec<_> = ompo_start::json_ordered_ids(steps);
+    // The boolean is the gate verdict, not a reimplementation: the typed
+    // TuiOnly/Empty refusal lives in `check_id_parity`, asserted by its own legs.
+    let parity_ok = ompo_start::check_id_parity(&tui_ids, &json_ids).is_ok();
     let halt = steps.iter().find(|step| step.id == "L3-HD0009").map(|step| {
         json!({
             "engaged": step.status == ompo_start::StepStatus::Blocked,
@@ -140,7 +143,7 @@ fn observability_json(steps: &[ompo_start::Step]) -> Value {
         })
     });
     json!({
-        "parity_ok": tui_ids == json_ids,
+        "parity_ok": parity_ok,
         "tui_ids": tui_ids,
         "json_ids": json_ids,
         "halt": halt,
