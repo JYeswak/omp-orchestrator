@@ -38,40 +38,43 @@ fn path_without_bv_is_typed_refusal_not_success() {
 
 #[test]
 fn positive_control_with_bv_writes_receipt_and_exits_zero() {
-    let path = env::var("PATH").expect("PATH");
-    let receipt = env::temp_dir().join(format!(
-        "selector-receipt-{}-{}.json",
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture_root = env::temp_dir().join(format!(
+        "selector-bv-fixture-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time")
             .as_nanos()
     ));
+    fs::create_dir_all(&fixture_root).expect("fixture root");
+    let bv = fixture_root.join("bv");
+    fs::write(&bv, b"selector fixture executable\n").expect("fixture bv");
+    let mut permissions = fs::metadata(&bv).expect("fixture metadata").permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&bv, permissions).expect("fixture executable permission");
+
+    let receipt = fixture_root.join("receipt.json");
     let output = Command::new(bin())
-        .env("PATH", &path)
+        .env_clear()
+        .env("PATH", &fixture_root)
         .args(["select-graph", "--receipt", receipt.to_str().unwrap()])
         .output()
-        .expect("spawn select-graph with bv");
+        .expect("spawn select-graph with fixture bv");
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let code = output.status.code().unwrap_or(-1);
     assert_eq!(code, 0, "positive control exit; stderr={stderr} stdout={stdout}");
-    assert!(
-        stdout.contains("\"status\":\"AVAILABLE\""),
-        "receipt missing on stdout: {stdout}"
-    );
-    assert!(
-        stdout.contains("\"selected_by\":\"bv\""),
-        "selected_by missing: {stdout}"
-    );
-    let body = fs::read_to_string(&receipt).unwrap_or_else(|_| panic!("receipt absent at {}", receipt.display()));
-    assert!(
-        !body.trim().is_empty(),
-        "empty receipt at {}",
-        receipt.display()
-    );
+    assert!(stdout.contains("\"status\":\"AVAILABLE\""), "{stdout}");
+    assert!(stdout.contains("\"selected_by\":\"bv\""), "{stdout}");
+    let body = fs::read_to_string(&receipt).expect("fixture receipt");
     assert!(body.contains("\"program\":\"bv\""), "{body}");
-    let _ = fs::remove_file(&receipt);
+    assert!(
+        body.contains(&format!("\"resolved\":\"{}\"", bv.display())),
+        "receipt did not resolve fixture bv: {body}"
+    );
+    fs::remove_dir_all(&fixture_root).expect("fixture cleanup");
 }
 
 #[test]
