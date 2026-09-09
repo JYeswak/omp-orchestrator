@@ -1,7 +1,9 @@
 //! Canonical `STEPS` for `ompo start`. Path named by docs/contracts/s1_l3_walkthrough.md.
 
+use serde::{Deserialize, Serialize};
+
 /// Predicate that may change `status` but must never remove the row from `STEPS`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Predicate {
     Always,
     /// Persona A never spawns. Unmet => `Skipped` / `NotApplicable`, still in the array.
@@ -12,7 +14,7 @@ pub enum Predicate {
     Hd0009Decided,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StepStatus {
     Pending,
     Ready,
@@ -23,7 +25,7 @@ pub enum StepStatus {
     NotApplicable,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Step {
     pub id: &'static str,
     pub title: &'static str,

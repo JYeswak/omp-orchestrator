@@ -5,6 +5,71 @@ use ompo_start::{
     ordered_ids, tui_next_command, tui_ordered_ids, view, Predicate, Step, StepStatus,
 };
 
+
+use serde::Deserialize;
+
+use serde_json::Value;
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct StepWire {
+    id: String,
+    title: String,
+    status: StepStatus,
+    reason_code: Value,
+    next_command: Option<String>,
+    predicate: Predicate,
+}
+
+#[test]
+fn step_fields_round_trip() {
+    let step = Step {
+        id: "L3-STEP",
+        title: "step carrier",
+        status: StepStatus::Pending,
+        reason_code: Some("L3-PENDING"),
+        next_command: Some("ompo start --json"),
+        predicate: Predicate::Always,
+    };
+
+    let encoded = serde_json::to_value(&step).expect("Step must serialize");
+    let object = encoded.as_object().expect("Step wire value must be an object");
+    let keys: std::collections::BTreeSet<&str> = object.keys().map(String::as_str).collect();
+    assert_eq!(
+        keys,
+        [
+            "id",
+            "title",
+            "status",
+            "reason_code",
+            "next_command",
+            "predicate",
+        ]
+        .into_iter()
+        .collect()
+    );
+
+    let decoded: StepWire = serde_json::from_value(encoded.clone()).expect("Step must round-trip");
+    assert_eq!(
+        decoded,
+        StepWire {
+            id: "L3-STEP".to_owned(),
+            title: "step carrier".to_owned(),
+            status: StepStatus::Pending,
+            reason_code: serde_json::json!("L3-PENDING"),
+            next_command: Some("ompo start --json".to_owned()),
+            predicate: Predicate::Always,
+        }
+    );
+
+    let mut missing_reason = encoded;
+    missing_reason
+        .as_object_mut()
+        .expect("Step wire value must be an object")
+        .remove("reason_code");
+    let error = serde_json::from_value::<StepWire>(missing_reason)
+        .expect_err("omitting reason_code must fail");
+    assert!(error.to_string().contains("reason_code"), "{error}");
+}
 #[test]
 fn skipped_steps_remain_in_both_renders() {
     let mut steps = fixture_steps();

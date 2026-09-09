@@ -1496,6 +1496,7 @@ dependencies = [
 name = "ompo-start"
 version = "0.1.0"
 dependencies = [
+ "serde",
  "lifecycle-event",
  "lifecycle-monitor",
  "serde_json",
