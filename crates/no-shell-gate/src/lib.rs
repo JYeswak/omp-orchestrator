@@ -29,6 +29,7 @@
 /// The six gates decide WHAT is wrong; this module decides whether their verdict is
 /// about the commit that is actually being made.
 pub mod cited_figure;
+pub mod commit_ratchets;
 pub mod commit_serialization;
 pub mod def_ids;
 pub mod firing_ledger;

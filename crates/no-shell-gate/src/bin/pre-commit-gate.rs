@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 use no_shell_gate::commit_serialization;
+use no_shell_gate::commit_ratchets;
 use no_shell_gate::firing_ledger;
 use no_shell_gate::violation_for;
 use orchestration_tick_gate::{law_code, parse_ledger, validate_receipt, LedgerError};
@@ -172,10 +173,22 @@ fn main() -> ExitCode {
         }
     };
     if staged.is_empty() && deletions.is_empty() && matches!(merge_context, MergeContext::None) {
+        eprintln!("empty_staged: NOTHING_TO_CHECK reason=no_staged_files");
         eprintln!("NOTHING_TO_CHECK: no staged files to check");
         return PreCommitOutcome::NothingToCheck.exit_code();
     }
+    eprintln!(
+        "empty_staged: CLEAN staged_files={} deletions={} merge={:?}",
+        staged.len(),
+        deletions.len(),
+        merge_context
+    );
     let mut refusals: Vec<String> = Vec::new();
+    let ratchets = commit_ratchets::run(&repo_root, &staged, &deletions);
+    for observation in ratchets.observations {
+        eprintln!("{observation}");
+    }
+    refusals.extend(ratchets.refusals);
     validate_project_agent(&repo_root, &staged, &deletions, &mut refusals);
     validate_staged_rust_modes(&repo_root, &staged, &mut refusals);
     eprintln!(
