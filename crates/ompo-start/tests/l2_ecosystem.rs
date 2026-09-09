@@ -90,7 +90,59 @@ fn equivalent_symlink_paths_share_identity() {
 }
 
 #[test]
-fn readback_refuses_missing_host_identity() {
+fn readback_refuses_empty_and_missing_identity_fields() {
+    let fields = [
+        ("project_id", false, "missing required keys: project_id"),
+        ("canonical_path", true, "repo_identity.canonical_path is missing"),
+        ("source_revision", true, "repo_identity.source_revision is missing"),
+        ("git_marker", true, "repo_identity.git_marker is missing"),
+        ("host_identity", true, "repo_identity.host_identity is missing"),
+    ];
+    for (field, nested, detail) in fields {
+        let repository = repository_fixture();
+        let output = repository.path().join(".omp-orchestrator/inception.json");
+        initialize(repository.path(), &output).expect("write inception");
+        let mut value: Value = serde_json::from_str(
+            &std::fs::read_to_string(&output).expect("read inception"),
+        )
+        .expect("valid JSON");
+        if nested {
+            value
+                .get_mut("repo_identity")
+                .and_then(Value::as_object_mut)
+                .expect("repo identity object")
+                .insert(field.to_owned(), Value::String(String::new()));
+        } else {
+            value
+                .as_object_mut()
+                .expect("manifest object")
+                .remove(field);
+        }
+        std::fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
+            .expect("write mutation");
+        let error = read_inception(&output).expect_err("identity omission must refuse");
+        assert_eq!(
+            error.to_string(),
+            format!("INCEPTION_READBACK_FAILED path={} detail={detail}", output.display())
+        );
+    }
+}
+
+#[test]
+fn readback_refuses_empty_or_missing_manifest_objects() {
+    let cases = ["", "{}"];
+    for contents in cases {
+        let repository = repository_fixture();
+        let output = repository.path().join(".omp-orchestrator/inception.json");
+        std::fs::create_dir_all(output.parent().expect("artifact parent")).expect("parent");
+        std::fs::write(&output, contents).expect("write malformed artifact");
+        let error = read_inception(&output).expect_err("empty manifest must refuse");
+        assert!(
+            error.to_string().starts_with("INCEPTION_READBACK_FAILED"),
+            "{error}"
+        );
+    }
+
     let repository = repository_fixture();
     let output = repository.path().join(".omp-orchestrator/inception.json");
     initialize(repository.path(), &output).expect("write inception");
@@ -99,16 +151,28 @@ fn readback_refuses_missing_host_identity() {
     )
     .expect("valid JSON");
     value
-        .get_mut("repo_identity")
-        .and_then(Value::as_object_mut)
-        .expect("repo identity object")
-        .remove("host_identity");
+        .as_object_mut()
+        .expect("manifest object")
+        .insert("repo_identity".to_owned(), Value::Null);
     std::fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
         .expect("write mutation");
-    let error = read_inception(&output).expect_err("missing host identity must refuse");
-    assert!(error.to_string().contains("host_identity"), "{error}");
+    let error = read_inception(&output).expect_err("null repo identity must refuse");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "INCEPTION_READBACK_FAILED path={} detail=repo_identity is not an object",
+            output.display()
+        )
+    );
 }
-
+#[test]
+fn nonexistent_root_refuses_canonicalization() {
+    let root = tempfile::tempdir().expect("root parent").path().join("missing");
+    let output = root.join(".omp-orchestrator/inception.json");
+    let error = initialize(&root, &output).expect_err("nonexistent root must refuse");
+    assert!(matches!(error, InceptionError::RepositoryUnreadable { .. }));
+    assert!(error.to_string().contains("INCEPTION_REPOSITORY_UNREADABLE"));
+}
 #[test]
 fn l2_named_target_refuses_missing_control_files() {
     let repository = repository_fixture();
