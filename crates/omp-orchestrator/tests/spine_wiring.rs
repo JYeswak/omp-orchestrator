@@ -81,7 +81,7 @@ fn the_emitter_probe_finds_nothing_for_a_crate_nobody_emits_through() {
     }
 }
 
-/// SELF-EXCLUSION, and it is not hygiene. `ack-spine`'s own `main.rs` and `spine.rs`
+/// SELF-EXCLUSION, and it is not hygiene. ack-spine's own main.rs and spine.rs
 /// call its step primitive, so a probe that counted them would report the crate
 /// wired by its own source forever — the self-referential-checker defect this
 /// repository has produced six times.
@@ -96,8 +96,13 @@ fn a_crate_emitting_into_its_own_ledger_is_not_a_caller() {
     // And prove the exclusion is load-bearing rather than incidental: the crate's
     // own source really does contain the primitive, so excluding it changes the
     // answer.
-    let own = std::fs::read_to_string(root.join("crates/ack-spine/src/spine.rs")).unwrap_or_default()
-        + &std::fs::read_to_string(root.join("crates/ack-spine/src/main.rs")).unwrap_or_default();
+    let own = ["main.rs", "spine.rs"]
+        .into_iter()
+        .map(|name| {
+            std::fs::read_to_string(root.join("crates/ack-spine/src").join(name))
+                .unwrap_or_else(|error| panic!("ack-spine source {name} must be readable: {error}"))
+        })
+        .collect::<String>();
     assert!(
         own.contains("ledger::step(") || own.contains("emit_step"),
         "ack-spine's own source no longer calls its step primitive, so the \

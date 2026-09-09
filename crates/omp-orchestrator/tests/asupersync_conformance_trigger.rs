@@ -3,7 +3,7 @@
 //! NO-CLAIM: this proves command spelling and reachability only. It does not prove that the
 //! conformance scanner or its generated table is correct.
 
-const SUPERVISOR_SOURCE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+const SUPERVISOR_SOURCE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/resident.rs"));
 
 #[test]
 fn run_cycle_owns_reachable_asupersync_conformance_check() {

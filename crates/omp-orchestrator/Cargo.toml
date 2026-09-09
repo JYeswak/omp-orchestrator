@@ -6,9 +6,6 @@ edition = "2021"
 build = "build.rs"
 description = "Resident supervisor: observe -> dispatch -> receiver receipt -> escalate"
 
-[[bin]]
-name = "omp-orchestrator"
-path = "src/main.rs"
 
 [[bin]]
 name = "omp-target-dir"

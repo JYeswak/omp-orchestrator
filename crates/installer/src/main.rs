@@ -15,7 +15,7 @@ use std::process::ExitCode;
 #[used]
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
 const BINARIES: &[(&str, &str)] = &[
-    ("omp-orchestrator", "omp-orchestrator"),
+    ("ompo-doctor", "ompo"),
     ("tick-monitor", "tick-monitor"),
     ("pane-truth", "pane-truth"),
     ("installer", "installer"),
@@ -149,13 +149,13 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     // class as the retired "81 JSON-RPC methods, 17 used" figure.
     let mut owned = 0usize;
 
-    for &(_, name) in BINARIES {
+    for &(crate_name, name) in BINARIES {
         let binary = bin_dir.join(name);
         if !binary.exists() {
             println!("  {name}: NOT INSTALLED (skipped)");
             continue;
         }
-        let ownership = installer::resolve_repo_ownership(repo_root, name);
+        let ownership = installer::resolve_repo_ownership(repo_root, crate_name);
         let check = installer::verify_identity(&binary, &head, &ownership);
         println!("  {check}");
         match (&ownership, check.consistent) {
@@ -209,10 +209,10 @@ fn run_install(
     let Some((crate_name, binary_name)) =
         BINARIES.iter().find(|(_, name)| *name == target).copied()
     else {
-        eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of omp-orchestrator, tick-monitor, pane-truth, installer, bead-availability");
+        eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of ompo, tick-monitor, pane-truth, installer, bead-availability");
         return ExitCode::from(2);
     };
-    let ownership = installer::resolve_repo_ownership(repo_root, binary_name);
+    let ownership = installer::resolve_repo_ownership(repo_root, crate_name);
     if let RepoOwnership::Foreign { repo } = &ownership {
         eprintln!("INSTALLER ERROR: target {binary_name} is FOREIGN (source in {repo}); install it from its owning repository");
         return ExitCode::from(3);

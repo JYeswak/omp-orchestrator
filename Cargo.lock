@@ -912,6 +912,8 @@ dependencies = [
 name = "gate-runner"
 version = "0.1.0"
 dependencies = [
+ "input-manifest",
+ "serde",
  "serde_json",
  "subprocess-contract",
 ]
@@ -1079,7 +1081,7 @@ version = "0.1.0"
 dependencies = [
  "lifecycle-event",
  "serde_json",
- "sha2",
+ "sha2 0.10.9",
  "staged-build-gate",
  "subprocess-contract",
 ]
@@ -1180,6 +1182,7 @@ dependencies = [
  "loop-queue-filter",
  "serde",
  "serde_json",
+ "text-structure",
  "tick-monitor",
 ]
 
@@ -1394,24 +1397,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "omp-idle-dispatch"
-version = "0.1.0"
-dependencies = [
- "agent-mail-native",
- "asupersync",
- "finding",
- "loop-queue-filter",
- "ompo-doctor",
- "serde_json",
- "subprocess-contract",
- "tick-monitor",
-]
-
-[[package]]
 name = "omp-inventory-map"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "omp-surface-consumption",
+ "ompo-doctor",
  "regex",
  "serde",
  "serde_json",
@@ -1467,6 +1458,7 @@ dependencies = [
 name = "omp-surface-consumption"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "subprocess-contract",
 ]
 
@@ -1484,7 +1476,10 @@ dependencies = [
 name = "ompo-doctor"
 version = "0.1.0"
 dependencies = [
+ "asupersync",
  "lifecycle-event",
+ "omp-orchestrator",
+ "omp-rpc-session",
  "ompo-start",
  "serde",
  "serde_json",
@@ -1496,12 +1491,12 @@ dependencies = [
 name = "ompo-start"
 version = "0.1.0"
 dependencies = [
- "serde",
  "lifecycle-event",
  "lifecycle-monitor",
- "subprocess-contract",
+ "serde",
  "serde_json",
  "sha2 0.11.0",
+ "subprocess-contract",
  "tempfile",
 ]
 
@@ -1729,6 +1724,7 @@ dependencies = [
 name = "pre-delete-citation-check"
 version = "0.1.0"
 dependencies = [
+ "ack-spine",
  "finding",
  "omp-types",
  "serde_json",
@@ -1927,6 +1923,7 @@ version = "0.1.0"
 dependencies = [
  "pane-truth",
  "proptest",
+ "subprocess-contract",
  "tick-monitor",
 ]
 

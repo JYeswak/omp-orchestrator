@@ -35,11 +35,11 @@ fn tracker_error_clears_pending_dispatch_intent() {
     ));
 }
 
-/// dispatch-claim-fence is already imported at main.rs:16 and its known-bad
+/// dispatch-claim-fence is already imported at resident.rs:16 and its known-bad
 /// leg (unknown_status_is_not_admitted) is green in its own test suite.
 #[test]
 fn claim_fence_is_already_wired() {
-    // The import at main.rs:16 proves the fence is callable from the
+    // The import at resident.rs:16 proves the fence is callable from the
     // orchestrator. The fence's own test suite (dispatch-claim-fence tests)
     // verifies the known-bad leg. This test proves the WIRE exists.
     let manifest = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml"));

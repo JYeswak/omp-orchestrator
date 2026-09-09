@@ -118,7 +118,7 @@
       "existing_beads": [
         {"id": "omp-orchestrator-zlqk", "status": "in_progress", "match": "partial", "evidence": "Prove the cron conductor dispatches idle panes unattended: 5 consecutive ticks, zero orchestrator sends"},
         {"id": "omp-orchestrator-kxe", "status": "in_progress", "match": "partial", "evidence": "4. END-TO-END PROOF on a real repo: the binary takes a plan, produces beads with acceptance criteria, triages, dispatches to a real OMP pane, and verifies a close by GROUND TRUTH (a commit or a bead close with cited evidence). Not a fixture, not a dry run."},
-        {"id": "omp-orchestrator-kxe.1", "status": "in_progress", "match": "partial", "evidence": "The command must be `omp-orchestrator run --once ...` and must emit a real DISPATCHED result containing a receiver receipt"},
+        {"id": "omp-orchestrator-kxe.1", "status": "in_progress", "match": "partial", "evidence": "The command must be `ompo supervise --once ...` and must emit a real DISPATCHED result containing a receiver receipt"},
         {"id": "omp-orchestrator-th0z", "status": "in_progress", "match": "partial", "evidence": "L1 every free pane is DISPATCHED or NAMED in the tick receipt ... dispatched[] ∪ refused[] == observed.free_capacity"}
       ],
       "coverage": "PARTIAL",
@@ -132,8 +132,8 @@
       "id": "09.7",
       "title": "M6: a foreign repository runs the orchestrator on a clean host via cargo install and takes a first tick",
       "lines": "L163-L213",
-      "what": "On a clean host with no target/, `cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator` under env -i succeeds and `omp-orchestrator run --repo <foreign-repo fixture> --once` exits 0 with output classified progress (OBSERVATION) or named_refusal (SUPERVISOR_REFUSED).",
-      "acceptance_seed": "Run the L167-L192 script verbatim: `test ! -e target`; env -i cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root $TMPDIR/omp-m6; env -i omp-orchestrator run --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >log; grep SUPERVISOR_REFUSED→named_refusal, OBSERVATION→progress, else M6_UNCLASSIFIED_OUTPUT exit 1; then `jq -e '(.install_exit == 0) and (.cache_absent == true) and (.fixture == \"foreign-repo\") and (.first_tick_exit == 0) and (.verdict == \"progress\" or .verdict == \"named_refusal\") and (.revision|type == \"string\") and (.revision|length > 0)' m6.json`. Presence probes must use `tmux -V`, never `tmux --version`.",
+      "what": "On a clean host with no target/, `cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator` under env -i succeeds and `ompo supervise --repo <foreign-repo fixture> --once` exits 0 with output classified progress (OBSERVATION) or named_refusal (SUPERVISOR_REFUSED).",
+      "acceptance_seed": "Run the L167-L192 script verbatim: `test ! -e target`; env -i cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root $TMPDIR/omp-m6; env -i ompo supervise --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >log; grep SUPERVISOR_REFUSED→named_refusal, OBSERVATION→progress, else M6_UNCLASSIFIED_OUTPUT exit 1; then `jq -e '(.install_exit == 0) and (.cache_absent == true) and (.fixture == \"foreign-repo\") and (.first_tick_exit == 0) and (.verdict == \"progress\" or .verdict == \"named_refusal\") and (.revision|type == \"string\") and (.revision|length > 0)' m6.json`. Presence probes must use `tmux -V`, never `tmux --version`.",
       "priority": 0,
       "kind": "milestone",
       "existing_beads": [

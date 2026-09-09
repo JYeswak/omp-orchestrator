@@ -155,7 +155,7 @@ fn exactly_the_two_production_probes_are_bounded() {
     let mut raw_output_sites = Vec::new();
     let mut bounded_sites = Vec::new();
 
-    for name in ["main.rs", "target_directory.rs", "resident_tick.rs"] {
+    for name in ["resident.rs", "target_directory.rs", "resident_tick.rs"] {
         let path = root.join(name);
         let text = std::fs::read_to_string(&path).expect("source readable");
         for (index, line) in text.lines().enumerate() {
@@ -188,7 +188,7 @@ fn exactly_the_two_production_probes_are_bounded() {
     );
 
     assert!(
-        bounded_sites.contains(&"main.rs") && bounded_sites.contains(&"target_directory.rs"),
+        bounded_sites.contains(&"resident.rs") && bounded_sites.contains(&"target_directory.rs"),
         "both production sites must route through bounded_output; got {bounded_sites:?}"
     );
     assert!(

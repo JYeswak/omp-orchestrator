@@ -54,8 +54,8 @@ fn diagnostic_tmux_read_is_allowed() {
         "tmux list-panes -a -F '#{pane_id}'",
         "tmux capture-pane -p -t %1413 | grep 'tmux send-keys'",
         "tmux list-panes -a -F '#{pane_id}' | grep pane",
-        "/Users/josh/.local/bin/tick-monitor observe --session omp-orchestrator",
-        "/Users/josh/.local/bin/omp-orchestrator --once",
+        "$HOME/.local/bin/tick-monitor observe --session omp-orchestrator",
+        "$HOME/.local/bin/ompo supervise --once",
         "ntm --robot-send=omp-orchestrator --panes=%1413 --msg-file=/tmp/packet",
     ] {
         let input: HookInput = parse_input(&claude_event(command)).unwrap();
@@ -66,8 +66,8 @@ fn diagnostic_tmux_read_is_allowed() {
 #[test]
 fn exact_kernel_shapes_and_token_spoofs_have_distinct_verdicts() {
     for command in [
-        "/Users/josh/.local/bin/tick-monitor observe --session omp-orchestrator",
-        "/Users/josh/.local/bin/omp-orchestrator --once",
+        "$HOME/.local/bin/tick-monitor observe --session omp-orchestrator",
+        "$HOME/.local/bin/ompo supervise --once",
         "ntm --robot-send=omp-orchestrator --panes=%1413",
         "bv --robot-triage --json",
     ] {

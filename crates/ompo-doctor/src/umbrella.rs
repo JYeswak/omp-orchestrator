@@ -37,6 +37,7 @@ pub const VERBS: &[&str] = &[
     "help",
     "capabilities",
     "start",
+    "supervise",
     "portal",
     "quickstart",
     "completion",
@@ -206,6 +207,7 @@ pub fn usage() -> String {
          \x20 audit [--limit N] [--repo PATH] [--json]         recent state mutations with provenance\n\
          \x20 why <id> [--repo PATH] [--json]                  provenance trace for one object\n\
          \x20 start [--repo PATH] [--session NAME] [--json]    run the ordered S1 walkthrough\n\
+         \x20 supervise [--repo PATH] [--session NAME] [--once|--max-ticks N]  run observe -> dispatch -> receipt\n\
          \x20 portal [--repo PATH] [--session NAME] --json     emit the S1 robot portal envelope\n\
          \x20 state [--json]                                   project OMP's own state over --mode=rpc\n\
          \x20 stats [--json]                                   project OMP's session cost and token counts\n\

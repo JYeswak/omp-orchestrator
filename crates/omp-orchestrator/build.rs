@@ -83,7 +83,7 @@ fn main() {
     // silently describes a different commit than the one being built.
     //
     // This is the identity half of the same failure as the claim fence: a mechanism was
-    // correct in source and inert in the installed artifact. `~/.local/bin/omp-orchestrator`
+    // correct in source and inert in the installed artifact. `~/.local/bin/ompo`
     // still reported `build_id=unversioned` at 18:18 tonight for exactly this reason,
     // while its `--version` output was being trusted to prove what it was built from.
     //

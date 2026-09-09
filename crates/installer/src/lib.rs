@@ -1006,7 +1006,7 @@ fn launchd_uid() -> Result<String, InstallError> {
 
 fn launchd_service_for_binary(binary_name: &str) -> Option<&'static str> {
     match binary_name {
-        "omp-orchestrator" => Some("ai.zeststream.omp-orchestrator"),
+        "ompo" => Some("ai.zeststream.omp-orchestrator"),
         _ => None,
     }
 }
@@ -1246,6 +1246,85 @@ pub fn publish_atomic(
     })?;
     Ok(())
 }
+fn replacement_backup_path(dest: &Path) -> PathBuf {
+    let name = dest
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("binary");
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    dest.with_file_name(format!(".{name}.previous.{}-{nonce}", std::process::id()))
+}
+
+/// Publish a verified artifact over an existing destination without exposing a
+/// partially-written file. The old bytes are copied to a same-directory rollback
+/// file before the atomic rename and retained until the final identity check.
+fn replace_atomic(
+    staged: &Path,
+    dest: &Path,
+    expected_len: u64,
+) -> Result<Option<PathBuf>, InstallError> {
+    if staged.parent() != dest.parent() {
+        return Err(InstallError::IoError {
+            path: dest.display().to_string(),
+            detail: "ATOMIC_REFUSED: staged file is not in the destination directory".to_owned(),
+        });
+    }
+    let staged_name = staged
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if !staged_name.contains(".staged.") {
+        return Err(InstallError::IoError {
+            path: staged.display().to_string(),
+            detail: "ATOMIC_REFUSED: not a staged temporary".to_owned(),
+        });
+    }
+    let metadata = std::fs::metadata(staged).map_err(|error| InstallError::IoError {
+        path: staged.display().to_string(),
+        detail: format!("stat staged failed: {error}"),
+    })?;
+    if metadata.len() != expected_len {
+        return Err(InstallError::IoError {
+            path: staged.display().to_string(),
+            detail: format!(
+                "ATOMIC_REFUSED: staged length {} != verified length {expected_len}",
+                metadata.len()
+            ),
+        });
+    }
+
+    let rollback = if dest.exists() {
+        let rollback = replacement_backup_path(dest);
+        std::fs::copy(dest, &rollback).map_err(|error| InstallError::IoError {
+            path: rollback.display().to_string(),
+            detail: format!("rollback snapshot failed: {error}"),
+        })?;
+        Some(rollback)
+    } else {
+        None
+    };
+    if let Err(error) = std::fs::rename(staged, dest) {
+        if let Some(rollback) = &rollback {
+            let _ = std::fs::remove_file(rollback);
+        }
+        return Err(InstallError::IoError {
+            path: dest.display().to_string(),
+            detail: format!("atomic publish failed: {error}"),
+        });
+    }
+    Ok(rollback)
+}
+
+fn restore_atomic(rollback: &Path, dest: &Path) -> Result<(), InstallError> {
+    std::fs::rename(rollback, dest).map_err(|error| InstallError::IoError {
+        path: dest.display().to_string(),
+        detail: format!("rollback restore failed: {error}"),
+    })
+}
+
 pub fn install_binary(
     source: &Path,
     install_dir: &Path,
@@ -1264,17 +1343,15 @@ pub fn install_binary(
         path: source.display().to_string(),
         detail: format!("open source artifact failed: {error}"),
     })?;
-    let expected_len = source_file.metadata().map_err(|error| InstallError::IoError {
-        path: source.display().to_string(),
-        detail: format!("stat source artifact failed: {error}"),
-    })?.len();
+    let expected_len = source_file
+        .metadata()
+        .map_err(|error| InstallError::IoError {
+            path: source.display().to_string(),
+            detail: format!("stat source artifact failed: {error}"),
+        })?
+        .len();
     let install_path = install_dir.join(&binary_name);
-    let staged_path = stage_artifact_stream(
-        install_dir,
-        &binary_name,
-        source_file,
-        expected_len,
-    )?;
+    let staged_path = stage_artifact_stream(install_dir, &binary_name, source_file, expected_len)?;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     #[cfg(unix)]
@@ -1298,38 +1375,13 @@ pub fn install_binary(
             version: staged_check.version_output.unwrap_or_default(),
         });
     }
-    // A pre-existing destination is a foreign owner, not an upgrade slot.
-    // Rename would replace it atomically; L0 refuses first. Dies when an
-    // explicit same-identity upgrade path is added and this test is rewritten.
-    if install_path.exists() {
-        let _ = std::fs::remove_file(&staged_path);
-        return Err(InstallError::IoError {
-            path: install_path.display().to_string(),
-            detail: "destination already exists; refuse replace of a pre-existing owner"
-                .to_owned(),
-        });
-    }
 
-    // Rename publishes onto an empty path atomically on the same filesystem.
-    if let Err(error) = std::fs::rename(&staged_path, &install_path) {
-        let _ = std::fs::remove_file(&staged_path);
-        return Err(InstallError::IoError {
-            path: install_path.display().to_string(),
-            detail: format!("atomic publish failed: {error}"),
-        });
-    }
-    let metadata = std::fs::metadata(&install_path).map_err(|error| InstallError::IoError {
-        path: install_path.display().to_string(),
-        detail: format!("post-install stat failed: {error}"),
-    })?;
-    if !metadata.is_file() || metadata.len() == 0 {
-        return Err(InstallError::RunningExecutableMissing {
-            binary: binary_name,
-            path: install_path.display().to_string(),
-        });
-    }
+    let rollback = replace_atomic(&staged_path, &install_path, expected_len)?;
     let final_check = verify_identity(&install_path, head_sha, repo_ownership);
     if !final_check.consistent {
+        if let Some(rollback) = rollback {
+            restore_atomic(&rollback, &install_path)?;
+        }
         return Err(InstallError::IdentityMismatch {
             binary: binary_name,
             head: head_sha.to_owned(),
@@ -1337,9 +1389,14 @@ pub fn install_binary(
             version: final_check.version_output.unwrap_or_default(),
         });
     }
+    if let Some(rollback) = rollback {
+        std::fs::remove_file(&rollback).map_err(|error| InstallError::IoError {
+            path: rollback.display().to_string(),
+            detail: format!("rollback cleanup failed: {error}"),
+        })?;
+    }
     Ok(final_check)
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1347,11 +1404,11 @@ mod tests {
     #[test]
     fn identity_check_consistent_when_build_id_matches_head() {
         let check = verify_identity_impl(
-            "omp-orchestrator",
+            "ompo",
             "85828bf95fba66525aa64944f3e84443f7ce188f", // HEAD
             Some("85828bf95fba66525aa64944f3e84443f7ce188f".to_owned()), // build_id
             Some(
-                "omp-orchestrator 0.1.0 build_id=85828bf95fba66525aa64944f3e84443f7ce188f"
+                "ompo supervise 0.1.0 build_id=85828bf95fba66525aa64944f3e84443f7ce188f"
                     .to_owned(),
             ), // version
         );
@@ -1361,10 +1418,10 @@ mod tests {
     #[test]
     fn identity_check_fails_when_build_id_differs_from_head() {
         let check = verify_identity_impl(
-            "omp-orchestrator",
+            "ompo",
             "aaaaaaaa",                  // HEAD
             Some("bbbbbbbb".to_owned()), // build_id
-            Some("omp-orchestrator 0.1.0 build_id=aaaaaaaa".to_owned()),
+            Some("ompo supervise 0.1.0 build_id=aaaaaaaa".to_owned()),
         );
         assert!(
             !check.consistent,
@@ -1374,7 +1431,7 @@ mod tests {
 
     #[test]
     fn identity_check_fails_when_both_missing() {
-        let check = verify_identity_impl("omp-orchestrator", "cccccccc", None, None);
+        let check = verify_identity_impl("ompo", "cccccccc", None, None);
         assert!(!check.consistent, "missing identity must be inconsistent");
     }
 
@@ -1450,7 +1507,7 @@ exit 0
         build_target(
             &root,
             cargo.to_str().expect("cargo path"),
-            "omp-orchestrator",
+            "ompo-doctor",
             "head-42",
         )
         .expect("single-target build must not require a broken sibling");
@@ -1458,7 +1515,7 @@ exit 0
         assert!(command_args.contains("build"), "{command_args}");
         assert!(command_args.contains("--release"), "{command_args}");
         assert!(command_args.contains("-p"), "{command_args}");
-        assert!(command_args.contains("omp-orchestrator"), "{command_args}");
+        assert!(command_args.contains("ompo-doctor"), "{command_args}");
         assert!(!command_args.contains("--workspace"), "{command_args}");
         assert_eq!(std::fs::read_to_string(strip).unwrap().trim(), "false");
         assert_eq!(std::fs::read_to_string(build_id).unwrap().trim(), "head-42");
@@ -1478,10 +1535,10 @@ exit 0
     #[test]
     fn identity_output_names_the_legs_that_ran() {
         let check = verify_identity_impl(
-            "omp-orchestrator",
+            "ompo",
             "head-42",
             Some("head-42".to_owned()),
-            Some("omp-orchestrator 0.1.0 build_id=head-42".to_owned()),
+            Some("ompo supervise 0.1.0 build_id=head-42".to_owned()),
         );
         let rendered = check.to_string();
         assert!(rendered.contains("legs=build_id,version"), "{rendered}");
@@ -1520,7 +1577,7 @@ exit 0
         std::fs::create_dir_all(&root).expect("fixture root");
         let binary = executable_fixture(
             &root,
-            "#!/bin/sh\n# build_id=head-42\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'omp-orchestrator 0.1.0 build_id=head-42'; fi\n",
+            "#!/bin/sh\n# build_id=head-42\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'ompo supervise 0.1.0 build_id=head-42'; fi\n",
         );
         let check = verify_identity(&binary, "head-42", &RepoOwnership::ThisRepo);
         assert!(check.consistent, "{check}");
@@ -1560,6 +1617,54 @@ exit 0
         assert_eq!(staged, 0, "failed install must remove only its staged file");
         std::fs::remove_dir_all(source_root).expect("source cleanup");
         std::fs::remove_dir_all(scratch).expect("scratch cleanup");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn existing_destination_is_replaced_atomically_after_identity_check() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "omp-installer-replace-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).expect("fixture root");
+        let source = root.join("ompo");
+        let install_dir = root.join("bin");
+        std::fs::create_dir_all(&install_dir).expect("install directory");
+        std::fs::write(
+            &source,
+            b"#!/bin/sh\n# build_id=head-42\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'ompo supervise 0.1.0 build_id=head-42'; fi\n",
+        )
+        .expect("source artifact");
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o755))
+            .expect("source permissions");
+        let destination = install_dir.join("ompo");
+        std::fs::write(&destination, b"previous artifact").expect("previous destination");
+
+        let check = install_binary(&source, &install_dir, "head-42", &RepoOwnership::ThisRepo)
+            .expect("same-identity replacement must succeed");
+        assert!(check.consistent, "{check}");
+        assert_ne!(
+            std::fs::read(&destination).expect("installed artifact"),
+            b"previous artifact"
+        );
+        assert!(
+            std::fs::read_to_string(&destination)
+                .expect("installed artifact text")
+                .contains("build_id=head-42"),
+            "new artifact must be published"
+        );
+        let rollback_count = std::fs::read_dir(&install_dir)
+            .expect("install directory entries")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains(".previous."))
+            .count();
+        assert_eq!(rollback_count, 0, "successful replacement cleans its rollback file");
+        std::fs::remove_dir_all(root).expect("cleanup");
     }
     #[test]
     fn anonymous_build_identity_is_absent_from_leg_inventory() {

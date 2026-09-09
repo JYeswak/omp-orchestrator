@@ -44,9 +44,9 @@ use ntm_fleet_monitor::bead_lifecycle::{
 };
 use ntm_fleet_monitor::parse_activity_json;
 use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
-use omp_orchestrator::packet_admission::{self, PacketAdmission};
+use crate::packet_admission::{self, PacketAdmission};
 use omp_types::{DispatchAdmissibility, DispatchPacketClass};
-use omp_orchestrator::{
+use crate::{
     applicable, census_gates, cross_pane_hold, decide, dispatch_packet, read_idle_authorization,
     GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision,
 };
@@ -155,7 +155,6 @@ pub struct Config {
     repo: PathBuf,
     session: String,
     interval: Duration,
-    run_subcommand: bool,
     command_timeout: Duration,
     max_ticks: Option<u64>,
     tick_monitor: String,
@@ -471,12 +470,8 @@ impl Config {
         let mut omp_binary = env::var_os("OMP_BINARY")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("omp"));
-        // `run` is the explicit lifecycle entrypoint: `omp-orchestrator run
-        // --once ...`. It consumes only the leading token; every flag after
-        // it parses identically to the launchd flag-only invocation, and any
-        // positional other than a leading `run` is refused in the match arm.
-        let run_subcommand = args.first().map(String::as_str) == Some("run");
-        let mut index = if run_subcommand { 1 } else { 0 };
+        // ompo supervise forwards its flags directly to the shared runtime.
+        let mut index = 0;
         while index < args.len() {
             match args[index].as_str() {
                 "--repo" => {
@@ -560,7 +555,7 @@ impl Config {
                 "--help" => return Err(usage().to_owned()),
                 "--version" => {
                     return Err(format!(
-                        "omp-orchestrator {} build_id={BUILD_ID}",
+                        "ompo supervise {} build_id={BUILD_ID}",
                         env!("CARGO_PKG_VERSION")
                     ));
                 }
@@ -666,7 +661,6 @@ impl Config {
             bv: env::var("OMP_BV_BIN").unwrap_or_else(|_| "bv".to_owned()),
             ntm: env::var("OMP_NTM_BIN").unwrap_or_else(|_| tick_monitor::NTM.to_owned()),
             tmux_tmpdir,
-            run_subcommand,
             exclude_panes,
             heartbeat_ledger,
             bead_lifecycle_ledger,
@@ -687,7 +681,7 @@ impl Config {
     }
 }
 fn usage() -> &'static str {
-    "usage: omp-orchestrator [run] [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       grade --claim [--repo PATH] [--session NAME]\n       run is the explicit resident lifecycle entrypoint (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
+    "usage: ompo supervise [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       grade --claim [--repo PATH] [--session NAME]\n       supervise runs the resident lifecycle (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
 }
 
 fn now_unix() -> u64 {
@@ -1630,14 +1624,14 @@ fn persist_spine(
     ledger: &ack_spine::ledger::StepLedger,
     dispatched: bool,
 ) -> Result<(), String> {
-    omp_orchestrator::spine_emit::assert_cycle_emitted(ledger.steps_taken(), dispatched)?;
+    crate::spine_emit::assert_cycle_emitted(ledger.steps_taken(), dispatched)?;
     ledger
         .assert_step_count()
         .map_err(|error| format!("SPINE_LEDGER_INCONSISTENT {error}"))?;
     if ledger.rows().is_empty() {
         return Ok(());
     }
-    let path = omp_orchestrator::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
+    let path = crate::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| format!("SPINE_LEDGER_MKDIR {error}"))?;
     }
@@ -1663,11 +1657,11 @@ fn persist_spine(
 /// zero heartbeat DISPATCHED lines).
 fn prior_dispatch_count(config: &Config, bead: &str) -> usize {
     let heartbeat = fs::read_to_string(&config.heartbeat_ledger).unwrap_or_default();
-    let spine = fs::read_to_string(omp_orchestrator::spine_emit::spine_ledger_path(
+    let spine = fs::read_to_string(crate::spine_emit::spine_ledger_path(
         &config.heartbeat_ledger,
     ))
     .unwrap_or_default();
-    omp_orchestrator::spine_emit::prior_send_count(&heartbeat, &spine, bead)
+    crate::spine_emit::prior_send_count(&heartbeat, &spine, bead)
 }
 
 /// THE CLOSE HALF. Emit `Closed` and `GradeReceived` for beads this supervisor
@@ -1690,8 +1684,8 @@ async fn reconcile_completions(cx: &Cx, config: &Config, tick: u64) -> Result<us
     let Ok(heartbeat) = fs::read_to_string(&config.heartbeat_ledger) else {
         return Ok(0);
     };
-    let spine_path = omp_orchestrator::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
-    let recorded = omp_orchestrator::spine_emit::recorded_closures(
+    let spine_path = crate::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
+    let recorded = crate::spine_emit::recorded_closures(
         &fs::read_to_string(&spine_path).unwrap_or_default(),
     );
     let mut candidates: Vec<(String, String)> = Vec::new();
@@ -1733,7 +1727,7 @@ async fn reconcile_completions(cx: &Cx, config: &Config, tick: u64) -> Result<us
             // tick, a fabricated one is not.
             continue;
         };
-        let prior = omp_orchestrator::spine_emit::PriorDispatch {
+        let prior = crate::spine_emit::PriorDispatch {
             bead_id: bead.clone(),
             pane_id: pane.clone(),
             status: status.clone(),
@@ -1741,7 +1735,7 @@ async fn reconcile_completions(cx: &Cx, config: &Config, tick: u64) -> Result<us
             prior_dispatch_count: 0,
             already_recorded: false,
         };
-        for kind in omp_orchestrator::spine_emit::completion_kinds(&prior) {
+        for kind in crate::spine_emit::completion_kinds(&prior) {
             let detail = format!(
                 "status={status} close_reason={}",
                 close_reason.as_deref().unwrap_or("<none>")
@@ -4577,7 +4571,7 @@ fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
     command.args(["-k", &probe.display().to_string()]);
     let out = match subprocess_contract::bounded_output(
         &mut command,
-        omp_orchestrator::target_directory::DF_DEADLINE,
+        crate::target_directory::DF_DEADLINE,
     ) {
         subprocess_contract::BoundedOutcome::Completed(out) => out,
         // A timeout is NOT the "no data row" error below. That one means df answered and the
@@ -4589,7 +4583,7 @@ fn disk_pressure(config: &Config) -> Result<Option<String>, String> {
                 "DISK_PRESSURE df TIMED_OUT after {}s on {} — process group signalled. This \
                  is NOT a capacity verdict: statfs measured 78ms healthy, so a timeout means a \
                  WEDGED MOUNT and the free space is UNKNOWN, never zero and never fine",
-                omp_orchestrator::target_directory::DF_DEADLINE.as_secs(),
+                crate::target_directory::DF_DEADLINE.as_secs(),
                 probe.display()
             ));
         }
@@ -5557,19 +5551,19 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // file would be the fourth instance of that class.
     let advisory_census = crate::census_gates(&config.repo);
     let advisory = advisory_census.advisory_gates();
-    let overdue = omp_orchestrator::advisory_ratchet_overdue(
+    let overdue = crate::advisory_ratchet_overdue(
         now_unix(),
-        omp_orchestrator::ADVISORY_CEILING_RECORDED_AT_UNIX,
+        crate::ADVISORY_CEILING_RECORDED_AT_UNIX,
         DEFAULT_INTERVAL.as_secs(),
-        omp_orchestrator::ADVISORY_RATCHET_DEADLINE_TICKS,
+        crate::ADVISORY_RATCHET_DEADLINE_TICKS,
         advisory.len(),
-        omp_orchestrator::ADVISORY_CEILING,
+        crate::ADVISORY_CEILING,
     );
     println!(
         "CENSUS_ADVISORY count={} ceiling={} rows={} blocking={} {} \
          next_action=wire-or-retire-one-advisory-crate",
         advisory.len(),
-        omp_orchestrator::ADVISORY_CEILING,
+        crate::ADVISORY_CEILING,
         advisory_census.rows.len(),
         advisory_census
             .rows
@@ -5584,11 +5578,11 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             "ratchet=on-time"
         }
     );
-    if let Some(omp_orchestrator::SupervisorDecision::GateUnwired { unwired }) =
-        omp_orchestrator::gate_census_decision(&Some(advisory_census.clone()))
+    if let Some(crate::SupervisorDecision::GateUnwired { unwired }) =
+        crate::gate_census_decision(&Some(advisory_census.clone()))
     {
         let joined = unwired.join(" ");
-        let line = omp_orchestrator::resident_tick::gate_unwired_line(&unwired);
+        let line = crate::resident_tick::gate_unwired_line(&unwired);
         write_heartbeat(
             config,
             tick,
@@ -5597,7 +5591,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
         )?;
         write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
         eprintln!("{line}");
-        if omp_orchestrator::resident_tick::SURVIVE_GATE_UNWIRED {
+        if crate::resident_tick::SURVIVE_GATE_UNWIRED {
             return Ok(());
         }
         return Err(format!("GATE_UNWIRED unwired={joined}"));
@@ -6153,7 +6147,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                 let before = capture_pane(cx, config, &pane).await?;
                 emit_step(cx, &mut spine, StepKind::PacketRendered, bead, &pane, config, &format!("receiver={receiver_agent}")).await?;
                 let prior = prior_dispatch_count(config, bead);
-                let send = omp_orchestrator::spine_emit::send_kind(prior);
+                let send = crate::spine_emit::send_kind(prior);
                 let stage_result = send_and_verify(
                     cx,
                     config,
@@ -6642,7 +6636,7 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
             // A PER-TICK REFUSAL IS A VERDICT, NOT A CRASH — the loop continues
             // unless SURVIVE_GATE_UNWIRED is mutated to false (the crash-loop shape).
             if error.contains("GATE_UNWIRED")
-                && !omp_orchestrator::resident_tick::SURVIVE_GATE_UNWIRED
+                && !crate::resident_tick::SURVIVE_GATE_UNWIRED
             {
                 return Err(error);
             }
@@ -6728,8 +6722,7 @@ fn close_readback_exit(outcome: CloseReadback) -> std::process::ExitCode {
     }
 }
 
-fn main() -> std::process::ExitCode {
-    let args: Vec<String> = env::args().skip(1).collect();
+pub fn run(args: Vec<String>) -> std::process::ExitCode {
     let close_request = match parse_close_readback_args(&args) {
         Ok(request) => request,
         Err(error) => {
@@ -6882,7 +6875,6 @@ mod tests {
             reap_finished_panes: "reap-finished-panes".to_owned(),
             omp_quick: false,
             session: "test-session".to_owned(),
-            run_subcommand: false,
             interval: Duration::from_secs(1),
             command_timeout: Duration::from_secs(5),
             max_ticks: Some(1),
@@ -7794,7 +7786,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
 
     #[test]
     fn send_and_verify_rechecks_status_before_transport() {
-        let source = include_str!("main.rs");
+        let source = include_str!("resident.rs");
         let start = source
             .find("async fn send_and_verify")
             .expect("send_and_verify must exist");
@@ -7944,21 +7936,9 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     }
 
     #[test]
-    fn run_subcommand_parses_with_once() {
-        let args = ["run".to_owned(), "--once".to_owned()];
-        let config = Config::from_args(&args).unwrap();
-        assert!(config.run_subcommand);
-        assert_eq!(config.max_ticks, Some(1));
-    }
-
-    #[test]
-    fn flag_only_invocation_is_unchanged_for_launchd() {
+    fn supervise_flag_only_invocation_parses_with_once() {
         let args = ["--once".to_owned()];
         let config = Config::from_args(&args).unwrap();
-        assert!(
-            !config.run_subcommand,
-            "flag-only form must not require the subcommand"
-        );
         assert_eq!(config.max_ticks, Some(1));
     }
 
@@ -8098,7 +8078,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
 
     #[test]
     fn unknown_positional_is_refused() {
-        let stray = Config::from_args(&["run".to_owned(), "extra".to_owned()]).unwrap_err();
+        let stray = Config::from_args(&["extra".to_owned()]).unwrap_err();
         assert!(
             stray.contains("CONFIG_REFUSED unknown argument extra"),
             "{stray}"
@@ -8111,12 +8091,12 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     }
 
     #[test]
-    fn help_reports_the_run_entrypoint() {
+    fn help_reports_the_supervise_entrypoint() {
         let help = Config::from_args(&["--help".to_owned()]).unwrap_err();
         assert_eq!(help, usage());
         assert!(
-            help.contains("[run]"),
-            "usage must advertise the run subcommand"
+            help.contains("ompo supervise"),
+            "usage must advertise the supervise entrypoint"
         );
     }
     #[test]
@@ -8559,7 +8539,7 @@ exit 2
     /// Legacy hand-dispatched rows remain readable through the fallback parser.
     #[test]
     fn dispatch_path_never_claims_on_the_receivers_behalf() {
-        let source = include_str!("main.rs");
+        let source = include_str!("resident.rs");
         let start = source
             .find("async fn claim_bead_for_supervisor")
             .expect("claim_bead_for_supervisor must exist");
@@ -8646,7 +8626,6 @@ exit 2
         .expect("write cargo config");
 
         let args = vec![
-            "run".to_owned(),
             "--repo".to_owned(),
             tmp.display().to_string(),
         ];
@@ -9918,7 +9897,7 @@ Stop: now
             tracker_assignee_with_composite(true, "WildStone", "%8", b).unwrap(),
         );
         assert_eq!(restored, with);
-        let source = include_str!("main.rs");
+        let source = include_str!("resident.rs");
         assert!(source.contains("tracker_assignee_with_composite(true,"));
     }
     #[test]

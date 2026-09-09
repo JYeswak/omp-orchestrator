@@ -25,6 +25,7 @@ subprocess-contract = { path = "../subprocess-contract" }
 ompo-start = { path = "../ompo-start" }
 omp-rpc-session = { path = "../omp-rpc-session" }
 asupersync = { workspace = true }
+omp-orchestrator = { path = "../omp-orchestrator" }
 
 
 [dev-dependencies]

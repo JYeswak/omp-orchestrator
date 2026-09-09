@@ -176,7 +176,7 @@ env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$cargo_dir:/usr/bin:/bin:/opt/homebre
   cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root "$TMPDIR/omp-m6"
 first_tick_log="$tmpdir/m6-output.log"
 if env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" \
-  omp-orchestrator run --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >"$first_tick_log" 2>&1; then
+  ompo supervise --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >"$first_tick_log" 2>&1; then
   first_tick_exit=0
 else
   first_tick_exit=$?

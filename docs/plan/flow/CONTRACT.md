@@ -14,7 +14,7 @@ is UNWIRED, and both fail the build.
 id = "S5a"                       # S1 S2 S3 S4 S5a S5b S6a S6b S6c S7 S8 S9
 name = "select: ready ∩ unclaimed ∩ non-epic, bv-ranked, claim ATTEMPTED"
 trigger_today = "hand"           # hand | hook:<name> | launchd:<unit> | cron | slash:/<skill> | none
-trigger_target = "launchd:omp-orchestrator run"   # where it MUST fire once wired
+trigger_target = "launchd:ompo supervise"   # where it MUST fire once wired
 crate = "loop-queue-filter"      # a dir under crates/, or MISSING
 crate_status = "exists-no-caller"   # wired | exists-no-caller | MISSING   (caller = main.rs, hook, or a crate dep — cite it)
 bead = "omp-orchestrator-2ceb"   # or "no bead"

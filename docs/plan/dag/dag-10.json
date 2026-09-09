@@ -168,7 +168,7 @@
       "title": "Type the missing external dependency: sentinel, DEPENDENCY_MISSING wire code, in-envelope remediation, per-call-site policy, conformance test (Gap 8)",
       "lines": "L162-L174",
       "what": "When ntm/br/bv/tmux/omp is absent the CLI must return a typed sentinel with a stable wire code and a remediation string, degrade per call site explicitly, and pin the exit taxonomy in a conformance test.",
-      "acceptance_seed": "With ntm removed from PATH, `omp-orchestrator run --once` (or doctor) exits with the registered DEPENDENCY_MISSING code and an envelope carrying {required:\"ntm\", probed:[...], install:\"...\"}; a conformance test asserts the code for each named dependency; a call site that can degrade (e.g. bv absent -> unranked queue) says so in its row.",
+      "acceptance_seed": "With ntm removed from PATH, `ompo supervise --once` (or doctor) exits with the registered DEPENDENCY_MISSING code and an envelope carrying {required:\"ntm\", probed:[...], install:\"...\"}; a conformance test asserts the code for each named dependency; a call site that can degrade (e.g. bv absent -> unranked queue) says so in its row.",
       "priority": 1,
       "kind": "crate",
       "existing_beads": [],

@@ -27,9 +27,14 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-const WRAPPER: &str = "/Users/josh/.local/bin/cargo";
-const REAL_TOOLCHAIN_CARGO: &str =
-    "/Users/josh/.rustup/toolchains/nightly-aarch64-apple-darwin/bin/cargo-rch-real";
+fn wrapper_path() -> PathBuf {
+    PathBuf::from(std::env::var_os("HOME").expect("HOME for cargo wrapper")).join(".local/bin/cargo")
+}
+
+fn real_toolchain_cargo() -> PathBuf {
+    PathBuf::from(std::env::var_os("HOME").expect("HOME for real cargo"))
+        .join(".rustup/toolchains/nightly-aarch64-apple-darwin/bin/cargo-rch-real")
+}
 const REGISTERED_ROOT: &str =
     "/Volumes/ZestData/zeststream-offload-20260609/build-cache/cargo-targets";
 
@@ -47,7 +52,7 @@ fn repo_root() -> PathBuf {
 /// behavior, so the child invocation must always see the guarded wrapper
 /// regardless of how this test process was started.
 fn wrapper_metadata(target_dir: &str) -> (i32, String) {
-    let output = Command::new(WRAPPER)
+    let output = Command::new(wrapper_path())
         .env("CARGO_TARGET_DIR", target_dir)
         .env_remove("RCH_CARGO_WRAPPER_BYPASS")
         .args(["metadata", "-q", "--no-deps", "--format-version", "1"])
@@ -125,14 +130,14 @@ fn unowned_dir_receives_artifacts_only_without_the_wrapper() {
     std::fs::create_dir_all(scratch.join("src")).expect("scratch");
     std::fs::write(
         scratch.join("Cargo.toml"),
-        "[package]\nname = \"qfa-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+        "[package]\nname = \"qfa-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[[bin]]\nname = \"qfa-probe\"\npath = \"src/resident.rs\"\n",
     )
     .expect("manifest");
-    std::fs::write(scratch.join("src/main.rs"), "fn main() {}\n").expect("source");
+    std::fs::write(scratch.join("src/resident.rs"), "fn main() {}\n").expect("source");
     let unowned = scratch.join("unowned-target");
 
     // Move 1: bypass leaks.
-    let bypass = Command::new(REAL_TOOLCHAIN_CARGO)
+    let bypass = Command::new(real_toolchain_cargo())
         .env("CARGO_TARGET_DIR", &unowned)
         .args(["check", "-q"])
         .current_dir(&scratch)
@@ -145,7 +150,7 @@ fn unowned_dir_receives_artifacts_only_without_the_wrapper() {
     );
 
     // Move 2: the wrapper guards the identical invocation.
-    let guarded = Command::new(WRAPPER)
+    let guarded = Command::new(wrapper_path())
         .env("CARGO_TARGET_DIR", &unowned)
         .env_remove("RCH_CARGO_WRAPPER_BYPASS")
         .args(["check", "-q"])
@@ -175,7 +180,7 @@ fn fleet_wrapper_matches_measured_revision() {
         .split_whitespace()
         .next()
         .expect("sha");
-    let current = sha256_of(WRAPPER);
+    let current = sha256_of(wrapper_path().to_str().expect("wrapper path"));
     assert_eq!(
         recorded, current,
         "the fleet wrapper changed underneath the ownership contract; \

@@ -77,6 +77,7 @@ fn main() -> ExitCode {
         "parity" => run_parity(rest),
         "init" => run_init(rest),
         "start" => run_start(rest),
+        "supervise" => run_supervise(rest),
         "portal" => run_portal(rest),
         "validate" => run_validate(rest),
         "audit" => run_audit(rest),
@@ -135,6 +136,11 @@ fn step_json(step: &ompo_start::Step) -> Value {
     })
 }
 
+/// ompo supervise is the canonical resident observe -> dispatch -> receipt entrypoint.
+/// The runtime lives in omp-orchestrator; this frontend only forwards the parsed tail.
+fn run_supervise(rest: &[String]) -> ExitCode {
+    omp_orchestrator::resident::run(rest.to_vec())
+}
 fn run_start(rest: &[String]) -> ExitCode {
     let mut repo = match current_repo() {
         Ok(path) => path,

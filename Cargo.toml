@@ -4,6 +4,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+exclude = ["crates/omp-idle-dispatch"]
 
 # Shared package metadata. Every member inherits this with `license.workspace = true`
 # so a new crate cannot land unlabelled — which is the state all 26 were in when the

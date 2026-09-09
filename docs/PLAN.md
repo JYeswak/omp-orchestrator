@@ -1029,7 +1029,7 @@ are **zero unqualified WORKS rows**:
 | actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` is implemented in `crates/omp-orchestrator/src/main.rs` (`fn send_and_verify`, line at `965ba11`) and called from `fn run_cycle` (line at `965ba11`); transport and receiver receipts remain unproven. The gap is runtime verification, not source existence |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
-**Runnable verification acceptance:** before promoting this row to `VERIFIED`, run `omp-orchestrator run --once --repo /Users/josh/Developer/omp-orchestrator --session omp-orchestrator --receiver-agent <registered-agent>`. Expect either `TRANSPORT_RECEIPT_CAPTURED` followed by a same-tick receiver outcome (`DISPATCHED` with `RECEIVER_RECEIPT`/`ACK_ACTION`) with both heartbeat rows retained, or a named typed refusal with its owner/next action; a sender-success line alone is not delivery proof.
+**Runnable verification acceptance:** before promoting this row to `VERIFIED`, run `ompo supervise --once --repo /Users/josh/Developer/omp-orchestrator --session omp-orchestrator --receiver-agent <registered-agent>`. Expect either `TRANSPORT_RECEIPT_CAPTURED` followed by a same-tick receiver outcome (`DISPATCHED` with `RECEIVER_RECEIPT`/`ACK_ACTION`) with both heartbeat rows retained, or a named typed refusal with its owner/next action; a sender-success line alone is not delivery proof.
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 A single shared predicate, used to answer two different questions, produced a coherent but wrong local
@@ -5973,7 +5973,7 @@ env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$cargo_dir:/usr/bin:/bin:/opt/homebre
   cargo install --locked --path crates/omp-orchestrator --bin omp-orchestrator --root "$TMPDIR/omp-m6"
 first_tick_log="$tmpdir/m6-output.log"
 if env -i HOME="$HOME" TMPDIR="$tmpdir" PATH="$tmpdir/omp-m6/bin:/usr/bin:/bin" \
-  omp-orchestrator run --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >"$first_tick_log" 2>&1; then
+  ompo supervise --repo crates/omp-orchestrator/tests/fixtures/foreign-repo --once >"$first_tick_log" 2>&1; then
   first_tick_exit=0
 else
   first_tick_exit=$?

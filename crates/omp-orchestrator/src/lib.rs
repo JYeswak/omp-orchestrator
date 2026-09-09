@@ -38,6 +38,7 @@ use std::path::{Path, PathBuf};
 use text_structure::code_only;
 pub mod target_directory;
 pub mod resident_tick;
+pub mod resident;
 pub mod resident_liveness;
 pub mod packet_admission;
 

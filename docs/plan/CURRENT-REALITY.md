@@ -6,6 +6,11 @@ Generated_at: `2026-09-03T21:42:32.828Z`
 Repository_HEAD: `05cdd2adb10bcbc7b5da54fbc9529934146554a8`
 S1_coverage: SUSPENDED after `5619f5bedc33ff6fff753a9fba12f0799e96541d feat(s1): add tree-backed coverage kernel [test]`; preserved, not reverted.
 
+## 2026-09-09 command and roster correction
+
+The snapshot below is historical and is not the current adapter roster. The live workspace truth is derived by cargo metadata --no-deps --format-version 1 --offline: 87 packages, 87 binary targets, ompo-doctor owns the canonical ompo binary, and omp-idle-dispatch is explicitly excluded from workspace membership. The installed idle-dispatch artifact remains a separate cleanup item until the fresh non-author review completes.
+
+Commands in archived plan/DAG goldens that name omp-orchestrator are retained as HISTORICAL_LEGACY_EXECUTABLE; they are not runnable acceptance commands. Current executable callers use ompo supervise.
 ## Verdict
 
 Current reality is a partial substrate: 72 Cargo packages, 69 binary targets, 48 packages with a measured caller, and 24 without one. Of 16 declared persisted artifacts, 4 are writer-backed PRESENT, 4 are ABSENT, and 8 are HAND-WRITTEN.

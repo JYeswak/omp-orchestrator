@@ -31,7 +31,7 @@ the defect, not the plan.
 Measured 2026-09-01 by running the shipped binary, not by reading it:
 
 ```
-$ omp-orchestrator run --once --repo .
+$ ompo supervise --once --repo .
 SUPERVISOR_REFUSED GATE_UNWIRED
   unwired=fleet-truth[NOT_EXTRACTED→extract-crate-from-control-plane]
           oracle-compare[NOT_EXTRACTED→extract-crate-from-control-plane]
@@ -45,7 +45,7 @@ SUPERVISOR_REFUSED GATE_UNWIRED
 
 That is the product risk. Everything else is downstream of proving the existing actuator against a live, reversible target and retaining both transport and receiver receipts. **When choosing between two tasks, pick the one that produces that proof.**
 
-**Runnable verification acceptance — expectation before execution:** run `omp-orchestrator run --once --repo <repo>` against a reversible live pane. Expect either a transport receipt plus the receiver receipt retained by `send_and_verify`, or a typed refusal naming the admission blocker. Current source addresses are `send_and_verify` at `crates/omp-orchestrator/src/main.rs:961` and its tick call at `:2481`; line numbers in earlier reports drifted. Source existence alone is not delivery proof.
+**Runnable verification acceptance — expectation before execution:** run `ompo supervise --once --repo <repo>` against a reversible live pane. Expect either a transport receipt plus the receiver receipt retained by `send_and_verify`, or a typed refusal naming the admission blocker. Current source addresses are `send_and_verify` at `crates/omp-orchestrator/src/main.rs:961` and its tick call at `:2481`; line numbers in earlier reports drifted. Source existence alone is not delivery proof.
 
 ---
 
@@ -183,7 +183,7 @@ a section. Do not use it as a gate.**
 > anyone can re-run, or (b) explicitly retracted / marked PROJECTED with the marker adjacent to
 > the claim.** Prose quality is not a convergence criterion.
 >
-> **The wave is DONE when `omp-orchestrator run` completes 3 consecutive autonomous dispatches
+> **The wave is DONE when `ompo supervise` completes 3 consecutive autonomous dispatches
 > with logged receipts and zero human keystrokes** — the thing `01-idea:§1.2` says does not
 > exist.
 >

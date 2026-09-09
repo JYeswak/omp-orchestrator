@@ -4,7 +4,7 @@
 //! # Why this is a source-predicate proof and what that costs
 //!
 //! `apply_phase_gate`'s only production caller sits inside `run_cycle`, which is invoked from the
-//! supervisor loop at `main.rs:6045`. `HD-0016` stopped that supervisor, so a live `PHASE_GATE`
+//! supervisor loop at `resident.rs:6045`. `HD-0016` stopped that supervisor, so a live `PHASE_GATE`
 //! heartbeat row is **unobtainable today** — not because the caller is unreachable, but because the
 //! process that reaches it is deliberately down. Item 8 is explicit that a compiling call site is
 //! not a wiring proof (`blocker-taxonomy`: 662 LOC, 19 green tests, zero callers), so this target
@@ -23,7 +23,7 @@ use std::path::Path;
 use text_structure::code_only;
 
 fn supervisor_source() -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/resident.rs");
     std::fs::read_to_string(&path).expect("the supervisor source must be readable")
 }
 

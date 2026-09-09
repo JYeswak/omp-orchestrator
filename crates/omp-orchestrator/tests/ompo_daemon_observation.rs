@@ -8,7 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 
 fn supervisor_source() -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/resident.rs");
     fs::read_to_string(path).expect("orchestrator source is readable")
 }
 
