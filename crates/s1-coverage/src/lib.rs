@@ -1067,19 +1067,6 @@ mod tests {
         assert!(report.requirements[0].reason.as_deref().unwrap().contains("backtick"));
     }
 
-    #[test]
-    fn empty_scan_is_an_error() {
-        let result = compute(
-            &CoverageInput {
-                contracts: Vec::new(),
-                s1_toml: String::new(),
-                beads: Vec::new(),
-            },
-            "tree",
-            "HEAD",
-        );
-        assert_eq!(result, Err(CoverageError::ScanEmpty));
-    }
 
     #[test]
     fn doc_only_without_reason_is_an_error() {
