@@ -740,24 +740,24 @@ pub fn read_inception(output: &Path) -> Result<InceptionReadback, InceptionError
 }
 
 
-fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
+fn emit_stage_event(
+    repo_root: &Path,
+    layer: Layer,
+    stage_from: &str,
+    stage_to: &str,
+    actor: &str,
+    reason: &str,
+) -> Result<usize, InceptionError> {
     let journal_path = default_repo_journal(repo_root);
     let journal = DurableJournal::open(&journal_path).map_err(|error| InceptionError::Readback {
         path: journal_path.clone(),
         detail: format!("lifecycle journal open failed: {error}"),
     })?;
-    let reason = ReasonCode::new("INIT_REPROBE_OK").map_err(|error| InceptionError::Readback {
+    let code = ReasonCode::new(reason).map_err(|error| InceptionError::Readback {
         path: journal_path.clone(),
         detail: error.to_string(),
     })?;
-    let event = LifecycleEvent::new(
-        Layer::L2,
-        "S1.L1",
-        "S1.L2",
-        "ompo-init",
-        EmitOutcome::Emitted,
-        reason,
-    );
+    let event = LifecycleEvent::new(layer, stage_from, stage_to, actor, EmitOutcome::Emitted, code);
     let readback = lifecycle_event::emit_one_host(&journal, event).map_err(|error| {
         InceptionError::Readback {
             path: journal_path,
@@ -765,6 +765,10 @@ fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
         }
     })?;
     Ok(readback.lines)
+}
+
+fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
+    emit_stage_event(repo_root, Layer::L2, "S1.L1", "S1.L2", "ompo-init", "INIT_REPROBE_OK")
 }
 
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
@@ -832,6 +836,10 @@ pub fn write_inception(
         });
     }
     emit_init_event(repo_root)?;
+    // L5 writer (5iwj): the write+fsync+readback success chokepoint records one
+    // S1.L4 -> S1.L5 row. The source stage matches the supervisor-tick L5 row so
+    // journal readers see one consistent S1.L4 -> S1.L5 transition.
+    emit_stage_event(repo_root, Layer::L5, "S1.L4", "S1.L5", "ompo-init", "INIT_WRITE_OK")?;
     Ok(manifest)
 }
 
@@ -902,6 +910,45 @@ mod tests {
         assert!(journal.contains("\"reason_code\":\"INIT_REPROBE_OK\""));
         assert!(journal.contains("\"stage_to\":\"S1.L2\""));
         assert_eq!(manifest.required_tools.len(), REQUIRED_TOOLS.len());
+    }
+
+    /// Typed scan refusal: zero S1.L5 rows is an ERROR with its own reason,
+    /// distinct from a content mismatch. Absence of evidence is not a pass.
+    fn find_s1_l5_row(journal: &Path) -> Result<serde_json::Value, String> {
+        let text = std::fs::read_to_string(journal).map_err(|error| {
+            format!(
+                "L5_SCAN_UNREADABLE_JOURNAL path={} detail={error}",
+                journal.display()
+            )
+        })?;
+        for line in text.lines() {
+            let value: serde_json::Value = serde_json::from_str(line)
+                .map_err(|error| format!("L5_SCAN_UNPARSEABLE_ROW detail={error}"))?;
+            if value.get("stage_to").and_then(|stage| stage.as_str()) == Some("S1.L5") {
+                return Ok(value);
+            }
+        }
+        Err(format!(
+            "L5_SCAN_ZERO_S1_L5_ROWS journal={} lines={}",
+            journal.display(),
+            text.lines().count()
+        ))
+    }
+
+    /// L5 writer leg (5iwj): one `write_inception` call emits one S1.L5 row
+    /// beside the S1.L2 init row, through the shared stage-event core.
+    #[test]
+    fn write_inception_emits_one_s1_l5_row() {
+        let (directory, output) = fixture();
+        write_inception(directory.path(), &output).expect("write succeeds");
+        let row =
+            find_s1_l5_row(&default_repo_journal(directory.path())).expect("S1.L5 row exists");
+        assert_eq!(row["stage_to"], "S1.L5");
+        assert_eq!(row["stage_from"], "S1.L4");
+        assert_eq!(row["layer"], "L5");
+        assert_eq!(row["reason_code"], "INIT_WRITE_OK");
+        assert_eq!(row["actor"], "ompo-init");
+        assert_eq!(row["outcome"], "emitted");
     }
 
     #[test]
