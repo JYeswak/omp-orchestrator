@@ -1397,6 +1397,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "omp-host-tool-guard"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
 name = "omp-inventory-map"
 version = "0.1.0"
 dependencies = [
