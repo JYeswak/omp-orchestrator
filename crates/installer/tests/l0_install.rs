@@ -2,7 +2,7 @@ use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
     git_rev_parse_short, install_binary, merge_hooks, publish_atomic, refuse_path_collisions,
     resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
-    verify_identity, verify_minisign_policy, AgentOutcome, HookWrite, IdentityCheck, InstallError,
+    probe_build_id_string, verify_identity, verify_minisign_policy, AgentOutcome, HookWrite, IdentityCheck, InstallError,
     RepoOwnership, RestartPostcondition,
 };
 use std::fs;
@@ -111,6 +111,25 @@ fn real_identity_probe_rejects_non_installer() {
     );
 }
 
+#[test]
+fn real_probe_rejects_packed_sentinel_fixture() {
+    let dir = TempDir::new("packed-sentinel");
+    let binary = dir.path().join("unstamped-installer");
+    fs::write(
+        &binary,
+        b"build_id=absentunavailableunversionedmarker\n",
+    )
+    .expect("packed sentinel fixture");
+    assert_eq!(
+        probe_build_id_string(&binary),
+        None,
+        "the parser must reject the packed sentinel token"
+    );
+    assert_ne!(
+        probe_build_id_string(&built_installer()).as_deref(),
+        Some("absentunavailableunversionedmarker")
+    );
+}
 #[test]
 fn real_atomic_install_publishes_complete_binary() {
     let target = TempDir::new("atomic-success");

@@ -878,6 +878,56 @@ pub fn build_target(
 
 // ── IDENTITY VERIFICATION ───────────────────────────────────────────────────────
 
+fn is_anonymous_sentinel(token: &str) -> bool {
+    let lower = token.to_ascii_lowercase();
+    let bytes = lower.as_bytes();
+    let prefix_len = if bytes.len() >= 6
+        && bytes[..6] == [b'a', b'b', b's', b'e', b'n', b't']
+    {
+        6
+    } else if bytes.len() >= 11
+        && bytes[..11] == [
+            b'u', b'n', b'a', b'v', b'a', b'i', b'l', b'a', b'b', b'l', b'e',
+        ]
+    {
+        11
+    } else if bytes.len() >= 11
+        && bytes[..11] == [
+            b'u', b'n', b'v', b'e', b'r', b's', b'i', b'o', b'n', b'e', b'd',
+        ]
+    {
+        11
+    } else {
+        return false;
+    };
+    bytes.len() == prefix_len
+        || bytes
+            .get(prefix_len)
+            .is_some_and(|character| !character.is_ascii_alphanumeric())
+}
+
+fn is_fallback_build_id(token: &str) -> bool {
+    let mut characters = token.bytes();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphanumeric() {
+        return false;
+    }
+    let mut separator = false;
+    for character in characters {
+        if character.is_ascii_alphanumeric() {
+            continue;
+        }
+        if matches!(character, b'-' | b'_' | b'~' | b'/' | b'.' | b':') {
+            separator = true;
+            continue;
+        }
+        return false;
+    }
+    separator
+}
+
 fn parse_build_id(text: &str) -> Option<String> {
     text.lines().find_map(|line| {
         let value = line.split_once("build_id=")?.1.trim();
@@ -896,23 +946,13 @@ fn parse_build_id(text: &str) -> Option<String> {
         } else if hex_len >= 8 {
             &value[..hex_len]
         } else {
-            value
-                .split(|character: char| character.is_whitespace() || character == '_')
-                .next()?
+            value.split_whitespace().next()?
         };
-        let lowercase = token.to_ascii_lowercase();
-        let anonymous_sentinel = ["absent", "unavailable", "unversioned"]
-            .iter()
-            .any(|sentinel| {
-                lowercase == *sentinel
-                    || lowercase.strip_prefix(sentinel).is_some_and(|suffix| {
-                        suffix
-                            .chars()
-                            .next()
-                            .is_some_and(|character| !character.is_ascii_alphanumeric())
-                    })
-            });
-        (!token.is_empty() && !anonymous_sentinel).then(|| token.to_owned())
+        if token.is_empty() || is_anonymous_sentinel(token) {
+            return None;
+        }
+        let positive = sha_len.is_some() || hex_len >= 8 || is_fallback_build_id(token);
+        positive.then(|| token.to_owned())
     })
 }
 
@@ -1672,6 +1712,11 @@ exit 0
             assert_eq!(parse_build_id(&format!("installer 0.1.0 build_id={value}")), None);
             assert_eq!(parse_build_id(&format!("installer 0.1.0 build_id={value}~/")), None);
         }
+        assert_eq!(
+            parse_build_id("build_id=absentunavailableunversionedmarker"),
+            None,
+            "packed sentinel literals must not become an identity token"
+        );
         assert_eq!(
             parse_build_id("installer 0.1.0 build_id=head-42"),
             Some("head-42".to_owned())
