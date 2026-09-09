@@ -29,12 +29,32 @@ use std::process::Command;
 ///
 /// An allowance that outlives its reason is worse than no allowance, because it
 /// reads as a considered exception when it is only an un-revisited one.
-const UNWIRED_LANE_ALLOWANCE: &[(&str, &str)] = &[
-    ("refill-idle-panes", "cron-wired via fast-dispatch at */5; the Rust source scanner cannot see a crontab invocation"),
-    ("tick-dispatch", "cron-wired via controller-tick at :18/:38/:58; the Rust source scanner cannot see a crontab invocation"),
-    ("s1-coverage", "S1 depth suspended under Atlas Arc R1; crate exists as a coverage artifact with no production caller. Dies when S1 build waves consume it"),
+const UNWIRED_LANE_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
+    (
+        "refill-idle-panes",
+        "cron-wired via fast-dispatch at */5; the Rust source scanner cannot see a crontab invocation",
+        "control-plane fast-dispatch owner",
+        "Dies when the Rust source scanner learns to read crontab invocations or the lane gains a source-visible caller",
+    ),
+    (
+        "tick-dispatch",
+        "cron-wired via controller-tick at :18/:38/:58; the Rust source scanner cannot see a crontab invocation",
+        "control-plane controller-tick owner",
+        "Dies when the Rust source scanner learns to read crontab invocations or the lane gains a source-visible caller",
+    ),
+    (
+        "s1-coverage",
+        "S1 depth suspended under Atlas Arc R1; crate exists as a coverage artifact with no production caller",
+        "S1 coverage owner",
+        "Dies when S1 build waves consume the coverage artifact through a production caller",
+    ),
 ];
-/// Plan-level gate identifiers are either wired to an existing referent or
+fn unwired_allowance_refs() -> Vec<(&'static str, &'static str)> {
+    UNWIRED_LANE_ALLOWANCE
+        .iter()
+        .map(|(name, reason, _, _)| (*name, *reason))
+        .collect()
+}
 /// explicitly declared as future work. This registry does not certify gate
 /// semantics; it prevents a canonical ID from becoming decorative prose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -626,10 +646,12 @@ fn every_declared_lane_has_a_production_caller() {
     // DECLARED_LANES is the defect this crate exists to prevent. An empty or
     // unreadable derivation is an error, never a pass.
     let lanes = derive_lanes(&repo_root()).expect("lane derivation must be readable and non-empty");
+    validate_allowance_rows(UNWIRED_LANE_ALLOWANCE, "unwired-lane")
+        .expect("unwired allowances must carry owner and dies_when");
     let advisory = advisory_allowance(&repo_root()).expect("ADVISORY_ALLOWANCE must be readable");
-    let mut allowance_rows: Vec<(String, String)> = UNWIRED_LANE_ALLOWANCE
-        .iter()
-        .map(|(name, reason)| ((*name).to_owned(), (*reason).to_owned()))
+    let mut allowance_rows: Vec<(String, String)> = unwired_allowance_refs()
+        .into_iter()
+        .map(|(name, reason)| (name.to_owned(), reason.to_owned()))
         .collect();
     allowance_rows.extend(advisory);
     let allowance_refs: Vec<(&str, &str)> = allowance_rows
@@ -788,11 +810,11 @@ fn comments_and_test_only_code_do_not_prove_wiring() {
 fn empty_scan_sets_are_errors_not_passes() {
     let lanes = derive_lanes(&repo_root()).expect("derivation must work in this repo");
     assert_eq!(
-        check_wiring(&lanes, &[], UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE),
+        check_wiring(&lanes, &[], &unwired_allowance_refs(), STRIP_TEST_CODE),
         Err("ERROR: production caller scan set is empty".to_owned())
     );
     assert_eq!(
-        check_wiring(&[], &[], UNWIRED_LANE_ALLOWANCE, STRIP_TEST_CODE),
+        check_wiring(&[], &[], &unwired_allowance_refs(), STRIP_TEST_CODE),
         Err("ERROR: declared lane scan set is empty".to_owned())
     );
 }
@@ -804,7 +826,9 @@ fn every_allowance_row_names_a_lane_and_carries_a_reason() {
     // rows for lanes whose wiring lands later — but every row must name a DERIVED
     // lane and carry a reason. A row for an undeclared lane, or a row with an empty
     // reason, is an error, not a pass.
-    validate_allowance(&lanes, UNWIRED_LANE_ALLOWANCE).expect("allowance must validate");
+    validate_allowance(&lanes, &unwired_allowance_refs()).expect("allowance must validate");
+    validate_allowance_rows(UNWIRED_LANE_ALLOWANCE, "unwired-lane")
+        .expect("real allowance rows must carry owner and dies_when");
     assert!(
         validate_allowance(&lanes, &[("not-a-workspace-crate", "a reason")]).is_err(),
         "an allowance row naming an undeclared lane must be rejected"
@@ -813,16 +837,12 @@ fn every_allowance_row_names_a_lane_and_carries_a_reason() {
         validate_allowance(&lanes, &[("no-shell-gate", "")]).is_err(),
         "an allowance row without a reason must be rejected"
     );
-    // No invented rows (validated above), and no silent gaps (check_wiring enforces
-    // them): the allowance is the only sanctioned unwired state.
-    for (name, reason) in UNWIRED_LANE_ALLOWANCE {
-        assert!(
-            !reason.trim().is_empty(),
-            "allowance {name} has an empty reason"
-        );
+    for (name, reason, owner, dies_when) in UNWIRED_LANE_ALLOWANCE {
+        assert!(!reason.trim().is_empty(), "allowance {name} has an empty reason");
+        assert!(!owner.trim().is_empty(), "allowance {name} has an empty owner");
+        assert!(!dies_when.trim().is_empty(), "allowance {name} has an empty dies_when");
     }
 }
-
 #[test]
 fn derivation_is_an_error_when_the_workspace_is_unreadable() {
     // An empty or unreadable derivation is an ERROR, never a pass: a gate pointed at
