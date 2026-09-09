@@ -1,0 +1,40 @@
+# Project-scoped omp configuration for omp-orchestrator.
+#
+# SCOPE, measured 2026-09-08 from the installed bundle rather than assumed:
+#   dist/types/config/config.d.ts:51-92 -- getConfigDirs() returns dirs "ordered by priority
+#   (highest first)"; findConfigFile() returns the first existing. Project entries precede user
+#   entries, so a project file OVERRIDES the user-level equivalent BY NAME. There is no merging.
+#
+#   config.d.ts also states: "Native project settings are intentionally scoped to the process
+#   working directory's .omp/ folder -- settings discovery does not walk ancestor directories."
+#   So this file affects ONLY sessions started in this repo. It cannot shadow ~/.omp/agent/ for
+#   any other project, which is why writing it is safe.
+#
+# What omp actually reads from a project ./.omp/ (confirmed; NOT a guess):
+#   config.yml | config.yaml, agents/, prompts/, tools/, commands/, skills/, modules/,
+#   mcp.json, lsp.*
+#
+# Two filenames that were CLAIMED in a research brief and do NOT exist:
+#   .omp/RULES.md   -- 0 occurrences in dist/cli.js. Not an omp-read filename.
+#   .omp/AGENTS.md  -- AGENTS.md is discovered by walking UP from cwd (dist/types/sdk.d.ts:27),
+#                      not read from the .omp/ subdirectory. The repo-root AGENTS.md is already
+#                      on that walk and needs no relocation.
+
+task:
+  # Default is 2 (dist/types/config/settings-schema.d.ts:5157-5159), enforced by
+  # canSpawnAtDepth(maxRecursionDepth, taskDepth) at dist/types/task/types.d.ts:260-262.
+  #
+  # Pinned to 1 here DELIBERATELY: a subagent may be spawned, but may not spawn its own.
+  #
+  # The reason is provenance, and it is the failure this repo measured on 2026-09-08. Eleven of
+  # thirteen newly-closed beads were refused by the close-reason gate for CLOSE_REASON_WORKER_MISSING,
+  # and repairing them required each pane to attest, from its OWN run log, which worker produced a
+  # figure. Three panes correctly refused to attest rows they had closed but not run -- yielding the
+  # rule that the closer owns the verdict while the runner owns the provenance.
+  #
+  # Every additional nesting level adds a hop between the figure and the agent that can attest it.
+  # At depth 1 provenance is one hop and attestable. At depth 2 a grandchild's cargo figure has no
+  # attestable owner, which is precisely the state that cost a session of repair work.
+  #
+  # Raise this only with a stated reason. Setting it below 0 disables task spawning entirely.
+  maxRecursionDepth: 1
