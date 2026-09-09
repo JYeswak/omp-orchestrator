@@ -547,31 +547,6 @@ fn pane_scoped_authors(bead: &BeadComments) -> BTreeSet<String> {
     out
 }
 
-/// Outcome of [`comment_count`]. Absence is a typed variant, never a silent zero,
-/// so no caller can flatten a missing row into a healthy count with `unwrap_or(0)`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommentCount {
-    /// Row present with this many comments (0 for a comment-free row).
-    Found(usize),
-    /// No row carries the requested id (includes empty documents).
-    RowAbsent { id: String },
-}
-
-/// Count comments for `id`, distinguishing absence from a present zero.
-///
-/// Returns [`CommentCount::Found`] for a present row and [`CommentCount::RowAbsent`]
-/// when no row carries `id`. Malformed JSONL remains a parse error.
-pub fn comment_count(jsonl: &str, id: &str) -> Result<CommentCount, String> {
-    let beads = parse_jsonl(jsonl)?;
-    Ok(beads
-        .iter()
-        .find(|b| b.id == id)
-        .map(|b| CommentCount::Found(b.authors.len().max(b.texts.len())))
-        .unwrap_or_else(|| CommentCount::RowAbsent {
-            id: id.to_owned(),
-        }))
-}
-
 /// Grading priority is an optimisation over an already-correct ranked order.
 /// Unreadable JSONL / no eligible grader SKIP the slot. They do not refuse
 /// the cycle. Ranking refusals stay in [`select_dispatch_order`].
@@ -1123,6 +1098,19 @@ pub fn assign_peer_grade_with_ledger(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Test-only typed comment counter (production has no comment-count consumer).
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    enum CommentCount { Found(usize), RowAbsent { id: String } }
+
+    fn comment_count(jsonl: &str, id: &str) -> Result<CommentCount, String> {
+        let beads = super::parse_jsonl(jsonl)?;
+        Ok(beads
+            .iter()
+            .find(|b| b.id == id)
+            .map(|b| CommentCount::Found(b.authors.len().max(b.texts.len())))
+            .unwrap_or_else(|| CommentCount::RowAbsent { id: id.to_owned() }))
+    }
 
     #[test]
     fn ranking_prefers_a_p0_articulation_point_over_an_older_p1_leaf() {
