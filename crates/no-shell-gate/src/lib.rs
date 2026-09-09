@@ -33,6 +33,7 @@ pub mod commit_serialization;
 pub mod def_ids;
 pub mod firing_ledger;
 pub mod head_compiles;
+pub mod project_agent;
 use std::fmt;
 use std::path::Path;
 use std::process::Command;

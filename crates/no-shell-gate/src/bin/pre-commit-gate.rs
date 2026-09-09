@@ -176,11 +176,11 @@ fn main() -> ExitCode {
         return PreCommitOutcome::NothingToCheck.exit_code();
     }
     let mut refusals: Vec<String> = Vec::new();
+    validate_project_agent(&repo_root, &staged, &deletions, &mut refusals);
     validate_staged_rust_modes(&repo_root, &staged, &mut refusals);
     eprintln!(
         "mode-gate: COMMIT_TIME_ONLY -- the write tool may still create mode-only M rows before commit; inspect git diff --numstat -- <path>"
     );
-
     if let Err(error) = validate_staged_preregistration(&repo_root, &staged) {
         refusals.push(format!("preregistration-gate: {error}"));
     }
@@ -733,6 +733,39 @@ fn staged_paths_for_tick_ledger(repo_root: &Path) -> Result<Vec<String>, String>
             Err("git diff --cached exceeded deadline; group killed".to_owned())
         }
         subprocess_contract::BoundedOutcome::Unspawned(error) => Err(error.to_string()),
+    }
+}
+
+fn validate_project_agent(
+    repo_root: &Path,
+    staged: &[String],
+    deletions: &[String],
+    refusals: &mut Vec<String>,
+) {
+    let staged_path = staged
+        .iter()
+        .chain(deletions)
+        .any(|path| path == no_shell_gate::project_agent::OMP_GRADER_PATH);
+    let result = if staged_path {
+        match staged_blob(repo_root, no_shell_gate::project_agent::OMP_GRADER_PATH) {
+            Ok(bytes) => no_shell_gate::project_agent::validate_grader_agent_bytes(
+                Path::new(no_shell_gate::project_agent::OMP_GRADER_PATH),
+                &bytes,
+            ),
+            Err(detail) => Err(no_shell_gate::project_agent::ProjectAgentError::UnreadableFile {
+                path: no_shell_gate::project_agent::OMP_GRADER_PATH.to_owned(),
+                detail: format!("staged blob: {detail}"),
+            }),
+        }
+    } else {
+        no_shell_gate::project_agent::validate_grader_agent_file(repo_root)
+    };
+    match result {
+        Ok(()) => eprintln!(
+            "project-agent-gate: CLEAN path={}",
+            no_shell_gate::project_agent::OMP_GRADER_PATH
+        ),
+        Err(error) => refusals.push(format!("project-agent-gate: {error}")),
     }
 }
 
