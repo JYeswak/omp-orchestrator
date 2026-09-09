@@ -396,6 +396,32 @@ Concurrency is managed by **file reservations**, not by giving each agent its ow
 **The one exception, stated exactly:** a **test** may create a worktree **if it deletes it**. The
 worktree must not outlive the test that made it. Nothing else may create one — not a build, not a
 lane, not an agent wanting a clean tree, not a "temporary" experiment.
+**CORRECTION, omp-orchestrator-9edo3 (2026-09-09; installed OMP 18.1.15):** The native OMP task
+primitive is worktree machinery, not an advisory hint. The installed declarations expose
+TaskItem.isolated?: boolean at /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/task/types.d.ts:113-118,
+an executor worktree?: string at .../types/task/executor.d.ts:75-83, and ensureIsolation / cleanupIsolation
+at .../types/task/worktree.d.ts:87-99. The installed bundle's task-branch capture names branches
+omp/task/<taskId> at dist/cli.js byte 12390486; its isolation backend creates the merged directory
+through isoStart at byte 12386800.
+
+**RULING: FORBID task(isolated: true) in this repository.** It conflicts directly with the policy above.
+Use the non-isolated task path: subagents share this checkout and coordinate through file reservations.
+The test-only exception above remains unchanged; it is the only permitted worktree path, and the test
+must delete what it creates. Do not create a branch or worktree named omp/task/* here.
+
+**CLEANUP VERDICT: PARTIAL / UNKNOWN, not total.** After isolation returns a handle, the installed
+executor wraps the subagent run in a try/catch/finally at dist/cli.js byte 18054631; ordinary completion,
+subagent failure, merge failure, and a rejected run therefore reach cleanup. The cleanup helper at byte
+12387401 attempts isoStop, catches stop errors, and force-removes the parent directory; the removal result
+is not checked. A deferred-cleanup path schedules cleanup only after the deferred promise resolves. More
+importantly, isolation setup at byte 12386800 removes its temp directory only for backend-unavailable
+errors; an unexpected isoStart error after the owner marker is written throws without a matching cleanup
+in that function. The installed artifacts therefore do not prove cleanup on every error, cancellation,
+parent-abort, or filesystem-failure path.
+
+**NO-CLAIM, 9edo3:** This amendment records the installed mechanism, the FORBID ruling, and the
+incomplete cleanup proof. It does not claim this repository has used isolated: true, and it does not
+change Joshua's quoted policy history above.
 
 **Measured at the time of the ruling.** Compliant on the branch/worktree axis and **not** on the
 axis the policy actually protects:
