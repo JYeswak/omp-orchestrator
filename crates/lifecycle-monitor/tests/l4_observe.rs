@@ -70,7 +70,7 @@ fn real_l4_observe_reports_silent_with_measured_stale_age() {
     let journal = dir.path().join("stale.jsonl");
     std::fs::write(&journal, row_with_timestamp(1)).expect("write stale row");
 
-    let metrics = load_metrics(&metrics_path()).expect("METRICS.toml");
+    let metrics = load_metrics(&Path::new(METRICS_PATH)).expect("METRICS.toml");
     let threshold = metrics
         .iter()
         .find(|spec| spec.layer.as_str() == "L4")
