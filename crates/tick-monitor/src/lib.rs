@@ -1294,6 +1294,16 @@ pub struct CapacityEscalationReceipt {
     pub consecutive_ticks: u32,
 }
 
+/// Overwrite the operator attention snapshot; it is not an append-only ledger.
+pub fn overwrite_attention(path: &Path, message: &str) -> Result<(), String> {
+    std::fs::write(path, message).map_err(|error| {
+        format!(
+            "cannot write attention artifact {}: {error}",
+            path.display()
+        )
+    })
+}
+
 /// Escalate through the real macOS notification surface. The urgent artifact is written
 /// first so a notification failure cannot erase the durable signal. Tests use the sibling
 /// `_with_notifier` seam with `/bin/echo`; production always uses `/usr/bin/osascript`.

@@ -1178,6 +1178,177 @@ fn capacity_alarm_is_wired_to_watch_escalation() {
     );
 }
 
+#[test]
+fn configured_conductor_is_excluded_from_free_and_dispatchable() {
+    let conductor = "%conductor-arbitrary";
+    let worker = "%worker-arbitrary";
+    let evidence = DispatchableEvidence {
+        proven_at: 100,
+        valid_until: 200,
+    };
+    let rows = vec![
+        CapacityObservation::with_evidence(
+            conductor,
+            PaneState::Idle,
+            Liveness::ConfirmedIdle,
+            Some(evidence),
+        ),
+        CapacityObservation::with_evidence(
+            worker,
+            PaneState::Idle,
+            Liveness::ConfirmedIdle,
+            Some(evidence),
+        ),
+    ];
+
+    let without_exclusion =
+        partition_capacity(&rows, &[], 150).expect("both observed panes are capacity");
+    assert_eq!(
+        without_exclusion.free_capacity,
+        vec![conductor.to_owned(), worker.to_owned()]
+    );
+    assert_eq!(
+        without_exclusion.dispatchable,
+        vec![conductor.to_owned(), worker.to_owned()]
+    );
+
+    let excluded = partition_capacity(&rows, &[conductor], 150)
+        .expect("excluding one arbitrary conductor is still observable");
+    assert_eq!(excluded.free_capacity, vec![worker.to_owned()]);
+    assert_eq!(excluded.dispatchable, vec![worker.to_owned()]);
+}
+
+#[test]
+fn attention_snapshot_overwrites_without_growth() {
+    let dir = tempfile::tempdir().expect("attention fixture");
+    let path = dir.path().join("ATTENTION.txt");
+    for tick in 1..=3 {
+        let message = format!("IDLE CAPACITY tick {tick}\n");
+        overwrite_attention(&path, &message).expect("attention snapshot write");
+    }
+
+    let final_message = std::fs::read_to_string(&path).expect("attention snapshot read");
+    assert_eq!(final_message, "IDLE CAPACITY tick 3\n");
+    assert_eq!(final_message.lines().count(), 1);
+    assert_eq!(
+        std::fs::metadata(&path).expect("attention metadata").len(),
+        final_message.len() as u64
+    );
+}
+
+#[test]
+fn notifier_failure_preserves_urgent_artifact_as_error() {
+    let dir = tempfile::tempdir().expect("notifier fixture");
+    let urgent = dir.path().join("URGENT_JOSH.md");
+    let missing_notifier = dir.path().join("no-such-notifier");
+    let error = escalate_idle_capacity_with_notifier(
+        &urgent,
+        9,
+        2,
+        "free_capacity=[%worker-arbitrary]",
+        &missing_notifier,
+    )
+    .expect_err("missing notifier must refuse");
+
+    assert!(error.contains("notification command failed to spawn"), "{error}");
+    assert!(
+        std::fs::read_to_string(&urgent)
+            .expect("urgent artifact remains durable")
+            .contains("consecutive_ticks: 2")
+    );
+}
+
+struct TmuxSessionGuard(String);
+
+impl Drop for TmuxSessionGuard {
+    fn drop(&mut self) {
+        let _ = tick_monitor::run(
+            &["tmux", "kill-session", "-t", self.0.as_str()],
+            Duration::from_secs(10),
+        );
+    }
+}
+
+#[test]
+fn real_watch_emits_idle_capacity_without_dispatch_or_bead_mutation() {
+    let dir = tempfile::tempdir().expect("watch fixture");
+    let session = format!("tm-watch-{}-{}", std::process::id(), line!());
+    let idle_line = live::GLM_IDLE;
+    let script = format!("printf '%s\n' '{}'; sleep 30", idle_line);
+    let setup = [
+        "tmux",
+        "new-session",
+        "-d",
+        "-s",
+        session.as_str(),
+        "-x",
+        "120",
+        "-y",
+        "20",
+        "/bin/sh",
+        "-c",
+        script.as_str(),
+    ];
+    match tick_monitor::run(&setup, Duration::from_secs(10)) {
+        ChildOutcome::Completed { code: Some(0), .. } => {}
+        other => panic!("tmux fixture failed: {}", other.kind()),
+    }
+    let _session_guard = TmuxSessionGuard(session.clone());
+
+    let bead_sentinel = dir.path().join("issues.jsonl");
+    let sentinel = "unchanged-bead-sentinel\n";
+    std::fs::write(&bead_sentinel, sentinel).expect("bead sentinel write");
+    let state = dir.path().join("state.tsv");
+    let ledger = dir.path().join("watch-ledger.jsonl");
+    let binary = env!("CARGO_BIN_EXE_tick-monitor");
+    let args = [
+        binary,
+        "watch",
+        "--session",
+        session.as_str(),
+        "--interval",
+        "75",
+        "--max-ticks",
+        "1",
+        "--capacity-alarm-after",
+        "1",
+        "--stall-after",
+        "999",
+        "--state",
+        state.to_str().expect("state path utf8"),
+        "--watch-ledger",
+        ledger.to_str().expect("ledger path utf8"),
+        "--repo",
+        dir.path().to_str().expect("repo path utf8"),
+    ];
+    let output = tick_monitor::run(&args, Duration::from_secs(30));
+    let (stdout, stderr) = match output {
+        ChildOutcome::Completed { stdout, stderr, .. } => (stdout, stderr),
+        other => panic!("bounded watch failed: {}", other.kind()),
+    };
+
+    assert!(stdout.contains("IDLE CAPACITY"), "stdout\n{stdout}");
+    assert!(
+        stdout.contains("\"free_capacity\":[\"%"),
+        "watch must report an actual arbitrary pane\n{stdout}"
+    );
+    assert!(
+        stderr.contains("ALARM_ESCALATION_FAILED"),
+        "notifier failure must be typed\n{stderr}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&bead_sentinel).expect("bead sentinel readback"),
+        sentinel
+    );
+    assert_eq!(
+        std::fs::read_to_string(&ledger)
+            .expect("watch ledger readback")
+            .lines()
+            .count(),
+        1
+    );
+}
+
 // ── LEDGER OWNERSHIP ────────────────────────────────────────────────────────
 // Measured 2026-08-31: two watchers on one ledger decayed the observation gap
 // 15s per tick (75 -> 66 -> 51 -> 36 -> 22 -> 6) and disabled the two-capture

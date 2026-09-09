@@ -684,7 +684,7 @@ fn watch(args: &[String]) -> i32 {
         } else {
             format!("all panes occupied (tick {ticks})\n")
         };
-        let _ = std::fs::write(&attention, &msg);
+        let _ = tick_monitor::overwrite_attention(&attention, &msg);
         if free_streak >= capacity_alarm_after {
             // Loud on stdout too, so `hub logs` shows it without parsing JSON.
             print!("{msg}");
