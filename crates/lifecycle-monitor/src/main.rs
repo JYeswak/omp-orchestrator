@@ -6,13 +6,16 @@
 
 #![forbid(unsafe_code)]
 
+use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use lifecycle_event::{DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode};
+use lifecycle_monitor::ntm_sources::{
+    gate_ntm_sources, ntm_source_exit_code, parse_ntm_sources, read_live_snapshot,
+    read_snapshot_file, NtmSourceError,
+};
 use lifecycle_monitor::{
     gate_claimed_write_readback, gate_freshness_verdict, journal_for_host, load_metrics,
     observe_all, observe_layer, EXPECTED_METRIC_COUNT,
-};
-use lifecycle_monitor::ntm_sources::{
-    gate_ntm_sources, parse_ntm_sources, read_live_snapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -27,10 +30,12 @@ fn flag<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
     None
 }
 
-fn run(args: &[String]) -> Result<(), String> {
+async fn run(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
+    cx.checkpoint()
+        .map_err(|_| "LIFECYCLE_MONITOR_CANCELLED reason=caller_context".to_owned())?;
     match args.first().map(String::as_str) {
-        Some("observe") => observe(&args[1..]),
-        Some("gate") => gate(&args[1..]),
+        Some("observe") => observe(&args[1..]).map(|()| ExitCode::SUCCESS),
+        Some("gate") => gate(cx, &args[1..]).await,
         _ => Err(
             "usage: lifecycle-monitor observe|gate --journal PATH [--layer L0] [--metrics PATH]"
                 .to_owned(),
@@ -83,7 +88,7 @@ fn observe(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-fn gate(args: &[String]) -> Result<(), String> {
+async fn gate(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
     let journal_path = flag(args, "--journal")
         .map(PathBuf::from)
         .unwrap_or_else(journal_for_host);
@@ -101,7 +106,7 @@ fn gate(args: &[String]) -> Result<(), String> {
             Ok(()) => Err("known-bad readback unexpectedly succeeded".to_owned()),
             Err(error) => {
                 println!("GATE_KNOWN_BAD_FIRED {error}");
-                Ok(())
+                Ok(ExitCode::SUCCESS)
             }
         };
     }
@@ -115,18 +120,36 @@ fn gate(args: &[String]) -> Result<(), String> {
     gate_freshness_verdict(&vs).map_err(|e| e.to_string())?;
     println!("GATE_OK layers={}", vs.len());
     if args.iter().any(|a| a == "--ntm-sources") {
-        run_ntm_sources_gate(args)?;
+        return Ok(run_ntm_sources_gate(cx, args).await);
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 /// NTM source freshness as an opt-in tail of the existing gate verb. Default-off:
 /// without `--ntm-sources` this function does not exist on the path and every
 /// existing leg observes byte-identical behavior.
-fn run_ntm_sources_gate(args: &[String]) -> Result<(), String> {
-    let ntm_bin = flag(args, "--ntm-bin").unwrap_or("ntm");
-    let snapshot = read_live_snapshot(ntm_bin).map_err(|e| e.to_string())?;
-    let verdicts = parse_ntm_sources(&snapshot).map_err(|e| e.to_string())?;
+///
+/// Exit authority: every [`NtmSourceError`] converts through
+/// [`ntm_source_exit_code`] and nothing else. There is deliberately no second
+/// mapping here — a production exit-code mutation must redden exactly one
+/// function, which the CLI legs below observe end to end.
+async fn run_ntm_sources_gate(cx: &Cx, args: &[String]) -> ExitCode {
+    let snapshot = if let Some(path) = flag(args, "--snapshot-file") {
+        match read_snapshot_file(std::path::Path::new(path)) {
+            Ok(snapshot) => snapshot,
+            Err(error) => return fail_ntm(error),
+        }
+    } else {
+        let ntm_bin = flag(args, "--ntm-bin").unwrap_or("ntm");
+        match read_live_snapshot(cx, ntm_bin).await {
+            Ok(snapshot) => snapshot,
+            Err(error) => return fail_ntm(error),
+        }
+    };
+    let verdicts = match parse_ntm_sources(&snapshot) {
+        Ok(verdicts) => verdicts,
+        Err(error) => return fail_ntm(error),
+    };
     for mapped in &verdicts {
         println!(
             "source={} state={} age_ms={} fresh={} reason={}",
@@ -137,28 +160,51 @@ fn run_ntm_sources_gate(args: &[String]) -> Result<(), String> {
             mapped.verdict.last_reason
         );
     }
-    gate_ntm_sources(&verdicts).map_err(|e| e.to_string())?;
-    println!("NTM_SOURCES_OK count={}", verdicts.len());
-    Ok(())
-}
-fn error_exit_code(error: &str) -> ExitCode {
-    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_SCAN")
-        || error.starts_with("NTM_SOURCE_EMPTY_SCAN")
-    {
-        ExitCode::from(2)
-    } else if error.starts_with("NTM_SOURCE_UNAVAILABLE") {
-        ExitCode::from(3)
-    } else {
-        ExitCode::from(1)
+    match gate_ntm_sources(&verdicts) {
+        Ok(()) => {
+            println!("NTM_SOURCES_OK count={}", verdicts.len());
+            ExitCode::SUCCESS
+        }
+        Err(error) => fail_ntm(error),
     }
+}
+
+/// The single production conversion from typed NTM error to process exit.
+/// Every failure above funnels here; `main` never maps these errors itself,
+/// and `error_exit_code` keeps only the journal family's pre-existing arm.
+fn fail_ntm(error: NtmSourceError) -> ExitCode {
+    eprintln!("{error}");
+    ntm_source_exit_code(&error)
 }
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    match run(&args) {
-        Ok(()) => ExitCode::SUCCESS,
+    let runtime = match RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("LIFECYCLE_MONITOR_ERROR reason=runtime_build detail={error}");
+            return ExitCode::from(2);
+        }
+    };
+    let result = runtime.block_on(async move {
+        let cx = Cx::current()
+            .ok_or_else(|| "LIFECYCLE_MONITOR_ERROR reason=no_runtime_context".to_owned())?;
+        run(&cx, &args).await
+    });
+    match result {
+        Ok(code) => code,
         Err(error) => {
             eprintln!("{error}");
             return error_exit_code(&error);
         }
+    }
+}
+/// Exit mapping for the journal family's string errors (pre-existing
+/// authority, pinned by freshness_gate/l5 legs). NTM errors never reach
+/// here: they convert through `ntm_source_exit_code` at the tail above.
+fn error_exit_code(error: &str) -> ExitCode {
+    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_SCAN") {
+        ExitCode::from(2)
+    } else {
+        ExitCode::from(1)
     }
 }

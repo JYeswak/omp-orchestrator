@@ -39,8 +39,12 @@
 //! number, and neither exists for a snapshot object. Reusing them would be the
 //! dishonest-label defect this crate exists to prevent.
 
+use std::path::Path;
 use std::time::Duration;
 
+use asupersync::process::Command;
+use asupersync::time::timeout;
+use asupersync::Cx;
 use lifecycle_event::Layer;
 use serde_json::Value;
 
@@ -62,36 +66,46 @@ pub struct NtmSourceVerdict {
 /// Restrictive errors for the NTM source path. No variant reads as fresh.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NtmSourceError {
-    SnapshotUnavailable { detail: String },
+    SnapshotUnavailable {
+        detail: String,
+    },
     EmptySources,
-    MalformedSources { detail: String },
-    MissingField { source: String, field: &'static str },
+    MalformedSources {
+        detail: String,
+    },
+    MissingField {
+        source: String,
+        field: &'static str,
+    },
     WrongType {
         source: String,
         field: &'static str,
         expected: &'static str,
     },
-    EmptyReason { source: String },
-    StaleSources { sources: Vec<String> },
+    EmptyReason {
+        source: String,
+    },
+    StaleSources {
+        sources: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for NtmSourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::SnapshotUnavailable { detail } => {
-                write!(f, "NTM_SOURCE_UNAVAILABLE {detail} — unmeasured, never fresh")
+                write!(
+                    f,
+                    "NTM_SOURCE_UNAVAILABLE {detail} — unmeasured, never fresh"
+                )
             }
-            Self::EmptySources => write!(
-                f,
-                "NTM_SOURCE_EMPTY_SCAN — empty is ERROR, never a pass"
-            ),
+            Self::EmptySources => write!(f, "NTM_SOURCE_EMPTY_SCAN — empty is ERROR, never a pass"),
             Self::MalformedSources { detail } => {
                 write!(f, "NTM_SOURCE_MALFORMED_SOURCES {detail}")
             }
-            Self::MissingField { source, field } => write!(
-                f,
-                "NTM_SOURCE_MISSING_FIELD source={source} field={field}"
-            ),
+            Self::MissingField { source, field } => {
+                write!(f, "NTM_SOURCE_MISSING_FIELD source={source} field={field}")
+            }
             Self::WrongType {
                 source,
                 field,
@@ -213,9 +227,11 @@ pub fn parse_ntm_sources(snapshot: &Value) -> Result<Vec<NtmSourceVerdict>, NtmS
         .ok_or_else(|| NtmSourceError::SnapshotUnavailable {
             detail: "missing .sources.sources".to_owned(),
         })?;
-    let map = sources.as_object().ok_or_else(|| NtmSourceError::MalformedSources {
-        detail: "expected .sources.sources to be an object".to_owned(),
-    })?;
+    let map = sources
+        .as_object()
+        .ok_or_else(|| NtmSourceError::MalformedSources {
+            detail: "expected .sources.sources to be an object".to_owned(),
+        })?;
     if map.is_empty() {
         return Err(NtmSourceError::EmptySources);
     }
@@ -247,41 +263,70 @@ pub fn gate_ntm_sources(verdicts: &[NtmSourceVerdict]) -> Result<(), NtmSourceEr
     Err(NtmSourceError::StaleSources { sources: stale })
 }
 
-/// Run the live `ntm --robot-snapshot` under the subprocess contract and decode
-/// it. Any transport failure — unspawnable binary, deadline, non-JSON stdout —
-/// is [`NtmSourceError::SnapshotUnavailable`]: unmeasured, never a verdict
-/// about the sources.
-pub fn read_live_snapshot(ntm_bin: &str) -> Result<Value, NtmSourceError> {
-    let mut command = std::process::Command::new(ntm_bin);
+/// Run the live `ntm --robot-snapshot` under the caller's cancellation context.
+///
+/// `&Cx` is first per the repository binding: every subprocess is cancellable
+/// work with a deadline, owned by the caller's region. The 60s restrictive
+/// bound is preserved through [`timeout`]: a hung daemon yields
+/// [`NtmSourceError::SnapshotUnavailable`], never a hang. Any transport
+/// failure — unspawnable binary, deadline, cancellation, non-JSON stdout —
+/// is unmeasured, never a verdict about the sources.
+pub async fn read_live_snapshot(cx: &Cx, ntm_bin: &str) -> Result<Value, NtmSourceError> {
+    cx.checkpoint()
+        .map_err(|_| NtmSourceError::SnapshotUnavailable {
+            detail: "caller context cancelled before spawn".to_owned(),
+        })?;
+    let mut command = Command::new(ntm_bin);
     command.args(["--robot-snapshot"]);
-    match subprocess_contract::bounded_output(&mut command, SNAPSHOT_DEADLINE) {
-        subprocess_contract::BoundedOutcome::Completed(output) => {
-            if !output.status.success() {
-                return Err(NtmSourceError::SnapshotUnavailable {
-                    detail: format!(
-                        "ntm --robot-snapshot exited {}",
-                        output.status.code().unwrap_or(-1)
-                    ),
-                });
-            }
-            serde_json::from_slice(&output.stdout).map_err(|error| {
-                NtmSourceError::SnapshotUnavailable {
-                    detail: format!("snapshot stdout is not JSON: {error}"),
-                }
-            })
+    let output = match timeout(
+        cx.now_for_observability(),
+        SNAPSHOT_DEADLINE,
+        subprocess_contract::run_output(cx, command),
+    )
+    .await
+    {
+        Ok(Ok(output)) => output,
+        Ok(Err(subprocess_contract::RunError::Timeout))
+        | Ok(Err(subprocess_contract::RunError::Cancelled(_))) => {
+            return Err(NtmSourceError::SnapshotUnavailable {
+                detail: "snapshot wait cancelled by caller context".to_owned(),
+            });
         }
-        subprocess_contract::BoundedOutcome::TimedOut => {
-            Err(NtmSourceError::SnapshotUnavailable {
+        Ok(Err(subprocess_contract::RunError::Process(error))) => {
+            return Err(NtmSourceError::SnapshotUnavailable {
+                detail: format!("cannot run {ntm_bin}: {error}"),
+            });
+        }
+        Err(_) => {
+            return Err(NtmSourceError::SnapshotUnavailable {
                 detail: format!(
                     "ntm --robot-snapshot exceeded {}s",
                     SNAPSHOT_DEADLINE.as_secs()
                 ),
-            })
+            });
         }
-        subprocess_contract::BoundedOutcome::Unspawned(error) => {
-            Err(NtmSourceError::SnapshotUnavailable {
-                detail: format!("cannot spawn {ntm_bin}: {error}"),
-            })
-        }
+    };
+    if !output.status.success() {
+        return Err(NtmSourceError::SnapshotUnavailable {
+            detail: format!(
+                "ntm --robot-snapshot exited {}",
+                output.status.code().unwrap_or(-1)
+            ),
+        });
     }
+    serde_json::from_slice(&output.stdout).map_err(|error| NtmSourceError::SnapshotUnavailable {
+        detail: format!("snapshot stdout is not JSON: {error}"),
+    })
+}
+
+/// Read a captured snapshot document from a file. Same envelope, alternate
+/// transport for replay and for process legs that must not depend on a live
+/// daemon. A missing file is unmeasured; present-but-not-JSON is malformed.
+pub fn read_snapshot_file(path: &Path) -> Result<Value, NtmSourceError> {
+    let bytes = std::fs::read(path).map_err(|error| NtmSourceError::SnapshotUnavailable {
+        detail: format!("cannot read snapshot file {}: {error}", path.display()),
+    })?;
+    serde_json::from_slice(&bytes).map_err(|error| NtmSourceError::MalformedSources {
+        detail: format!("snapshot file is not JSON: {error}"),
+    })
 }
