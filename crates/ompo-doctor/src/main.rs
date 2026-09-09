@@ -141,6 +141,35 @@ fn step_json(step: &ompo_start::Step) -> Value {
 fn run_supervise(rest: &[String]) -> ExitCode {
     omp_orchestrator::resident::run(rest.to_vec())
 }
+/// L3 observability writer (hilk): every successful `ompo start` run emits one
+/// S1.L2 -> S1.L3 row at the step-advance chokepoint below. Observability never
+/// fails the command: an emit error is reported on stderr and execution continues.
+/// Shape copied from tick-monitor's `emit_l4`, pointed at the L3 transition.
+fn emit_s1_l3_start(repo: &std::path::Path) {
+    let code = match lifecycle_event::ReasonCode::new("START_OK") {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L3 detail={error}");
+            return;
+        }
+    };
+    let event = lifecycle_event::LifecycleEvent::new(
+        lifecycle_event::Layer::L3,
+        "S1.L2",
+        "S1.L3",
+        "ompo",
+        lifecycle_event::EmitOutcome::Emitted,
+        code,
+    );
+    let path = lifecycle_event::default_repo_journal(repo);
+    match lifecycle_event::DurableJournal::open(&path)
+        .and_then(|journal| lifecycle_event::emit_one_host(&journal, event))
+    {
+        Ok(_) => {}
+        Err(error) => eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer=L3 detail={error}"),
+    }
+}
+
 fn run_start(rest: &[String]) -> ExitCode {
     let mut repo = match current_repo() {
         Ok(path) => path,
@@ -238,6 +267,7 @@ fn run_start(rest: &[String]) -> ExitCode {
         }
     };
 
+    emit_s1_l3_start(&repo);
     let data = json!({
         "repo": repo.display().to_string(),
         "session": session,
