@@ -768,6 +768,245 @@ pub fn resolve_repo_ownership(this_root: &Path, binary_name: &str) -> RepoOwners
     RepoOwnership::Unknown
 }
 
+// ── THE OWNED ROSTER, AND WHY IT LIVES HERE ────────────────────────────────────
+
+/// The `(crate, installed binary)` pairs this repository owns and installs.
+///
+/// It lives in the LIBRARY, not in `main.rs`, because a roster no test can reach is
+/// a roster that drifts unobserved.
+///
+/// MEASURED 2026-09-10 at HEAD 08e9bc3: the INSTALLED `installer` (build_id 2a862a2,
+/// Sep 4) still carried the pair `("omp-orchestrator", "omp-orchestrator")`. The
+/// supervisor cutover (07dad3f) renamed that artifact to `ompo`, and
+/// `crates/omp-orchestrator` now declares exactly one bin — `omp-target-dir`. So the
+/// flagship `ompo` — 7,869,104 bytes, installed, running — was NEVER PROBED, and the
+/// hole in the identity proof rendered as the benign line
+/// `omp-orchestrator: NOT INSTALLED (skipped)`.
+///
+/// A compile-time roster reports the world as of its own build, so the defence is not
+/// a better list: it is [`crate_declares_bin`], which compares every entry against the
+/// bin targets this workspace actually declares. A renamed artifact is then a FINDING,
+/// not a skipped row.
+pub const OWNED_BINARIES: &[(&str, &str)] = &[
+    ("ompo-doctor", "ompo"),
+    ("tick-monitor", "tick-monitor"),
+    ("pane-truth", "pane-truth"),
+    ("installer", "installer"),
+    ("bead-availability", "bead-availability"),
+];
+
+/// Every bin target name `crate_name` produces in this workspace: the explicit
+/// `[[bin]]` entries plus the two cargo auto-discovers — `src/main.rs` (named after
+/// the package) and each `src/bin/NAME.rs`.
+///
+/// A crate with no readable manifest yields an EMPTY list rather than a guess, so an
+/// unreadable manifest cannot be mistaken for a satisfied roster entry.
+#[must_use]
+pub fn declared_bin_targets(repo_root: &Path, crate_name: &str) -> Vec<String> {
+    let crate_dir = repo_root.join("crates").join(crate_name);
+    let Ok(manifest) = std::fs::read_to_string(crate_dir.join("Cargo.toml")) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = Vec::new();
+    let mut package_name: Option<String> = None;
+    let mut table = "";
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            table = if trimmed.starts_with("[[bin]]") {
+                "bin"
+            } else if trimmed.starts_with("[package]") {
+                "package"
+            } else {
+                "other"
+            };
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "name" {
+            continue;
+        }
+        let value = value.trim().trim_matches('"').to_owned();
+        match table {
+            "bin" => names.push(value),
+            "package" if package_name.is_none() => package_name = Some(value),
+            _ => {}
+        }
+    }
+    if crate_dir.join("src").join("main.rs").is_file() {
+        if let Some(name) = package_name {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(crate_dir.join("src").join("bin")) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|extension| extension == "rs") {
+                if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
+                    if !names.iter().any(|name| name == stem) {
+                        names.push(stem.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    names
+}
+
+/// Does `crate_name` actually build a binary called `bin_name` in this workspace?
+#[must_use]
+pub fn crate_declares_bin(repo_root: &Path, crate_name: &str, bin_name: &str) -> bool {
+    declared_bin_targets(repo_root, crate_name)
+        .iter()
+        .any(|name| name == bin_name)
+}
+
+/// One roster entry's outcome. Every entry gets a row: a roster member that produces
+/// no row is invisible, which is how the flagship stayed out of the proof.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RosterRow {
+    /// The artifact was found and its identity legs were compared.
+    Probed(IdentityCheck),
+    /// This workspace builds the target, and the install directory does not have it.
+    /// NAMED, never probed — absence is not consistency.
+    NotInstalled {
+        crate_name: String,
+        binary_name: String,
+    },
+    /// The roster names a bin target this workspace does not build. This entry can
+    /// NEVER be probed, so it is a finding, not a skip.
+    RosterStale {
+        crate_name: String,
+        binary_name: String,
+    },
+}
+
+impl fmt::Display for RosterRow {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Probed(check) => write!(formatter, "{check}"),
+            Self::NotInstalled {
+                crate_name,
+                binary_name,
+            } => write!(
+                formatter,
+                "{binary_name}: NOT INSTALLED — crate {crate_name} builds this target; \
+                 nothing was compared, so this row is NOT coverage"
+            ),
+            Self::RosterStale {
+                crate_name,
+                binary_name,
+            } => write!(
+                formatter,
+                "{binary_name}: ROSTER STALE — crate {crate_name} builds no bin named \
+                 {binary_name}, so this entry can never be probed"
+            ),
+        }
+    }
+}
+
+/// The whole-roster verdict for one install directory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityReport {
+    pub head_sha: String,
+    pub rows: Vec<RosterRow>,
+    /// Owned artifacts whose identity was actually compared. Counted, never derived
+    /// from `rows.len()`: a denominator that includes rows it never examined is
+    /// unverifiable.
+    pub probed: usize,
+    pub mismatches: usize,
+    pub foreign: usize,
+    pub unavailable: usize,
+    pub not_installed: usize,
+    pub roster_stale: usize,
+}
+
+impl IdentityReport {
+    /// Drift is a disagreeing artifact OR a roster entry naming an artifact this
+    /// workspace does not build. The second is the defect that hid `ompo`.
+    #[must_use]
+    pub fn drifted(&self) -> bool {
+        self.mismatches > 0 || self.roster_stale > 0
+    }
+
+    /// The process exit code this report maps to. `main` returns exactly this.
+    #[must_use]
+    pub fn exit_code(&self) -> u8 {
+        u8::from(self.drifted())
+    }
+
+    #[must_use]
+    pub fn row_for(&self, binary_name: &str) -> Option<&RosterRow> {
+        self.rows.iter().find(|row| match row {
+            RosterRow::Probed(check) => check.binary_name == binary_name,
+            RosterRow::NotInstalled { binary_name: name, .. }
+            | RosterRow::RosterStale { binary_name: name, .. } => name == binary_name,
+        })
+    }
+}
+
+/// Sweep an install directory against the roster.
+///
+/// Roster integrity is checked BEFORE installation state, because an entry naming a
+/// bin target this workspace does not build is stale whether or not a file of that
+/// name happens to exist.
+#[must_use]
+pub fn sweep_installed_identity(
+    repo_root: &Path,
+    bin_dir: &Path,
+    head_sha: &str,
+    roster: &[(&str, &str)],
+) -> IdentityReport {
+    let mut report = IdentityReport {
+        head_sha: head_sha.to_owned(),
+        rows: Vec::with_capacity(roster.len()),
+        probed: 0,
+        mismatches: 0,
+        foreign: 0,
+        unavailable: 0,
+        not_installed: 0,
+        roster_stale: 0,
+    };
+    for &(crate_name, binary_name) in roster {
+        let ownership = resolve_repo_ownership(repo_root, crate_name);
+        if matches!(ownership, RepoOwnership::ThisRepo)
+            && !crate_declares_bin(repo_root, crate_name, binary_name)
+        {
+            report.roster_stale += 1;
+            report.rows.push(RosterRow::RosterStale {
+                crate_name: crate_name.to_owned(),
+                binary_name: binary_name.to_owned(),
+            });
+            continue;
+        }
+        let binary = bin_dir.join(binary_name);
+        if !binary.exists() {
+            report.not_installed += 1;
+            report.rows.push(RosterRow::NotInstalled {
+                crate_name: crate_name.to_owned(),
+                binary_name: binary_name.to_owned(),
+            });
+            continue;
+        }
+        let check = verify_identity(&binary, head_sha, &ownership);
+        match (&ownership, check.consistent) {
+            (RepoOwnership::Foreign { .. }, _) => report.foreign += 1,
+            (RepoOwnership::Unknown, _) => report.unavailable += 1,
+            (RepoOwnership::ThisRepo, true) => report.probed += 1,
+            (RepoOwnership::ThisRepo, false) => {
+                report.probed += 1;
+                report.mismatches += 1;
+            }
+        }
+        report.rows.push(RosterRow::Probed(check));
+    }
+    report
+}
+
 // ── GIT OPERATIONS ──────────────────────────────────────────────────────────────
 
 pub fn git_rev_parse_short(repo: &Path) -> Result<String, InstallError> {

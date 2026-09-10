@@ -14,13 +14,10 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 #[used]
 static BUILD_ID_MARKER: &[u8] = concat!("build_id=", env!("OMP_BUILD_ID")).as_bytes();
-const BINARIES: &[(&str, &str)] = &[
-    ("ompo-doctor", "ompo"),
-    ("tick-monitor", "tick-monitor"),
-    ("pane-truth", "pane-truth"),
-    ("installer", "installer"),
-    ("bead-availability", "bead-availability"),
-];
+// The roster moved to `installer::OWNED_BINARIES`. It was a private const HERE, which
+// is how it drifted unobserved for six days: no test could reach it, so nothing
+// noticed that the installed artifact's baked copy still named `omp-orchestrator`
+// while the shipped flagship had been renamed to `ompo`. See the doc comment there.
 
 fn main() -> ExitCode {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
@@ -139,53 +136,73 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
     let head_short = installer::git_rev_parse_short(repo_root).unwrap_or_default();
     println!("installer --check: HEAD={head_short}");
 
-    let mut mismatches = 0usize;
-    let mut foreign = 0usize;
-    let mut unavailable = 0usize;
-    // Counted explicitly, never derived. `BINARIES.len() - foreign` looks equivalent and is not:
-    // a binary that is NOT INSTALLED hits the `continue` below without touching the counters,
-    // yet still sits in `BINARIES.len()`, so it would silently inflate the "owned" denominator.
-    // A ratio whose denominator includes rows it never examined is unverifiable — the same defect
-    // class as the retired "81 JSON-RPC methods, 17 used" figure.
-    let mut owned = 0usize;
-
-    for &(crate_name, name) in BINARIES {
-        let binary = bin_dir.join(name);
-        if !binary.exists() {
-            println!("  {name}: NOT INSTALLED (skipped)");
-            continue;
-        }
-        let ownership = installer::resolve_repo_ownership(repo_root, crate_name);
-        let check = installer::verify_identity(&binary, &head, &ownership);
-        println!("  {check}");
-        match (&ownership, check.consistent) {
-            (RepoOwnership::Foreign { .. }, _) => foreign += 1,
-            (RepoOwnership::Unknown, _) => unavailable += 1,
-            _ if check.consistent => owned += 1,
-            _ => {
-                owned += 1;
-                mismatches += 1;
-            }
-        }
+    // Every counter is the report's, counted explicitly per row and never derived from
+    // the roster length: a ratio whose denominator includes rows it never examined is
+    // unverifiable — the same defect class as the retired "81 JSON-RPC methods, 17
+    // used" figure.
+    let report = installer::sweep_installed_identity(
+        repo_root,
+        bin_dir,
+        &head,
+        installer::OWNED_BINARIES,
+    );
+    for row in &report.rows {
+        println!("  {row}");
     }
 
-    if mismatches > 0 {
+    if report.roster_stale > 0 {
         eprintln!(
-            "INSTALLER IDENTITY DRIFT: {mismatches}/{owned} owned binaries disagree with HEAD {head_short}"
+            "INSTALLER ROSTER STALE: {}/{} roster entries name a bin target this workspace does not build — the identity proof has a HOLE exactly where those artifacts live",
+            report.roster_stale,
+            report.rows.len()
         );
-        return ExitCode::from(1);
     }
-    if foreign > 0 {
+    if report.mismatches > 0 {
+        eprintln!(
+            "INSTALLER IDENTITY DRIFT: {}/{} owned binaries disagree with HEAD {head_short}",
+            report.mismatches, report.probed
+        );
+    }
+    if report.foreign > 0 {
         println!(
-            "INSTALLER: {foreign} foreign artifact(s) named — excluded from drift denominator"
+            "INSTALLER: {} foreign artifact(s) named — excluded from drift denominator",
+            report.foreign
         );
     }
-    if unavailable > 0 {
+    if report.unavailable > 0 {
         println!(
-            "INSTALLER: {unavailable} artifact(s) have unavailable source ownership — excluded from drift denominator"
+            "INSTALLER: {} artifact(s) have unavailable source ownership — excluded from drift denominator",
+            report.unavailable
         );
     }
-    println!("INSTALLER IDENTITY OK: {owned}/{owned} binaries consistent with HEAD {head_short}");
+    if report.not_installed > 0 {
+        println!(
+            "INSTALLER: {} roster binar(ies) absent from {} — NAMED, not probed; absence is not consistency",
+            report.not_installed,
+            bin_dir.display()
+        );
+    }
+    if report.drifted() {
+        return ExitCode::from(report.exit_code());
+    }
+    if report.probed == 0 {
+        // A 0/0 "IDENTITY OK" is the vacuous green this check shipped with: the one
+        // wired invocation (gate.yml -> gate-runner --run -> the declared check in
+        // this crate's Cargo.toml) points at an EMPTY scratch directory, so every
+        // row was skipped and the gate passed having compared nothing. The roster
+        // integrity leg above is what that invocation now actually measures; the
+        // identity leg says so instead of claiming a proof it does not have.
+        println!(
+            "INSTALLER IDENTITY UNPROVEN: 0 of {} roster binaries were probed in {} — no identity was compared. NO-CLAIM: this is not an OK, and roster integrity alone is what passed here.",
+            report.rows.len(),
+            bin_dir.display()
+        );
+        return ExitCode::SUCCESS;
+    }
+    println!(
+        "INSTALLER IDENTITY OK: {}/{} binaries consistent with HEAD {head_short}",
+        report.probed, report.probed
+    );
     emit_s1(
         repo_root,
         Layer::L1,
@@ -206,8 +223,10 @@ fn run_install(
         eprintln!("INSTALLER BLOCKED: {error}");
         return ExitCode::from(75);
     }
-    let Some((crate_name, binary_name)) =
-        BINARIES.iter().find(|(_, name)| *name == target).copied()
+    let Some((crate_name, binary_name)) = installer::OWNED_BINARIES
+        .iter()
+        .find(|(_, name)| *name == target)
+        .copied()
     else {
         eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of ompo, tick-monitor, pane-truth, installer, bead-availability");
         return ExitCode::from(2);

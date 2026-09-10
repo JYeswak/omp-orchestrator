@@ -588,3 +588,242 @@ fn install_report_refuses_when_one_detected_agent_is_dropped() {
     }
 }
 
+
+// ── omp-orchestrator-j9ngc: THE FLAGSHIP MUST BE INSIDE THE PROOF ─────────────────
+//
+// MEASURED 2026-09-10 at HEAD 08e9bc3, `~/.local/bin/installer --check` (unpiped,
+// rc=1) opened with `omp-orchestrator: NOT INSTALLED (skipped)` while the flagship
+// `ompo` — 7,869,104 bytes, installed, running — was never probed. The installed
+// artifact (build_id 2a862a2) carried a roster the cutover 07dad3f had already
+// renamed. A skipped row reads identically to a passing one, so the hole was
+// invisible from the output.
+
+/// Create a throwaway git repository with exactly one commit and return its full sha.
+///
+/// The identity check reads HEAD from git, and the remote build worker's synced tree
+/// has a `.git` with NO commits (measured: `git rev-parse HEAD` exits 128 there). So
+/// the CLI test carries its own repository and hands it to the child through GIT_DIR
+/// rather than depending on the tree it happens to be built in.
+fn temp_git_repo_with_one_commit(root: &Path) -> String {
+    fs::create_dir_all(root).expect("create the throwaway repository directory");
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .args(["-c", "user.email=test@invalid", "-c", "user.name=test"])
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("run git");
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "-q"]);
+    git(&["commit", "-q", "--allow-empty", "-m", "identity fixture"]);
+    let head = git(&["rev-parse", "HEAD"]);
+    assert_eq!(head.len(), 40, "expected a full sha, got {head:?}");
+    head
+}
+
+/// A stamped artifact the identity probe can read: `strings` finds the build id, and
+/// the file is deliberately not executable, so the `--version` leg is absent and the
+/// row reports `legs=build_id`.
+fn write_stamped_artifact(path: &Path, build_id: &str) {
+    fs::write(path, format!("build_id={build_id}\nfixture artifact\n"))
+        .expect("write the stamped fixture artifact");
+}
+
+#[test]
+fn real_roster_covers_the_flagship_and_names_only_bin_targets_this_workspace_builds() {
+    let root = repo_root();
+    assert!(
+        installer::OWNED_BINARIES
+            .iter()
+            .any(|&(krate, bin)| krate == "ompo-doctor" && bin == "ompo"),
+        "the flagship must be IN the roster, not outside the proof: {:?}",
+        installer::OWNED_BINARIES
+    );
+    for &(crate_name, bin) in installer::OWNED_BINARIES {
+        assert!(
+            installer::crate_declares_bin(&root, crate_name, bin),
+            "roster entry ({crate_name}, {bin}) names a bin target this workspace does \
+             not build; {crate_name} declares {:?}",
+            installer::declared_bin_targets(&root, crate_name)
+        );
+    }
+    // NEGATIVE CONTROL. The pair the INSTALLED installer still carries must be
+    // REJECTED, or the loop above proves only that the instrument always says yes.
+    assert!(
+        !installer::crate_declares_bin(&root, "omp-orchestrator", "omp-orchestrator"),
+        "the instrument cannot say NO: crates/omp-orchestrator declares {:?}",
+        installer::declared_bin_targets(&root, "omp-orchestrator")
+    );
+    // ...and it must still say YES to the bin that crate does build, or it is merely
+    // broken rather than discriminating.
+    assert!(
+        installer::crate_declares_bin(&root, "omp-orchestrator", "omp-target-dir"),
+        "declared targets: {:?}",
+        installer::declared_bin_targets(&root, "omp-orchestrator")
+    );
+}
+
+#[test]
+fn real_sweep_names_every_roster_entry_and_a_stale_flagship_is_a_mismatch() {
+    let root = repo_root();
+    let bins = TempDir::new("flagship-sweep");
+    let head = "a".repeat(40);
+    let wrong = "b".repeat(40);
+    let flagship: &[(&str, &str)] = &[("ompo-doctor", "ompo")];
+
+    // ABSENT: still NAMED, and named as something other than coverage.
+    let absent = installer::sweep_installed_identity(&root, bins.path(), &head, flagship);
+    assert_eq!(absent.rows.len(), 1, "{absent:?}");
+    let row = absent.rows[0].to_string();
+    assert!(
+        row.starts_with("ompo:") && row.contains("NOT coverage"),
+        "an absent flagship must be named and disclaimed: {row}"
+    );
+    assert_eq!(absent.probed, 0, "nothing was compared: {absent:?}");
+    assert_eq!(absent.exit_code(), 0, "{absent:?}");
+
+    // STALE: the flagship disagrees with HEAD -> MISMATCH for `ompo` SPECIFICALLY.
+    let flagship_path = bins.path().join("ompo");
+    write_stamped_artifact(&flagship_path, &wrong);
+    let drifted = installer::sweep_installed_identity(&root, bins.path(), &head, flagship);
+    let row = drifted
+        .row_for("ompo")
+        .expect("the flagship must have a row")
+        .to_string();
+    assert!(row.starts_with("ompo:"), "the row must NAME the flagship: {row}");
+    assert!(row.contains("MISMATCH"), "a stale flagship must MISMATCH: {row}");
+    assert!(row.contains("legs=build_id"), "the legs must be named: {row}");
+    assert_eq!(drifted.probed, 1, "{drifted:?}");
+    assert_eq!(drifted.mismatches, 1, "{drifted:?}");
+    assert_eq!(
+        drifted.exit_code(),
+        1,
+        "drift must map to a NONZERO exit: {drifted:?}"
+    );
+
+    // RESTORED: a fresh flagship reports OK, so the MISMATCH above was a measurement
+    // and not an instrument that can only fail.
+    write_stamped_artifact(&flagship_path, &head);
+    let fresh = installer::sweep_installed_identity(&root, bins.path(), &head, flagship);
+    let row = fresh
+        .row_for("ompo")
+        .expect("the flagship must have a row")
+        .to_string();
+    assert!(row.contains("IDENTITY OK"), "{row}");
+    assert_eq!(fresh.mismatches, 0, "{fresh:?}");
+    assert_eq!(fresh.exit_code(), 0, "{fresh:?}");
+}
+
+#[test]
+fn real_sweep_refuses_a_roster_entry_naming_an_artifact_this_workspace_does_not_build() {
+    let root = repo_root();
+    let bins = TempDir::new("roster-stale");
+    let head = "c".repeat(40);
+    // The exact pair the installed artifact carries. A file of that name EXISTS and is
+    // stamped with the right build id: a roster entry naming a deleted bin target is
+    // stale whether or not something answers to the name, so integrity is checked
+    // before installation state.
+    write_stamped_artifact(&bins.path().join("omp-orchestrator"), &head);
+    let stale = installer::sweep_installed_identity(
+        &root,
+        bins.path(),
+        &head,
+        &[("omp-orchestrator", "omp-orchestrator")],
+    );
+    let row = stale.rows[0].to_string();
+    assert!(row.contains("ROSTER STALE"), "{row}");
+    assert_eq!(stale.roster_stale, 1, "{stale:?}");
+    assert_eq!(stale.probed, 0, "a stale entry can never be probed: {stale:?}");
+    assert!(stale.drifted(), "{stale:?}");
+    assert_eq!(stale.exit_code(), 1, "{stale:?}");
+}
+
+#[test]
+fn real_cli_check_exits_nonzero_for_a_stale_flagship_and_zero_when_all_agree() {
+    let fixture = TempDir::new("cli-check");
+    let repo = fixture.path().join("repo");
+    let head = temp_git_repo_with_one_commit(&repo);
+    let bins = fixture.path().join("bin");
+    fs::create_dir_all(&bins).expect("create the fixture install directory");
+
+    let run = |bins: &Path| {
+        let output = Command::new(built_installer())
+            .arg("--check")
+            .arg("--bin-dir")
+            .arg(bins)
+            .env("GIT_DIR", repo.join(".git"))
+            .env("GIT_WORK_TREE", &repo)
+            .output()
+            .expect("run the real installer binary");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        // Captured by cargo unless `-- --nocapture`, where it becomes the pasteable
+        // OBSERVED output this bead's coverage clause asks for. An assertion proves the
+        // rows are right; only the rows themselves show WHAT was checked.
+        println!(
+            "OBSERVED installer --check --bin-dir {} exit={:?}\n{text}",
+            bins.display(),
+            output.status.code()
+        );
+        (output.status.code(), text)
+    };
+
+    // Every roster binary present and fresh EXCEPT the flagship, which is one commit
+    // behind. The one row that must go red is `ompo`.
+    for &(_, bin) in installer::OWNED_BINARIES {
+        write_stamped_artifact(&bins.join(bin), &head);
+    }
+    write_stamped_artifact(&bins.join("ompo"), &"d".repeat(40));
+    let (code, text) = run(&bins);
+    assert_eq!(code, Some(1), "a stale flagship must exit 1:\n{text}");
+    assert!(
+        text.lines().any(|line| line.trim().starts_with("ompo:")
+            && line.contains("MISMATCH")),
+        "the flagship must be a CHECKED row reporting MISMATCH:\n{text}"
+    );
+    assert!(
+        !text.contains("NOT INSTALLED (skipped)"),
+        "no row may report the retired benign skip:\n{text}"
+    );
+
+    // RESTORE the flagship byte-for-byte to a fresh stamp: the same command now exits
+    // 0 and says how many artifacts it actually compared.
+    write_stamped_artifact(&bins.join("ompo"), &head);
+    let (code, text) = run(&bins);
+    assert_eq!(code, Some(0), "a fresh roster must exit 0:\n{text}");
+    assert!(
+        text.contains(&format!(
+            "INSTALLER IDENTITY OK: {}/{}",
+            installer::OWNED_BINARIES.len(),
+            installer::OWNED_BINARIES.len()
+        )),
+        "every roster binary must be counted as probed:\n{text}"
+    );
+
+    // AN EMPTY INSTALL DIRECTORY IS NOT AN OK. This is the one invocation anything
+    // actually runs (gate.yml -> gate-runner --run -> the declared check in this
+    // crate's Cargo.toml, against an empty {scratch}), and it used to print
+    // `INSTALLER IDENTITY OK: 0/0`.
+    let empty = fixture.path().join("empty");
+    fs::create_dir_all(&empty).expect("create the empty install directory");
+    let (code, text) = run(&empty);
+    assert_eq!(code, Some(0), "roster integrity held, so this is not a red:\n{text}");
+    assert!(
+        text.contains("INSTALLER IDENTITY UNPROVEN: 0 of"),
+        "zero probed artifacts must not render as an identity proof:\n{text}"
+    );
+    assert!(
+        !text.contains("INSTALLER IDENTITY OK"),
+        "0/0 must never read as OK:\n{text}"
+    );
+}

@@ -25,4 +25,13 @@ unsafe_code = "forbid"
 # edit when a gate is added. {repo}/{scratch} are substituted by the runner rather
 # than hardcoded, because a path literal in a manifest is what path-literal-guard
 # exists to refuse.
+#
+# omp-orchestrator-j9ngc — WHAT THIS INVOCATION MEASURES, and what it does NOT.
+# {scratch} is an EMPTY directory, so ZERO artifacts are probed: this phase measures
+# ROSTER INTEGRITY (every OWNED_BINARIES entry names a bin target this workspace
+# actually builds) and prints `INSTALLER IDENTITY UNPROVEN` for the identity leg. It
+# would have gone RED at 2a862a2, where the roster still named `omp-orchestrator` —
+# a bin target the cutover had deleted — which is how the flagship `ompo` stayed out
+# of the proof. It does NOT prove any installed artifact matches HEAD; that needs a
+# real bin dir, and nothing on a schedule runs it against one yet.
 checks = [["--check", "--bin-dir", "{scratch}"]]
