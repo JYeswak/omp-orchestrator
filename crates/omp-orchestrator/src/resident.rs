@@ -191,6 +191,10 @@ pub struct Config {
     omp_quick: bool,
     reap_finished_panes: String,
     omp_binary: PathBuf,
+    /// Explicit UDS executable. Missing configuration is restrictive: no gate roster fallback.
+    uds_binary: Option<PathBuf>,
+    /// Explicit UDS target-gate registry. The supervised repository is always the target root.
+    uds_registry: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -365,7 +369,7 @@ async fn run_peer_grade_claim(
         &config.tick_monitor,
         invoke(cx, config, &config.tick_monitor, &monitor_args).await?,
     )?;
-    let mut observation = parse_observation(&monitor_bytes, census_gates(&config.repo))?;
+    let mut observation = parse_observation(&monitor_bytes, Some(census_gates(&config.repo)))?;
     observation.panes.retain(|pane| {
         !config
             .exclude_panes
@@ -470,6 +474,8 @@ impl Config {
         let mut omp_binary = env::var_os("OMP_BINARY")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("omp"));
+        let mut uds_binary = env::var_os("OMP_UDS_BINARY").map(PathBuf::from);
+        let mut uds_registry = env::var_os("OMP_UDS_TARGET_GATE_REGISTRY").map(PathBuf::from);
         // ompo supervise forwards its flags directly to the shared runtime.
         let mut index = 0;
         while index < args.len() {
@@ -551,6 +557,18 @@ impl Config {
                         PathBuf::from(args.get(index).ok_or_else(|| {
                             "CONFIG_REFUSED --omp-binary requires a path".to_owned()
                         })?);
+                }
+                "--uds-binary" => {
+                    index += 1;
+                    uds_binary = Some(PathBuf::from(args.get(index).ok_or_else(|| {
+                        "CONFIG_REFUSED --uds-binary requires a path".to_owned()
+                    })?));
+                }
+                "--uds-registry" => {
+                    index += 1;
+                    uds_registry = Some(PathBuf::from(args.get(index).ok_or_else(|| {
+                        "CONFIG_REFUSED --uds-registry requires a path".to_owned()
+                    })?));
                 }
                 "--help" => return Err(usage().to_owned()),
                 "--version" => {
@@ -677,11 +695,13 @@ impl Config {
             reap_finished_panes: env::var("OMP_REAP_FINISHED_PANES_BIN")
                 .unwrap_or_else(|_| "reap-finished-panes".to_owned()),
             omp_binary,
+            uds_binary,
+            uds_registry,
         })
     }
 }
 fn usage() -> &'static str {
-    "usage: ompo supervise [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       grade --claim [--repo PATH] [--session NAME]\n       supervise runs the resident lifecycle (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
+    "usage: ompo supervise [--once|--max-ticks N] [--repo PATH] [--session NAME] [--interval-secs N] [--receiver-agent NAME] [--omp-quick] [--omp-binary PATH] [--uds-binary PATH] [--uds-registry PATH]\n       close-readback BEAD --reason REASON\n       dispatch render --bead BEAD --pane %N [--why-now TEXT] [--traps-file PATH]\n       grade --claim [--repo PATH] [--session NAME]\n       supervise runs the resident lifecycle (observe -> ready queue -> dispatch -> receiver receipt); dispatch render emits the same packet without transport"
 }
 
 fn now_unix() -> u64 {
@@ -765,6 +785,187 @@ fn require_success(program: &str, output: Output) -> Result<Vec<u8>, String> {
         String::from_utf8_lossy(&output.stderr).trim()
     ))
 }
+const UDS_ENVELOPE_SCHEMA: &str = "uds/v2";
+const UDS_PROJECTION_SCHEMA: &str = "uds-target-gates/v1";
+const UDS_FH_REQUIREMENTS: [&str; 2] = ["fh-doctor", "fh-how-oracle"];
+const UDS_TARGET_GATE_VERB: &str = "target-gate";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UdsProcessResult {
+    process_exit: Option<i32>,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+impl UdsProcessResult {
+    fn from_output(output: Output) -> Self {
+        Self {
+            process_exit: output.status.code(),
+            stdout: output.stdout,
+            stderr: output.stderr,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UdsTargetGateRequirement {
+    id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UdsTargetGateObservation {
+    requirements: Vec<UdsTargetGateRequirement>,
+}
+
+fn uds_target_gate_unwired(detail: impl AsRef<str>) -> String {
+    format!("UDS_TARGET_GATE_UNWIRED {}", detail.as_ref())
+}
+
+fn uds_target_gate_exit(code: &str) -> Option<i32> {
+    match code {
+        "EC-PASS" => Some(0),
+        "EC-RED" => Some(1),
+        "EC-USAGE" => Some(2),
+        "EC-UNRUN" => Some(77),
+        _ => None,
+    }
+}
+
+fn parse_uds_target_gate(result: UdsProcessResult) -> Result<UdsTargetGateObservation, String> {
+    let process_exit = result.process_exit.ok_or_else(|| {
+        uds_target_gate_unwired("process_exit=signal")
+    })?;
+    let value: Value = serde_json::from_slice(&result.stdout).map_err(|error| {
+        uds_target_gate_unwired(format!(
+            "malformed_envelope detail={} stderr={}",
+            error,
+            one_line_detail(&String::from_utf8_lossy(&result.stderr))
+        ))
+    })?;
+    let schema = value
+        .get("schema")
+        .and_then(Value::as_str)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=schema"))?;
+    if schema != UDS_ENVELOPE_SCHEMA {
+        return Err(uds_target_gate_unwired(format!(
+            "envelope_schema={schema} expected={UDS_ENVELOPE_SCHEMA}"
+        )));
+    }
+    let verb = value
+        .get("verb")
+        .and_then(Value::as_str)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=verb"))?;
+    if verb != UDS_TARGET_GATE_VERB {
+        return Err(uds_target_gate_unwired(format!(
+            "envelope_verb={verb} expected={UDS_TARGET_GATE_VERB}"
+        )));
+    }
+    let code = value
+        .get("code")
+        .and_then(Value::as_str)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=code"))?;
+    let exit_status = value
+        .get("exit_status")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=exit_status"))?;
+    if exit_status != i64::from(process_exit) {
+        return Err(uds_target_gate_unwired(format!(
+            "envelope_mismatch code={code} exit_status={exit_status} process_exit={process_exit}"
+        )));
+    }
+    let Some(expected_exit) = uds_target_gate_exit(code) else {
+        return Err(uds_target_gate_unwired(format!(
+            "unsupported_code code={code} exit_status={exit_status}"
+        )));
+    };
+    if exit_status != i64::from(expected_exit) {
+        return Err(uds_target_gate_unwired(format!(
+            "code_exit_mismatch code={code} exit_status={exit_status} expected={expected_exit}"
+        )));
+    }
+    if code != "EC-PASS" {
+        let detail = value
+            .get("detail")
+            .and_then(Value::as_str)
+            .unwrap_or("typed UDS target-gate refusal");
+        return Err(uds_target_gate_unwired(format!(
+            "uds_code={code} exit_status={exit_status} detail={detail}"
+        )));
+    }
+    let projection = value
+        .get("projection")
+        .and_then(Value::as_object)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_projection missing=projection"))?;
+    let projection_schema = projection
+        .get("schema")
+        .and_then(Value::as_str)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_projection missing=schema"))?;
+    if projection_schema != UDS_PROJECTION_SCHEMA {
+        return Err(uds_target_gate_unwired(format!(
+            "projection_schema={projection_schema} expected={UDS_PROJECTION_SCHEMA}"
+        )));
+    }
+    let rows = projection
+        .get("requirements")
+        .and_then(Value::as_array)
+        .ok_or_else(|| uds_target_gate_unwired("malformed_projection missing=requirements"))?;
+    if rows.len() != UDS_FH_REQUIREMENTS.len() {
+        return Err(uds_target_gate_unwired(format!(
+            "requirement_count={} expected={}",
+            rows.len(),
+            UDS_FH_REQUIREMENTS.len()
+        )));
+    }
+    let mut requirements = Vec::with_capacity(rows.len());
+    for (index, expected_id) in UDS_FH_REQUIREMENTS.iter().enumerate() {
+        let row = rows
+            .get(index)
+            .and_then(Value::as_object)
+            .ok_or_else(|| uds_target_gate_unwired(format!("missing_requirement={expected_id}")))?;
+        let id = row
+            .get("id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| uds_target_gate_unwired(format!("missing_requirement={expected_id}")))?;
+        if id != *expected_id {
+            return Err(uds_target_gate_unwired(format!(
+                "requirement_order index={index} expected={expected_id} found={id}"
+            )));
+        }
+        let command = row
+            .get("command")
+            .and_then(Value::as_str)
+            .ok_or_else(|| uds_target_gate_unwired(format!("missing_trigger={expected_id}")))?;
+        if command.trim().is_empty() {
+            return Err(uds_target_gate_unwired(format!("missing_trigger={expected_id}")));
+        }
+        requirements.push(UdsTargetGateRequirement { id: id.to_owned() });
+    }
+    Ok(UdsTargetGateObservation { requirements })
+}
+
+async fn observe_uds_target_gate(
+    cx: &Cx,
+    config: &Config,
+) -> Result<UdsTargetGateObservation, String> {
+    let Some(binary) = config.uds_binary.as_ref() else {
+        return Err(uds_target_gate_unwired("config_missing=uds_binary"));
+    };
+    let Some(registry) = config.uds_registry.as_ref() else {
+        return Err(uds_target_gate_unwired("config_missing=uds_registry"));
+    };
+    let binary = binary.to_string_lossy().into_owned();
+    let args = vec![
+        "target-gate".to_owned(),
+        registry.display().to_string(),
+        config.repo.display().to_string(),
+        "--json".to_owned(),
+    ];
+    let output = invoke(cx, config, &binary, &args)
+        .await
+        .map_err(|error| uds_target_gate_unwired(format!("invoke={error}")))?;
+    parse_uds_target_gate(UdsProcessResult::from_output(output))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum AsupersyncConformanceEvidence {
     Current { detail: String },
@@ -1272,7 +1473,7 @@ fn string_set(value: Option<&Value>) -> BTreeSet<String> {
         .map(ToOwned::to_owned)
         .collect()
 }
-fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observation, String> {
+fn parse_observation(bytes: &[u8], gate_census: Option<GateCensus>) -> Result<Observation, String> {
     let value: Value = serde_json::from_slice(bytes)
         .map_err(|error| format!("MONITOR_BLIND invalid tick-monitor JSON: {error}"))?;
     let panes_value = value
@@ -1344,7 +1545,7 @@ fn parse_observation(bytes: &[u8], gate_census: GateCensus) -> Result<Observatio
             ready_count: 0,
             readable: true,
         },
-        gate_census: Some(gate_census),
+        gate_census,
     })
 }
 
@@ -5549,53 +5750,35 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // `gate.yml` failed six consecutive runs unread. **The only path that has ever
     // reached a human is a verdict the operator had to answer.** A count written to a
     // file would be the fourth instance of that class.
-    let advisory_census = crate::census_gates(&config.repo);
-    let advisory = advisory_census.advisory_gates();
-    let overdue = crate::advisory_ratchet_overdue(
-        now_unix(),
-        crate::ADVISORY_CEILING_RECORDED_AT_UNIX,
-        DEFAULT_INTERVAL.as_secs(),
-        crate::ADVISORY_RATCHET_DEADLINE_TICKS,
-        advisory.len(),
-        crate::ADVISORY_CEILING,
-    );
+    let uds_gate = match observe_uds_target_gate(cx, config).await {
+        Ok(projection) => projection,
+        Err(unwired) => {
+            let unwired = vec![unwired];
+            let joined = unwired.join(" ");
+            let line = crate::resident_tick::gate_unwired_line(&unwired);
+            write_heartbeat(
+                config,
+                tick,
+                "GATE_UNWIRED",
+                &format!("unwired={joined} owner=josh"),
+            )?;
+            write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
+            eprintln!("{line}");
+            if crate::resident_tick::SURVIVE_GATE_UNWIRED {
+                return Ok(());
+            }
+            return Err(format!("GATE_UNWIRED unwired={joined}"));
+        }
+    };
     println!(
-        "CENSUS_ADVISORY count={} ceiling={} rows={} blocking={} {} \
-         next_action=wire-or-retire-one-advisory-crate",
-        advisory.len(),
-        crate::ADVISORY_CEILING,
-        advisory_census.rows.len(),
-        advisory_census
-            .rows
+        "UDS_TARGET_GATE_OBSERVED requirements={}",
+        uds_gate
+            .requirements
             .iter()
-            .filter(|r| r.disposition.is_blocking())
-            .count(),
-        if overdue {
-            "CENSUS_ADVISORY_RATCHET_OVERDUE owner=josh -- the advisory count has not \
-             decreased inside the deadline; advisory-first has failed its own falsifier and \
-             triage-first was the right call"
-        } else {
-            "ratchet=on-time"
-        }
+            .map(|requirement| requirement.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",")
     );
-    if let Some(crate::SupervisorDecision::GateUnwired { unwired }) =
-        crate::gate_census_decision(&Some(advisory_census.clone()))
-    {
-        let joined = unwired.join(" ");
-        let line = crate::resident_tick::gate_unwired_line(&unwired);
-        write_heartbeat(
-            config,
-            tick,
-            "GATE_UNWIRED",
-            &format!("unwired={joined} owner=josh"),
-        )?;
-        write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
-        eprintln!("{line}");
-        if crate::resident_tick::SURVIVE_GATE_UNWIRED {
-            return Ok(());
-        }
-        return Err(format!("GATE_UNWIRED unwired={joined}"));
-    }
 
 
     // eg0m: THE CLOSE HALF, RECONCILED EVERY TICK — ahead of the pending-dispatch
@@ -5721,7 +5904,7 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     )?;
     let ompo_ps = observe_ompo_ps(cx, config).await?;
     record_ompo_ps_observation(&ompo_ps);
-    let mut observation = parse_observation(&monitor_bytes, census_gates(&config.repo))?;
+    let mut observation = parse_observation(&monitor_bytes, None)?;
     observation.panes.retain(|pane| {
         !config
             .exclude_panes
@@ -6904,6 +7087,8 @@ mod tests {
             // and proven for real only against the live daemon.
             mail_sender: String::new(),
             omp_binary: PathBuf::from("omp"),
+            uds_binary: None,
+            uds_registry: None,
         }
     }
 
@@ -7270,7 +7455,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     fn observed_idle_state_counts_as_free_capacity_before_confirmation() {
         let observation = parse_observation(
             br#"{"omp_lifecycle":{"panes":[{"pane":"%1","state":"IDLE","liveness":"UNPROVEN"}]},"idle_panes":{"dispatchable":[],"free_capacity":[]}}"#,
-            GateCensus { rows: Vec::new() },
+            Some(GateCensus { rows: Vec::new() }),
         )
         .unwrap();
         assert!(observation.panes[0].is_free_capacity);
