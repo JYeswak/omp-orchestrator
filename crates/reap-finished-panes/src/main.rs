@@ -3,7 +3,7 @@
 //! Live reap-finished-panes binary. The reaping path is implemented in the Rust crate.
 
 use reap_finished_panes::{
-    acquire_lock, apply_deadline, consecutive_cycle_started_same_pid, decide_reap,
+    acquire_lock, apply_deadline, consecutive_cycle_started_same_pid, decide_reap, decide_reap_with,
     filter_panes_to_session, foreign_sessions_in, invoker_from_chain, is_worker_pane,
     lane_row_json, parse_ancestor_rows, reap_pane, require_panes, scoped_artifact_dir,
     spawn_timeout, write_reaped_result, MISSING_SESSION_REFUSAL, ReapFinishedPanesLockOutcome,
@@ -223,13 +223,12 @@ fn main() -> ExitCode {
 
     let _guard = match acquire_lock(Path::new(&lock_path)) {
         ReapFinishedPanesLockOutcome::Acquired(g) => g,
-        ReapFinishedPanesLockOutcome::Busy {
-            holder_pid,
-            holder_elapsed,
-        } => {
+        ReapFinishedPanesLockOutcome::Busy { holder } => {
+            let detail = holder.detail();
             let row = format!(
-                r#"{{"ts":"{}","event":"sweep_skipped","reason":"another_sweep_running","holder_pid":"{holder_pid}","holder_elapsed":"{holder_elapsed}"}}"#,
-                ts()
+                r#"{{"ts":"{}","event":"sweep_skipped","reason":"another_sweep_running","holder_state":"{}","holder_detail":"{detail}"}}"#,
+                ts(),
+                holder.state()
             );
             append_line(Path::new(&ledger), &row);
             let inv = invoker_from_chain(&parse_ancestor_rows(&ancestry_text()));
@@ -237,7 +236,7 @@ fn main() -> ExitCode {
                 Path::new(&lane_ledger),
                 &lane_row_json("SKIPPED", "another_sweep_running", inv, &ts()),
             );
-            println!("reap-finished-panes SKIPPED another_sweep_running pid={holder_pid} elapsed={holder_elapsed}");
+            println!("reap-finished-panes SKIPPED another_sweep_running {detail}");
             return ExitCode::SUCCESS;
         }
         ReapFinishedPanesLockOutcome::Unusable { reason } => {
@@ -300,6 +299,7 @@ fn main() -> ExitCode {
             &outdir,
             Path::new(&ledger),
             &ts(),
+            &rules,
         ) {
             ReapPaneResult::Reaped {
                 path,
@@ -456,7 +456,15 @@ fn run_selftest(rules: &ReapFinishedPanesRules, repo: &Path) -> ExitCode {
         fail += 1;
     }
 
-    let working = decide_reap("Working (9s)", "Working (9s)", false, "Working (9s)");
+    // Rules-aware on purpose: `--mutation --disable-rule strict_reap_predicate` must
+    // turn this leg RED, which is what makes the mutation leg non-vacuous.
+    let working = decide_reap_with(
+        "Working (9s)",
+        "Working (9s)",
+        false,
+        "Working (9s)",
+        rules,
+    );
     if matches!(working, ReapPaneDecision::Working) {
         println!("PASS selftest.working-pane-not-reaped");
     } else {

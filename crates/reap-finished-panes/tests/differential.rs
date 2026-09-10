@@ -3,9 +3,10 @@
 //! reaping path and the script remains an external differential oracle.
 
 use reap_finished_panes::{
-    apply_deadline, consecutive_cycle_started_same_pid, decide_reap, invoker_from_chain,
-    is_worker_pane, parse_ancestor_rows, parse_reaper_out, require_panes, should_reap,
-    write_reaped_result, ReapFinishedPanesRules, ReapPaneDecision, SweepStats,
+    apply_deadline, consecutive_cycle_started_same_pid, decide_reap, decide_reap_with,
+    invoker_from_chain, is_worker_pane, parse_ancestor_rows, parse_reaper_out, require_panes,
+    should_reap_with, write_reaped_result, ReapFinishedPanesRules, ReapPaneDecision,
+    SweepStats,
 };
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -270,21 +271,73 @@ fn empty_pane_set_is_an_error_not_a_pass() {
     println!("ANTI-VACUITY: empty pane set refused");
 }
 
+/// rfp-004: the reap predicate itself. Driven by the production knob
+/// (`ReapFinishedPanesRules::disable` / `--mutation --disable-rule strict_reap_predicate`),
+/// the same mechanism as rfp-001 and rfp-002 — no bespoke harness, no constant-true expression.
 #[test]
 fn mutation_breaking_reap_predicate_is_detectable() {
     let text = "Codex\nWorking (9s)";
-    let canonical = should_reap(text, text, false);
-    let mutant = !text.trim().is_empty() && (text == text || !false);
-    assert!(!canonical, "canonical predicate must refuse a working pane");
+
+    // KNOWN-GOOD: rule on, a working pane is refused.
+    let on = ReapFinishedPanesRules::default();
     assert!(
-        mutant,
-        "the planted mutation must incorrectly reap the working pane"
+        !should_reap_with(text, text, false, &on),
+        "rule strict_reap_predicate: a working pane must not be reaped"
     );
+    assert!(matches!(
+        decide_reap_with(text, text, false, text, &on),
+        ReapPaneDecision::Working
+    ));
     assert!(matches!(
         decide_reap(text, text, false, text),
         ReapPaneDecision::Working
     ));
-    println!("MUTATION RED target: replacing the readiness AND with OR would reap WORKING");
+
+    // MUTATION: the knob off admits the working pane -- the leg fires.
+    let mut off = ReapFinishedPanesRules::default();
+    assert!(off.disable("strict_reap_predicate"));
+    assert!(
+        should_reap_with(text, text, false, &off),
+        "disabled strict_reap_predicate must admit a working pane, or this leg is vacuous"
+    );
+    assert!(matches!(
+        decide_reap_with(text, text, false, text, &off),
+        ReapPaneDecision::Reaped { .. }
+    ));
+
+    // And through the shipped binary, which is where the knob actually lives.
+    let bin = env!("CARGO_BIN_EXE_reap-finished-panes");
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .expect("workspace root");
+    let repo = repo.to_str().expect("repo path");
+    let good = Command::new(bin)
+        .args(["--repo", repo, "--selftest"])
+        .output()
+        .expect("selftest process");
+    let good_out = String::from_utf8_lossy(&good.stdout).to_string();
+    assert!(
+        good.status.success() && good_out.contains("PASS selftest.working-pane-not-reaped"),
+        "KNOWN-GOOD: unmutated selftest must pass, got {good_out}"
+    );
+    let bad = Command::new(bin)
+        .args([
+            "--repo",
+            repo,
+            "--selftest",
+            "--mutation",
+            "--disable-rule",
+            "strict_reap_predicate",
+        ])
+        .output()
+        .expect("mutated selftest process");
+    let bad_out = String::from_utf8_lossy(&bad.stdout).to_string();
+    assert!(
+        !bad.status.success() && bad_out.contains("FAIL selftest.working-pane-not-reaped"),
+        "MUTATION RED strict_reap_predicate: disabling the rule must reap a WORKING pane, got {bad_out}"
+    );
+    println!("MUTATION RED strict_reap_predicate: {}", bad_out.trim());
 }
 
 #[test]

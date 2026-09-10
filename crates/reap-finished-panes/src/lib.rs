@@ -17,6 +17,7 @@ pub enum ReapFinishedPanesRule {
     SkipHumanShell,
     DeadlineReportsUnswept,
     LockNamesHolder,
+    StrictReapPredicate,
 }
 
 impl ReapFinishedPanesRule {
@@ -24,12 +25,14 @@ impl ReapFinishedPanesRule {
         ReapFinishedPanesRule::SkipHumanShell,
         ReapFinishedPanesRule::DeadlineReportsUnswept,
         ReapFinishedPanesRule::LockNamesHolder,
+        ReapFinishedPanesRule::StrictReapPredicate,
     ];
     pub fn as_str(self) -> &'static str {
         match self {
             ReapFinishedPanesRule::SkipHumanShell => "skip_human_shell",
             ReapFinishedPanesRule::DeadlineReportsUnswept => "deadline_reports_unswept",
             ReapFinishedPanesRule::LockNamesHolder => "lock_names_holder",
+            ReapFinishedPanesRule::StrictReapPredicate => "strict_reap_predicate",
         }
     }
     pub fn parse(name: &str) -> Option<Self> {
@@ -42,6 +45,7 @@ pub struct ReapFinishedPanesRules {
     pub skip_human_shell: bool,
     pub deadline_reports_unswept: bool,
     pub lock_names_holder: bool,
+    pub strict_reap_predicate: bool,
 }
 
 impl Default for ReapFinishedPanesRules {
@@ -50,6 +54,7 @@ impl Default for ReapFinishedPanesRules {
             skip_human_shell: true,
             deadline_reports_unswept: true,
             lock_names_holder: true,
+            strict_reap_predicate: true,
         }
     }
 }
@@ -63,6 +68,7 @@ impl ReapFinishedPanesRules {
             ReapFinishedPanesRule::SkipHumanShell => self.skip_human_shell = false,
             ReapFinishedPanesRule::DeadlineReportsUnswept => self.deadline_reports_unswept = false,
             ReapFinishedPanesRule::LockNamesHolder => self.lock_names_holder = false,
+            ReapFinishedPanesRule::StrictReapPredicate => self.strict_reap_predicate = false,
         }
         true
     }
@@ -159,11 +165,30 @@ pub enum ReapPaneResult {
 }
 
 /// The reaping predicate is strict: two non-empty equal captures and a FREE readiness verdict.
-pub fn should_reap(first: &str, second: &str, ready: bool) -> bool {
+/// Rule `strict_reap_predicate` is the production knob over that strictness; disabling it keeps
+/// only the non-empty check, so a WORKING pane is admitted for reaping. That is the mutation.
+pub fn should_reap_with(
+    first: &str,
+    second: &str,
+    ready: bool,
+    rules: &ReapFinishedPanesRules,
+) -> bool {
+    if !rules.strict_reap_predicate {
+        return !first.trim().is_empty();
+    }
     !first.trim().is_empty() && first == second && ready
 }
-pub fn decide_reap(first: &str, second: &str, ready: bool, text: &str) -> ReapPaneDecision {
-    if !should_reap(first, second, ready) {
+pub fn should_reap(first: &str, second: &str, ready: bool) -> bool {
+    should_reap_with(first, second, ready, &ReapFinishedPanesRules::default())
+}
+pub fn decide_reap_with(
+    first: &str,
+    second: &str,
+    ready: bool,
+    text: &str,
+    rules: &ReapFinishedPanesRules,
+) -> ReapPaneDecision {
+    if !should_reap_with(first, second, ready, rules) {
         if first.trim().is_empty() || second.trim().is_empty() {
             return ReapPaneDecision::Empty;
         }
@@ -175,6 +200,15 @@ pub fn decide_reap(first: &str, second: &str, ready: bool, text: &str) -> ReapPa
     ReapPaneDecision::Reaped {
         awaiting_human: awaiting_human(text),
     }
+}
+pub fn decide_reap(first: &str, second: &str, ready: bool, text: &str) -> ReapPaneDecision {
+    decide_reap_with(
+        first,
+        second,
+        ready,
+        text,
+        &ReapFinishedPanesRules::default(),
+    )
 }
 
 fn awaiting_human(text: &str) -> bool {
@@ -331,6 +365,7 @@ pub fn reap_pane(
     outdir: &Path,
     ledger: &Path,
     stamp: &str,
+    rules: &ReapFinishedPanesRules,
 ) -> ReapPaneResult {
     let pane_id = match resolve_pane_id(session, idx, Duration::from_secs(15)) {
         Ok(id) => id,
@@ -347,7 +382,7 @@ pub fn reap_pane(
     };
     let readiness = classify(&second, false, &PaneDispatchReadyRules::default());
     let ready = readiness.state == PaneDispatchReadyState::Free;
-    match decide_reap(&first, &second, ready, &second) {
+    match decide_reap_with(&first, &second, ready, &second, rules) {
         ReapPaneDecision::Empty => ReapPaneResult::Skipped {
             reason: "empty_capture",
         },
@@ -454,12 +489,45 @@ impl Drop for ReapFinishedPanesRunLock {
     }
 }
 
+/// Who holds the lock is a SEPARATE verdict from whether the probe could run.
+/// Collapsing both into the token "unknown" is the denied-probe-as-negative-result
+/// trap: "nobody holds it" and "I could not look" have different remedies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReapLockHolder {
+    /// The probe ran and named a holder.
+    Named { pid: String, elapsed: String },
+    /// The probe ran and found no other holder (lock held by this process tree only).
+    NoHolder,
+    /// The probe could NOT run: lsof was absent at every candidate path, or the
+    /// bounded spawn timed out. Never reported as a pid.
+    ProbeUnavailable { reason: String },
+}
+
+impl ReapLockHolder {
+    /// Operator-facing detail. Never emits the string "unknown".
+    pub fn detail(&self) -> String {
+        match self {
+            ReapLockHolder::Named { pid, elapsed } => format!("pid={pid} elapsed={elapsed}"),
+            ReapLockHolder::NoHolder => "holder=none probe=ran".to_string(),
+            ReapLockHolder::ProbeUnavailable { reason } => {
+                format!("holder=unprobed probe_unavailable={reason}")
+            }
+        }
+    }
+    pub fn state(&self) -> &'static str {
+        match self {
+            ReapLockHolder::Named { .. } => "named",
+            ReapLockHolder::NoHolder => "none",
+            ReapLockHolder::ProbeUnavailable { .. } => "unprobed",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum ReapFinishedPanesLockOutcome {
     Acquired(ReapFinishedPanesRunLock),
     Busy {
-        holder_pid: String,
-        holder_elapsed: String,
+        holder: ReapLockHolder,
     },
     Unusable {
         reason: String,
@@ -483,34 +551,65 @@ pub fn acquire_lock(path: &Path) -> ReapFinishedPanesLockOutcome {
             file,
             path: path.to_path_buf(),
         }),
-        Err(_) => {
-            let holder_pid = lsof_holder(path).unwrap_or_else(|| "unknown".into());
-            let holder_elapsed = ps_etime(&holder_pid).unwrap_or_else(|| "unknown".into());
-            ReapFinishedPanesLockOutcome::Busy {
-                holder_pid,
-                holder_elapsed,
-            }
+        Err(_) => ReapFinishedPanesLockOutcome::Busy {
+            holder: lsof_holder(path),
+        },
+    }
+}
+
+/// Same candidate pair as `loop-driver/src/lib.rs:462` and
+/// `omp-orchestrator/src/target_directory.rs:344`: Darwin ships lsof in /usr/sbin,
+/// Debian/Ubuntu (the Contabo workers) in /usr/bin. fh C47: those two sites hold a
+/// PATH list, not this crate's identity-bearing contract — that contract is the TYPED
+/// verdict below, which `lock_holder_pids` cannot express (it returns an empty Vec for
+/// both "no holder" and "lsof missing"), and it is private to a crate this one does not
+/// depend on. The list is duplicated; the verdict is defined once, here.
+pub const LSOF_CANDIDATES: [&str; 2] = ["/usr/sbin/lsof", "/usr/bin/lsof"];
+
+fn lsof_holder(path: &Path) -> ReapLockHolder {
+    // Measured 2026-08-27: `lsof -t` on a held lock took 2.8–3.2s, so the 2s
+    // bound killed it with empty stdout and the skip row printed pid=unknown.
+    // -nP: PATH-less cron still works; we only need PIDs.
+    let me = std::process::id().to_string();
+    let mut ran = false;
+    for bin in LSOF_CANDIDATES {
+        if !Path::new(bin).is_file() {
+            continue;
+        }
+        let mut cmd = Command::new(bin);
+        cmd.args(["-nP", "-t"]).arg(path);
+        let Some(out) = spawn_timeout(cmd, Duration::from_secs(10)) else {
+            continue;
+        };
+        ran = true;
+        let found = String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::trim)
+            .find(|p| !p.is_empty() && *p != me)
+            .map(str::to_string);
+        if let Some(pid) = found {
+            let elapsed = ps_etime(&pid);
+            return match elapsed {
+                Some(elapsed) => ReapLockHolder::Named { pid, elapsed },
+                // The holder IS named; only its age is unavailable. Say which.
+                None => ReapLockHolder::Named {
+                    pid,
+                    elapsed: "etime_unavailable".to_string(),
+                },
+            };
+        }
+    }
+    if ran {
+        ReapLockHolder::NoHolder
+    } else {
+        ReapLockHolder::ProbeUnavailable {
+            reason: format!("lsof_absent:{}", LSOF_CANDIDATES.join(",")),
         }
     }
 }
 
-fn lsof_holder(path: &Path) -> Option<String> {
-    // Measured 2026-08-27: `lsof -t` on a held lock took 2.8–3.2s, so the 2s
-    // bound killed it with empty stdout and the skip row printed pid=unknown.
-    // /usr/sbin + -nP: PATH-less cron still works; we only need PIDs.
-    let mut cmd = Command::new("/usr/sbin/lsof");
-    cmd.args(["-nP", "-t"]).arg(path);
-    let out = spawn_timeout(cmd, Duration::from_secs(10))?;
-    let me = std::process::id().to_string();
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .map(str::trim)
-        .find(|p| !p.is_empty() && *p != me)
-        .map(str::to_string)
-}
-
 fn ps_etime(pid: &str) -> Option<String> {
-    if pid == "unknown" {
+    if pid.is_empty() {
         return None;
     }
     let mut cmd = Command::new("ps");
@@ -629,19 +728,32 @@ mod tests {
     }
 
     #[test]
-    fn lock_busy_without_lookup_names_unknown_only_when_os_silent() {
-        // Structural: Busy always carries pid+elapsed fields. "unknown" is honest OS silence.
-        let outcome = ReapFinishedPanesLockOutcome::Busy {
-            holder_pid: "4242".into(),
-            holder_elapsed: "22:22".into(),
+    fn a_denied_probe_is_a_distinct_verdict_from_an_empty_one() {
+        // "nobody holds it" and "I could not look" must not share a token.
+        let named = ReapLockHolder::Named {
+            pid: "4242".into(),
+            elapsed: "22:22".into(),
         };
-        match outcome {
-            ReapFinishedPanesLockOutcome::Busy {
-                holder_pid,
-                holder_elapsed,
-            } => {
-                assert_ne!(holder_pid, "unknown", "rule lock_names_holder");
-                assert_ne!(holder_elapsed, "unknown");
+        let none = ReapLockHolder::NoHolder;
+        let denied = ReapLockHolder::ProbeUnavailable {
+            reason: format!("lsof_absent:{}", LSOF_CANDIDATES.join(",")),
+        };
+        assert_eq!(named.state(), "named");
+        assert_eq!(none.state(), "none");
+        assert_eq!(denied.state(), "unprobed");
+        assert_ne!(none.state(), denied.state());
+        assert_ne!(none.detail(), denied.detail());
+        for holder in [&named, &none, &denied] {
+            assert!(
+                !holder.detail().contains("unknown"),
+                "rule lock_names_holder: no verdict may render as unknown, got {}",
+                holder.detail()
+            );
+        }
+        assert!(denied.detail().contains("/usr/bin/lsof"), "{}", denied.detail());
+        match (ReapFinishedPanesLockOutcome::Busy { holder: named }) {
+            ReapFinishedPanesLockOutcome::Busy { holder } => {
+                assert_eq!(holder.detail(), "pid=4242 elapsed=22:22")
             }
             ReapFinishedPanesLockOutcome::Acquired(_)
             | ReapFinishedPanesLockOutcome::Unusable { .. } => panic!("expected Busy"),
