@@ -35,10 +35,6 @@ use std::path::{Path, PathBuf};
 /// Where drafts land under `--apply`.
 pub const DRAFT_DIR: &str = ".planning/upstream-issues";
 
-/// Install roots whose binaries are OURS. A resolution outside these is a name collision with
-/// the host, which is a reportable packaging defect rather than a bug in our adapter.
-const OUR_INSTALL_MARKERS: &[&str] = &[".local/bin", ".cargo/bin", "target/debug", "target/release"];
-
 /// What, if anything, is worth filing upstream about one adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reportable {
@@ -149,30 +145,25 @@ pub fn classify(verdict: &AdapterVerdict) -> Result<Reportable, NotReportable> {
         AdapterStatus::TimedOut => Ok(Reportable::Hangs),
         AdapterStatus::NoHelpContract => Ok(Reportable::NoHelpContract),
         AdapterStatus::NotInstalled => Err(NotReportable::NotInstalled),
-        AdapterStatus::Live => {
-            if let Some(resolved) = verdict.resolved.as_ref() {
-                if !is_ours(resolved) {
-                    return Ok(Reportable::ForeignResolution {
-                        resolved: resolved.clone(),
-                    });
-                }
-            }
-            match verdict.exit {
-                Some(0) | None => Err(NotReportable::Healthy),
-                Some(exit) => Ok(Reportable::UsageWithNonZero { exit }),
-            }
-        }
+        // The executor already keyed this arm on [`is_ours`], so the collision outranks the
+        // exit code here by CONSTRUCTION rather than by a second check: the exit code on a
+        // foreign row belongs to a binary that is not ours at all. A `Foreign` row without a
+        // resolution is unreachable — the executor only reaches that arm from a `Some(path)`
+        // — and the sentinel keeps the impossible case VISIBLE rather than silently dropping
+        // the row from the draft.
+        AdapterStatus::Foreign => Ok(Reportable::ForeignResolution {
+            resolved: verdict
+                .resolved
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("unresolved")),
+        }),
+        AdapterStatus::Live => match verdict.exit {
+            Some(0) | None => Err(NotReportable::Healthy),
+            Some(exit) => Ok(Reportable::UsageWithNonZero { exit }),
+        },
     }
 }
 
-/// True when a resolved path sits under an install root we own.
-#[must_use]
-pub fn is_ours(resolved: &Path) -> bool {
-    let text = resolved.to_string_lossy();
-    OUR_INSTALL_MARKERS
-        .iter()
-        .any(|marker| text.contains(marker))
-}
 
 /// A stable content id for the draft filename.
 ///
@@ -432,7 +423,13 @@ mod tests {
     fn an_absent_adapter_is_a_local_install_gap_and_never_an_upstream_report() {
         // 50 of 88 adapters were in this state when the taxonomy was measured. Filing them
         // upstream would be 50 false reports.
-        let absent = verdict("gate-runner", AdapterStatus::NotInstalled, None, None, "no such file");
+        let absent = verdict(
+            "gate-runner",
+            AdapterStatus::NotInstalled,
+            None,
+            None,
+            "no such file",
+        );
         let error = classify(&absent).expect_err("absent must be refused");
         assert_eq!(error, NotReportable::NotInstalled);
         assert_ne!(
@@ -454,7 +451,9 @@ mod tests {
         );
         let report = classify(&specimen).expect("must be reportable");
         assert_eq!(report, Reportable::NoHelpContract);
-        assert!(report.title("loop-queue-filter").contains("exits 0 and prints nothing"));
+        assert!(report
+            .title("loop-queue-filter")
+            .contains("exits 0 and prints nothing"));
     }
 
     #[test]
@@ -476,10 +475,12 @@ mod tests {
     fn the_measured_foreign_resolution_outranks_the_exit_code() {
         // installer resolves to macOS /usr/sbin/installer and exits 255 with a usage line.
         // BOTH conditions hold; the collision is the one worth filing, because the exit code
-        // belongs to a binary that is not ours at all.
+        // belongs to a binary that is not ours at all. The executor now types that row
+        // `Foreign`, so this leg asserts the DRAFT follows the typed status rather than
+        // re-deriving foreignness from the path a second time.
         let foreign = verdict(
             "installer",
-            AdapterStatus::Live,
+            AdapterStatus::Foreign,
             Some("/usr/sbin/installer"),
             Some(255),
             "Usage: installer [-help] [-dominfo]",
@@ -495,17 +496,14 @@ mod tests {
     }
 
     #[test]
-    fn our_install_roots_are_recognised_and_a_host_path_is_not() {
-        assert!(is_ours(Path::new("/home/operator/.local/bin/tick-monitor")));
-        assert!(is_ours(Path::new("/home/operator/.cargo/bin/ompo")));
-        assert!(is_ours(Path::new("target/release/ompo")));
-        assert!(!is_ours(Path::new("/usr/sbin/installer")));
-        assert!(!is_ours(Path::new("/bin/sh")));
-    }
-
-    #[test]
     fn a_timeout_is_reportable_and_never_silently_healthy() {
-        let hung = verdict("slow-adapter", AdapterStatus::TimedOut, None, None, "exceeded 5s deadline");
+        let hung = verdict(
+            "slow-adapter",
+            AdapterStatus::TimedOut,
+            None,
+            None,
+            "exceeded 5s deadline",
+        );
         assert_eq!(classify(&hung).expect("reportable"), Reportable::Hangs);
     }
 
@@ -525,7 +523,11 @@ mod tests {
         let mut unique = codes.to_vec();
         unique.sort_unstable();
         unique.dedup();
-        assert_eq!(unique.len(), codes.len(), "two outcomes share one code: {codes:?}");
+        assert_eq!(
+            unique.len(),
+            codes.len(),
+            "two outcomes share one code: {codes:?}"
+        );
     }
 
     #[test]
@@ -554,7 +556,13 @@ mod tests {
 
     #[test]
     fn the_draft_carries_build_provenance_so_a_maintainer_knows_which_ompo_probed() {
-        let specimen = verdict("loop-queue-filter", AdapterStatus::NoHelpContract, None, Some(0), "x");
+        let specimen = verdict(
+            "loop-queue-filter",
+            AdapterStatus::NoHelpContract,
+            None,
+            Some(0),
+            "x",
+        );
         let report = classify(&specimen).expect("reportable");
         let body = draft(&specimen, &report);
         let provenance = BuildProvenance::current();
@@ -568,11 +576,23 @@ mod tests {
         // ANTI-VACUITY: an empty draft on disk is worse than none. A directory of empty files
         // trains an operator to stop reading the directory.
         let dir = tempfile::tempdir().expect("fixture dir");
-        let healthy = verdict("tick-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/x"), Some(0), "usage");
+        let healthy = verdict(
+            "tick-monitor",
+            AdapterStatus::Live,
+            Some("/home/operator/.local/bin/x"),
+            Some(0),
+            "usage",
+        );
         let decision = classify(&healthy);
         let error = apply(&healthy, &decision, dir.path()).expect_err("must refuse");
-        assert!(error.contains("UPSTREAM_REPORT_NOTHING_TO_REPORT"), "got {error}");
-        assert!(error.contains("tick-monitor"), "the refusal must name the adapter; got {error}");
+        assert!(
+            error.contains("UPSTREAM_REPORT_NOTHING_TO_REPORT"),
+            "got {error}"
+        );
+        assert!(
+            error.contains("tick-monitor"),
+            "the refusal must name the adapter; got {error}"
+        );
         assert!(
             !dir.path().join(DRAFT_DIR).exists(),
             "a refused apply must not even create the directory"
@@ -582,11 +602,23 @@ mod tests {
     #[test]
     fn apply_refuses_an_absent_adapter_with_the_local_gap_code_not_the_healthy_one() {
         let dir = tempfile::tempdir().expect("fixture dir");
-        let absent = verdict("gate-runner", AdapterStatus::NotInstalled, None, None, "no such file");
+        let absent = verdict(
+            "gate-runner",
+            AdapterStatus::NotInstalled,
+            None,
+            None,
+            "no such file",
+        );
         let decision = classify(&absent);
         let error = apply(&absent, &decision, dir.path()).expect_err("must refuse");
-        assert!(error.contains("UPSTREAM_REPORT_NOT_AN_UPSTREAM_DEFECT"), "got {error}");
-        assert!(!error.contains("UPSTREAM_REPORT_NOTHING_TO_REPORT"), "got {error}");
+        assert!(
+            error.contains("UPSTREAM_REPORT_NOT_AN_UPSTREAM_DEFECT"),
+            "got {error}"
+        );
+        assert!(
+            !error.contains("UPSTREAM_REPORT_NOTHING_TO_REPORT"),
+            "got {error}"
+        );
     }
 
     #[test]
@@ -604,12 +636,20 @@ mod tests {
         let first = apply(&broken, &decision, dir.path()).expect("first apply");
         let path = match &first {
             Applied::Written(path) => path.clone(),
-            Applied::Unchanged(path) => panic!("a fresh dir cannot be unchanged: {}", path.display()),
+            Applied::Unchanged(path) => {
+                panic!("a fresh dir cannot be unchanged: {}", path.display())
+            }
         };
         assert_eq!(first.reason_code(), "UPSTREAM_REPORT_WRITTEN");
         let on_disk = std::fs::read_to_string(&path).expect("draft on disk");
-        assert!(on_disk.contains("UPSTREAM_NO_HELP_CONTRACT"), "the file must carry the reason code");
-        assert!(on_disk.contains("loop-queue-filter --help"), "the file must carry the argv");
+        assert!(
+            on_disk.contains("UPSTREAM_NO_HELP_CONTRACT"),
+            "the file must carry the reason code"
+        );
+        assert!(
+            on_disk.contains("loop-queue-filter --help"),
+            "the file must carry the argv"
+        );
 
         // Re-running must NOT churn a second file: the path is content-keyed.
         let second = apply(&broken, &decision, dir.path()).expect("second apply");
@@ -626,25 +666,53 @@ mod tests {
         // The content id is the filename, so new evidence must not silently replace old
         // evidence about the same adapter.
         let dir = tempfile::tempdir().expect("fixture dir");
-        let first_run = verdict("fleet-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/fleet-monitor"), Some(2), "usage: fleet-monitor");
-        let later_run = verdict("fleet-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/fleet-monitor"), Some(64), "usage: fleet-monitor");
+        let first_run = verdict(
+            "fleet-monitor",
+            AdapterStatus::Live,
+            Some("/home/operator/.local/bin/fleet-monitor"),
+            Some(2),
+            "usage: fleet-monitor",
+        );
+        let later_run = verdict(
+            "fleet-monitor",
+            AdapterStatus::Live,
+            Some("/home/operator/.local/bin/fleet-monitor"),
+            Some(64),
+            "usage: fleet-monitor",
+        );
         apply(&first_run, &classify(&first_run), dir.path()).expect("first");
         apply(&later_run, &classify(&later_run), dir.path()).expect("second");
-        let count = std::fs::read_dir(dir.path().join(DRAFT_DIR)).expect("dir").count();
+        let count = std::fs::read_dir(dir.path().join(DRAFT_DIR))
+            .expect("dir")
+            .count();
         assert_eq!(count, 2, "two distinct observations must be two drafts");
     }
 
     #[test]
     fn the_content_id_is_deterministic_and_discriminates() {
         let a = content_id("one body");
-        assert_eq!(a, content_id("one body"), "same body must yield the same id");
-        assert_ne!(a, content_id("another body"), "different bodies must differ");
+        assert_eq!(
+            a,
+            content_id("one body"),
+            "same body must yield the same id"
+        );
+        assert_ne!(
+            a,
+            content_id("another body"),
+            "different bodies must differ"
+        );
         assert_eq!(a.len(), 16);
     }
 
     #[test]
     fn the_draft_path_is_stable_for_unchanged_evidence() {
-        let specimen = verdict("loop-queue-filter", AdapterStatus::NoHelpContract, None, Some(0), "x");
+        let specimen = verdict(
+            "loop-queue-filter",
+            AdapterStatus::NoHelpContract,
+            None,
+            Some(0),
+            "x",
+        );
         let report = classify(&specimen).expect("reportable");
         let body = draft(&specimen, &report);
         let first = draft_path("loop-queue-filter", &body);
@@ -655,13 +723,25 @@ mod tests {
 
     #[test]
     fn the_envelope_states_reportability_in_both_directions() {
-        let healthy = verdict("tick-monitor", AdapterStatus::Live, Some("/home/operator/.local/bin/x"), Some(0), "usage");
+        let healthy = verdict(
+            "tick-monitor",
+            AdapterStatus::Live,
+            Some("/home/operator/.local/bin/x"),
+            Some(0),
+            "usage",
+        );
         let value = envelope(&healthy, &classify(&healthy));
         assert_eq!(value["command"], "upstream-report");
         assert_eq!(value["status"], "OK");
         assert_eq!(value["data"]["reportable"], false);
 
-        let broken = verdict("loop-queue-filter", AdapterStatus::NoHelpContract, None, Some(0), "x");
+        let broken = verdict(
+            "loop-queue-filter",
+            AdapterStatus::NoHelpContract,
+            None,
+            Some(0),
+            "x",
+        );
         let value = envelope(&broken, &classify(&broken));
         assert_eq!(value["status"], "DEGRADED");
         assert_eq!(value["data"]["reportable"], true);

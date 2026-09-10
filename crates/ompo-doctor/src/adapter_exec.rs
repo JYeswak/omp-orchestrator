@@ -20,17 +20,32 @@
 //! fallback: `loop-queue-filter --help` exits **0 with no output at all**. So the exit code
 //! is wrong in BOTH directions and is recorded rather than believed.
 //!
-//! # Why the resolved path is recorded
+//! # Why the resolved path is recorded, AND CONSUMED
 //!
 //! An adapter name is a workspace bin target; `PATH` may resolve it to something else
 //! entirely. Measured: roster name `installer` resolves to macOS `/usr/sbin/installer`
 //! ("Usage: installer [-help] [-dominfo]"), and `07-installability.md:556` already records
 //! `pane-truth` as "the foreign pane-truth binary". A verdict that does not say WHAT it ran
 //! cannot be checked, which is `%8`'s provenance finding on the adapter axis.
+//!
+//! **Recording it was not enough.** Measured 2026-09-10 against the installed `ompo`:
+//! `doctor --adapter all --json` reported `live=35`, and one of those 35 was the `installer`
+//! row carrying `resolved=/usr/sbin/installer` — our own `~/.local/bin/installer` is
+//! SHADOWED (`/usr/sbin` precedes it on `PATH`) and was never probed. The field existed, the
+//! per-row evidence contradicted the aggregate, and nothing consumed it: BUILT, not WIRED, at
+//! FIELD granularity. [`AdapterStatus::Foreign`] is the consumption, and [`is_ours`] is the
+//! single predicate both this executor and [`crate::upstream_report`] key on (`fh C47`).
+//!
+//! **What this answers and what it does NOT.** It answers *"did `PATH` resolve this roster
+//! name to a binary outside our install roots"*. It does NOT answer *"was this binary built
+//! from this workspace"* — that is the identity axis, owned by `installer`'s
+//! `RepoOwnership`/`verify_identity` pair and by bead `omp-orchestrator-j9ngc`. The two are
+//! independent and the specimen proves it: `resolve_repo_ownership` returns `ThisRepo` for
+//! `installer` (because `crates/installer/` exists here) while `PATH` hands us Apple's.
 
 use crate::umbrella;
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use subprocess_contract::{bounded_output, BoundedOutcome};
@@ -47,14 +62,52 @@ pub const PROBE_ARGS: &[&str] = &["--help"];
 /// Truncation bound for captured child output, matching the system probe loop.
 const DETAIL_CHARS: usize = 240;
 
+/// Install roots whose binaries are OURS. A resolution outside these is a name collision
+/// with the host, not a measurement of our adapter.
+///
+/// THE canonical definition for this crate (`fh C47`): [`crate::upstream_report`] keys its
+/// `ForeignResolution` draft on this same predicate, so the row a reader sees and the issue
+/// a maintainer receives can never disagree about which binaries are ours.
+const OUR_INSTALL_MARKERS: &[&str] =
+    &[".local/bin", ".cargo/bin", "target/debug", "target/release"];
+
+/// True when a resolved path sits under an install root we own.
+///
+/// **Substring, deliberately.** The install prefix is `$INSTALL_BIN_DIR`-overridable and a
+/// probe process does not see the installer's argv, so an exact-prefix compare would need a
+/// second copy of the installer's `--bin-dir` resolution and would drift from it. A marker
+/// match is the floor: it recognises every root the installer actually writes to and refuses
+/// system directories, which is the whole measured specimen class.
+///
+/// **NO-CLAIM:** `true` means "resolved under an owned root", NOT "built from this
+/// workspace". A stale or third-party binary sitting in `~/.local/bin` reads as ours here;
+/// proving provenance is `installer::verify_identity`'s job, on a different axis.
+#[must_use]
+pub fn is_ours(resolved: &Path) -> bool {
+    let text = resolved.to_string_lossy();
+    OUR_INSTALL_MARKERS
+        .iter()
+        .any(|marker| text.contains(marker))
+}
+
 /// What executing one adapter established.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdapterStatus {
-    /// Spawned and produced output on stdout or stderr. The adapter is installed and
-    /// answers its documented surface. Says NOTHING about health.
+    /// Spawned and produced output on stdout or stderr. The adapter is installed under an
+    /// owned install root and answers its documented surface. Says NOTHING about health.
     Live,
     /// Spawned and produced NO output. Specimen: `loop-queue-filter --help` exits 0 silently.
     NoHelpContract,
+    /// A binary ANSWERED under this roster name and it is not ours: `PATH` resolved the name
+    /// outside every root in [`OUR_INSTALL_MARKERS`]. Specimen: `installer` ->
+    /// `/usr/sbin/installer`, exit 255, "Usage: installer [-help] [-dominfo]".
+    ///
+    /// Distinct from [`Self::Live`] and from [`Self::NotInstalled`] because the three have
+    /// three different remedies — use it / resolve the shadow / install ours — and AGENTS.md
+    /// gate rule 4a (`fh C69`) is that a survey emitting one colour for two remedies sends
+    /// the reader to the wrong repair. Folding this into `Live` is exactly that defect: it
+    /// says "use it" about a binary we do not ship.
+    Foreign,
     /// Could not be spawned — absent from `PATH`. UNMEASURABLE, not a failure: the same
     /// class as the seven `UNMEASURABLE` crates in the 88-crate roster run.
     NotInstalled,
@@ -69,6 +122,7 @@ impl AdapterStatus {
         match self {
             Self::Live => "UAD_ADAPTER_LIVE",
             Self::NoHelpContract => "UAD_ADAPTER_NO_HELP_CONTRACT",
+            Self::Foreign => "UAD_ADAPTER_FOREIGN",
             Self::NotInstalled => "UAD_ADAPTER_NOT_INSTALLED",
             Self::TimedOut => "UAD_ADAPTER_TIMED_OUT",
         }
@@ -80,11 +134,22 @@ impl AdapterStatus {
         match self {
             Self::Live => "OK",
             Self::NoHelpContract => "DEGRADED",
+            // Not `OK`: nothing was established about OUR adapter, because ours never ran.
+            // Not `DEGRADED` either — `DEGRADED` is the count a reader treats as "our tool
+            // is misbehaving", and this row is a host binary we do not ship. The remedy
+            // lives in `reason_code`, which is the fine-grained axis.
+            Self::Foreign => "UNKNOWN",
             Self::NotInstalled | Self::TimedOut => "UNKNOWN",
         }
     }
 
-    /// True when this arm establishes nothing about the adapter.
+    /// True when this arm establishes nothing about the adapter because it NEVER RAN.
+    ///
+    /// [`Self::Foreign`] also establishes nothing about our adapter, and is deliberately NOT
+    /// folded in here: it is its own counted bucket so that `live + degraded + foreign +
+    /// unmeasurable` partitions `executed`. Folding it in would restore the ambiguity this
+    /// bead exists to remove — a reader could no longer tell "our binary is absent" from
+    /// "someone else's binary answered to its name".
     #[must_use]
     pub fn is_unmeasurable(self) -> bool {
         matches!(self, Self::NotInstalled | Self::TimedOut)
@@ -192,18 +257,34 @@ pub fn execute_unchecked(adapter: &str) -> AdapterVerdict {
     command.args(PROBE_ARGS);
     let (status, exit, detail) = match bounded_output(&mut command, PROBE_DEADLINE) {
         BoundedOutcome::Completed(output) => {
-            let detail = first_output_line(&output);
+            let captured = first_output_line(&output);
             let code = output.status.code();
-            if detail.is_empty() {
-                (AdapterStatus::NoHelpContract, code, "no output on stdout or stderr".to_owned())
+            let (answered, detail) = if captured.is_empty() {
+                (false, "no output on stdout or stderr".to_owned())
             } else {
-                (AdapterStatus::Live, code, detail)
-            }
+                (true, captured)
+            };
+            // Foreignness is a property of the RESOLUTION, not of the output, so it outranks
+            // BOTH completed arms: whatever answered, it was not ours, and reading either its
+            // usage line or its silence as a measurement of our adapter is the defect this
+            // arm exists to prevent. `TimedOut` and `NotInstalled` are left alone — both are
+            // already restrictive terminals that never read as a pass.
+            let status = if resolved.as_deref().is_some_and(|path| !is_ours(path)) {
+                AdapterStatus::Foreign
+            } else if answered {
+                AdapterStatus::Live
+            } else {
+                AdapterStatus::NoHelpContract
+            };
+            (status, code, detail)
         }
         BoundedOutcome::TimedOut => (
             AdapterStatus::TimedOut,
             None,
-            format!("exceeded {}s deadline; process group killed", PROBE_DEADLINE.as_secs()),
+            format!(
+                "exceeded {}s deadline; process group killed",
+                PROBE_DEADLINE.as_secs()
+            ),
         ),
         BoundedOutcome::Unspawned(error) => (AdapterStatus::NotInstalled, None, error.to_string()),
     };
@@ -231,8 +312,19 @@ pub fn exit_code(verdicts: &[AdapterVerdict]) -> Result<u8, String> {
                     detail=an empty execution set is an ERROR, never a pass"
             .to_owned());
     }
-    if verdicts.iter().any(|v| v.status == AdapterStatus::NoHelpContract) {
+    if verdicts
+        .iter()
+        .any(|v| v.status == AdapterStatus::NoHelpContract)
+    {
         return Ok(EXIT_DEGRADED);
+    }
+    // Never a pass: a foreign binary answered to our roster name, so our adapter was not
+    // measured at all. It reuses EXIT_UNMEASURABLE rather than minting a fifth code because
+    // the MEASUREMENT outcome is the same class ("we did not measure ours") — exactly as
+    // NotInstalled and TimedOut already share it despite two different remedies. The remedy
+    // is carried by `reason_code`, which is the axis that stays fine-grained.
+    if verdicts.iter().any(|v| v.status == AdapterStatus::Foreign) {
+        return Ok(EXIT_UNMEASURABLE);
     }
     if verdicts.iter().any(|v| v.status.is_unmeasurable()) {
         return Ok(EXIT_UNMEASURABLE);
@@ -310,15 +402,28 @@ pub fn exit_histogram(verdicts: &[AdapterVerdict]) -> Vec<(String, usize)> {
 pub fn envelope(verdicts: &[AdapterVerdict]) -> Result<Value, String> {
     let exit = exit_code(verdicts)?;
     let roster = umbrella::roster_or_error()?;
-    let live = verdicts.iter().filter(|v| v.status == AdapterStatus::Live).count();
+    let live = verdicts
+        .iter()
+        .filter(|v| v.status == AdapterStatus::Live)
+        .count();
     let degraded = verdicts
         .iter()
         .filter(|v| v.status == AdapterStatus::NoHelpContract)
         .count();
-    let unmeasurable = verdicts.iter().filter(|v| v.status.is_unmeasurable()).count();
+    // Counted explicitly and NOT derived, on the same reasoning `crates/installer`'s
+    // `--check` tally records for its own foreign counter: a derived figure whose
+    // denominator includes rows it never examined is unverifiable.
+    let foreign = verdicts
+        .iter()
+        .filter(|v| v.status == AdapterStatus::Foreign)
+        .count();
+    let unmeasurable = verdicts
+        .iter()
+        .filter(|v| v.status.is_unmeasurable())
+        .count();
     let status = if degraded > 0 {
         "DEGRADED"
-    } else if unmeasurable > 0 {
+    } else if unmeasurable > 0 || foreign > 0 {
         "UNKNOWN"
     } else {
         "OK"
@@ -332,6 +437,7 @@ pub fn envelope(verdicts: &[AdapterVerdict]) -> Result<Value, String> {
             "roster_size": roster.len(),
             "live": live,
             "degraded": degraded,
+            "foreign": foreign,
             "unmeasurable": unmeasurable,
             "nonzero_exit_on_help": nonzero_exit_on_help(verdicts),
             "nonzero_exit_with_usage_marker": nonzero_exit_with_usage_marker(verdicts),
@@ -432,15 +538,25 @@ pub fn run_axis(named: &str, json: bool) -> u8 {
             println!("{}", render(verdict));
         }
         println!(
-            "OMPO_DOCTOR_ADAPTERS executed={} live={} degraded={} unmeasurable={} \
+            "OMPO_DOCTOR_ADAPTERS executed={} live={} degraded={} foreign={} unmeasurable={} \
              nonzero_exit_on_help={} usage_marker_floor={} exit={code}",
             verdicts.len(),
-            verdicts.iter().filter(|v| v.status == AdapterStatus::Live).count(),
+            verdicts
+                .iter()
+                .filter(|v| v.status == AdapterStatus::Live)
+                .count(),
             verdicts
                 .iter()
                 .filter(|v| v.status == AdapterStatus::NoHelpContract)
                 .count(),
-            verdicts.iter().filter(|v| v.status.is_unmeasurable()).count(),
+            verdicts
+                .iter()
+                .filter(|v| v.status == AdapterStatus::Foreign)
+                .count(),
+            verdicts
+                .iter()
+                .filter(|v| v.status.is_unmeasurable())
+                .count(),
             nonzero_exit_on_help(&verdicts),
             nonzero_exit_with_usage_marker(&verdicts),
         );
@@ -484,7 +600,10 @@ mod tests {
         assert_eq!(verdict.resolved, None);
         assert_eq!(verdict.exit, None);
         assert_eq!(verdict.status.envelope_status(), "UNKNOWN");
-        assert!(!verdict.detail.is_empty(), "the spawn error must be carried");
+        assert!(
+            !verdict.detail.is_empty(),
+            "the spawn error must be carried"
+        );
     }
 
     #[test]
@@ -492,16 +611,194 @@ mod tests {
         let codes = [
             AdapterStatus::Live.reason_code(),
             AdapterStatus::NoHelpContract.reason_code(),
+            AdapterStatus::Foreign.reason_code(),
             AdapterStatus::NotInstalled.reason_code(),
             AdapterStatus::TimedOut.reason_code(),
         ];
         let mut unique = codes.to_vec();
         unique.sort_unstable();
         unique.dedup();
-        assert_eq!(unique.len(), codes.len(), "two causes share one token: {codes:?}");
+        assert_eq!(
+            unique.len(),
+            codes.len(),
+            "two causes share one token: {codes:?}"
+        );
         assert_ne!(
             AdapterStatus::NotInstalled.reason_code(),
             AdapterStatus::TimedOut.reason_code()
+        );
+    }
+
+    #[test]
+    fn our_install_roots_are_recognised_and_a_host_path_is_not() {
+        // KNOWN-GOOD half first: an over-strict predicate would call our own binaries
+        // foreign, and a doctor that accuses everything gets routed around.
+        assert!(is_ours(Path::new("/home/operator/.local/bin/tick-monitor")));
+        assert!(is_ours(Path::new("/home/operator/.cargo/bin/ompo")));
+        assert!(is_ours(Path::new("target/release/ompo")));
+        assert!(is_ours(Path::new("target/debug/ompo")));
+        // KNOWN-BAD half: the measured specimen and a second host directory.
+        assert!(!is_ours(Path::new("/usr/sbin/installer")));
+        assert!(!is_ours(Path::new("/bin/sh")));
+    }
+
+    /// FIRES-ON-KNOWN-BAD, end to end through the real executor and the real `PATH`.
+    ///
+    /// `sh` is not a roster name — that is deliberate: [`execute_unchecked`] is the spawn
+    /// half precisely so execution can be asserted without the roster, and `sh` is the one
+    /// binary guaranteed present and guaranteed to live outside every owned install root on
+    /// both a mac and a Contabo box. The roster-name specimen (`installer` ->
+    /// `/usr/sbin/installer`) needs the host's own `PATH` and is measured by the operator
+    /// run recorded in this module's header.
+    #[test]
+    fn a_binary_resolved_outside_every_owned_root_is_foreign_and_never_live() {
+        let resolved = resolve_on_path("sh")
+            .expect("`sh` must be on PATH for this leg to mean anything; an absent `sh` is an \
+                     ERROR, not a skip");
+        assert!(
+            !is_ours(&resolved),
+            "this leg needs a host-owned `sh`; got {} which reads as ours",
+            resolved.display()
+        );
+        let verdict = execute_unchecked("sh");
+        assert_eq!(
+            verdict.status,
+            AdapterStatus::Foreign,
+            "a host binary answering to our name must not be counted as our adapter: {verdict:?}"
+        );
+        assert_ne!(verdict.status, AdapterStatus::Live);
+        assert_ne!(verdict.status, AdapterStatus::NotInstalled);
+        assert_eq!(verdict.resolved.as_deref(), Some(resolved.as_path()));
+        // BOTH AXES on the executor's own output, to the precision the environment allows:
+        // the token, and the fact that the exit the foreign binary produced is still carried.
+        // The exact code is not asserted here because `sh --help` differs across shells; the
+        // exact-code pin is `the_foreign_row_pins_its_reason_code_and_its_exit_code_together`.
+        assert_eq!(
+            (verdict.status.reason_code(), verdict.exit.is_some()),
+            ("UAD_ADAPTER_FOREIGN", true),
+            "token and recorded exit must survive together: {verdict:?}"
+        );
+    }
+
+    /// KNOWN-GOOD, at row level. An attack-only suite ships an over-strict gate, so the
+    /// suite must prove an owned resolution still reads `Live`, `OK` and exit `0`.
+    ///
+    /// It is a fixture path and NOT `current_exe()`, and that is a measured correction:
+    /// under `rch` this crate's test binary lands in
+    /// `.rch-target-contabo-4-pool-<hash>/debug/deps/`, which carries none of
+    /// [`OUR_INSTALL_MARKERS`] — so a `current_exe()` fixture asserted the host's build
+    /// layout rather than the predicate, and failed on the only machine allowed to build
+    /// here. The end-to-end owned-resolution leg is the operator run in the module header
+    /// (34 adapters under `~/.local/bin` still classify `Live`); a `PATH`-mutating in-suite
+    /// equivalent would poison every sibling test in this binary.
+    #[test]
+    fn a_name_resolved_under_an_owned_root_still_classifies_live() {
+        let owned = PathBuf::from("/home/operator/.local/bin/tick-monitor");
+        assert!(is_ours(&owned), "the fixture must be an owned root");
+        let row = AdapterVerdict {
+            adapter: "tick-monitor".to_owned(),
+            status: AdapterStatus::Live,
+            resolved: Some(owned),
+            exit: Some(0),
+            detail: "usage: tick-monitor [observe|watch]".to_owned(),
+        };
+        assert_eq!(row.status.reason_code(), "UAD_ADAPTER_LIVE");
+        assert_eq!(row.status.envelope_status(), "OK");
+        assert_eq!(exit_code(&[row]).expect("code"), EXIT_ALL_LIVE);
+    }
+
+    /// MUTATION LEG, pinning BOTH axes. A message-only assertion survives a code collapse
+    /// (measured in this repo: 5 codes to 3 with the token unchanged) and a code-only
+    /// assertion survives unrelated breakage, so the reason_code string and the recorded
+    /// exit are asserted together, on one row.
+    #[test]
+    fn the_foreign_row_pins_its_reason_code_and_its_exit_code_together() {
+        let shadowed = AdapterVerdict {
+            adapter: "installer".to_owned(),
+            status: AdapterStatus::Foreign,
+            resolved: Some(PathBuf::from("/usr/sbin/installer")),
+            exit: Some(255),
+            detail: "Usage: installer [-help] [-dominfo] [-volinfo]".to_owned(),
+        };
+        let row = shadowed.to_json();
+        assert_eq!(
+            row["reason_code"], "UAD_ADAPTER_FOREIGN",
+            "the token must not collapse into UAD_ADAPTER_LIVE"
+        );
+        assert_eq!(
+            row["exit"], 255,
+            "the exit the foreign binary produced must stay on the row"
+        );
+        assert_eq!(row["resolved"], "/usr/sbin/installer");
+        assert_ne!(
+            shadowed.status.reason_code(),
+            AdapterStatus::Live.reason_code()
+        );
+        assert_ne!(
+            shadowed.status.reason_code(),
+            AdapterStatus::NotInstalled.reason_code(),
+            "\"someone else's binary answered\" and \"ours is absent\" have different remedies"
+        );
+        assert_eq!(
+            exit_code(&[shadowed]).expect("code"),
+            EXIT_UNMEASURABLE,
+            "a foreign resolution is never a pass"
+        );
+    }
+
+    /// The aggregate is the half this bead exists for: `resolved` was recorded and never
+    /// consumed, so `live` counted a binary the per-row evidence contradicted.
+    #[test]
+    fn the_aggregate_counts_foreign_outside_live_and_the_buckets_partition_executed() {
+        let rows = [
+            AdapterVerdict {
+                adapter: "tick-monitor".into(),
+                status: AdapterStatus::Live,
+                resolved: Some(PathBuf::from("/home/operator/.local/bin/tick-monitor")),
+                exit: Some(0),
+                detail: "usage".into(),
+            },
+            AdapterVerdict {
+                adapter: "installer".into(),
+                status: AdapterStatus::Foreign,
+                resolved: Some(PathBuf::from("/usr/sbin/installer")),
+                exit: Some(255),
+                detail: "Usage: installer [-help]".into(),
+            },
+            AdapterVerdict {
+                adapter: "loop-queue-filter".into(),
+                status: AdapterStatus::NoHelpContract,
+                resolved: Some(PathBuf::from("/home/operator/.local/bin/loop-queue-filter")),
+                exit: Some(0),
+                detail: "no output on stdout or stderr".into(),
+            },
+            AdapterVerdict {
+                adapter: "pane-truth".into(),
+                status: AdapterStatus::NotInstalled,
+                resolved: None,
+                exit: None,
+                detail: "absent".into(),
+            },
+        ];
+        let data = &envelope(&rows).expect("envelope")["data"];
+        assert_eq!(data["executed"], 4);
+        assert_eq!(data["live"], 1, "the foreign row must NOT be inside live");
+        assert_eq!(data["foreign"], 1);
+        assert_eq!(data["degraded"], 1);
+        assert_eq!(data["unmeasurable"], 1);
+        let partitioned = data["live"].as_u64().expect("live")
+            + data["degraded"].as_u64().expect("degraded")
+            + data["foreign"].as_u64().expect("foreign")
+            + data["unmeasurable"].as_u64().expect("unmeasurable");
+        assert_eq!(
+            partitioned,
+            data["executed"].as_u64().expect("executed"),
+            "the four buckets must partition executed, or a row is being counted twice or \
+             not at all -- which is exactly how live=35 came to include a foreign binary"
+        );
+        assert_eq!(
+            data["adapters"][1]["reason_code"], "UAD_ADAPTER_FOREIGN",
+            "the row-level evidence and the aggregate must agree"
         );
     }
 
@@ -543,7 +840,10 @@ mod tests {
         let error = exit_code(&[]).expect_err("empty set must refuse");
         assert!(error.contains("UAD_EXECUTE_EMPTY_SET"), "got {error}");
         let envelope_error = envelope(&[]).expect_err("empty envelope must refuse");
-        assert!(envelope_error.contains("UAD_EXECUTE_EMPTY_SET"), "got {envelope_error}");
+        assert!(
+            envelope_error.contains("UAD_EXECUTE_EMPTY_SET"),
+            "got {envelope_error}"
+        );
     }
 
     fn verdict(adapter: &str, status: AdapterStatus) -> AdapterVerdict {
@@ -576,7 +876,10 @@ mod tests {
 
     #[test]
     fn all_live_is_the_only_zero() {
-        let live = [verdict("a", AdapterStatus::Live), verdict("b", AdapterStatus::Live)];
+        let live = [
+            verdict("a", AdapterStatus::Live),
+            verdict("b", AdapterStatus::Live),
+        ];
         assert_eq!(exit_code(&live).expect("code"), EXIT_ALL_LIVE);
     }
 
@@ -586,13 +889,43 @@ mod tests {
         // exiting nonzero". The executor recorded `exit` on every row from the start, so the
         // count was always derivable and simply never derived.
         let rows = [
-            AdapterVerdict { adapter: "a".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "usage".into() },
-            AdapterVerdict { adapter: "b".into(), status: AdapterStatus::Live, resolved: None, exit: Some(78), detail: "usage".into() },
-            AdapterVerdict { adapter: "c".into(), status: AdapterStatus::Live, resolved: None, exit: Some(64), detail: "usage".into() },
+            AdapterVerdict {
+                adapter: "a".into(),
+                status: AdapterStatus::Live,
+                resolved: None,
+                exit: Some(0),
+                detail: "usage".into(),
+            },
+            AdapterVerdict {
+                adapter: "b".into(),
+                status: AdapterStatus::Live,
+                resolved: None,
+                exit: Some(78),
+                detail: "usage".into(),
+            },
+            AdapterVerdict {
+                adapter: "c".into(),
+                status: AdapterStatus::Live,
+                resolved: None,
+                exit: Some(64),
+                detail: "usage".into(),
+            },
             // NOT counted: it never answered, so it is not "answered AND exited nonzero".
-            AdapterVerdict { adapter: "d".into(), status: AdapterStatus::NoHelpContract, resolved: None, exit: Some(0), detail: "none".into() },
+            AdapterVerdict {
+                adapter: "d".into(),
+                status: AdapterStatus::NoHelpContract,
+                resolved: None,
+                exit: Some(0),
+                detail: "none".into(),
+            },
             // NOT counted: absent binaries never exited at all.
-            AdapterVerdict { adapter: "e".into(), status: AdapterStatus::NotInstalled, resolved: None, exit: None, detail: "absent".into() },
+            AdapterVerdict {
+                adapter: "e".into(),
+                status: AdapterStatus::NotInstalled,
+                resolved: None,
+                exit: None,
+                detail: "absent".into(),
+            },
         ];
         assert_eq!(nonzero_exit_on_help(&rows), 2);
         assert_eq!(nonzero_exit_on_help(&[]), 0);
@@ -615,10 +948,22 @@ mod tests {
         // counted, because an agent branching on `$?` still cannot tell them from a failure,
         // and the field name no longer claims they are usage failures.
         let rows = [
-            live("pre-commit-gate", 3, "NOTHING_TO_CHECK: no staged files to check"),
-            live("staged-build-gate", 1, "STAGED_BUILD_GATE_REFUSED crate=x reason=STAGED_WORKTREE"),
+            live(
+                "pre-commit-gate",
+                3,
+                "NOTHING_TO_CHECK: no staged files to check",
+            ),
+            live(
+                "staged-build-gate",
+                1,
+                "STAGED_BUILD_GATE_REFUSED crate=x reason=STAGED_WORKTREE",
+            ),
         ];
-        assert_eq!(nonzero_exit_on_help(&rows), 2, "the ambiguity is the defect, so both count");
+        assert_eq!(
+            nonzero_exit_on_help(&rows),
+            2,
+            "the ambiguity is the defect, so both count"
+        );
         assert_eq!(
             nonzero_exit_with_usage_marker(&rows),
             0,
@@ -633,8 +978,16 @@ mod tests {
         // partition. Making it exact needs a per-adapter declared list -- the second inventory
         // UAD-NO-SECOND-COUNT forbids -- so the bound is published instead.
         let missed = [
-            live("omp-idle-dispatch", 2, "omp-idle-dispatch [status|why|capabilities|run]"),
-            live("pane-dispatch-fence", 78, "pane-dispatch-fence: unknown argument: --help"),
+            live(
+                "omp-idle-dispatch",
+                2,
+                "omp-idle-dispatch [status|why|capabilities|run]",
+            ),
+            live(
+                "pane-dispatch-fence",
+                78,
+                "pane-dispatch-fence: unknown argument: --help",
+            ),
         ];
         assert_eq!(nonzero_exit_on_help(&missed), 2);
         assert_eq!(
@@ -648,7 +1001,11 @@ mod tests {
             live("fleet-composite", 2, "usage error: unknown command --help"),
             live("inbox-monitor", 64, "inbox-monitor: usage:"),
         ];
-        assert_eq!(nonzero_exit_with_usage_marker(&caught), 4, "all four spellings must match");
+        assert_eq!(
+            nonzero_exit_with_usage_marker(&caught),
+            4,
+            "all four spellings must match"
+        );
     }
 
     #[test]
@@ -656,24 +1013,57 @@ mod tests {
         let rows = [
             live("a", 2, "usage: a"),
             live("b", 3, "NOTHING_TO_CHECK"),
-            AdapterVerdict { adapter: "c".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "usage: c".into() },
+            AdapterVerdict {
+                adapter: "c".into(),
+                status: AdapterStatus::Live,
+                resolved: None,
+                exit: Some(0),
+                detail: "usage: c".into(),
+            },
         ];
         let total = nonzero_exit_on_help(&rows);
         let floor = nonzero_exit_with_usage_marker(&rows);
-        assert!(floor <= total, "a floor above its own total is incoherent: {floor} > {total}");
+        assert!(
+            floor <= total,
+            "a floor above its own total is incoherent: {floor} > {total}"
+        );
         assert_eq!(total, 2);
-        assert_eq!(floor, 1, "the exit-0 row carries a usage marker and must NOT be counted");
+        assert_eq!(
+            floor, 1,
+            "the exit-0 row carries a usage marker and must NOT be counted"
+        );
     }
 
     #[test]
     fn the_exit_histogram_keeps_never_exited_as_a_visible_bucket() {
         let rows = [
-            AdapterVerdict { adapter: "a".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "x".into() },
-            AdapterVerdict { adapter: "b".into(), status: AdapterStatus::Live, resolved: None, exit: Some(0), detail: "x".into() },
-            AdapterVerdict { adapter: "c".into(), status: AdapterStatus::NotInstalled, resolved: None, exit: None, detail: "x".into() },
+            AdapterVerdict {
+                adapter: "a".into(),
+                status: AdapterStatus::Live,
+                resolved: None,
+                exit: Some(0),
+                detail: "x".into(),
+            },
+            AdapterVerdict {
+                adapter: "b".into(),
+                status: AdapterStatus::Live,
+                resolved: None,
+                exit: Some(0),
+                detail: "x".into(),
+            },
+            AdapterVerdict {
+                adapter: "c".into(),
+                status: AdapterStatus::NotInstalled,
+                resolved: None,
+                exit: None,
+                detail: "x".into(),
+            },
         ];
         let histogram = exit_histogram(&rows);
-        assert_eq!(histogram, vec![("000".to_owned(), 2), ("none".to_owned(), 1)]);
+        assert_eq!(
+            histogram,
+            vec![("000".to_owned(), 2), ("none".to_owned(), 1)]
+        );
         assert!(
             histogram.iter().any(|(code, _)| code == "none"),
             "never-exited must not be folded into a sentinel integer"
