@@ -991,6 +991,61 @@ git grep --no-index -hoE 'Command::new\("[a-z_-]+"\)' -- 'crates/*/src/*' | sort
 
 `br`, `git`, `tmux`, `cargo`. **No `omp`.** We orchestrate OMP by reading the terminal it drew.
 
+### ⛔ CORRECTED 2026-09-10 — EVERY ONE OF THOSE FOUR ZEROS IS NOW FALSE, AND THE POSITIVE CONTROL HAS INVERTED
+
+**Retracted:** *"`Command::new("omp")` → **0 files**; `mode=rpc` → **0**; `muxConnect` → **0**;
+`omp/` → **0**"* and *"**No `omp`.** We orchestrate OMP by reading the terminal it drew."* Both were
+true on 2026-08-31. Re-measured today by pane 1, running the file's own commands:
+
+```
+                          raw   code_only     <- code_only = same grep with // comments stripped
+Command::new("omp")         4       2
+mode=rpc                   28      14
+muxConnect                  2       1
+omp/                       48      32
+```
+
+**We consume OMP over a typed transport now.** `ompo state --json` returns **437,558 bytes** of live
+OMP state with `adopted_method: get_state`; `ompo stats` and `ompo messages` project session cost and
+message roles the same way. The two real spawn sites are
+`crates/omp-surface-consumption/src/main.rs:60` and `crates/ompo-doctor/src/omp_process.rs:238`.
+
+**READ THE `code_only` COLUMN, NOT THE RAW ONE — and the reason is this section.** The raw counts are
+inflated by comments *about the old zero*: `crates/omp-surface-consumption/src/lib.rs:39` reads
+``//! `Command::new("omp")`, `mode=rpc`, `muxConnect`, `omp/` — all **0 files**.`` A grep for the
+needle matches the prose recording that the needle was absent. That is the **self-referential
+checker** this file already names in census property 5 (*"a doc comment warning about a needle
+contained the needle"*) — firing here on the census that produced the doctrine. Strip `//` and
+`/* */` before matching; over-stripping is the safe direction, since it can only report LESS
+consumption.
+
+**THE PRESCRIBED POSITIVE CONTROL NOW RETURNS ZERO, SO THE RECIPE ABOVE IS BROKEN AS WRITTEN.**
+`Command::new("br")` → **0 files**, against the **3** this section cites. `br` did not stop being
+spawned; it moved behind the kernel — `crates/finding/src/lib.rs:58` declares
+*"Tracker CLI the bead-filing kernel owns. Callers use `Command::new(finding::BR)`"*, and the spawn
+at `:463` is `Command::new(self.program.clone())`. **A literal-argument grep cannot see a spawn whose
+program is a const or a field**, which is the same blind spot as `ripwire --uses` missing call sites
+inside `assert!()`. So anyone re-running this census gets a control that reports absence for a live
+caller and cannot distinguish a real zero from an instrument zero — rule `8i`'s failure condition
+reached by following rule `8i`'s recipe. **Pick a control that is still a string literal** (measured
+today: `Command::new("git")` → 33, `Command::new("ps")` → 10, `Command::new("cargo")` → 10) **and
+prefer `ripwire --uses` or the compiler over a text count.**
+
+**The live spawn census, replacing the four-row block above:**
+
+```
+  33 git · 10 ps · 10 cargo · 8 sleep · 4 timeout · 4 omp · 3 crontab · 3 am · 2 tar
+   2 shasum · 2 sh · 2 pgrep · 2 ntm · 2 launchctl · 2 kill        (0 br — see above)
+```
+
+**WHAT THIS DOES *NOT* RETRACT, and it is the load-bearing half.** The rule's *point* was never the
+integer; it was that scraping paint is not a protocol. That still stands, and this file's own
+`HD-0049` block measures the residue: **115 spinner-regex sites across 11 crates**, five NTM robot
+verbs at zero consumption. The zeros are gone; the scrapers are not. **Do not read this correction as
+"the fifth rule is satisfied"** — read it as "the denominator moved and the numerator is no longer
+zero." Re-derive both before citing either.
+
+
 **Every classifier defect measured today is downstream of this one fact** — not correlated with it,
 caused by it. Each row names what we do instead of a protocol, and why the protocol makes the defect
 unconstructible:
