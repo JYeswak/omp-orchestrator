@@ -33,7 +33,7 @@ use ompo_doctor::provenance;
 use ompo_doctor::state_triad;
 use ompo_doctor::umbrella::{self, ProbeId};
 use ompo_doctor::upstream_report;
-use ompo_doctor::{current_repo, run_doctor};
+use ompo_doctor::{current_repo, run_doctor, DoctorError};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -1151,7 +1151,13 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
         }
         Err(error) => {
             eprintln!("ompo doctor: {error}");
-            ExitCode::from(1)
+            // An unknown scope name is a usage error (a name absent from the
+            // roster), not a degraded verdict: the contract pins rc=2 here
+            // and every other doctor failure stays rc=1.
+            match error {
+                DoctorError::UnsupportedScope(_) => ExitCode::from(EXIT_BAD_INVOCATION),
+                _ => ExitCode::from(1),
+            }
         }
     }
 }

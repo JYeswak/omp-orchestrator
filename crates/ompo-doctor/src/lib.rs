@@ -16,6 +16,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use ompo_start::inception;
 use subprocess_contract::{bounded_output, BoundedOutcome};
 
 pub mod adapter_exec;
@@ -306,9 +307,16 @@ fn remediation_for(decisions: &[ProbeDecision]) -> Vec<String> {
         .collect()
 }
 pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
-    if scope != "system" {
-        return Err(DoctorError::UnsupportedScope(scope.to_owned()));
+    match scope {
+        // The health/repair axis advertises these scopes (health_repair::SCOPES);
+        // a scope health names must not die here. "system" runs the probe loop;
+        // "inception" verifies control files plus the inception artifact.
+        "system" => run_doctor_system(repo, scope),
+        "inception" => run_doctor_inception(repo),
+        _ => Err(DoctorError::UnsupportedScope(scope.to_owned())),
     }
+}
+fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
     let run_id = doctor_run_id();
     let decisions: Vec<_> = PROBES.iter().map(run_probe).collect();
     let exit_code = doctor_exit_code(&decisions)?;
@@ -332,6 +340,74 @@ pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError
         probes: decisions,
         remediation,
         next_action,
+    })
+}
+
+/// Scoped doctor for the inception axis health advertises. Verifies the
+/// control-file set plus the inception artifact and reports a verdict —
+/// read-only: unlike the system scope it writes no journal rows, so there is
+/// no readback to confuse with a passing system run.
+fn run_doctor_inception(repo: &Path) -> Result<DoctorSummary, DoctorError> {
+    let run_id = doctor_run_id();
+    let presence = inception::control_file_presence(repo);
+    let missing: Vec<&str> = presence
+        .iter()
+        .filter_map(|(path, present)| (!present).then_some(path.as_str()))
+        .collect();
+    let mut decisions = vec![ProbeDecision {
+        name: "control_files".to_owned(),
+        status: if missing.is_empty() { "OK".to_owned() } else { "MISSING".to_owned() },
+        reason_code: if missing.is_empty() {
+            "CONTROL_FILES_COMPLETE".to_owned()
+        } else {
+            "CONTROL_FILES_MISSING".to_owned()
+        },
+        detail: if missing.is_empty() {
+            format!("{} present", presence.len())
+        } else {
+            format!("missing {}", missing.join(","))
+        },
+        presence: Some(repo.display().to_string()),
+        version: None,
+    }];
+    let artifact = repo.join(".omp-orchestrator").join("inception.json");
+    decisions.push(match inception::read_inception(&artifact) {
+        Ok(_) => ProbeDecision {
+            name: "inception_artifact".to_owned(),
+            status: "OK".to_owned(),
+            reason_code: "INCEPTION_READABLE".to_owned(),
+            detail: artifact.display().to_string(),
+            presence: Some(artifact.display().to_string()),
+            version: None,
+        },
+        Err(error) => ProbeDecision {
+            name: "inception_artifact".to_owned(),
+            status: "UNREADABLE".to_owned(),
+            // Mirrors health_repair::reason_code_of; unify the two when that
+            // file is not under active peer edit.
+            reason_code: error.to_string().split_whitespace().next().unwrap_or("INCEPTION_UNKNOWN").to_owned(),
+            detail: error.to_string(),
+            presence: Some(artifact.display().to_string()),
+            version: None,
+        },
+    });
+    let exit_code = if decisions.iter().all(|decision| decision.status == "OK") { 0 } else { 1 };
+    let status = if exit_code == 0 { "OK" } else { "DEGRADED" };
+    let remediation = remediation_for(&decisions);
+    Ok(DoctorSummary {
+        schema: "ompo.doctor.v1",
+        run_id,
+        scope: "inception".to_owned(),
+        status,
+        exit_code,
+        artifact: ARTIFACT_REFERENCE,
+        lifecycle_journal: default_repo_journal(repo),
+        probe_count: decisions.len(),
+        event_count: 0,
+        readback_lines: 0,
+        probes: decisions,
+        remediation,
+        next_action: format!("repair_scope=inception artifact={}", artifact.display()),
     })
 }
 
