@@ -55,7 +55,15 @@ fn usage() -> ExitCode {
 
 omp-orchestrator-fsu7. Derives every workspace gate from cargo metadata and runs it
 through ONE entry point. An empty roster is an ERROR, never a pass.
-gate-runner --ci-citation <run-id|latest> emits a citable CI aggregate with InputManifest."#
+
+gate-runner --ci-citation local            cite THIS run from the aggregate --run measured
+gate-runner --ci-citation <run-id>         cite a PRIOR COMPLETED run from its GitHub log
+gate-runner --ci-citation latest           cite the newest run, if it is not this one
+
+`local` is what CI uses and it touches no network. Naming the run you are running INSIDE
+is refused (CI_CITATION_SELF_REFERENCE, exit 9): GitHub does not serve logs for an
+in-progress run, so that citation is unsatisfiable rather than merely unlucky --
+omp-orchestrator-pxhmd, 90 red runs."#
     );
     ExitCode::from(2)
 }
@@ -63,7 +71,11 @@ gate-runner --ci-citation <run-id|latest> emits a citable CI aggregate with Inpu
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() == 2 && args[0] == "--ci-citation" {
-        return ci_citation::run(&args[1]);
+        // The citation reads the aggregate `--run` wrote, so it needs the same root resolution.
+        // A missing root is NOT fatal here: `local` names its own absent input, and the remote
+        // selectors never touch the file at all.
+        let repo = repo_root().unwrap_or_else(|| PathBuf::from("."));
+        return ci_citation::run(&args[1], &aggregate_path(&repo));
     }
     let mut plan = false;
     let mut run = false;
@@ -205,6 +217,19 @@ fn main() -> ExitCode {
     // is not "slow" — an interruption at crate 80 of 88 destroyed the record that 79 passed, so
     // every interrupted run cost its entire cost. `9gta3` item 1.
     let bank = bank_path(&repo);
+    // A STALE AGGREGATE MUST NOT BE CITABLE. Removed before the first crate runs, so a run that
+    // dies mid-measurement leaves NOTHING to cite rather than the previous run's numbers under
+    // this run's id. `if: always()` in CI means the citation step fires on that path too.
+    let aggregate_file = aggregate_path(&repo);
+    if let Err(error) = std::fs::remove_file(&aggregate_file) {
+        if error.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "GATE_RUNNER_STALE_AGGREGATE path={} detail={error} -- could not clear the prior \
+                 aggregate, so `--ci-citation local` may cite a verdict this run did not produce",
+                aggregate_file.display()
+            );
+        }
+    }
     let mut observations = BTreeMap::new();
     for entry in &roster {
         let observed = run_crate(&repo, &entry.crate_name);
@@ -297,7 +322,35 @@ fn main() -> ExitCode {
     );
 
     let report = build_report_scoped(&roster, &full_roster, &observations, &ledger);
-    print!("{}", report.render());
+    let rendered = report.render();
+    print!("{rendered}");
+    // HAND THE AGGREGATE TO THE CITATION DIRECTLY — omp-orchestrator-pxhmd.
+    //
+    // The citation used to recover this exact line by asking GitHub for the log of the run it
+    // was running inside, which GitHub refuses until the run completes. **Ninety consecutive
+    // red runs, zero green, on every commit.** The line is right here, in the process that
+    // measured it, so `--ci-citation local` reads it from disk instead of from a log store.
+    //
+    // Written AFTER the measurement and removed BEFORE it (see `aggregate_path`), so absence
+    // means "no verdict was produced" rather than "an older verdict is still lying around".
+    match rendered
+        .lines()
+        .find(|line| line.starts_with("GATE_RUNNER crates="))
+    {
+        Some(line) => {
+            if let Err(error) = write_aggregate(&aggregate_file, line) {
+                eprintln!(
+                    "GATE_RUNNER_AGGREGATE_UNWRITABLE path={} detail={error} -- the verdict \
+                     above stands, but `--ci-citation local` will refuse for want of it",
+                    aggregate_file.display()
+                );
+            }
+        }
+        None => eprintln!(
+            "GATE_RUNNER_AGGREGATE_UNRENDERED detail=report.render() produced no `GATE_RUNNER \
+             crates=` line -- the citation cannot be satisfied and must not be faked"
+        ),
+    }
     // A FAILING DECLARED CHECK MUST FAIL THE RUN. Reporting it and exiting 0 is the
     // ledger-instead-of-a-gate defect this repo has already paid for twice.
     let code = report.exit_code();
@@ -466,6 +519,48 @@ fn bank_path(repo: &Path) -> PathBuf {
         }
     }
     repo.join("target").join("gate-runner-bank.rows")
+}
+
+/// Where `--run` leaves the aggregate line so `--ci-citation local` can cite it.
+///
+/// # Why this file exists at all — `omp-orchestrator-pxhmd`
+///
+/// **Its consumer is running code**, not a status report: `ci_citation::cite_local` reads it and
+/// the CI step's exit code depends on it. It replaced a `gh run view <self> --log` round-trip that
+/// **could never succeed** — GitHub does not serve logs for an in-progress run, and the step
+/// asking was part of that run. Measured 2026-09-09: 75 failure, 15 cancelled, **zero** success
+/// across 90 runs, and the verdict was computed every time before being thrown away.
+///
+/// **Deletion condition:** when the citation no longer needs the aggregate as a string — i.e.
+/// when `Report` is handed to the citation in-process through one entry point instead of through
+/// two `cargo run` invocations of the same binary.
+///
+/// `GATE_RUNNER_AGGREGATE` overrides it, for the same reason `GATE_RUNNER_BANK` does: a test must
+/// own its path, and writing into the real one would let a test's fixture become a citable
+/// verdict. The default sits under `target/`, already ignored.
+fn aggregate_path(repo: &Path) -> PathBuf {
+    if let Ok(explicit) = std::env::var("GATE_RUNNER_AGGREGATE") {
+        if !explicit.trim().is_empty() {
+            return PathBuf::from(explicit);
+        }
+    }
+    repo.join("target").join("gate-runner-aggregate.line")
+}
+
+/// Write the aggregate line, TRUNCATING — never appending.
+///
+/// The bank appends because an interrupted run must keep what it earned. This one must not: two
+/// aggregates in the file would make "which run measured this" a guess, and the whole point of the
+/// citation is that it is not a guess.
+fn write_aggregate(path: &Path, line: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut file = std::fs::File::create(path)?;
+    file.write_all(line.as_bytes())?;
+    file.write_all(b"\n")?;
+    file.sync_all()
 }
 
 /// Append one already-rendered row, then `sync_all` before returning.

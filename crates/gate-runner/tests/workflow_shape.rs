@@ -199,3 +199,98 @@ fn no_former_per_gate_job_key_has_reappeared() {
         );
     }
 }
+
+/// The EFFECTIVE workflow: comment lines removed.
+///
+/// # This helper is not defensive coding, it is a measured requirement
+///
+/// The two legs below first ran as raw `text.contains(…)` and BOTH went red on their own
+/// documentation: the step's provenance comment quotes the defective line
+/// (`--ci-citation "${{ github.run_id }}"`) and names `continue-on-error` as the thing that was
+/// deliberately not added. A gate that fires on a comment describing the defect cannot tell a
+/// described defect from a live one — and `AGENTS.md` has the receipt for that exact reading
+/// error on `workers.toml`, where **22 comment lines mentioned darwin while exactly 1 live tag
+/// carried it**, and the remedy it records is the one used here: strip comments first.
+fn effective_yaml(text: &str) -> String {
+    text.lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// THE NINETY-RUN DEFECT, GUARDED AT ITS EXACT SHAPE — `omp-orchestrator-pxhmd`.
+///
+/// The citation step used to pass `${{ github.run_id }}`: the id of the run it was running
+/// inside. `gh run view <self> --log` cannot succeed, because GitHub does not serve logs for an
+/// in-progress run, so the step exited 4 on every commit. Measured 2026-09-09 over
+/// `gh run list --limit 100`: **75 failure, 15 cancelled, ZERO success.**
+///
+/// This is asserted HERE rather than in CI for the reason the module header already gives: asking
+/// CI whether CI can be green is the question that cannot be answered from inside.
+#[test]
+fn the_citation_step_never_asks_for_this_runs_own_id() {
+    let live = effective_yaml(&workflow_text());
+    assert!(
+        live.contains("--ci-citation local"),
+        "the citation must cite the aggregate this run MEASURED (`--ci-citation local`), not \
+         re-read it out of GitHub's log store"
+    );
+    for self_reference in ["github.run_id", "github.run_number", "GITHUB_RUN_ID"] {
+        assert!(
+            !live.contains(self_reference),
+            "the workflow hands `{self_reference}` to a step; from inside CI that names THIS \
+             run, and citing it is unsatisfiable rather than merely unlucky — the mechanism \
+             behind 90 red runs and zero green"
+        );
+    }
+    assert!(
+        !live.contains("--ci-citation latest"),
+        "`latest` resolves to this run from inside CI for the same reason the explicit id did — \
+         `gh run list --limit 1` returns the run you are in"
+    );
+}
+
+/// AND THE FIX MUST NOT BE A SUPPRESSION.
+///
+/// Deleting the step, or letting it fail soft, would have turned CI green without making the
+/// citation work — gate self-weakening, and the pathology has a name because it is tempting.
+#[test]
+fn the_citation_step_is_present_and_not_allowed_to_fail_soft() {
+    let live = effective_yaml(&workflow_text());
+    assert!(
+        live.contains("--ci-citation"),
+        "the citation step is GONE. A verdict with no run id bound to it is not a verdict; \
+         removing the gate is not fixing the gate"
+    );
+    assert!(
+        !live.contains("continue-on-error"),
+        "`continue-on-error` suppresses a gate's exit code, which makes every downstream red \
+         unreadable — the exact condition omp-orchestrator-pxhmd was filed for"
+    );
+    assert!(
+        live.contains("if: always()"),
+        "the citation must still run when the gates are red: a verdict is exactly what a red \
+         run needs bound to its id"
+    );
+}
+
+/// KNOWN-BAD FOR THE COMMENT-STRIPPING METHOD ITSELF.
+///
+/// The two methods must be shown to DISAGREE on this very file, or nothing establishes which one
+/// is in force — the same requirement the job-counting leg above carries. The raw text contains
+/// the defective invocation (inside a comment); the effective YAML must not.
+#[test]
+fn the_raw_and_effective_scans_disagree_on_this_file() {
+    let text = workflow_text();
+    let live = effective_yaml(&text);
+    assert!(
+        text.contains("github.run_id"),
+        "the provenance comment quoting the defect has been deleted, so this leg no longer \
+         proves the scans differ — restore it or delete this test, do not weaken it"
+    );
+    assert!(
+        !live.contains("github.run_id"),
+        "comment stripping did not remove the quoted defect: the method is broken, not the file"
+    );
+    assert!(live.len() < text.len(), "no comments were stripped at all");
+}

@@ -147,8 +147,37 @@ jobs:
         run: cargo run --quiet -p gate-runner -- --plan
       - name: Every gate, one entry point
         run: cargo run --quiet -p gate-runner -- --run
+      # THE CITATION, AND WHY IT NO LONGER ASKS GITHUB — omp-orchestrator-pxhmd.
+      #
+      # THIS STEP MADE CI UNSATISFIABLE FOR NINETY RUNS. It read:
+      #
+      #   run: cargo run --quiet -p gate-runner -- --ci-citation "${{ github.run_id }}"
+      #
+      # which handed the citation THE ID OF THE RUN IT WAS RUNNING INSIDE. `ci_citation` then
+      # ran `gh run view <that id> --log`, and GitHub does not serve logs for an in-progress
+      # run. Verbatim from run 34326877717:
+      #
+      #   CI_CITATION_GH_UNAVAILABLE detail=run 34326877717 is still in progress; logs will
+      #     be available when it is complete
+      #   ##[error]Process completed with exit code 4.
+      #
+      # With `if: always()` and no `continue-on-error`, it fired even when everything upstream
+      # was green, so NO COMMIT COULD EVER PRODUCE A GREEN RUN. Measured 2026-09-09,
+      # `gh run list --limit 100`: 75 failure, 15 cancelled, ZERO success. The same runs had
+      # already printed `GATE_RUNNER crates=87 pass=67 fail=16 …` — a complete verdict,
+      # computed and then discarded, which is why ninety reds carried no information: "sixteen
+      # crates fail" and "the citation is impossible" looked identical from outside.
+      #
+      # `local` cites the aggregate the step above MEASURED, read from its own artifact, with
+      # the identity from `GITHUB_RUN_ID` / `GITHUB_SHA` (set by Actions, no `env:` needed).
+      # No network, no token, no log store, no race. Naming this run's id is now a typed
+      # refusal (`CI_CITATION_SELF_REFERENCE`, exit 9) rather than a mystery exit 4, and
+      # `latest` — which from inside CI also resolves to self — is refused the same way.
+      #
+      # WHAT WAS DELIBERATELY NOT DONE: the step was not deleted and `continue-on-error` was
+      # not added. Both are gate self-weakening, and `tests/workflow_shape.rs` fails if either
+      # appears. An absent aggregate still reds this step (exit 11) — a citation that reads
+      # nothing and exits 0 is the vacuous green this repo has already paid for.
       - name: Cite gate-runner CI result
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: cargo run --quiet -p gate-runner -- --ci-citation "${{ github.run_id }}"
+        run: cargo run --quiet -p gate-runner -- --ci-citation local
