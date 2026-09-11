@@ -7351,3 +7351,38 @@ the durable fix is the same unlanded bead — emit it from the dispatch site (`9
 
 **Until then the 40 stay blocked and VISIBLE as blocked**, which is strictly better than a
 conductor quietly minting provenance to make a commit go through.
+
+## ✅ THE CAPTURE ARC CLOSED AT **10 OF 10** — four commits, and the calibration lesson
+
+**Run `34587961695` / `df49750a`, four rungs cleared before a row was read
+(`GATE_RUNNER ' '` 2 · `could not compile` 0 · 59 cause lines):**
+
+```
+details containing "left:"                                10
+details announcing `assertion `left == right` failed`     10     <- SAME RUN, same command
+```
+
+**The whole arc, each step measured in production rather than argued:**
+
+```
+f60845e  cause capture            59/59 carried a LOCATION and no message
+9176b51  message capture          55/55 message · header-only 0/55
+51990cc  operand capture          5/10  -- adjacency-bounded, and the miss was the finding
+d342505  block-bounded scan       10/10
+```
+
+⭐ **THE CALIBRATION LESSON IS THE TRANSFERABLE HALF.** On the previous round I pre-registered
+`10` and measured `5`; I published the miss with the same prominence as the hit, and then for
+this round I **refused to name a number and claimed only *"greater than 5 of 10."*** It landed
+at the ceiling. **A prediction that missed once earns a WIDER interval, not a louder one** —
+and the wide claim was still falsifiable, because `5` or fewer would have refuted it.
+
+ **AND THE DENOMINATOR CAME FROM THE SAME RUN AND THE SAME COMMAND.** `10 of 10` is a verdict;
+a bare `10` is a number that could equally have meant `10 of 40`. Every figure in this arc was
+reported as a ratio against a population measured beside it, which is the only reason the `5`
+was legible as a PARTIAL rather than as a success.
+
+**NO-CLAIM:** this proves the emitter carries an `assert_eq!` payload in full for all ten
+announcing details in one verdict-bearing run. It says nothing about whether any failing crate
+is fixed — `GATE_RUNNER_FAILING` is unchanged — and nothing about assertion macros other than
+`assert_eq!`/`assert_ne!`, which no run has yet exercised.
