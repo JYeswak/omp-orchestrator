@@ -289,17 +289,21 @@ pub const UNALLOWED_COLLISION_CEILING: usize = UNALLOWED_COLLISION_RATCHET.ceili
 /// Slack between the ceiling and a converged tree, and nothing else (zhr29
 /// revision after GradeCatch22's lockstep-raise mutation).
 ///
-/// EXACTLY 2 today: Hit and ScanReport collide only via UNTRACKED
-/// kernel-only-gate (with path-literal-guard). A fresh clone reads 42 while
-/// this worktree reads 44, so a `==` pin would red one tree or the other and
-/// a bare `<=` leaves the upper side unconstrained (proven: raising both
-/// anchor fields to 100 stayed green). The leg enforces
-/// `live <= CEILING <= live + TOLERANCE`: raising past live+tolerance
-/// reddens, so a raise now requires the live count to actually rise. Keep
-/// small and named. DIES when kernel-only-gate is tracked (both trees read
-/// 44 -- lower this to 0) or when its Hit/ScanReport collisions resolve
-/// (lower it alongside the ceiling).
-pub const UNTRACKED_COLLISION_TOLERANCE: usize = 2;
+/// ZERO since 2026-09-11: its own death condition arrived, in the words this comment used to
+/// carry -- "DIES when kernel-only-gate is tracked (both trees read 44 -- lower this to 0)".
+/// It read EXACTLY 2 because Hit and ScanReport collided only via UNTRACKED kernel-only-gate
+/// (with path-literal-guard), so a fresh clone read 42 while this worktree read 44 and no `==`
+/// pin could hold in both. The crate is now tracked, the two trees agree, and the leg's
+/// `live <= CEILING <= live + TOLERANCE` band collapses to equality -- which is strictly
+/// stronger, and is what the tolerance existed to make possible rather than to preserve.
+///
+/// ⛔ THE RCH LANE CANNOT ADJUDICATE THIS LEG AND ITS RED THERE IS NOT A REPO STATE. The
+/// collision census derives its roster from git, and the worker's index is a fossil (measured
+/// 2026-09-11: 86 paths against this Mac's 1131), so the lane reads `live 42` and the band
+/// refuses. This Mac and CI read 44 with both crates tracked. The red names its cause here so
+/// the next reader does not lower the CEILING to fit a fossil -- which would bank the defect
+/// into the bound permanently. CI is the oracle for this leg; the lane is not.
+pub const UNTRACKED_COLLISION_TOLERANCE: usize = 0;
 
 /// The workspace's shared vocabulary crate. Declared, not guessed: its
 /// [`NAMED_ZEROS`] row calls it a "Re-export vocabulary crate

@@ -443,6 +443,8 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("s2-gate", "legitimate never-wire: S2 dropped by Joshua ruling; policy-dead by decision (OMP-SURFACE-MAP omp_surface none), not by missing code."),
     ("verify-dispatch", "built reporter, zero invocations; binary exits 0 for VERIFIED and NO-EVIDENCE alike, so a gate stanza would be decorative. Dies when it gains a caller needing a real verdict."),
     ("wired-but-inert-guard", "advisory scanner nothing invokes (06-gates clause 3 exclusion); gate-runner names it only as fixture exemption. Dies when a lane needs the guard."),
+    ("kernel-only-gate", "INERT: complete source-half gate (scan_source/scan_paths/scan_tree, 7 passing legs) with no bin and no caller; tracked 2026-09-11 so CI can compile it at all. The remedy is WIRE, not amnesty -- bead omp-orchestrator-kernel-only-gate-wr2 demands an installable commit-path gate. Dies when the pre-commit binary or gate-runner invokes it."),
+    ("omp-host-tool-guard", "INERT: fail-closed evaluator for parent-declared OMP host tools (set_host_tools / host_tool_call), 11 passing legs; tracked 2026-09-11 so CI can compile it at all. Nothing in this repo drives that RPC seam yet, so it has no honest caller. Dies when an OMP-driving surface routes host_tool_call through it, or the row goes with the crate if it is retired."),
 ];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdvisoryRatchetAnchor {
@@ -545,11 +547,13 @@ pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
 };
 
 /// Slack between the ceiling and a converged tree, and nothing else (ky6yx).
-/// EXACTLY 2: the untracked advisory pair kernel-only-gate +
-/// omp-host-tool-guard (present here, absent fresh clone). Dies when both are
-/// tracked (both trees read 29 -- lower this to 0) or removed (lower
-/// alongside the ceiling). Small and named by construction.
-pub const UNTRACKED_ADVISORY_TOLERANCE: usize = 2;
+///
+/// ZERO since 2026-09-11: its own death condition arrived. It read EXACTLY 2 for the untracked
+/// advisory pair kernel-only-gate + omp-host-tool-guard, present in this worktree and absent
+/// from a fresh clone; both are now TRACKED, so both trees read the same live count and the
+/// band collapses to equality. A pin whose death condition has arrived and which is not killed
+/// becomes tomorrow's stale allowance.
+pub const UNTRACKED_ADVISORY_TOLERANCE: usize = 0;
 
 /// Compatibility projection from the single ratchet anchor.
 pub const ADVISORY_CEILING: usize = ADVISORY_RATCHET.ceiling();

@@ -1,0 +1,13 @@
+[package]
+license.workspace = true
+name = "kernel-only-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "S1 source-half gate: refuse handrolled equivalents of existing kernels at file:line naming the replacement"
+
+[lints]
+workspace = true
+
+[dependencies]
+text-structure = { path = "../text-structure" }

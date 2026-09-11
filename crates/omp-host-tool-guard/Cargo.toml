@@ -1,0 +1,25 @@
+[package]
+name = "omp-host-tool-guard"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Pre-execution guard for parent-declared host tools, the only OMP seam where refusal is structural"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "omp_host_tool_guard"
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The approved-execution leg runs through the shared process-group / dual-pipe
+# boundary. `installer` already consumes `bounded_output` from this crate
+# (crates/installer/src/lib.rs:473,713,799,857); adding a second subprocess
+# dependency would reintroduce the handroll the kernel exists to prevent.
+subprocess-contract = { path = "../subprocess-contract" }
