@@ -55,7 +55,12 @@ denominator_type_dirs = 57
 denominator_subcommands = 39
 measured_against = "@oh-my-pi/pi-coding-agent v18.0.11"
 measured_on = "2026-08-31"
-crates_declared = 88
+# 88 -> 92 on 2026-09-11: four crates declared at the end of this file. The number is a COUNT
+# OF `[crates.x]` BLOCKS HERE, not a measurement of the workspace — HEAD carries 92 crate
+# directories and the worktree 94, and the gate compares this file to disk rather than to this
+# field. No code reads it (`grep -r crates_declared --include=*.rs` -> 0 hits); it is a
+# human-facing figure, so it gets its tree named like every other figure in this repo.
+crates_declared = 92
 revision_2_reason = "cross-pane dispatch and delivery receipt reclassified (b)->(a); --mode=rpc proven single-session"
 
 # ── (b) REIMPLEMENTED BY SCRAPING — an OMP alternative EXISTS AND IS REACHABLE ───────────────────
@@ -585,3 +590,30 @@ why = "worker evidence gate over our fleet; not an OMP method"
 classification = "a"
 omp_surface = "none"
 why = "worker identity tag gate over our fleet; not an OMP surface"
+
+# Crates that arrived on disk after the group above and were UNDECLARED, found by
+# `every_crate_is_declared_in_the_surface_map` (no-shell-gate/tests/wired_lanes.rs) on
+# 2026-09-11. Declared here because absence is this file's failure state and the remedy for
+# "undeclared" is a declaration, never an allowance row — SURFACE_ALLOWANCE stays empty.
+#
+# DENOMINATOR, and which tree it came from: 94 crate directories in the WORKTREE, 92 at HEAD.
+# `kernel-only-gate` and `omp-host-tool-guard` are fully untracked (`git ls-files` -> 0 files)
+# and are NOT declared here on purpose: declaring a crate that does not exist at HEAD would
+# trade this leg's worktree red for a GHOST DECLARATION red in CI, where the checkout has
+# 92 crates. They are someone else's uncommitted work; the row lands when the crate does.
+[crates.build-stamp]
+classification = "a"
+omp_surface = "none"
+why = "build-identity stamp emitted from build.rs (OMP_BUILD_ID); a cargo build concern, and OMP owns no build-identity surface"
+[crates.contabo-reclaim]
+classification = "a"
+omp_surface = "none"
+why = "remote-worker disk reclamation over the rch fleet; OMP has no surface for another machine's filesystem"
+[crates.doctrine-retirement-gate]
+classification = "a"
+omp_surface = "none"
+why = "retirement-marker scan over OUR doctrine documents; OMP does not own this repository's prose"
+[crates.fleet-idle-monitor]
+classification = "a"
+omp_surface = "none"
+why = "idle-pane decision kernel across THIRD-PARTY panes; revision 2 of this file proved --mode=rpc is single-session and cannot address a pane we do not own, so no OMP alternative exists"
