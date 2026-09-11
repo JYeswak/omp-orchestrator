@@ -1555,5 +1555,33 @@ mod dispatch_result_tests {
                  absent from the capture, so the input is already only the visible screen."
             );
         }
+
+        // ⛔ THE SAME SEAM, THE OTHER DIRECTION — ADDED AFTER A GRADER BROKE IT. GradeCloseReason
+        // negated the call site (`composer_is_free_over` with a leading `!`) and NOT ONE LEG
+        // REDDENED: exit=0 across all five harnesses. `free_and_occupied_are_not_the_same_answer`
+        // asserts both polarities OF THE FUNCTION and never calls `pane_is_live`, so a call-site
+        // negation is invisible to it — exactly the hole the positional needle above closes, left
+        // open one operator over. That inversion ADMITS a typed pane and REFUSES a free one.
+        //
+        // ⛔ AND THE NEEDLE MUST BE SCOPED TO THE FUNCTION BODY, NOT THE FILE. Written file-wide
+        // first, it matched the legitimate negations in `a_composer_above_the_old_window_is_detected`
+        // and `free_and_occupied_are_not_the_same_answer`, where asserting the negative IS the
+        // test — a checker that cannot pass over correct code, for the SECOND time in this one leg.
+        // Both failures were found by running it; neither by reading it.
+        let body = {
+            let start = code
+                .find(concat!("fn pane_is", "_live"))
+                .expect("pane_is_live must exist");
+            let rest = &code[start..];
+            let end = rest[1..].find("\nfn ").map_or(rest.len(), |idx| idx + 1);
+            &rest[..end]
+        };
+        assert!(
+            !body.contains(concat!("!composer_is_free", "_over")),
+            "the composer verdict is NEGATED inside the dispatch path. `composer_is_free_over` \
+             already carries the negation: negating it again admits a TYPED pane and refuses a \
+             FREE one. A pure-function polarity leg cannot see this, because the defect is in the \
+             CALLER, not the predicate. Body inspected:\n{body}"
+        );
     }
 }
