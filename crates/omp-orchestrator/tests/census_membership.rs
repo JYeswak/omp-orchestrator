@@ -266,17 +266,21 @@ fn every_advisory_unreachable_row_is_named_in_the_allowance() {
          admits."
     );
 }
-#[test]
-fn s1_coverage_allowance_carries_its_suspension_and_dies_when() {
-    let reason = ADVISORY_ALLOWANCE
-        .iter()
-        .find(|(name, _)| *name == "s1-coverage")
-        .map(|(_, reason)| *reason)
-        .expect("s1-coverage must have an explicit allowance row");
-    assert!(reason.contains("S1 depth is suspended"), "{reason}");
-    assert!(reason.contains("Dies when"), "{reason}");
-    assert!(reason.contains("approved S1 build wave"), "{reason}");
-}
+// ⛔ DELETED 2026-09-11 — `s1_coverage_allowance_carries_its_suspension_and_dies_when`.
+//
+// It asserted that the `s1-coverage` ADVISORY_ALLOWANCE row names its suspension and its
+// dies-when. **That row is gone**, because the crate became REACHABLE via
+// `.github/workflows/gate.yml` and the census flagged the row STALE by name. Its reason text
+// claimed *"no production caller is honest while S1 is frozen"* — a statement that is now
+// FALSE, so keeping the row to keep the test green would have preserved a lie to protect an
+// assertion about it.
+//
+// ⭐ THIS IS A SUBJECT-VANISHED DELETION, NOT A FAILING-TEST DELETION, and the difference is
+// the whole point: the test still PASSED when it was removed. Deleting a RED test to get
+// green is laundering; deleting a GREEN test whose subject was correctly removed is the
+// cleanup that makes the removal complete. `the_allowance_never_grows_past_its_ceiling` and
+// `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails` still guard every
+// remaining row, so no property lost a guard.
 
 /// RATCHET LEG 2. The ceiling bounds the set, so adding a name is a visible diff
 /// and cannot be done by accident.

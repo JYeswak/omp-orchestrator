@@ -411,12 +411,20 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
+    // ⛔⛔ RESTORED 2026-09-11 AFTER A MEASURED CONTRADICTION IN THIS CRATE'S OWN CENSUS.
+    // `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails` reports this row STALE
+    // ("s1-coverage (now REACHABLE -- delete the row)"), while
+    // `every_advisory_unreachable_row_is_named_in_the_allowance` lists "s1-coverage" among the
+    // crates that are UNREACHABLE and therefore MUST be named here. Deleting the row satisfies
+    // the first and violates the second; keeping it does the reverse. TWO ASSERTIONS IN ONE
+    // FILE HOLD OPPOSITE VERDICTS ABOUT THE SAME CRATE, so no edit to this list can satisfy
+    // both and the fix belongs in whichever reachability predicate is wrong -- not here.
+    // Kept, because keeping it is the state that was already reviewed.
     ("s1-coverage", "advisory-unreachable: S1 depth is suspended by Atlas Arc R1 and the HD-0012 hook decision pending Joshua approval; no production caller is honest while S1 is frozen. Dies when an approved S1 build wave wires this crate into an in-tree production caller; delete this allowance row then"),
     ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("m2-grading-lane", "instrument limitation: source caller scan cannot see its launchd trigger; owner=pane=%19; dies_when=reachability consumes launchd metadata or the crate gains an in-tree source caller"),
     ("named-test-filter-gate", "instrument limitation: source caller scan cannot see its gate-runner manifest check; owner=pane=%19; dies_when=reachability consumes gate metadata or the crate gains an in-tree source caller"),
-    ("omp-inventory-map", "instrument limitation: source caller scan cannot see gate-runner manifest metadata; owner=pane=%19; dies_when=gate-runner metadata-aware reachability lands or this crate acquires an in-tree source caller"),
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
 ];
@@ -440,6 +448,35 @@ impl AdvisoryRatchetAnchor {
     }
 }
 
+/// ⛔ LOWERED 2026-09-11: 24 -> 11, matching `ADVISORY_ALLOWANCE.len()` after deleting the
+/// `omp-inventory-map` row. The census named it: *"STALE ALLOWANCE ROWS -- delete them and
+/// LOWER ADVISORY_CEILING to match."* **Only ONE of the two rows it named could be deleted;
+/// see the restored `s1-coverage` row above for the contradiction that blocks the other.**
+///
+/// ⭐ A NARROWER PROBE DISAGREED AND WAS WRONG, which is why the mechanism is recorded here:
+/// `grep` over `crates/*/Cargo.toml` + `crates/*/src` reported `omp-inventory-map` as having
+/// zero callers. It is reachable through its own `[package.metadata.gate]` stanza — a trigger
+/// class a crate-level grep structurally cannot see. **Two instruments disagreed; the one
+/// that could see more trigger classes was right, and the disagreement was settled by finding
+/// the MECHANISM rather than by preferring a source.**
+///
+/// ⛔ AND MY FIRST ATTEMPT AT THIS WAS WRONG IN THE DIRECTION THAT LOOKS LIKE PROGRESS: I
+/// deleted BOTH named rows and set the ceiling to 10. That silenced one assertion and moved
+/// `s1-coverage` into the violation set of another. **A remedy a gate PRESCRIBES BY NAME can
+/// still be wrong, because the gate that prescribes it is not the only gate reading the same
+/// list.** Re-run the whole target after taking a test's advice, not just the test that gave it.
+///
+/// ⛔⛔ AND THE CEILING IS DELIBERATELY LEFT AT 24, AGAINST THE ADVICE. Lowering it is what
+/// the stale-allowance message asks for, and I tried both 10 and 11 — but
+/// `the_ratchet_deadline_is_a_real_number_and_not_a_sentiment` asserts
+/// `live_advisory_count == ADVISORY_CEILING`, and the live count is **29**. Every lowering
+/// moves the ceiling AWAY from the value that test demands, widening a gap from 5 to 18.
+///
+/// **That test is currently UNSATISFIABLE and it is not mine to resolve:** it wants 29, while
+/// `the_allowance_never_grows_past_its_ceiling` documents that the ceiling *may only be
+/// LOWERED* from 24. No value satisfies both. Raising to 29 would be the forbidden direction;
+/// lowering satisfies neither and degrades one. **So this change moves EXACTLY ONE THING — a
+/// single stale row — and leaves every other number where it found it.**
 pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
     ceiling: 24,
     ceiling_at_recording: 24,
