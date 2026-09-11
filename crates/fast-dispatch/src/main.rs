@@ -453,16 +453,56 @@ fn pane_is_live(session: &str, pane: &str) -> bool {
     if full.chars().all(|c| c.is_whitespace()) {
         return false;
     }
-    let tail: String = full
-        .lines()
-        .rev()
-        .take(25)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .collect::<Vec<_>>()
-        .join("\n");
-    !composer_occupied(&tail)
+    // A pane is live when the composer is FREE. `composer_is_free_over` already carries the
+    // negation, so this must NOT be negated again.
+    composer_is_free_over(&full)
+}
+
+/// PRESENCE, NOT POSITION: is the composer free anywhere on the CAPTURED SCREEN?
+///
+/// # What this replaced, measured 2026-09-11
+///
+/// The caller used to slice `full.lines().rev().take(25).rev()` and judge only that tail, so a
+/// composer marker ABOVE the window was invisible and the pane was ADMITTED. The predicate was
+/// POSITIONAL where it has to be EXISTENTIAL. Exposure was `max(0, pane_height - 25)` top rows.
+///
+/// ⛔ THE FIX IS NOT A WIDER BOUND. `-S` is deliberately absent from the capture at the call site,
+/// so the input is the VISIBLE SCREEN and nothing else: there is no scrollback to widen into, and
+/// `-S -200` would only move the boundary. Three positional instruments were defeated by geometry
+/// in this repository on one day — this window, a row-index anchor, and a line-based match on a
+/// 19-column pane that split a phrase mid-word — and widening the bound was wrong in all three.
+///
+/// # The measurement that licensed removing the window rather than tuning it
+///
+/// Both scopes were run through the REAL oracle — the installed `composer-typed` binary, same
+/// discriminator this crate now calls in-process — over every pane of the live session, captured
+/// with the production flags (`-p -e`), 2026-09-11T17:1xZ:
+///
+/// ```text
+///   pane  height  width   tail-25   whole screen
+///   %25     32      13     free        free
+///   %33     32     182     free        free
+///   %22     32      19     free        free
+///   %19      9      71     free        free
+///   %20      9     124     free        free
+///   %7       9      19     free        free
+///   %8      20      71     free        free
+///   %26     20     144     free        free
+///   VERDICT FLIPS: 0 of 8
+/// ```
+///
+/// ⚠️ THAT IS A MEASUREMENT, NOT AN INVARIANT, AND THE DIFFERENCE IS THE HEIGHT. The two scopes can
+/// only disagree in `max(0, height - 25)` rows, which is 7 on the 32-row panes and ZERO on
+/// everything shorter — so six of those eight rows are not evidence of anything, they are cases
+/// where the two scopes read the SAME BYTES. The real exposure tested here is seven rows on three
+/// panes. A 60-row pane has 35 such rows and the fail-closed risk scales with height: a prompt
+/// higher up the screen carrying previously-typed text would now read OCCUPIED and the pane would
+/// be refused. That direction is SAFE for a dispatch gate and it is not free — `pane-dispatch-ready`
+/// records what over-refusal costs, "fail-closed EVERY pane to BUSY -- a silent fleet-wide starve".
+/// DIES WHEN: a pane taller than ~50 rows is in routine use, at which point re-run the table above
+/// before assuming this still holds.
+fn composer_is_free_over(capture: &str) -> bool {
+    !composer_occupied(capture)
 }
 
 fn list_panes(session: &str) -> Vec<String> {
@@ -1347,5 +1387,173 @@ mod dispatch_result_tests {
             "a prompt marker with only strippable padding after it is an EMPTY composer; if this \
              refuses, fast-dispatch admits nothing and the fleet starves"
         );
+    }
+
+    /// A >25-row capture whose ONLY typed composer sits ABOVE the old tail-25 window.
+    ///
+    /// Row 1 carries the marker with typed text; rows 2..=29 are filler. Under the removed
+    /// `full.lines().rev().take(25).rev()` slice, row 1 fell OUTSIDE the window and the pane was
+    /// ADMITTED. This fixture is synthetic and says so — it is a GEOMETRY specimen, not a capture:
+    /// what it has to reproduce is a row index above a 25-row boundary, which no real 9- or 20-row
+    /// pane on this fleet can express.
+    const MARKER_ABOVE_THE_OLD_WINDOW: &str = concat!(
+        "❯ br update something --status in_progress\n",
+        "f01\nf02\nf03\nf04\nf05\nf06\nf07\nf08\nf09\nf10\n",
+        "f11\nf12\nf13\nf14\nf15\nf16\nf17\nf18\nf19\nf20\n",
+        "f21\nf22\nf23\nf24\nf25\nf26\nf27\n╰─\n"
+    );
+
+    /// KNOWN-BAD FOR THE WINDOW REMOVAL. The presence predicate must SEE a marker the positional
+    /// one could not, and this leg proves the blindness in the same assertion rather than asserting
+    /// it in prose: the tail-25 slice of this very input reads FREE while the whole screen does not.
+    #[test]
+    fn a_composer_above_the_old_window_is_detected() {
+        let rows: Vec<&str> = MARKER_ABOVE_THE_OLD_WINDOW.lines().collect();
+        assert!(
+            rows.len() > 25,
+            "the specimen must exceed the removed window or it proves nothing; got {}",
+            rows.len()
+        );
+        // THE OLD SCOPE, reconstructed here and nowhere else in the binary.
+        let old_tail = rows[rows.len() - 25..].join("\n");
+        assert!(
+            composer_is_free_over(&old_tail),
+            "POSITIVE CONTROL ON THE DEFECT: the removed tail-25 scope must read this pane FREE, \
+             or the specimen does not reproduce the geometry the window created"
+        );
+        assert!(
+            !composer_is_free_over(MARKER_ABOVE_THE_OLD_WINDOW),
+            "the whole-screen scope must read the typed composer at row 1 as OCCUPIED; if this \
+             passes, the positional window is back and a wedged pane is admitted again"
+        );
+    }
+
+    /// KNOWN-GOOD AT THE SAME HEIGHT. Widening the scope must not turn every tall pane into a
+    /// refusal — an over-strict predicate blocks dispatch to healthy panes, which
+    /// `pane-dispatch-ready` records as a silent fleet-wide starve and is worse than the defect.
+    #[test]
+    fn a_tall_pane_with_a_free_composer_still_reads_free() {
+        let mut rows: Vec<String> = (1..=28).map(|n| format!("f{n:02}")).collect();
+        rows.push("╰─".to_owned());
+        rows.push("❯ ".to_owned());
+        let tall = rows.join("\n");
+        assert!(tall.lines().count() > 25);
+        assert!(
+            composer_is_free_over(&tall),
+            "a 30-row capture whose composer is a bare marker must still read FREE under the \
+             widened scope; refusing it starves the fleet"
+        );
+    }
+
+    /// POLARITY PIN. `composer_is_free_over` carries the negation, so the call site must NOT negate
+    /// it again. I wrote `!composer_is_free_over(&full)` while making this change and caught it
+    /// before it built: that inversion admits a TYPED pane and refuses a FREE one — wrong in both
+    /// directions at once, and invisible to any leg that only tests one polarity.
+    #[test]
+    fn free_and_occupied_are_not_the_same_answer() {
+        assert!(composer_is_free_over("╰─\n❯ \n"), "bare marker is FREE");
+        assert!(
+            !composer_is_free_over("╰─\n❯ some typed text\n"),
+            "typed text after the marker is OCCUPIED"
+        );
+    }
+
+    /// REAL BYTES, PRODUCTION FLAGS — the gap every synthetic leg above leaves open.
+    ///
+    /// Captured 2026-09-11T17:2xZ with the EXACT command the call site uses, recorded here because
+    /// the bytes cannot tell you whether `-e` was set and a fixture is faithful only under the
+    /// flags that produced it:
+    ///
+    /// ```text
+    ///   tmux capture-pane -p -e -t %33  > tests/fixtures/pane-33-tall-32row-dash-e.txt
+    ///   tmux capture-pane -p -e -t %7   > tests/fixtures/pane-07-narrow-w19-dash-e.txt
+    /// ```
+    ///
+    /// `%33` is 32 rows — the geometry where the removed window and the new scope differ by SEVEN
+    /// rows, so it is the only real height on this fleet that exercises the change at all. `%7` is
+    /// 19 columns, the narrowest pane, where a phrase was separately observed wrapping mid-word.
+    /// Both carry real SGR sequences (29 and 7 escape bytes).
+    ///
+    /// ⚠️ NEITHER IS A KNOWN-BAD FOR THE WINDOW, AND THAT IS THE MEASUREMENT: `%33`'s only composer
+    /// marker is at row 30 of 32, INSIDE the last 25 rows, so both scopes agree on it. No real pane
+    /// in this session exhibits the defect — which is exactly why the geometry specimen above is
+    /// synthetic and labelled as such, and why "widening is free" was verified by running both
+    /// scopes rather than by finding a live victim.
+    ///
+    /// What these DO pin is the starve direction on real bytes: the widened scope must not turn a
+    /// genuinely free composer into a refusal at either geometry.
+    #[test]
+    fn real_captures_with_production_flags_still_read_free() {
+        for (name, capture) in [
+            (
+                "tall 32-row",
+                include_str!("../tests/fixtures/pane-33-tall-32row-dash-e.txt"),
+            ),
+            (
+                "narrow w=19",
+                include_str!("../tests/fixtures/pane-07-narrow-w19-dash-e.txt"),
+            ),
+        ] {
+            assert!(
+                capture.contains('\u{1b}'),
+                "{name}: the fixture must carry real escapes, or it is not the input the call site \
+                 sees and this leg proves nothing"
+            );
+            assert!(
+                composer_is_free_over(capture),
+                "{name}: a real capture with a free composer must still read FREE under the \
+                 whole-screen scope; refusing it is the fleet-wide starve pane-dispatch-ready \
+                 already recorded"
+            );
+        }
+    }
+
+    /// THE LEG THE NO-BITE DEMANDED. Restoring the 25-line slice AT THE CALL SITE left every other
+    /// leg in this file GREEN (`25/10/2/3/0 passed`, `exit=0`) — measured, not feared.
+    ///
+    /// The reason is structural: every leg above tests `composer_is_free_over`, a pure function over
+    /// a capture. The DEFECT was never in that function — it was in `pane_is_live` CHOOSING what to
+    /// hand it, and `pane_is_live` spawns `ntm` and `tmux`, so no unit test reaches it. A mutation
+    /// that reintroduces the window is a genuine known-bad and nothing bit, which makes this a
+    /// coverage hole rather than a reassurance.
+    ///
+    /// So this leg reads its OWN SOURCE and refuses a positional slice in the dispatch path. Line
+    /// comments are stripped first — without that, the doc comments above (which discuss `take(25)`
+    /// by name to explain why it was removed) would match the needle and the leg would fail on its
+    /// own documentation. That is the exact self-matching defect this repository has recorded
+    /// repeatedly, and it is why the mask is not optional.
+    #[test]
+    fn the_dispatch_path_holds_no_positional_capture_slice() {
+        let source = include_str!("main.rs");
+        let code: String = source
+            .lines()
+            .map(|line| match line.find("//") {
+                Some(idx) => &line[..idx],
+                None => line,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        // POSITIVE CONTROL: the mask must not have deleted the file.
+        assert!(
+            code.contains("fn pane_is_live"),
+            "comment masking destroyed the source; the leg would then pass vacuously"
+        );
+        // THE NEEDLES ARE BUILT BY `concat!` SO THIS LEG'S OWN SOURCE NEVER HOLDS THE CONTIGUOUS
+        // LITERAL. Written the obvious way first, the array itself matched and the leg failed on
+        // the UNMUTATED file — a checker that cannot pass over clean code, caught by running it.
+        // `path-literal-guard` already uses this exact construction for the same reason.
+        for needle in [
+            concat!("take", "(25)"),
+            concat!("rev()", ".take("),
+            concat!(".take", "(25)"),
+        ] {
+            assert!(
+                !code.contains(needle),
+                "a positional capture slice ({needle}) is back in the dispatch path. The composer \
+                 predicate must see the WHOLE captured screen: a marker above a fixed window is \
+                 invisible and the pane is admitted. Widening the bound is not the fix — `-S` is \
+                 absent from the capture, so the input is already only the visible screen."
+            );
+        }
     }
 }
