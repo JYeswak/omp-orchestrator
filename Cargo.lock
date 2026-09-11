@@ -429,6 +429,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
+name = "contabo-reclaim"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "serde",
+ "serde_json",
+ "subprocess-contract",
+ "tempfile",
+]
+
+[[package]]
 name = "convergence-stamp"
 version = "0.1.0"
 dependencies = [
@@ -665,6 +676,10 @@ version = "0.1.0"
 dependencies = [
  "subprocess-contract",
 ]
+
+[[package]]
+name = "doctrine-retirement-gate"
+version = "0.1.0"
 
 [[package]]
 name = "ed25519"
@@ -1059,6 +1074,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexmap"
+version = "2.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
+dependencies = [
+ "equivalent",
+ "hashbrown",
+]
+
+[[package]]
 name = "inout"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1148,8 +1173,10 @@ dependencies = [
 name = "lifecycle-monitor"
 version = "0.1.0"
 dependencies = [
+ "asupersync",
  "lifecycle-event",
  "serde_json",
+ "subprocess-contract",
  "tempfile",
 ]
 
@@ -1295,6 +1322,7 @@ dependencies = [
  "asupersync-conformance",
  "convergence-stamp",
  "crate-atom-gate",
+ "doctrine-retirement-gate",
  "finding",
  "omp-orchestrator",
  "orchestration-tick-gate",
@@ -1303,6 +1331,7 @@ dependencies = [
  "preregistration-gate",
  "r1-breadth-gate",
  "serde_json",
+ "serde_yaml_ng",
  "staged-build-gate",
  "state-wildcard-lint",
  "subprocess-contract",
@@ -2049,6 +2078,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
+
+[[package]]
 name = "s1-coverage"
 version = "0.1.0"
 dependencies = [
@@ -2143,6 +2178,19 @@ dependencies = [
  "serde",
  "serde_core",
  "zmij",
+]
+
+[[package]]
+name = "serde_yaml_ng"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -2447,6 +2495,12 @@ dependencies = [
  "crypto-common 0.2.2",
  "ctutils",
 ]
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "unty-next"
