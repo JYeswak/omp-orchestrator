@@ -286,8 +286,11 @@ fn handroll() { Command::new(\"tmux\").arg(\"kill-server\"); }
 /// ADOPTED-VERB PROOF (bead -9ub39): the packet instruction the fleet adopted
 /// (`--robot-send-receipt=x`) must NOT register as a bypass.
 ///
-/// This leg is also the tripwire against re-adding a bare `robot-send` row: the
-/// day such a row returns, this leg goes RED on the adopted verb.
+/// This leg pins comment-routing, NOT row-absence: its specimen is a `//`
+/// comment, blanked before any needle matches, so re-adding a bare
+/// `robot-send` row leaves this leg GREEN (proven 2026-09-11 by re-adding it:
+/// 15 passed / 2 failed, this leg unmoved). The row-readd tripwire is
+/// `real_workspace_ledger_balances`, which reddens UNDECLARED_PATTERN.
 #[test]
 fn adopted_robot_send_verb_does_not_trigger() {
     let source = "\

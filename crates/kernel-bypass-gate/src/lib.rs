@@ -53,7 +53,10 @@
 //! that may only be LOWERED**. The gate therefore:
 //!
 //! - REFUSES a bypass whose pattern has no allowance row at all, so an undeclared kernel
-//!   pattern is enforced absolutely from its first site;
+//!   pattern is enforced absolutely from its first site — CONTINGENT on no allowance row
+//!   ever naming that pattern: the None arm is the entire absolute enforcement, and adding
+//!   a row moves the pattern out of it. A ledger reddened by a re-added row must be answered
+//!   by DELETING the row, never by allowing it; the path of least resistance is the defect.
 //! - REFUSES when a pattern's live count **exceeds** its ceiling, so a new handroll cannot
 //!   silently widen a known gap;
 //! - REFUSES a row whose ceiling sits **above** the live count (`CEILING_HAS_SLACK`),
