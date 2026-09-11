@@ -1512,6 +1512,48 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    assertion, because the prefix is unchanged. **Assert the substring that the mutation actually
    moves**, or the message half is decorative.
 
+   **⛔ AND PINNING BOTH IS THE WORKAROUND. SPLITTING THE CHANNEL IS THE FIX.** Added 2026-09-10
+   from `GradePxhmd`, generalising four instrument over-reads measured in one evening. Rule 7 as
+   written tells you to READ HARDER. That is correct and it is second best, because it leaves the
+   ambiguity in place for the next reader.
+
+   **Every one of these is ONE CHANNEL CARRYING TWO CAUSES:**
+
+   ```
+   tvu5      rc=103   "the build failed"      vs  "the shim refused, with no diagnostic"
+   eux9p     rc=75    "the verb is refused"   vs  "the BYPASS is refused"   (gate is inside
+                                                   `if RCH_CARGO_WRAPPER_BYPASS == 1`)
+   rustfmt   rc=1     "does not parse"        vs  "is not format-clean"
+   awk       delta≠0  "unbalanced delimiters" vs  "parens inside strings and comments"
+   ```
+
+   **The remedy that actually ends it is a WIDER CHANNEL, and this repo already shipped one.**
+   `pxhmd`'s citation step had exit `4` meaning both *"gh is unavailable"* and *"the run is still
+   in progress"*. The fix was not a more careful reader — it was `EXIT_SELF_REFERENCE=9`,
+   `EXIT_RUN_IN_PROGRESS=10`, `EXIT_LOCAL_AGGREGATE_UNAVAILABLE=11`. Three causes, three codes,
+   and the over-read became unconstructible. Compare `e0klo`, where `AdapterStatus` gained a
+   fourth variant rather than teaching readers that `Live` sometimes means foreign; and `6636a`,
+   where `ReapLockHolder::{NoHolder, ProbeUnavailable}` replaced the single token `"unknown"`.
+
+   **So the rule has two tiers, and prefer the second:**
+
+   1. **As a CONSUMER** you cannot change the channel: pin the message AND the code together, and
+      say which cause you observed.
+   2. **As the AUTHOR of the signal** you can: give each cause its own code or variant. An
+      assertion that must read two fields to disambiguate is telling you the emitter under-typed
+      its outcome.
+
+   **The outstanding instance is `exit=75` itself** — one code for *"bypass refused on Darwin"*
+   while fleet doctrine reads it as *"the verb is refused"*, which is `eux9p`. A distinct code for
+   the two would retire the misreading permanently instead of documenting it. That file is
+   SUBSTRATE, so the remedy is an upstream report, never a local patch.
+
+   **NO-CLAIM.** Splitting a channel removes ONE ambiguity; it does not make the emitter honest.
+   A gate can emit nine precise codes and still pick the wrong one, and `e0klo` is the proof that
+   the variant existing is not the same as the aggregate consuming it — that defect was a typed
+   field recorded and then ignored by the summary that counted it.
+
+
 7b. **TWO MUTATIONS PROVE INDEPENDENCE ONLY IF THEIR FAILURE SETS ARE DISJOINT.** Measured
    2026-09-07: `%20` reported *"two mutations redden DIFFERENT leg pairs, so the code assertions and
    the decision assertions are provably independent."* `%7` re-ran both and found the pairs
