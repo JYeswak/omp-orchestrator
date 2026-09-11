@@ -3586,9 +3586,39 @@ the bead needs a grader, not a sweep. A bead is genuinely abandoned only when it
 absent from a fresh roster **AND** its stated commit is not in `git log`. Absent the third leg,
 every claim-retirement sweep is one instrument away from deleting landed work.
 
+⛔ **BUT THE COMMIT PROVES SURVIVAL, NEVER DISPOSITION — AND `git log` ALONE DECIDES WRONG HALF
+THE TIME.** `UldvuSchedulerProbe` audited its own row against the leg it had just contributed and
+found the mirror image of the case below:
+
+```
+a4468ad   release beat in the COMMIT MESSAGE, absent from the bead   -> tracker-only reader decides wrong
+948236e   release beat in the BEAD comment, absent from the message  -> git-log-only reader decides wrong
+```
+
+**Two observed cases, and the release beat sits in EXACTLY ONE of the two surfaces each time —
+a DIFFERENT surface each time.** That is a shape, not two anecdotes. **Read leg 3 ALONGSIDE the
+bead, never as a substitute for it:** the commit answers *did the work survive*, the bead answers
+*was it released*, and neither answers the other. A reader taking *"the named commit exists"* as
+licence to decide from `git log` alone gets `948236e` backwards — a landed commit with no stated
+disposition reads as work-in-flight when it is in fact awaiting a non-author grade.
+
+⛔ **AND SURVIVAL DOES NOT RE-PROVE GREEN.** `VerifyDispatchGap`, declining to assert it: the diff
+landed, is pushed, and is byte-unchanged `git diff --numstat a4468ad HEAD -- <path>` → EMPTY —
+**but 12 commits have landed since its last run, so "still green" from it now would be a
+transcribed value**, which this file already forbids. **Survival is about the diff; green is about
+the tree, and a grader that wants green re-runs it.**
+
 **AND AN AUTHOR'S RELEASE IS OFTEN ONLY IN THE COMMIT MESSAGE.** `a4468ad` ends *"Bead:
 omp-orchestrator-poumg.7 (left in_progress for a non-author grade)"*. That is the **RELEASE beat**
 of `file → claim → dispatch → ACK → observe → verify → RELEASE → close`, written into the commit
 **because the tracker has no field to record a release in** — which is exactly why such a bead
 reads as unheld. Two panes refused grades the same week for the inverse (an author still holding
 `assignee`), so the gap cuts both ways.
+
+⭐ **THE SHARPEST STATEMENT OF WHY ALL THREE LEGS EXIST came from a subagent reasoning about its
+own mortality.** `VerifyDispatchGap`: *"I will not outlive this task, so by the time anyone reads
+my binding it is likely false in the only direction that matters — do not cite my liveness line,
+re-measure."* **An agent that writes the expiry of its own evidence into the evidence is doing the
+thing this whole section is about.** `poumg.7` is the concrete near-miss: under a namespace-only
+or liveness-only sweep, **a live grader AND a landed, pushed, unmodified fix would both have been
+swept.** **Grade the commit, not the claimant.**
