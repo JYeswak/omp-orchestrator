@@ -1864,6 +1864,16 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    **91 crates** / **165 `lib.rs`+`main.rs` files** / **179 including `src/bin/*.rs`**. All true,
    none interchangeable — state which you counted.
 
+   ⛔ **RESIDUAL, AND IT IS THE ONE THE THREE FIXES DO NOT COVER: 8r's GREEN IS EXACTLY AS
+   COMPLETE AS ITS `cargo metadata` IS FRESH.** Found by `GradePxhmd` 2026-09-10, inside the
+   corrected rule. `-i` catches a `src_path` that has been **DELETED** — that path prints
+   capital-`E` `Error:`. It cannot catch one that was **NEVER LISTED**, because a target added
+   since the metadata read emits nothing at all. Same shape as every other defect here: one
+   channel, two populations — *targets that exist* versus *targets cargo listed*. So the honest
+   statement of a green is **"every target cargo knew about when metadata ran"**, and
+   `--offline` reads a cache. Re-run metadata in the same command as the sweep, never from a
+   variable set earlier in the session.
+
    **NO-CLAIM.** This proves the crate **PARSES**, which is strictly weaker than type-checks and
    far weaker than compiles. It is a pre-check that stops you buying a remote slot to learn a
    delimiter is unbalanced; `cargo check -p <crate>` (~15 s local, also not refused) is the next
