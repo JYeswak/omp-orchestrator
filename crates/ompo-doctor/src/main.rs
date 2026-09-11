@@ -870,7 +870,10 @@ fn run_capabilities(rest: &[String]) -> ExitCode {
 }
 
 /// `ompo parity --installed PATH [--json]` compares an installed artifact's advertised verbs
-/// against the canonical source umbrella. A malformed or unrunnable artifact is never current.
+/// against the canonical source umbrella. A malformed or unrunnable artifact is never current,
+/// and neither is a verdict from a build that cannot name its own revision: `status` is the
+/// VERDICT, `verb_set_status` the observation it rests on, and the two are published apart so
+/// an UNKNOWN never hides the comparison that was actually performed.
 fn run_parity(rest: &[String]) -> ExitCode {
     let mut installed: Option<PathBuf> = None;
     let mut json_output = false;
@@ -915,6 +918,9 @@ fn run_parity(rest: &[String]) -> ExitCode {
         "installed_verbs": &probe.installed_verbs,
         "missing": &probe.missing,
         "unexpected": &probe.unexpected,
+        "verb_set_status": probe.verb_set_status,
+        "missing_provenance": &probe.missing_provenance,
+        "unmeasured_axes": probe.unmeasured_axes,
     });
     if json_output {
         let envelope = umbrella::envelope("parity", probe.status, payload);
@@ -927,9 +933,9 @@ fn run_parity(rest: &[String]) -> ExitCode {
             }
         }
     } else if probe.exit_code == provenance::PARITY_EXIT_CURRENT {
-        println!("OMPO_PARITY status={} installed_path={} source_revision={} build_commit={} message={} detail={}", probe.status, probe.installed_path, probe.provenance.source_revision, probe.provenance.build_commit, probe.message, probe.detail);
+        println!("OMPO_PARITY status={} verb_set_status={} installed_path={} source_revision={} build_commit={} missing_provenance={:?} unmeasured_axes={:?} message={} detail={}", probe.status, probe.verb_set_status, probe.installed_path, probe.provenance.source_revision, probe.provenance.build_commit, probe.missing_provenance, probe.unmeasured_axes, probe.message, probe.detail);
     } else {
-        eprintln!("OMPO_PARITY status={} installed_path={} source_revision={} build_commit={} message={} detail={}", probe.status, probe.installed_path, probe.provenance.source_revision, probe.provenance.build_commit, probe.message, probe.detail);
+        eprintln!("OMPO_PARITY status={} verb_set_status={} installed_path={} source_revision={} build_commit={} missing_provenance={:?} unmeasured_axes={:?} message={} detail={}", probe.status, probe.verb_set_status, probe.installed_path, probe.provenance.source_revision, probe.provenance.build_commit, probe.missing_provenance, probe.unmeasured_axes, probe.message, probe.detail);
     }
     ExitCode::from(probe.exit_code)
 }
