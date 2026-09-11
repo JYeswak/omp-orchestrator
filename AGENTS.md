@@ -6321,6 +6321,101 @@ REFUTATION ON NARRATIVE** — including the one being corrected, which noted tha
 peer's prose was the exact defect it had been corrected for an hour earlier. **Taking a
 correction on trust would have repeated the error inside the apology for it.**
 
+## ⭐⭐ ONE PENDING RUN CLEARS **FOUR BEADS' CI HALVES AT ONCE** — measure the REPAIR, not only your own commit
+
+**Three panes measured in-flight containment of one commit. A fourth measured the REPAIR that
+ended the build blindness:**
+```
+12 of 12 in-flight runs CONTAIN 454328b        --limit 12, 1.94s
+```
+⛔ **`34577201755` scored ZERO on rung 3 because `gate-runner` did not compile. EVERY run now
+pending carries the repair.** ⭐ **So the next completed run is simultaneously the first
+verdict for the ledger bead, the first for the host-precondition bead (whose guards were in
+the blinded run), and the first that can answer two other crates' legs.**
+
+⭐⭐ **AND THE FALSIFIER IS PRE-STATED: if a run containing `454328b` STILL scores zero on
+rung 3, that is a NEW defect, not the old one.** **Naming in advance which observation would
+mean something different is what makes the pending verdict readable.**
+
+## ⭐⭐ A NO-CLAIM THAT IS **SILENT WHERE A READER WILL FILL THE SILENCE** IS DOING HALF THE JOB
+
+**A grader's close said *"`454328b` is PUSHED and has not appeared in a verdict-bearing run
+that built"* — true, re-measured, still true, and it never said *"none is pending."*** ⛔ **It
+refused the credit anyway:**
+
+> *"I did not make the inference because I had no occasion to, not because I checked. My
+> correct-by-omission close would still have left a reader inferring that nothing was coming."*
+
+⭐ **Correctness by omission is not correctness by verification, and the reader cannot tell
+them apart.** **It closed the gap at a cost of 1.94 seconds rather than resting on having
+happened not to say the wrong thing.**
+
+## ⭐ AND THE 9-vs-12 DELTA IS **TIME**, WHICH IS THE THIRD MOVING QUANTITY READ AS A DISAGREEMENT
+
+**Not two instruments and not two populations.** Three runs started between the probes.
+⭐ **Third instance tonight: the index that emptied between check and commit · `dirty=39` ·
+the drained volume.** ⛔ ***Emptiness is an instant, not a state — and so is a run list.***
+**Stamp the MINUTE on a run figure exactly as we now stamp the TREE on a test figure.**
+
+## ⭐⭐⭐ AN `UNKNOWN` HAS **TWO DUTIES**: REPORTING IT AND RESOLVING IT
+
+**The causal chain, traced end to end by the pane that started it:**
+```
+it reported two UNKNOWNs honestly and correctly refused to call them negatives
+   -> left them standing for an hour, while the answer was FOUR SECONDS away
+   -> a peer filled the gap with an inference
+   -> a second pane awarded that inference `0 possible`
+   -> a third adopted it
+   -> one command falsified it
+```
+⛔ ***"I have been treating 'I said UNKNOWN' as discharging the duty. It discharges the
+REPORTING duty and not the RESOLUTION duty."*** ⭐ **An unresolved CHEAP unknown is an open
+invitation, and the honesty of the label does not close it.** **Reporting is necessary and not
+sufficient.**
+
+## ⭐⭐ HAND OFF A BLOCKED BEAD WITH THE RUNS THAT WILL ANSWER IT, BY NAME
+
+**Rather than hold a blocked bead, it named the exact runs that can resolve it and the check
+to apply, in order:**
+```
+1. grep -c 'GATE_RUNNER ' <log>       nonzero, or the gate produced no verdict
+2. grep -c 'could not compile'        zero, or it is absent-by-build
+3. GATE_RUNNER_FAILURE_CAUSE | grep -cE ':[0-9]+:[0-9]+:$'
+     == total -> STILL header-only, the message fix did not land
+     <  total -> messages are landing, the item is SATISFIED
+```
+⛔ **Three rungs, each of which can produce a false read on its own.** ⭐ **And rung 3 is ONE
+CHARACTER: does `detail=` END at `:col:`?** ⛔ **NEVER use length — a header alone is 104-155
+bytes, which is exactly why *"lengths 111-162, so it carries real panic text"* passed under
+the live defect.**
+
+⭐ **AND NEITHER IN-FLIGHT COUNT SHOULD BE PUBLISHED WITHOUT ITS MINUTE.** `9 at 08:2x` and
+`12` minutes later are both correct samples; **a reader taking either as a STATE rather than a
+SAMPLE repeats the entire class.**
+
+## ⛔⛔ A **DISPLAY BOUND** REACHED A SENTENCE — `| head -4` published as a set
+
+**Seventh member of the capture-wide family, and the block above inherited it: the answering
+runs were reported as FOUR. The real figure is TWELVE OF TWELVE.**
+```
+the pipeline ended in  | head -4
+the four named are real and contain the repair -- and so do the other eight
+```
+⛔ **A reader taking that list as exhaustive concludes eight pending runs CANNOT answer the
+bead, when every one of them can.** ⭐ ***A `head` is a DISPLAY bound, not a MEASUREMENT
+bound, and it must never reach a sentence.***
+
+⭐ **Same tell and same remedy as a `{0,400}` grep bound, a `cut -c1-110`, a `cut -c1-600` and
+a `| wc -l`: CAPTURE WIDE, FILTER AFTER.** ⛔ **Two of the seven now carry one author's name —
+the first destroyed a `.code()` site with a zero-width window, this one destroyed eight rows
+with a `head`.**
+
+⭐⭐ **AND THE CORRECTED HEADLINE IS BIGGER THAN THE CORRECTION: ALL TWELVE pending runs carry
+the repair, so the build blindness ends with the FIRST ONE TO COMPLETE** — and that single run
+is simultaneously the first verdict for four separate beads. **The pre-registered
+discriminator stands: if a run containing the repair STILL scores zero on rung 3, that is a
+NEW defect and not the old one.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
