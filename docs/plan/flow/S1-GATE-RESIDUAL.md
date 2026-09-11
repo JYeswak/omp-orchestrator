@@ -1,13 +1,19 @@
 # S1 gate residual — the 20 non-PASS crates, ENUMERATED
 
 ```
-SOURCE      run 34577876082   headSha 2deb06cd   completed/failure   2026-09-11
+SOURCE      run 34587961695   headSha df49750a   completed/failure   2026-09-11
 ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest "completed"
 
-⭐ FIRST RUN IN THIS DOCUMENT'S HISTORY WHOSE CAUSE TEXT CARRIES MESSAGES, NOT LOCATIONS:
-  GATE_RUNNER_FAILURE_CAUSE  55 lines · header-only 0 of 55 (was 59 of 59) · detail 94..6351 B
-  Emitted by f60845e (cause capture) + 9176b51 (message capture), repaired by 454328b.
-  The four rungs below were cleared on this run by FOUR panes independently.
+✅ THE CAUSE-CAPTURE ARC IS CLOSED ON THIS RUN. Four rungs cleared before a row was read:
+  GATE_RUNNER ' ' 2 · could-not-compile 0 · GATE_RUNNER_FAILURE_CAUSE 59 lines
+  assert_eq OPERANDS: details containing "left:" 10, against a denominator of 10 details
+  announcing `assertion left == right failed` -- measured in the SAME run, same command.
+  f60845e location-only (59/59) -> 9176b51 message (55/55, header-only 0) -> 51990cc operands
+  5/10 (adjacency-bounded) -> d342505 block-bounded 10/10. Every step a ratio, never a count.
+
+⛔ AND THE TALLY DID NOT MOVE WITH IT. crates 89 -> 90 (build-stamp landed and PASSES),
+  pass 81 -> 82, fail 4, unmeasurable 4, SAME FOUR NAMES. Readable causes are progress on
+  SIZING the failing set, never on shrinking it. Do not read this arc as a crate getting fixed.
 
 ⛔⛔ RETRACTED WITHIN THE HOUR BY ITS OWN AUTHOR -- DO NOT ACT ON THE DELETED TEXT. This block
   read "seven of no-shell-gate's legs emit ONE byte-identical cause, so one behaviour closes
@@ -28,7 +34,15 @@ ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest
   NOT TWO. For those 10 the deciding values are unreadable by anyone. The message-capture fix
   is real (55/55 carry a message where 59/59 carried only a location) and INCOMPLETE.
 
-SUMMARY     GATE_RUNNER crates=89 · pass=81 · fail=4 · unmeasurable=4   (81+4+4=89 ✓)
+  ✅ RESOLVED on the SOURCE run above -- 10 of 10 operands captured. Two commits: 51990cc
+  collected them adjacent to the message and scored 5/10, because an assert_eq MESSAGE can be
+  MULTI-LINE (one embeds captured gate stderr, so continuation text sits between the assertion
+  and its operands). d342505 bounds the scan by the TEST BLOCK instead -- skip continuation,
+  stop at '---- ' or a new 'panicked at', stop once both operands are held. The 5/10 was
+  published as a MISS with the same prominence as the hits, and its mechanism was named as an
+  UNVERIFIED candidate plus the one command that would decide it; that command closed it.
+
+SUMMARY     GATE_RUNNER crates=90 · pass=82 · fail=4 · unmeasurable=4   (82+4+4=90 ✓)
 FAILING     no-shell-gate · omp-inventory-map · omp-orchestrator · ompo-doctor
 
 ⛔ THE TALLY IS BYTE-IDENTICAL TO THE SUPERSEDED RUN (89/81/4/4, same four names). NOTHING
