@@ -1329,6 +1329,15 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             GateReachability::Reachable {
                 trigger: ".git/hooks/pre-commit".into(),
             }
+        } else if declares_gate_check(repo_root, "no-shell-gate") {
+            // SECOND ARM (3xpf0): the crate's own [package.metadata.gate]
+            // stanza, same detector and trigger string as crate_reachability.
+            // The hook stays first (proven to bite); the stanza covers trees
+            // where the hook is not installed (fresh clones, lanes).
+            GateReachability::Reachable {
+                trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                    .into(),
+            }
         } else {
             GateReachability::Unreachable {
                 reason: ".git/hooks/pre-commit does not exist on this clone".into(),
@@ -1338,9 +1347,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         disposition: CensusDisposition::Blocking,
     });
 
-    // path-literal-guard, state-wildcard-lint, undrained-pipe-lint:
-    // their only invocation is .github/workflows/gate.yml, and there is no
-    // remote to run it on.
+    // path-literal-gate, state-wildcard-lint, undrained-pipe-lint: workflow
+    // invocation needs a remote; the stanza arm below covers runner-discovered
+    // crates on lanes and clones where it cannot run (3xpf0).
     for gate in [
         "path-literal-guard",
         "state-wildcard-lint",
@@ -1351,6 +1360,15 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             reachability: if has_remote {
                 GateReachability::Reachable {
                     trigger: ".github/workflows/gate.yml".into(),
+                }
+            } else if declares_gate_check(repo_root, gate) {
+                // THIRD ARM (3xpf0): same stanza detector as crate_reachability.
+                // Covers lanes/clones where the workflow cannot run but the
+                // runner discovers the crate (path-literal-guard gained its
+                // stanza this unit). Last: never re-attributes a workflow row.
+                GateReachability::Reachable {
+                    trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                        .into(),
                 }
             } else {
                 GateReachability::Unreachable {

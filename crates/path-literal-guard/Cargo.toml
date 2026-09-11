@@ -15,6 +15,12 @@ path = "src/main.rs"
 
 [lints.rust]
 unsafe_code = "forbid"
+[package.metadata.gate]
+# 3xpf0: the bin's --repo-wide mode is a side-effect-free check (exit 0
+# clean / 1 violation / 2 usage / 3 nothing / 4 vacuous), so gate-runner can
+# execute it. Moves path-literal-guard from workflow-only (dead without a
+# remote) to runner-discovered, same shape as fleet-composite 8cfeac1.
+checks = [["--repo-wide", "{repo}"]]
 
 [build-dependencies]
 build-stamp = { path = "../build-stamp" }
