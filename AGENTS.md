@@ -1789,6 +1789,86 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    Use the compiler's dead-code warning, or `ripwire --uses`, which attributes to the enclosing
    symbol.
 
+8r. **THE CHEAP PARSE ORACLE — AND ITS FIRST THREE FORMS WERE ALL WRONG.** Added 2026-09-10. A
+   parse error in any file of a crate fails every `cargo` verb for that crate, so tonight one pane
+   spent **574,889 ms of a Contabo slot** discovering an unclosed delimiter. `rustfmt --check` is
+   a **free local parse oracle** — it is not a build, so the `exit=75` refusal does not apply. But
+   the obvious form is defective in three independent ways, each found only by asking what the
+   *previous* fix still could not see:
+
+   ```
+   rustfmt --edition 2021 --check <path> >/tmp/rf.txt 2>&1 ; grep -c '^error' /tmp/rf.txt
+                                                             ^^^^^^^^^^^^^^^^ ALL THREE BUGS
+   ```
+
+   **(1) A MISTYPED PATH SCORES A PASS.** `rustfmt` prints lowercase `error:` for a parse failure
+   and **capital-`E` `Error:`** for a missing file, so `^error` cannot see a path that never
+   resolved — the instrument reports identically to a clean tree. Measured:
+
+   ```
+   src/lbi.rs   (TYPO)     rc=1   '^error' = 0   '-ciE ^error' = 1    "Error: file ... does not exist"
+   src/lib.rs   (clean)    rc=1   '^error' = 0   '-ciE ^error' = 0
+   unclosed delimiter      rc=1   '^error' = 1   '-ciE ^error' = 1    <- the known-bad leg
+   ```
+
+   **`-i` is the rung-1 equivalent of `Remote command finished: exit=`**: it makes *did not run*
+   and *did not parse* report through the same nonzero, so a zero finally means what the rule
+   claims. Swept over all 91 crate roots it flips **zero** answers, so the widening introduces no
+   false positive — and leg D above proves it still fires on a real parse error.
+
+   **(2) `rc` IS OVERLOADED FOUR WAYS AND HERE IT INVERTS** — the NONEXISTENT file returns `rc=1`
+   while a genuinely clean file returns `rc=0`, and a merely unformatted-but-valid file also
+   returns `rc=1`. **Read the `^error` count. Never `rc`.**
+
+   **(3) THE CRATE ROOT IS NOT THE CRATE — IT MISSES EVERY INTEGRATION TEST.** `tests/*.rs` are
+   **separate crate roots**; no `mod` path connects them to `lib.rs`. Proven by planting an
+   unclosed delimiter in `crates/ompo-doctor/tests/l1_doctor.rs` and restoring it byte-identically:
+
+   ```
+   run on src/lib.rs      total errors = 0   <- BLIND to the planted defect
+   run on all 15 targets  total errors = 1   <- catches it
+   ```
+
+   `ompo-doctor` has **15 targets**: 1 lib · 1 bin · 12 test · 1 custom-build. A crate-root green
+   covers `lib.rs` + 12 modules and says nothing about 13 other files — while being
+   byte-indistinguishable from a green covering all of them.
+
+   ✅ **THE COMPLETE FORM. Derive the roots; never choose one by hand:**
+
+   ```bash
+   cargo metadata --no-deps --format-version 1 --offline \
+     | jq -r '.packages[]|select(.name=="<crate>")|.targets[].src_path' \
+     | while read -r p; do
+         rustfmt --edition 2021 --check "$p" >/tmp/rf.txt 2>&1
+         grep -ciE '^error' /tmp/rf.txt
+       done
+   # sum == 0  =>  every target parses AND every path resolved
+   ```
+
+   **1,165 ms for all 15 targets of `ompo-doctor`** — about 1/13th of one `cargo check`, and
+   `cargo metadata` is explicitly allowed under the build refusal. This also **retires
+   root-selection-by-judgment**: you do not decide whether the root is `lib.rs` or `main.rs`,
+   cargo tells you it is both plus thirteen more. The bin-with-zero-`mod`s trap
+   (`ompo-doctor/src/main.rs` declares **zero** file-backed mods, so a green there covers ONE
+   file) dissolves rather than needing a workaround.
+
+   **IF YOU CITE THE PATH LIST, USE `--files-with-diff`** — it emits bare paths with no `:LINE:`
+   suffix, which makes the lines-vs-files conflation **unconstructible** instead of merely warned
+   against. Three agents reported `13 paths` for output containing **3 files** (`lib.rs` 11 hunks
+   + 1 + 1) because a `sed`/`sort -u` over the un-deduplicated form dedupes HUNKS, and then built
+   a false "the output is non-stationary between reads" rule on the disagreement. Three reads were
+   **byte-identical** (one `sha256` across all three).
+
+   **DENOMINATORS, since four different true counts circulated for one crate:** `ompo-doctor` =
+   **15 targets** / **12 file-backed modules** / **13 `mod` declaration lines**. Workspace =
+   **91 crates** / **165 `lib.rs`+`main.rs` files** / **179 including `src/bin/*.rs`**. All true,
+   none interchangeable — state which you counted.
+
+   **NO-CLAIM.** This proves the crate **PARSES**, which is strictly weaker than type-checks and
+   far weaker than compiles. It is a pre-check that stops you buying a remote slot to learn a
+   delimiter is unbalanced; `cargo check -p <crate>` (~15 s local, also not refused) is the next
+   rung and the only one that answers a type question.
+
 8q. **AN `OR`ed READBACK NEEDLE IS ONLY AS STRONG AS ITS WEAKEST ALTERNATIVE — it confirms the FILE,
    not the EDIT.** Measured 2026-09-07 by `%20`, which caught it because two instruments disagreed.
 
