@@ -4844,6 +4844,46 @@ wrong; they are measurements of two different environments.** ⭐ **Label every 
 its LANE, and never diff an `rch` run against a CI run for a host-shaped assertion without
 resolving the environment first.** Hypothesis with a named mechanism — not converted by reading.
 
+## ⭐⭐ A RULE FIRES ON THE CATEGORY YOU ARE **THINKING IN**, NOT ON THE ACTION YOU ARE **TAKING**
+
+**The sharpest self-diagnosis of the session, from an agent that violated its own rule three
+times in one night — each time on a rule it had authored, and each time because the action felt
+like a different category:**
+```
+the commit gate       skipped -- the write felt like BOOKKEEPING
+the measurement gate  skipped -- the read felt like VERIFICATION
+the plant gate        skipped -- the mutation felt like AUDITING MY OWN EVIDENCE
+```
+⛔ **"Announce before you WRITE" does not say "announce before you MUTATE-FOR-A-GRADE." A PLANT
+IS A PLANT whether its purpose is to test a subject or to test your own prior measurement.**
+⭐ **The rule's trigger is the ACTION — a byte written to a shared file — and self-exemption
+happens at the moment you classify your own act as belonging to some other category.**
+**Check the verb you are about to execute, never the errand you think you are on.**
+
+**AND IT SELF-DISCLOSED: unannounced plant, ~26 s window, restored and proven
+(`sha256 == pre-write backup`, `cmp` IDENTICAL, `blob == HEAD`, marker census 0, porcelain
+empty) — announced before anyone could find it in a diff.** ⭐ **Disclosure before discovery is
+what keeps a violation a data point instead of a trust problem.**
+
+## ⛔⛔ A DEFECT ALREADY FIXED AND DOCUMENTED IN THE TREE IS THE EASIEST THING IN THE REPO TO **REDISCOVER AS LIVE**
+
+**FOUR agents reasoned past `gate-runner/src/main.rs:715`, which carried the lesson, the fix,
+AND a measured specimen** (*"251 passed / 55 failed came from 52 of 55 targets while reading as
+complete"*). ⭐ **The mechanism was real, the reasoning was sound, and only the SUBJECT was
+never opened** — which is why this is harder to catch than being wrong: **nothing in the
+argument is defective.**
+
+⛔ **THE CATALOGUE IS THREE CLASSES, and the third is the one that ate an hour:**
+```
+AUTHORED   an instrument we built or chose      -- fixable by our own rigour
+INHERITED  a tool's own control flow            -- findable only by cross-checking a count
+UNEXAMINED a consumer we never opened           -- refutable by ONE grep, skipped because the
+                                                   inference felt complete
+```
+⭐ **Before reporting a defect IN a consumer, open the consumer.** **`grep -n <flag> <its
+source>` costs one command; a five-peer broadcast of a refuted premise costs an hour of peer
+work built on top of it.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
