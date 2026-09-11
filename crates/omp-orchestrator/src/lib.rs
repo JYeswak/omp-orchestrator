@@ -35,7 +35,7 @@ pub mod jsm_suggest;
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use text_structure::code_only;
+use text_structure::{code_only, toml_code_only};
 pub mod target_directory;
 pub mod resident_tick;
 pub mod resident;
@@ -767,10 +767,18 @@ fn configured_upstream_crate(repo_root: &Path, gate: &str) -> String {
 /// The chain this arm asserts is a real one and it terminates in a trigger:
 /// `.github/workflows/gate.yml` -> `cargo run -p gate-runner -- --run` -> `gate_runner`
 /// `Command::new("cargo") run -p <crate> --bin <bin>`, derived from this stanza.
+/// A commented stanza (`# [package.metadata.gate]`) is literal text, not a
+/// trigger: the match runs per line through `toml_code_only`, so `#`-comments
+/// (quote-aware) never count. Raw substring matching counted them, which made
+/// a fully-commented stanza read REACHABLE -- a false wired verdict, worse
+/// than the false unwired one this arm replaced (udtqk revision).
 fn declares_gate_check(repo_root: &Path, crate_name: &str) -> bool {
     let manifest = repo_root.join("crates").join(crate_name).join("Cargo.toml");
     std::fs::read_to_string(manifest)
-        .map(|text| text.contains("[package.metadata.gate]"))
+        .map(|text| {
+            text.lines()
+                .any(|line| toml_code_only(line).contains("[package.metadata.gate]"))
+        })
         .unwrap_or(false)
 }
 
@@ -3301,6 +3309,34 @@ mod disk_pressure_thresholds {
         assert_eq!(
             crate::ADVISORY_CEILING_RECORDED_AT_UNIX,
             crate::ADVISORY_RATCHET.recorded_at_unix()
+        );
+    }
+    /// A commented stanza is literal text, not a trigger (udtqk revision
+    /// after GradeCatch22's comment-out mutation stayed green on the raw
+    /// substring detector). Both directions pinned: live stanza true,
+    /// fully-commented stanza false.
+    #[test]
+    fn declares_gate_check_ignores_commented_stanza() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("crates").join("probe-gate");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"probe-gate\"\n\n[package.metadata.gate]\nchecks = [[\"{repo}\"]]\n",
+        )
+        .unwrap();
+        assert!(
+            crate::declares_gate_check(root.path(), "probe-gate"),
+            "a live stanza must read as a trigger"
+        );
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"probe-gate\"\n\n# [package.metadata.gate]\n# checks = [[\"{repo}\"]]\n",
+        )
+        .unwrap();
+        assert!(
+            !crate::declares_gate_check(root.path(), "probe-gate"),
+            "a commented stanza must not read as a trigger"
         );
     }
 }
