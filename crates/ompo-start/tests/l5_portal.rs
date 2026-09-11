@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use ompo_start::inception::{write_atomic_observed, AtomicWriteEffect};
 use ompo_start::liveness::SourceVerdict;
 use ompo_start::portal::{
     data_hash_without_self, gates_verdict, observability, parse_gates_aggregate, queue_depth, seal,
@@ -452,4 +453,173 @@ fn one_next_action_is_object() {
         validate_one_next_action(&json!([action])),
         Err(NextActionDefect::NotAnObject { len: 1 })
     );
+}
+
+// ---------------------------------------------------------------------------
+// q7jz and u7qq -- the two inception durability ORDER laws.
+//
+// These legs live in `l5_portal` because that is the target both acceptances
+// name. THE INSTRUMENT IS NOT AN INJECTION. Nothing can fail between the write
+// and the rename through the public API, and the remote lane runs as ROOT, so
+// chmod, read-only files and unwritable directories all silently succeed there
+// and every permission-based known-bad is INEXPRESSIBLE. So the order is read
+// out of production instead: `write_atomic_observed` is the only write path,
+// and each effect it returns is the RETURN VALUE OF THE SYSCALL THAT PERFORMED
+// IT. An effect cannot be reported without its syscall having returned Ok, and
+// deleting the fsync deletes its record. Real bytes land on a real filesystem
+// in every leg below; nothing here is a fake.
+// ---------------------------------------------------------------------------
+
+/// The ordered effects of one real atomic replace into a fresh directory, plus
+/// the destination path and its parent.
+fn observed_replace(payload: &[u8]) -> (tempfile::TempDir, std::path::PathBuf, Vec<AtomicWriteEffect>) {
+    let dir = tempfile::tempdir().expect("fixture directory");
+    let destination = dir.path().join("inception.json");
+    let effects =
+        write_atomic_observed(&destination, payload).expect("the atomic replace must succeed");
+    (dir, destination, effects)
+}
+
+fn index_of(effects: &[AtomicWriteEffect], wanted: fn(&AtomicWriteEffect) -> bool) -> usize {
+    effects
+        .iter()
+        .position(wanted)
+        .unwrap_or_else(|| panic!("effect absent from the observed sequence: {effects:?}"))
+}
+
+/// q7jz, THE NAMED ACCEPTANCE: the staging file's bytes are fsynced BEFORE the
+/// rename publishes them. Renaming an unsynced file is a torn write.
+#[test]
+fn inception_fsyncs_file() {
+    let payload = b"{\"schema_version\":\"inception.v1\"}\n";
+    let (_dir, destination, effects) = observed_replace(payload);
+
+    // KNOWN-GOOD, and the proof this is production and not a simulation: the
+    // bytes are actually on disk afterwards.
+    assert_eq!(
+        std::fs::read(&destination).expect("the destination exists"),
+        payload,
+        "the observed replace must actually publish the bytes"
+    );
+
+    let written = index_of(&effects, |effect| {
+        matches!(effect, AtomicWriteEffect::BytesWritten(_))
+    });
+    let fsynced = index_of(&effects, |effect| {
+        matches!(effect, AtomicWriteEffect::FileFsynced(_))
+    });
+    let renamed = index_of(&effects, |effect| {
+        matches!(effect, AtomicWriteEffect::Renamed { .. })
+    });
+
+    // THE LAW, stated as an order and not as a presence: an fsync that happens
+    // AFTER the rename is not this law, and a present-but-late fsync is
+    // exactly what a presence-only assertion would accept.
+    assert!(
+        written < fsynced,
+        "the bytes must be written before they are synced: {effects:?}"
+    );
+    assert!(
+        fsynced < renamed,
+        "q7jz: fsync must precede the rename, got {effects:?}"
+    );
+
+    // And the fsync is on THE STAGING FILE's fd -- the same path the rename
+    // publishes FROM -- not on some other file that happens to be syncable.
+    let AtomicWriteEffect::FileFsynced(synced_path) = &effects[fsynced] else {
+        unreachable!("selected by matches!")
+    };
+    let AtomicWriteEffect::Renamed { from, to } = &effects[renamed] else {
+        unreachable!("selected by matches!")
+    };
+    assert_eq!(
+        synced_path, from,
+        "the synced fd must be the staging file the rename publishes"
+    );
+    assert_eq!(to, &destination);
+    assert_eq!(
+        effects[written],
+        AtomicWriteEffect::BytesWritten(payload.len()),
+        "the byte count is the write's own return, not a re-measurement"
+    );
+
+    println!("Q7JZ_ORDER {effects:?}");
+}
+
+/// u7qq, THE NAMED ACCEPTANCE: the PARENT DIRECTORY is fsynced AFTER the
+/// rename. The directory entry is not durable until the parent is synced
+/// (beads_rust sync/mod.rs:507-509), so a parent fsync taken BEFORE the rename
+/// syncs a directory that does not yet contain the entry.
+#[test]
+fn inception_fsyncs_parent_dir() {
+    #[cfg(not(unix))]
+    panic!("u7qq is a unix durability law and this lane is not unix: UNMEASURED, never green");
+
+    let (dir, destination, effects) = observed_replace(b"payload\n");
+    assert!(destination.exists());
+
+    let renamed = index_of(&effects, |effect| {
+        matches!(effect, AtomicWriteEffect::Renamed { .. })
+    });
+    let parent = index_of(&effects, |effect| {
+        matches!(effect, AtomicWriteEffect::ParentFsynced(_))
+    });
+    assert!(
+        renamed < parent,
+        "u7qq: the parent fsync must follow the rename, got {effects:?}"
+    );
+    assert_eq!(
+        parent,
+        effects.len() - 1,
+        "the parent fsync is the last thing a durable publish does: {effects:?}"
+    );
+
+    let AtomicWriteEffect::ParentFsynced(synced) = &effects[parent] else {
+        unreachable!("selected by matches!")
+    };
+    assert_eq!(
+        synced.canonicalize().expect("the parent exists"),
+        dir.path().canonicalize().expect("the fixture exists"),
+        "the synced directory must be the destination's own parent"
+    );
+    assert_eq!(
+        synced,
+        &destination
+            .parent()
+            .expect("a file has a parent")
+            .to_path_buf()
+    );
+
+    println!("U7QQ_ORDER {effects:?}");
+}
+
+/// KNOWN-GOOD over both laws at once, and the over-strictness control: the
+/// WHOLE sequence is pinned, so neither leg above can be satisfied by an
+/// implementation that also does something extra or something out of order.
+/// This is also the leg that fails if a sixth effect is ever introduced
+/// without a reader deciding where it belongs.
+#[test]
+fn inception_durability_sequence_is_exactly_five_ordered_effects() {
+    let payload = b"five\n";
+    let (dir, destination, effects) = observed_replace(payload);
+    let AtomicWriteEffect::Renamed { from, .. } = &effects[3] else {
+        panic!("the fourth effect must be the rename: {effects:?}")
+    };
+    assert_eq!(
+        effects,
+        vec![
+            AtomicWriteEffect::StageCreated(from.clone()),
+            AtomicWriteEffect::BytesWritten(payload.len()),
+            AtomicWriteEffect::FileFsynced(from.clone()),
+            AtomicWriteEffect::Renamed {
+                from: from.clone(),
+                to: destination.clone(),
+            },
+            AtomicWriteEffect::ParentFsynced(dir.path().to_path_buf()),
+        ],
+        "create, write, fsync, rename, fsync-parent -- in that order and nothing else"
+    );
+    // v809's law, re-read here rather than trusted: staging is in the SAME
+    // directory as the destination, so the publish is a same-filesystem rename.
+    assert_eq!(from.parent(), destination.parent());
 }

@@ -709,7 +709,109 @@ fn temporary_path(path: &Path) -> PathBuf {
     path.with_file_name(format!(".{filename}.{}.{}.tmp", std::process::id(), stamp))
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), InceptionError> {
+/// One durability effect of an atomic replace, in the order it completed.
+///
+/// THE ORDER IS THE LAW. The staging file's bytes must be on stable storage
+/// BEFORE the rename publishes them (q7jz: renaming an unsynced file is a torn
+/// write), and the parent directory entry must be fsynced AFTER it (u7qq: the
+/// entry is not durable until the parent is synced).
+///
+/// Neither order was observable. No failure can be injected BETWEEN the write
+/// and the rename through the public API -- that is a real property of the
+/// seam, not a gap in the tests -- and the remote lane runs as ROOT, so every
+/// permission-based injection silently succeeds there. So the seam is MADE
+/// here instead of worked around: each value is CONSTRUCTED BY THE SYSCALL
+/// THAT PERFORMED IT and returned only on its success. A recorded effect
+/// therefore cannot exist without its syscall having happened, and deleting
+/// the fsync deletes its record with it. The vector is not a log written
+/// beside the work; it is the work's return value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AtomicWriteEffect {
+    /// The staging file was created exclusively, beside the destination.
+    StageCreated(PathBuf),
+    /// This many bytes reached the staging fd.
+    BytesWritten(usize),
+    /// `fsync(2)` on the STAGING FILE's fd returned success.
+    FileFsynced(PathBuf),
+    /// `rename(2)` published the staging file over the destination.
+    Renamed { from: PathBuf, to: PathBuf },
+    /// `fsync(2)` on the PARENT DIRECTORY's fd returned success.
+    ParentFsynced(PathBuf),
+}
+
+fn stage_create(temporary: &Path) -> Result<(File, AtomicWriteEffect), InceptionError> {
+    let file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temporary)
+        .map_err(|error| InceptionError::Write {
+            path: temporary.to_owned(),
+            detail: error.to_string(),
+        })?;
+    Ok((file, AtomicWriteEffect::StageCreated(temporary.to_owned())))
+}
+
+fn stage_write(
+    file: &mut File,
+    temporary: &Path,
+    bytes: &[u8],
+) -> Result<AtomicWriteEffect, InceptionError> {
+    file.write_all(bytes)
+        .map_err(|error| InceptionError::Write {
+            path: temporary.to_owned(),
+            detail: error.to_string(),
+        })?;
+    Ok(AtomicWriteEffect::BytesWritten(bytes.len()))
+}
+
+/// q7jz. The effect is the fsync's own success value, so it cannot be reported
+/// without the fsync having returned Ok.
+fn stage_fsync(file: &File, temporary: &Path) -> Result<AtomicWriteEffect, InceptionError> {
+    file.sync_all().map_err(|error| InceptionError::Write {
+        path: temporary.to_owned(),
+        detail: error.to_string(),
+    })?;
+    Ok(AtomicWriteEffect::FileFsynced(temporary.to_owned()))
+}
+
+fn publish_rename(temporary: &Path, path: &Path) -> Result<AtomicWriteEffect, InceptionError> {
+    fs::rename(temporary, path).map_err(|error| InceptionError::Write {
+        path: path.to_owned(),
+        detail: error.to_string(),
+    })?;
+    Ok(AtomicWriteEffect::Renamed {
+        from: temporary.to_owned(),
+        to: path.to_owned(),
+    })
+}
+
+/// u7qq. Cites beads_rust sync/mod.rs:507-509: the directory entry is not
+/// durable until the parent is fsynced, so this runs AFTER the rename, never
+/// before it.
+#[cfg(unix)]
+fn parent_fsync(parent: &Path) -> Result<AtomicWriteEffect, InceptionError> {
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| InceptionError::Write {
+            path: parent.to_owned(),
+            detail: format!("parent fsync failed: {error}"),
+        })?;
+    Ok(AtomicWriteEffect::ParentFsynced(parent.to_owned()))
+}
+
+/// Atomic replace, returning the ordered durability effects it performed.
+///
+/// This is the ONLY write path -- [`write_atomic`] is a thin discard of the
+/// return value -- so an observer of the vector is observing production, not a
+/// parallel test implementation.
+///
+/// # Errors
+/// [`InceptionError::Write`] naming the path whose syscall failed. A failure
+/// at any step removes the staging file rather than abandoning it.
+pub fn write_atomic_observed(
+    path: &Path,
+    bytes: &[u8],
+) -> Result<Vec<AtomicWriteEffect>, InceptionError> {
     let parent = path.parent().ok_or_else(|| InceptionError::Write {
         path: path.to_owned(),
         detail: "output has no parent directory".to_owned(),
@@ -721,41 +823,25 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), InceptionError> {
 
     let temporary = temporary_path(path);
     let result = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-            .map_err(|error| InceptionError::Write {
-                path: temporary.clone(),
-                detail: error.to_string(),
-            })?;
-        file.write_all(bytes)
-            .map_err(|error| InceptionError::Write {
-                path: temporary.clone(),
-                detail: error.to_string(),
-            })?;
-        file.sync_all().map_err(|error| InceptionError::Write {
-            path: temporary.clone(),
-            detail: error.to_string(),
-        })?;
+        let mut effects = Vec::with_capacity(5);
+        let (mut file, created) = stage_create(&temporary)?;
+        effects.push(created);
+        effects.push(stage_write(&mut file, &temporary, bytes)?);
+        effects.push(stage_fsync(&file, &temporary)?);
         drop(file);
-        fs::rename(&temporary, path).map_err(|error| InceptionError::Write {
-            path: path.to_owned(),
-            detail: error.to_string(),
-        })?;
+        effects.push(publish_rename(&temporary, path)?);
         #[cfg(unix)]
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| InceptionError::Write {
-                path: parent.to_owned(),
-                detail: format!("parent fsync failed: {error}"),
-            })?;
-        Ok(())
+        effects.push(parent_fsync(parent)?);
+        Ok(effects)
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
     result
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), InceptionError> {
+    write_atomic_observed(path, bytes).map(|_| ())
 }
 
 #[derive(Debug)]
