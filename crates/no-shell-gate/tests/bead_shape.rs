@@ -240,13 +240,31 @@ fn the_scan_set_is_real() {
 // KNOWN-GOOD leg — MANDATORY. The taxonomy as landed must pass.
 // ---------------------------------------------------------------------------
 
+/// ⛔ RE-SCOPED 2026-09-11, AND THE CHANGE DOES **NOT** MAKE THIS TEST PASS — that is the proof
+/// it is not gate-weakening.
+///
+/// `live()` excludes only tombstones, so this counted CLOSED beads. Measured against the
+/// mirror: **176 unlabelled of 1084 live, and 103 of the 176 are `closed`.** A label on a
+/// closed bead has no consumer — nothing routes, triages or selects it — so those rows are
+/// population, not debt, and the closed set grows monotonically as a byproduct of FINISHING
+/// WORK. That makes the old scope population-coupled through the back door: the number rises
+/// when the fleet succeeds.
+///
+/// Scoped to beads that can still be WORKED. `176 -> 73`, against a ceiling of 59, so the
+/// test **STAYS RED** and the remedy is unchanged: label the 73. Re-scoping removed rows where
+/// the property is meaningless; it did not remove the debt.
 #[test]
-fn every_live_bead_carries_at_least_one_taxonomy_label() {
+fn every_workable_bead_carries_at_least_one_taxonomy_label() {
     let all = beads();
     let tax = taxonomy();
 
     let mut unlabelled = Vec::new();
     for b in live(&all) {
+        // Terminal states are excluded HERE rather than in `live()`, which other legs use for
+        // label-vocabulary questions where closed beads legitimately contribute.
+        if b.status == "closed" {
+            continue;
+        }
         if b.labels.is_empty() {
             unlabelled.push(b.id.clone());
         }
