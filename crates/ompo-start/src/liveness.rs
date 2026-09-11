@@ -156,10 +156,65 @@ impl LiveVerdict {
     }
 }
 
+/// A source's pane set, normalized: sorted and deduplicated.
+///
+/// Agreement is a SET question. Comparing the raw vectors made agreement depend
+/// on each probe's output order, so two sources that saw the same panes in a
+/// different order read as disagreeing.
+#[must_use]
+pub fn pane_set(source: &SourceVerdict) -> Vec<String> {
+    let mut panes = source.panes.clone();
+    panes.sort();
+    panes.dedup();
+    panes
+}
+
+/// The pane-set equality writer: the verdict AND the sets it was computed from.
+///
+/// `agree` is false when ANY set is empty, even though empty sets are trivially
+/// equal to each other. Three sources that each saw nothing agree about nothing,
+/// and reporting that as agreement is how a dead swarm reads as live. The three
+/// sets are emitted beside the boolean so the verdict is checkable here rather
+/// than trusted.
+#[must_use]
+pub fn pane_set_agreement(sources: &[SourceVerdict]) -> serde_json::Value {
+    let sets: serde_json::Map<String, serde_json::Value> = sources
+        .iter()
+        .map(|source| {
+            (
+                short_key(&source.name).to_owned(),
+                serde_json::json!(pane_set(source)),
+            )
+        })
+        .collect();
+    let normalized: Vec<Vec<String>> = sources.iter().map(pane_set).collect();
+    let any_empty = normalized.iter().any(Vec::is_empty);
+    let equal = normalized
+        .windows(2)
+        .all(|pair| pair[0] == pair[1]);
+    let agree = !normalized.is_empty() && !any_empty && equal;
+    let reason_code = if normalized.is_empty() {
+        "L4_PANE_SET_NO_SOURCE"
+    } else if any_empty {
+        "L4_PANE_SET_VACUOUS"
+    } else if !equal {
+        "L4_PANE_SET_DISAGREE"
+    } else {
+        "L4_PANE_SET_AGREE"
+    };
+    serde_json::json!({
+        "agree": agree,
+        "reason_code": reason_code,
+        "source_count": normalized.len(),
+        "pane_sets": sets,
+    })
+}
+
 /// Classify the required NTM, tick-monitor, and Agent Mail sources.
 ///
 /// The source set is sorted by name before comparison, making pane-set agreement
-/// deterministic rather than dependent on command completion order.
+/// deterministic rather than dependent on command completion order. Agreement is
+/// computed by [`pane_set_agreement`], so an all-empty census is NOT agreement.
 pub fn classify(mut sources: Vec<SourceVerdict>) -> Result<LiveVerdict, String> {
     if sources.is_empty() {
         return Err("L4_EMPTY_SOURCE_SET — no liveness source was observed".to_owned());
@@ -192,11 +247,15 @@ pub fn classify(mut sources: Vec<SourceVerdict>) -> Result<LiveVerdict, String> 
         });
     }
 
-    let first_panes = &sources[0].panes;
-    if sources.iter().any(|source| source.panes != *first_panes) {
+    let agreement = pane_set_agreement(&sources);
+    if agreement["agree"] != serde_json::Value::Bool(true) {
+        let reason_code = agreement["reason_code"]
+            .as_str()
+            .unwrap_or("L4_PANE_SET_DISAGREE")
+            .to_owned();
         return Ok(LiveVerdict::NotLive {
             sources,
-            reason_code: "L4_PANE_SET_DISAGREE".to_owned(),
+            reason_code,
         });
     }
 

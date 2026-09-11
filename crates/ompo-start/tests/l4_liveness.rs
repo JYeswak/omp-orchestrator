@@ -241,3 +241,106 @@ fn silent_reason_is_null_exactly_when_not_silent() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// L4-OBS-AGREE (l7ve): pane-set equality writer. Two agreeing sources plus a
+// third SILENT must not report live=true, and an all-empty census is NOT
+// agreement: empty sets are trivially equal, which is how a dead swarm reads
+// as live.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn silent_third_is_not_live() {
+    let verdict = classify(vec![
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7", "%8"], true, true),
+        source("agent-mail", &["%7", "%8"], false, false),
+    ])
+    .expect("complete source set");
+    println!(
+        "L4_AGREE status={} reason_code={}",
+        verdict.status(),
+        verdict.reason_code()
+    );
+    assert_eq!(
+        verdict.status(),
+        "NOT_LIVE",
+        "two sources agreeing plus a silent third is NOT live"
+    );
+    assert!(verdict.reason_code().contains("agent-mail"));
+    // The two that DID answer agree — so agreement alone is not the verdict.
+    let agreement = ompo_start::liveness::pane_set_agreement(&[
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%8", "%7"], true, true),
+    ]);
+    assert_eq!(agreement["agree"], serde_json::json!(true));
+}
+
+#[test]
+fn agreement_emits_the_three_pane_sets_and_a_verdict() {
+    let sources = vec![
+        source("ntm", &["%8", "%7"], true, true),
+        source("tick-monitor", &["%7", "%8"], true, true),
+        source("agent-mail", &["%7", "%8", "%8"], true, true),
+    ];
+    let agreement = ompo_start::liveness::pane_set_agreement(&sources);
+    assert_eq!(
+        agreement["agree"],
+        serde_json::json!(true),
+        "order and duplicates are not disagreement: agreement is a SET question"
+    );
+    assert_eq!(agreement["reason_code"], serde_json::json!("L4_PANE_SET_AGREE"));
+    assert_eq!(agreement["source_count"], serde_json::json!(3));
+    for key in ["ntm", "tick", "mail"] {
+        assert_eq!(
+            agreement["pane_sets"][key],
+            serde_json::json!(["%7", "%8"]),
+            "the writer must emit the {key} pane set it compared"
+        );
+    }
+}
+
+#[test]
+fn two_empty_pane_sets_are_equal_but_are_not_agreement() {
+    let empty = vec![
+        source("ntm", &[], true, true),
+        source("tick-monitor", &[], true, true),
+        source("agent-mail", &[], true, true),
+    ];
+    // KNOWN-BAD, pinned: raw equality says these three agree.
+    let raw: Vec<&Vec<String>> = empty.iter().map(|s| &s.panes).collect();
+    assert!(
+        raw.windows(2).all(|pair| pair[0] == pair[1]),
+        "KNOWN-BAD: empty sets ARE equal, which is why equality alone is unsafe"
+    );
+    // The writer under test refuses to call that agreement.
+    let agreement = ompo_start::liveness::pane_set_agreement(&empty);
+    assert_eq!(
+        agreement["agree"],
+        serde_json::json!(false),
+        "ANTI-VACUITY: three sources that saw nothing agree about nothing"
+    );
+    assert_eq!(
+        agreement["reason_code"],
+        serde_json::json!("L4_PANE_SET_VACUOUS")
+    );
+    // And classify must not report the swarm live off a vacuous census.
+    let verdict = classify(empty).expect("complete source set");
+    assert_eq!(verdict.status(), "NOT_LIVE");
+    assert_eq!(verdict.reason_code(), "L4_PANE_SET_VACUOUS");
+}
+
+#[test]
+fn disagreeing_pane_sets_are_named_as_disagreement_not_vacuity() {
+    let agreement = ompo_start::liveness::pane_set_agreement(&[
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%9"], true, true),
+        source("agent-mail", &["%7"], true, true),
+    ]);
+    assert_eq!(agreement["agree"], serde_json::json!(false));
+    assert_eq!(
+        agreement["reason_code"],
+        serde_json::json!("L4_PANE_SET_DISAGREE"),
+        "a non-empty mismatch is disagreement, a distinct defect from vacuity"
+    );
+}
