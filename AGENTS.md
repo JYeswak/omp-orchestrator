@@ -5111,6 +5111,58 @@ data does not trigger a re-derivation of something it never derived.**
 defect to FIX; an elision in a DISPLAY LAYER is a CITATION RULE.** Filing against the gate would
 have been a bead against a defect that does not exist.
 
+## ⛔⛔ A PATTERN WHOSE **ALPHABET EXCLUDES** A CHARACTER ITS SUBJECT CONTAINS
+
+**The 45-vs-49 gap, closed to the unit.** One parse used `grep -o '[a-z][a-z_]\{12,\}'` — **a
+character class with NO DIGITS** — against a corpus containing
+`staged_rust_mode_100644_is_clean_and_names_write_time_residual`:
+```
+the real name          1 token
+what the class saw     2 fragments, split by `100644`
+plus 3 LABEL tokens    failing_targets · failing_tests · unattributed_target
+45 − 1 + 2 + 3 = 49    exact
+```
+⭐ **Its author named the family: a `rev-parse` that PRINTS instead of failing; a CI control
+SHARING the disqualifying property with the lane under test; and now a regex whose alphabet
+excludes a character its subject contains.** ⛔ **Three disguises, one shape — A CLASS THAT
+CANNOT MATCH WHAT IT IS LOOKING FOR — and each time the tell was never asking what the
+instrument COULD NOT SAY.**
+
+⛔⛔ **AND THE UNCOMFORTABLE HALF, VOLUNTEERED: THAT 49 HAD BEEN USED AS A CONTROL.** The
+argument *"the same command returns 49 here and 9 there, so 9 is a short list and not a clip"*
+rested on a **numerically wrong** control. ⭐ **It survives because the control's JOB was to
+show the extractor can return a LONG list, and 45 discharges that as well as 49 — but a control
+built to defend a conclusion was itself defective, and only the DIRECTION of the error saved
+it.** **State that when it happens; a control that is wrong in the harmless direction is still
+wrong.**
+
+## ⛔⛔ STRIP **COMMENTS BEFORE LITERALS** — the ordering is load-bearing
+
+**A detector self-classified TWICE in one file, and the second time is the new mechanism.** Its
+table lists accessor spellings AS DATA, so a raw `contains` flagged the detector as
+host-dependent. The fix stripped string literals — **and it self-classified again, because an
+UNBALANCED DOUBLE QUOTE INSIDE ONE OF ITS OWN COMMENTS put the literal scanner OUT OF PHASE for
+the rest of the body**, re-exposing the table as code.
+
+⭐ **Third form of the self-referential checker in one session** — after a needle split so a
+checker's own code cannot contain it, and a plant marker that would satisfy the detector it
+documents. ⛔ **An author who had read BOTH warnings hit it twice in one file**, which is the
+argument for a mechanical rule over vigilance: **comments first, then literals, always.**
+
+## ⛔ AN ANCHORED PATTERN IS DEFEATED BY AN ANSI PREFIX
+
+**`grep -c "^error"` returned 0 on a log carrying FIVE compile errors** — the lines begin with
+escape sequences, not with `error`. ⭐ **Identical in shape to the conductor's 400-char bound:
+A FILTER TYPED ONE PIPE EARLIER, PRODUCING A PROPERTY THEN ATTRIBUTED TO THE SUBJECT.** One
+cost a re-read; the other cost a dispatch. **Same defect, different blast radius** — and both
+violated *capture wide and filter after* within the hour of its publication, by two different
+authors.
+
+⭐ **AND THE CAUSE-COUNT KEEPS RISING WITHIN ONE FILE: four legs in `target_ownership.rs`, FOUR
+distinct remedy codes** — `HOST_SHIM_ABSENT`, `WRONG_HOST_PLATFORM`, `MISSING_PLATFORM_TOOL`,
+`VOLUME_NOT_MOUNTED`. ⛔ **A single merged predicate would have named the WRONG ABSENT ARTIFACT
+for three of the four.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
