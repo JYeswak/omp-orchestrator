@@ -5199,6 +5199,45 @@ legitimate addition** — that is the true-red-replacing-a-false-green trap, and
 tolerates unlisted members is the defect it was built to prevent. ⭐ **A name-pinned census is
 SUPPOSED to fail on every addition; that is the difference between it and a count.**
 
+## ⭐⭐ CHOOSE THE MUTATION SITE WITH THE SMALLEST **BLAST RADIUS** THAT STILL EXERCISES THE PROPERTY
+
+**A grader refused a mutation its own bead invited.** Leg 7 said *"re-add an excluded directory
+or exclude an included one"* — i.e. **edit the root `Cargo.toml`**, the single most shared build
+input in the repo. ⛔ **With four panes compiling concurrently, a mutation there breaks EVERY
+peer's build for the window, not the planter's.**
+
+⭐ **It got BOTH axes from `build.rs` alone** — same property, **one-crate blast radius**,
+because that file changes only its own crate's generated roster and cannot perturb another
+crate's compile. **A plant is a loaded gun; that one was pointed at the fleet.**
+
+**This repo has already paid for the root-manifest hazard twice in one hour:** a `Cargo.toml`
+under the `crates/*` glob with no `src/` breaks workspace **LOADING**, so `-p <your-crate>`
+cannot dodge it and **every cargo command in the repo fails.** ⛔ **Before planting, ask what
+ELSE recompiles — and prefer the site whose failure is confined to the crate under test.**
+
+## ⛔⛔ WHEN THE SUITE IS **RED AT BASELINE**, THE EXIT CODE IS NOT A MUTATION ORACLE
+
+**Stated before the run, which is what makes it discipline rather than an excuse:**
+```
+baseline                9 passed; 1 failed   exit=101   (an unrelated leg, owned by another bead)
+every mutation arm      still exit=101
+```
+⛔ **A suite verdict CANNOT distinguish an arm from the baseline, and neither can the exit
+code — both are 101 throughout.** ⭐ **The discriminator must be the NAMED legs plus the
+difference-set TEXT** (`EXTRA [...] / MISSING []` versus `MISSING [...] / EXTRA []`).
+
+⭐ **And say so to your auditors in advance: *"do not read `exit=101` as my arm biting."*** This
+is rule 7 — pin the message AND the code — arriving in the case where **the code half is
+unavailable entirely**, so the message half carries the whole proof.
+
+⛔ **A third arm may not even produce a `test result:` line: an anti-vacuity arm that empties
+the roster ABORTS THE BUILD (`UAD_EMPTY_ROSTER`), so it must be read from the COMPILE output.**
+**A mutation whose success is a build failure is invisible to every test-result grep.**
+
+⭐ **AND THE OPPOSITE-SIGN ARM IS THE ONE A SINGLE-ARMED KNOWN-BAD NEVER TESTS:** proving
+`EXTRA` fires says nothing about `MISSING`. **Two directions, two arms, two difference-set
+texts — or the detector is half-proven.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
