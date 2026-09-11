@@ -602,6 +602,59 @@ fn the_crates_that_route_are_recognised_as_routing() {
     );
 }
 
+/// FIRES ON KNOWN-BAD, and it is the leg whose ABSENCE let the blindness live.
+///
+/// The three argv-shaped forms each had a case in
+/// [`the_surface_predicate_distinguishes_an_invocation_from_prose`]; the shared-kernel
+/// constant had none, because it did not exist when that leg was written and nothing failed
+/// when the code adopted it. So this pins all four corners of the fourth form: the constant
+/// counts, a bare surface name inside an operator MESSAGE does not, a socket-directory
+/// variable does not, and the env override is not double-counted by the identifier rule.
+///
+/// Unlike the four census legs in this file, this one reads no `git` and no worktree, so it
+/// is measurable on the rch lane, where a git-derived roster reads a fossil.
+#[test]
+fn the_shared_kernel_constant_counts_and_a_bare_name_in_a_message_does_not() {
+    let via_constant = "let mut c = Command::new(tick_monitor::TMUX);\n\
+                        let mut d = Command::new(tick_monitor::NTM);\n";
+    assert_eq!(
+        surface_evidence(via_constant, "tmux"),
+        1,
+        "spawning through the shared kernel constant IS an invocation; keying only on the \
+         `\"tmux\"` literal scored pane-oracle-diff, the reference implementation of \
+         routing, at zero on both surfaces"
+    );
+    assert_eq!(surface_evidence(via_constant, "ntm"), 1);
+
+    // The real line from crates/pane-oracle-diff/src/main.rs:130.
+    let message = "eprintln!(\"  NTM UNDERCOUNTS by {n}: a pane ntm cannot see is a pane \
+                   the controller will never dispatch to.\");\n";
+    assert_eq!(
+        surface_evidence(message, "ntm"),
+        0,
+        "a bare surface name inside an operator message is PROSE. This is why the constant \
+         form reads from `code_and_literals` while the argv forms read from `code_only`: one \
+         mask cannot serve both, and a single mask is how six false dual-surface readers \
+         were once measured on this tree"
+    );
+
+    let socket_dir = "std::env::set_var(\"TMUX_TMPDIR\", home.join(\".tmux-sockets\"));\n";
+    assert_eq!(
+        surface_evidence(socket_dir, "tmux"),
+        0,
+        "TMUX_TMPDIR names a socket DIRECTORY, not the binary — the identifier boundary is \
+         what keeps it out, and pane-oracle-diff sets it two lines from a real spawn"
+    );
+
+    let env_override = "let tmux = std::env::var(\"TMUX_BIN\").unwrap_or_default();\n";
+    assert_eq!(
+        surface_evidence(env_override, "tmux"),
+        1,
+        "the env override counts ONCE: `TMUX` must not also match inside `TMUX_BIN`, or \
+         every crate using the override would report double evidence"
+    );
+}
+
 #[test]
 fn every_allowance_row_carries_a_reason() {
     let empty: Vec<&str> = UNROUTED_ALLOWANCE
