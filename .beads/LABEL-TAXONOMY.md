@@ -42,6 +42,397 @@ wiring
 `correctness`, `observability`, `security`); our real domain labels (`extraction`, `gate`,
 `kernel`, `omp`, `coverage`) are legitimate and stay.
 
+## Plan axes (allowlist, second kind)
+
+A plan-section axis is not a topical label. `s1` has **215 workable carriers** and `phase-0` has
+20: these index, and `bv -l s1` groups. But an axis is a partition *declared a priori*, so its
+thin members (`phase-7`, one carrier) are not the one-off defect the taxonomy cap exists to stop —
+they are sections of a plan that has not reached them yet. Conflating the two is why a 25-label
+topical cap kept fighting a legitimate 19-term partition.
+
+So axes are declared separately, closed, and enumerated. `crates/no-shell-gate/tests/bead_shape.rs`
+requires each member to be `<axis><n>` or `<axis>-<n>` (nothing else can ride in on an axis line),
+caps the register at 3 axes / 12 members, and requires **each axis as a whole** to reach 2 members
+in use and 8 carriers — an axis nobody uses is a smuggling route, and is refused.
+
+```axes
+s: s0 s1 s2 s5 s6
+l: l0 l1 l2 l3 l4 l5
+phase: phase-0 phase-1 phase-2 phase-3 phase-4 phase-5 phase-6 phase-7
+```
+
+Measured 2026-09-11 on workable beads: `s` 3 members in use / 217 carriers, `l` 6 / 190,
+`phase` 8 / 27. Adding a plan section (`s3`) is a one-line edit here, reviewed like any
+vocabulary change. Admitting these axes is **not** what makes the gate green: it moves
+off-vocabulary workable beads from **531 to 530**, one bead, because a bead offends on any one of
+several off-taxonomy labels. That measurement is the reason this gate polices the delta.
+
+## Amnesty register — dated 2026-09-11, expires 2026-12-11, DOWN only
+
+The 332 labels below were in use on live beads at the census (union of HEAD and the working tree,
+so a dirty mirror cannot make the gate disagree with CI). They are **tolerated, not blessed**:
+
+- No bead created on or after **2026-09-10** may carry any of them. Zero allowance. Measured:
+  the 68 workable beads created 2026-09-10 and 2026-09-11 already carry none.
+- A label **not** in this register and not in the taxonomy or an axis cannot appear on any bead at
+  all. The register is a census, not a queue — it has no admission path.
+- `AMNESTY_LABEL_CEILING` (332) and `ACTIVE_OFF_VOCABULARY_CEILING` (548 workable carriers at
+  HEAD, 530 in the working tree) may only FALL.
+- **Death condition:** past 2026-12-11 the gate fails unconditionally. Three months is the entire
+  budget for draining these; renewal is a ruling, not a quiet constant edit.
+
+```amnesty-labels
+00
+01
+02
+03
+04
+05
+06
+07
+08
+09
+10
+11
+12
+3xva-successor
+L1
+L4
+L5
+R1
+S1
+S4
+S5
+S6
+S7
+S9
+a92y
+abort
+ack
+ack-spine
+actionability
+admission
+adoption
+agent-mail
+agent-mail-native
+agent-work
+agent_end
+alignment
+anti-vacuity
+arc
+architecture
+arrow:S4-S5
+arrow:S5-S6
+artifact
+artifact-lane
+artifact-oracle
+asupersync
+atlas-arc
+attribution
+autonomous-loop
+autonomy
+beads
+blocked-gauntlet
+build
+build-gate
+built-not-wired
+business-critical
+bv
+c112
+capability-schema
+cargo
+census
+ci
+ci-shape
+claim
+claim-path
+classification
+classifier
+cleanup
+close-policy
+command
+commit-path
+conductor
+conformance
+contention
+continuity
+continuous-operation
+contract
+contracts
+control-kernel
+control-plane
+convergence
+crate
+crate:bead-lint
+crate:crate-atom-gate
+crate:lifecycle-arrow-gate
+crates
+cross-compile
+cross-repo
+dag
+decision-ledger
+declared-not-wired
+definition
+deletion
+dependencies
+derived-artifacts
+dispatch-fence
+dispatch-saga
+doc
+doc-fact
+docs
+doctrine
+durability
+entry-contract
+epic
+error-taxonomy
+escalation
+escaping
+evidence
+evidence-standard
+execution-proof
+exit-codes
+f3g5-followon
+fail-open
+fairness
+false-live
+falsifier
+figure-class
+finding
+findings
+findings-ledger
+fleet
+fleet-block
+fleet-blocking
+fleet-wide
+fooled-certificate
+fsu7
+fuzz
+gate-layer
+gate-rule-8
+gate-runner
+gates
+get_state
+golden
+governance
+governing
+grade-pin
+grading
+grading-gate
+grading-integrity
+grading-lane
+graph
+green-tree
+ground-truth
+group-kill
+handoff
+hardening
+harness
+hd-0012
+hd-0047
+head-red
+heartbeat
+honest-credit
+hook
+hooks
+human-decision
+hygiene
+idempotency
+identity
+idle-capacity
+infra
+install-parity
+installability
+installer
+instrument
+instrument-defect
+journey
+jsonl
+kernel-contracts
+kernel-math
+kernel-only
+key-mismatch
+kxe
+lane
+lane-environment
+latency
+law
+ledger
+lifecycle
+live-fire
+liveness
+loop-contract
+loop-lifecycle
+loop-queue-filter
+loop-switch
+m2
+mail-health
+materializer
+measured
+measurement
+memory
+messaging
+metrics
+milestone
+mining
+missing-representation
+monitor
+monitoring
+mutation
+mutation-did-not-bite
+native
+nndr-proof
+no-shell
+ntm
+numbers-registry
+obs
+observation-contract
+omp-surface
+ompo
+operability
+operator-surface
+oracle
+orchestration
+orphaned-claims
+outage
+owner-josh
+owner-orchestrator
+ownership
+packet
+pagerank
+pane-observation
+pane-truth
+part:1
+pass1-matrix
+pass2
+pass5
+pass6
+pass8
+phase-gate
+planning
+platform-scope
+policy
+portability
+preregistration
+prescription:incarnation-lease-fencing
+prescription:layered-enforcement-of-one-rule
+prescription:saga-outcome-unknown-state
+prescription:sampled-reexecution-trust-ladder
+prescription:two-person-rule-transition-table
+priority
+probe
+process-kernel
+product
+program
+prompt
+proven-by-landing
+provenance
+push-blocker
+quality
+r10
+r3
+r5
+ratchet
+readback
+readiness
+reaping
+receipt
+receiver-receipt
+recurring-incident
+redundancy
+reference-integrity
+refusal
+registry
+reliability
+renderer
+reservations
+rigor-atlas
+root-cause
+rpc
+rule-8d
+safety
+salvage
+scheduler-kernel
+scope
+scope-control
+scoping
+scratch-home
+selection
+selector
+self-fixture
+self-referential
+session
+shared-checkout
+silent-absence
+silent-refusal
+silent-success
+skill-loop
+skill-loop-pass3
+skill-loop-pass4
+skills
+spike
+stages-1-3
+staleness
+steer
+strangling-edge
+subprocess
+subprocess-contract
+substring-token
+supervisor
+surface-map
+tech-debt
+terminal
+terminal-crates
+test
+test-coverage
+test-quality
+test-ratchet
+tests
+tmux
+tracker
+tracker-graph
+transient
+transport
+tree-hygiene
+truncation
+trust-boundary
+type-algebra
+typed-artifacts
+typed-no-data
+types
+unblock
+unbounded-wait
+upstream
+vacuity
+vacuous-absence
+verb-wiring
+verdict-honesty
+verification
+verification-hole
+wave-a
+wave-stability
+wire
+worktree-vs-index
+writer
+```
+
+## Reserved — taxonomy entries with no carrier yet
+
+`every_allowlist_label_is_actually_used` refuses an allowlist entry nobody uses, because an unused
+entry is aspiration rather than vocabulary. A controlled vocabulary must still be allowed to
+precede its first use, so the exceptions are named here individually rather than tolerated by a
+count — `unused <= 1` hides *which* label is dead. The gate also refuses a reservation that has
+come true, so these rows cannot become permanent.
+
+```reserved
+decision
+```
+
+`decision` has **zero carriers anywhere in the JSONL**, including tombstones, yet 82 beads are
+`blocked`. Either the blocked beads are not blocked on a human, or they are unlabelled: that is a
+real question this row keeps open instead of answering by deletion. **Death condition:** if
+`decision` still has no carrier when the amnesty expires on 2026-12-11, delete the label.
+
 ### What each label means
 
 | label | scope |
@@ -206,11 +597,17 @@ of scope for this pass, so the label was dropped and the disagreement is recorde
 
 ## Ratchet
 
-`crates/no-shell-gate/tests/bead_shape.rs` enforces a distinct-label ceiling, seeded from the
-gate's OWN scan of non-tombstone beads immediately after this consolidation landed. The ceiling
-may only fall. It is deliberately NOT seeded from the `jq` count above: a ratchet seeded from a
-neighbouring measurement can sit one above the scan and let a mutation probe pass. The gate
-prints its own count; that number is the seed of record.
+`crates/no-shell-gate/tests/bead_shape.rs` enforces the registers above. Every ceiling is seeded
+from the gate's OWN scan and may only fall. Seeds are deliberately NOT taken from the `jq` counts
+in this document: a ratchet seeded from a neighbouring measurement can sit one above the scan and
+let a mutation probe pass. The gate prints its own counts; those numbers are the seeds of record.
+
+**Re-shaped 2026-09-11 from LEVEL to DELTA.** The off-taxonomy bead ceiling (526, re-recorded
+2026-09-05) was breached six days later at 672. It was measured to be both population-coupled — it
+rises when the fleet files work — and saturated: admitting 434 label uses of the `s*`/`l*`/`phase-*`
+family moved it one bead. A ceiling that rises with productivity and will not fall under its own
+remedy is a countdown, not a ratchet. What is enforced instead: zero tolerance on new beads,
+identity-pinned vocabulary everywhere, a down-only grandfather register, and an expiry date.
 
 ## Adding a label
 
