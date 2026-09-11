@@ -5294,6 +5294,55 @@ of 59) **reads like a correctness check and is a ceiling underneath.** **Two ind
 found extra ratchets the same way, which argues for the method rather than against either
 count.**
 
+## ⭐⭐ PIN A MUTATION ARM BY ITS **CODE EFFECT**, NEVER BY PROSE — my own acceptance admitted two implementations
+
+**`8ems7` item 3 said *"arm B: remove the block gating (`current` defaults to `Some`)"*. That
+sentence has TWO faithful implementations and they give OPPOSITE verdicts on the item:**
+```
+ARM A   capture condition forced false                    { legA }              1 failed
+ARM B1  current defaults to Some, header STILL assigns    { antiflood }         1 failed   DISJOINT from A
+ARM B2  current defaults to Some, header STOPS assigning  { legA, antiflood }   2 failed   superset of A
+```
+⛔ **Under B1 the item as written is FALSE — the sets are DISJOINT, not nested — while the
+property the item exists to establish is MORE than satisfied.** ⭐ **A grader stopping at B1
+would have filed a false `CHANGES_REQUESTED` against a correct unit; stopping at B2 would have
+confirmed the author's prose without noticing it admits two implementations.**
+
+**The amendment is one line: state the CODE EFFECT — *"the failures-block header must stop
+assigning `current`"* — not the intent.**
+
+⭐⭐ **AND THE RESULT THE ACCEPTANCE DID NOT ASK FOR IS STRICTLY STRONGER: A and B1 are DISJOINT
+SINGLETONS. Each leg has a mutation that reddens it ALONE.** **That is independently
+load-bearing in BOTH directions — better than the strict subset specified, and no count of reds
+could have shown it.** ⛔ **When designing arms, aim for DISJOINT SINGLETONS; accept a strict
+subset; reject equal sets.**
+
+⭐ **Item 4 was then discharged BY MUTATION rather than by reading** — defaulting `current` to
+`Some` is inert on plain passing output and reddened the anti-flood leg only because the
+fixture genuinely carries capture-triggering text outside a failures block. **The measurement
+came first and the fixture was read afterwards.** That is how a tautology-class item is
+supposed to close.
+
+## ⛔⛔ A TIMESTAMP IS A TRANSCRIBED VALUE WITH AN UNDECLARED TIMEZONE — and the DAG beats the clock
+
+**Measured: `gh`'s `createdAt` is UTC (`07:01:45Z`); `git log` dates carry `-0600`.** Compared
+naively, **the same wall-clock instant reads as a FIVE-HOUR GAP** — and nearly produced a
+report that a pushed commit had never been pushed.
+
+⭐ **It was caught because the DAG DISAGREED WITH THE CLOCK: `git branch -r --contains` said
+`origin/main`, which cannot be true of an unpushed commit.** ⛔ **Prefer an ancestry fact over a
+time comparison whenever both are available** — `--contains` and `merge-base --is-ancestor` are
+timezone-free and cannot be defeated by a format.
+
+## ⛔ A STALE CI ROW IS NOT EVIDENCE A FIX FAILED — second live specimen in one hour
+
+**`6a0a4ed` is on `origin/main` and ZERO of the last 18 verdict-bearing runs contain it**; the
+newest verdict-bearing head predates it by **fourteen minutes.** ⛔ **That run's row still lists
+both repaired legs as FAILING, and anyone grepping CI right now will find them red and conclude
+the fix failed.** ⭐ **Check `git merge-base --is-ancestor <fix> <headSha>` BEFORE reading the
+row** — the same precondition that retired the `LEDGER_DRIFT` claim, now with a specimen where
+the stale row reads as a REFUTATION rather than as a leftover.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
