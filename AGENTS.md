@@ -7238,3 +7238,59 @@ name, not a finding.**
 
 **How to settle it: run that one test and read the RAW output**, which is the only place the
 structure exists. Not from CI.
+
+### ✅ SETTLED THE SAME HOUR, BY DOING EXACTLY WHAT THE LAST LINE SAID
+
+**Ran the test, read the raw output, and the named candidate is CONFIRMED:**
+
+```
+thread 'deletion_only' panicked at empty_staged.rs:402:5:
+assertion `left == right` failed: deletion-only work must run the normal gate path:
+plan_citations: GATE_NOT_APPLICABLE reason=no_staged_numbered_plan_markdown   <- CONTINUATION
+census_membership: GATE_NOT_APPLICABLE reason=no_staged_crate_manifest        <- CONTINUATION
+  left: 1
+ right: 0
+```
+
+**An `assert_eq!` MESSAGE can be MULTI-LINE** — this one embeds captured gate stderr — so the
+operands sit below continuation text and an adjacency-bounded scan never reaches them.
+**ADJACENCY IS NOT THE BOUNDARY; THE TEST BLOCK IS.** Fixed in `d342505`: skip continuation,
+stop at `---- ` or a new `panicked at`, and stop once BOTH operands are collected so a later
+assertion cannot append onto an earlier cause. Mutation restoring adjacency reddens exactly the
+multi-line leg (`27 passed; 1 failed`).
+
+ **The reusable half is the SHAPE OF THE SETTLEMENT, not the parser.** An `UNKNOWN` was
+published with (a) a named candidate, (b) an explicit refusal to promote consistency to
+evidence, and (c) **the one command that would decide it.** The next reader — who happened to be
+me — had nothing to re-derive. **An `UNKNOWN` that names its own decisive experiment costs one
+command to close; one that says "needs investigation" costs a session.**
+
+## ⛔⛔ A COMPILER ERROR IS A **DISCOVERY**, NOT AN **ENUMERATION**
+
+**Measured 2026-09-11, and it put a non-compiling crate on `origin/main`.**
+
+Adding a variant to `CargoBuildOutcome` produced `E0004 non-exhaustive patterns` at
+`staged-build-gate/src/main.rs:160`. I fixed it, **wrote a doctrine block praising the variant
+for forcing a SECOND consumer to decide rather than silently inherit** — and stopped looking.
+
+**There was a THIRD**, in `no-shell-gate/src/bin/pre-commit-gate.rs:1062`, whose arm I had
+deliberately reverted. It surfaced only when an unrelated command happened to build that crate:
+
+```
+variant present in staged-build-gate/src/lib.rs   4 refs
+arm present in pre-commit-gate.rs                 0
+-> no-shell-gate DID NOT COMPILE at HEAD, pushed
+```
+
+⛔ **`cargo` reports the first crate that fails to build, not every crate that will.** One error
+answered feels like the set closed, and the feeling is wrong whenever the workspace is larger
+than what your command compiled. **After changing a public enum, `grep` every match site
+yourself** — or build the whole workspace before believing the compiler has finished telling you
+things.
+
+ **AND THE REPAIR WAS A REVERT, NOT THE MISSING ARM.** Restoring the arm turns `hook_freshness`
+`STALE_HOOK`, and that file's binary is the one artifact this lane cannot rebuild. **So the
+improvement was unlandable in full, and landing HALF of it was strictly worse than the defect it
+fixed** — which only fired on two staged path prefixes, while a non-compiling crate fails
+everything. **When a change cannot land whole, the question is not "which half first" but
+"is the half coherent alone".**
