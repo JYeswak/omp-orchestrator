@@ -3970,12 +3970,42 @@ that cannot run.** Two steps, and neither alone is sufficient:
 
 ```
 1. CLOSE THE INPUTS.  Hash EVERY file cargo reads for that compilation unit against
-   `git show HEAD:` -- the crate's sources, ALL path deps, the workspace manifest, and the
-   crate's Cargo.lock ENTRY. All identical => the build's inputs ARE committed content,
-   even inside a worktree that is 130 files dirty.
+   `git show HEAD:`:
+     * THE CRATE'S OWN Cargo.toml        <- the one the first draft OMITTED; see below
+     * the crate's sources
+     * ALL path deps AND THEIR manifests
+     * the workspace manifest
+     * the crate's Cargo.lock ENTRY
+   All identical => the build's inputs ARE committed content, even inside a worktree
+   that is 130 files dirty.
 2. PROVE LOAD-BEARINGNESS.  Structural presence is necessary, not sufficient: the dep being
    at HEAD does not prove the green DEPENDS on it. Delete the suspect line, re-run, restore.
 ```
+
+⛔ **THE FIRST DRAFT OF THIS RULE OMITTED THE CRATE'S OWN `Cargo.toml` AND THEREFORE FAILED ON
+THE VERY SPECIMEN IT WAS DERIVED FROM.** `GradeUldvuP0` caught it within minutes of the commit.
+**A dependency lives in the crate's own manifest, and that file is not a path dep of itself** —
+so the published enumeration would hash sources (identical), path deps (identical), workspace
+manifest (identical), lock entry (identical), conclude *"the inputs ARE committed content"*, and
+then **compile against an UNCOMMITTED manifest supplying the missing dep.** ⭐ **It failed in the
+safe-looking direction on the exact case it was built for** — the `8h` shape again: an
+enumeration that cannot see the contaminated input returns "clean".
+
+⛔ **AND THE SHAPE IS LIVE IN THIS TREE, NOT HYPOTHETICAL:**
+```
+ M crates/contabo-reclaim/Cargo.toml    1 insertion / 5 deletions   UNCOMMITTED
+ M crates/contabo-reclaim/src/lib.rs    1072 / 16                   UNCOMMITTED
+```
+**Anyone committing that `lib.rs` path-scoped without the manifest reproduces `poumg.5`
+identically.** Both files are part of the six-file unit recorded in `jwlty`, which is why that
+bead insists they move together.
+
+**THREE FURTHER INPUT CLASSES THE ENUMERATION IS SILENT ABOUT** — offered as completeness, and
+**UNMEASURED here**: `build.rs` and anything it reads; `include_str!` / `include_bytes!` /
+`#[path = …]` targets, which are compilation inputs living outside the module tree; and
+`.cargo/config.toml`, which can inject rustflags and change resolution **without appearing in
+any manifest**. ⭐ **An omitted input class fails silently in the PASSING direction**, which is
+the only reason to enumerate them before anyone needs them.
 
 ⭐ **STEP 1 ALONE IS WHAT A FRESH CLONE GIVES YOU — RESOLUTION, NOT PROOF. STEP 2 ALONE IS WHAT A
 MUTATION GIVES YOU — DEPENDENCY, NOT PROVENANCE. TOGETHER THEY ARE STRICTLY STRONGER THAN
