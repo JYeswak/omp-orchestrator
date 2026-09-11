@@ -56,6 +56,27 @@ impl NtmVerb {
             Self::Assign => "--assign",
         }
     }
+
+    /// The flag THIS verb honours for selecting a pane.
+    ///
+    /// Measured 2026-09-11, not assumed. `--robot-inspect-pane` documents `--inspect-index=` in
+    /// `ntm --help` and SILENTLY IGNORES `--panes=`, answering `success=true, pane_index=0` for
+    /// every value including a nonexistent pane. Every other verb here honours `--panes=`.
+    ///
+    /// One place owns both spellings, beside [`Self::flag`], because the pair is what a reader has
+    /// to check: a verb whose selector differs from its neighbours is invisible at the call site.
+    #[must_use]
+    pub fn pane_selector_flag(self) -> &'static str {
+        match self {
+            Self::InspectPane => "--inspect-index",
+            Self::AgentHealth
+            | Self::Dialogs
+            | Self::AnswerDialog
+            | Self::Interrupt
+            | Self::FleetHealth
+            | Self::Assign => "--panes",
+        }
+    }
 }
 
 /// One invocation, described rather than spelled out at the call site.
@@ -117,7 +138,21 @@ impl NtmCall {
         }
     }
 
-    /// `--panes=<spec>`, the one spelling.
+    /// The pane selector, in whatever spelling the VERB actually honours.
+    ///
+    /// ⛔ `--panes=` is NOT universal, and the exception fails SILENTLY. Measured 2026-09-11
+    /// against a live 8-pane session: `--robot-inspect-pane --panes=<0..5|99>` returns
+    /// `success=true, pane_index=0` for EVERY value -- including a nonexistent pane -- because the
+    /// verb's own selector is `--inspect-index=`, documented in `ntm --help`. So a consumer that
+    /// asks for pane 5 is answered about pane 0 and told it succeeded.
+    ///
+    /// The validator is inconsistent in the worst direction: `--pane-index=` and `--target=` are
+    /// correctly refused with `INVALID_FLAG`, while `--panes=` and `--pane=` -- the two spellings a
+    /// caller arrives with from the rest of this surface -- are accepted and ignored.
+    ///
+    /// This method therefore translates per verb. The call site keeps ONE spelling; the wire gets
+    /// the one that works. Without this, the first `InspectPane` adopter would have graded eight
+    /// panes on pane 0 -- the zsh pane, never an agent -- with every payload reading success.
     #[must_use]
     pub fn panes(mut self, panes: &str) -> Self {
         self.panes = Some(panes.to_owned());
@@ -157,7 +192,7 @@ impl NtmCall {
             }
         }
         if let Some(panes) = &self.panes {
-            argv.push(format!("--panes={panes}"));
+            argv.push(format!("{}={panes}", self.verb.pane_selector_flag()));
         }
         argv.extend(self.extra.iter().cloned());
         argv

@@ -263,3 +263,78 @@ fn an_unspawnable_binary_is_unanswerable_never_an_empty_answer() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// The pane selector is VERB-AWARE, because --panes= is not universal
+// ---------------------------------------------------------------------------
+
+/// KNOWN-BAD, AND THE WHOLE REASON THIS EXISTS: `InspectPane` must never emit `--panes=`.
+///
+/// Measured 2026-09-11 on a live 8-pane session: `--robot-inspect-pane --panes=<any>` returns
+/// `success=true, pane_index=0` for every value including a nonexistent pane 99, because the
+/// verb's selector is `--inspect-index=`. A consumer asking for pane 5 is answered about pane 0
+/// AND TOLD IT SUCCEEDED -- so this cannot be caught downstream by checking `success`.
+#[test]
+fn inspect_pane_emits_its_own_selector_and_never_the_ignored_one() {
+    let call = NtmCall::on_session(NtmVerb::InspectPane, "omp-orchestrator").panes("5");
+    assert_eq!(
+        call.argv(),
+        vec!["--robot-inspect-pane=omp-orchestrator", "--inspect-index=5"]
+    );
+    let argv = call.argv().join(" ");
+    assert!(
+        !argv.contains("--panes="),
+        "--panes= is SILENTLY IGNORED by this verb; emitting it grades every pane on pane 0: {argv}"
+    );
+}
+
+/// KNOWN-GOOD: every other verb still takes `--panes=`, so the fix is a translation and not a
+/// blanket rename. Without this leg an over-broad mutation -- switching ALL verbs to
+/// `--inspect-index` -- would stay green, and an over-strict kernel gets routed around.
+#[test]
+fn every_other_verb_still_takes_the_panes_spelling() {
+    for verb in [
+        NtmVerb::AgentHealth,
+        NtmVerb::Dialogs,
+        NtmVerb::AnswerDialog,
+        NtmVerb::Interrupt,
+        NtmVerb::FleetHealth,
+    ] {
+        let argv = NtmCall::on_session(verb, "omp-orchestrator")
+            .panes("%7")
+            .argv()
+            .join(" ");
+        assert!(
+            argv.contains("--panes=%7"),
+            "{verb:?} honours --panes= and must keep emitting it: {argv}"
+        );
+        assert!(
+            !argv.contains("--inspect-index"),
+            "{verb:?} does not take --inspect-index: {argv}"
+        );
+    }
+}
+
+/// ANTI-VACUITY: the selector is a total function over the enum, so the legs above cannot pass by
+/// measuring an empty set, and a NEW verb cannot be added without choosing a spelling for it.
+#[test]
+fn the_selector_is_declared_for_every_verb() {
+    let verbs = [
+        NtmVerb::AgentHealth,
+        NtmVerb::Dialogs,
+        NtmVerb::AnswerDialog,
+        NtmVerb::Interrupt,
+        NtmVerb::InspectPane,
+        NtmVerb::FleetHealth,
+        NtmVerb::Assign,
+    ];
+    assert_eq!(verbs.len(), 7, "a verb was added without a selector decision");
+    for verb in verbs {
+        let flag = verb.pane_selector_flag();
+        assert!(
+            flag == "--panes" || flag == "--inspect-index",
+            "{verb:?} returned an unrecognised selector {flag}"
+        );
+        assert!(flag.starts_with("--"), "{verb:?} selector must be a flag: {flag}");
+    }
+}
