@@ -1012,6 +1012,53 @@ acceptance list and still be closed by a grader who skips an item — which is w
 level down. And the reverse failure is real too: an acceptance list edited after dispatch can move
 the target under a worker mid-flight, so the edit must precede the send, not follow the report.
 
+### ⛔ `--panes=` TAKES AN INDEX, AND AN INDEX IS A POSITION — DERIVE IT, NEVER CITE IT
+
+**Measured 2026-09-11: three consecutive packets were delivered to the wrong workers, and every
+send returned `success: true`.** The conductor's own dispatch block carried a transcribed map:
+
+```
+the block said   %19 idx2 · %20 idx3 · %7 idx4 · %8 idx5
+tmux reported    %19 idx3 · %20 idx4 · %7 idx5 · %8 idx6
+```
+
+**A pane had been inserted at idx0 and shifted every worker by one.** So `omp-inventory-map` went
+to `%22`, `ompo-doctor` to `%19`, `s1-coverage` to `%7` — and the two panes actually selected,
+`%20` and `%8`, received nothing while reading `IDLE t=0` beside three `success: true` receipts.
+
+**THE FAILURE IS SILENT IN BOTH DIRECTIONS, WHICH IS WHAT MAKES IT EXPENSIVE.** The intended pane
+shows no state change, so it looks like an unacknowledged transport (`cp-z42vu`) — the conductor
+re-sent twice, diagnosing a delivery defect that did not exist. Meanwhile an *unselected* pane was
+handed work it was never chosen for, with no record anywhere that it holds it.
+
+**Derive the mapping every time you dispatch. It is one command and it cannot go stale:**
+
+```bash
+tmux list-panes -t <session> -F '#{pane_index} #{pane_id} #{pane_title}'
+```
+
+**`%ID` is STABLE and `index` is POSITIONAL.** `%19` is `%19` for the life of the pane; its index
+changes whenever any pane before it is created, killed, or moved. So the `%ID` a tick block names
+is durable and the index beside it is a snapshot — **the two halves of that map have different
+lifetimes, and only one of them is safe to write down.**
+
+**This is `N043`'s sibling and the same class as `47g0`**, where `fleet-idle-monitor` binds panes
+from `FLEET_SESSION` while reading its queue from a cwd-independent `br ready` and hands workers a
+bead from the wrong repository. Both are a **correct payload delivered against a stale binding**,
+and both self-certify: `NUDGE_VERIFIED` there, `success: true` here. **A transport receipt proves
+bytes moved, never that they reached the intended party.**
+
+**And it defeats the idle→working receipt**, which this file elsewhere calls the strongest evidence
+available. That receipt is read *on the pane you selected*; when the packet lands elsewhere, the
+pane you watch stays IDLE and the pane that transitions is one you are not looking at. **Confirm the
+transition on the `%ID` you targeted, resolved through a freshly derived index — not on the index
+you sent to.**
+
+**NO-CLAIM.** This makes a misroute *detectable at send time*; nothing refuses one. `ntm
+--robot-send` takes the index and has no `--pane-id` form, so the resolution step is the operator's
+and stays unenforced until the dispatch site does it — which is the same shape as `93lo`, where the
+ACK instruction still depends on the conductor remembering to write it.
+
 ### THE RECEIVER MUST **ANSWER**, AND NOBODY WAS EVER TOLD TO
 
 **The lifecycle chain above is missing a beat, and its absence stalled the whole session.**
