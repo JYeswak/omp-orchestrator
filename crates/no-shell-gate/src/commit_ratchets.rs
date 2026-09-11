@@ -12,6 +12,7 @@ use std::process::Command;
 use std::time::{Duration, SystemTime};
 
 use subprocess_contract::{bounded_output, BoundedOutcome};
+use text_structure::{code_only, toml_code_only, yaml_code_only};
 
 const GIT_READ_DEADLINE: Duration = Duration::from_secs(10);
 const HOOK_SOURCE_CRATES: &[&str] = &[
@@ -254,7 +255,7 @@ fn contains_external_reference(
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        let code = strip_comments(&path, &text);
+        let code = code_text_for_path(&path, &text);
         if code.contains(hyphen) || code.contains(underscore) {
             return true;
         }
@@ -262,70 +263,29 @@ fn contains_external_reference(
     false
 }
 
-fn strip_comments(path: &Path, text: &str) -> String {
-    let is_rust = path.extension().and_then(|extension| extension.to_str()) == Some("rs");
-    let strip_hash = matches!(
-        path.extension().and_then(|extension| extension.to_str()),
-        Some("toml" | "yml" | "yaml")
-    );
-    let mut output = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    let mut in_block_comment = false;
-    let mut in_string = false;
-    let mut escaped = false;
-    while let Some(character) = chars.next() {
-        if in_block_comment {
-            if character == '*' && chars.peek() == Some(&'/') {
-                chars.next();
-                in_block_comment = false;
-            } else if character == '\n' {
-                output.push('\n');
-            }
-            continue;
-        }
-        if in_string {
-            output.push(character);
-            if escaped {
-                escaped = false;
-            } else if character == '\\' {
-                escaped = true;
-            } else if character == '"' {
-                in_string = false;
-            }
-            continue;
-        }
-        if character == '"' {
-            in_string = true;
-            output.push(character);
-            continue;
-        }
-        if is_rust && character == '/' && chars.peek() == Some(&'/') {
-            chars.next();
-            for comment_character in chars.by_ref() {
-                if comment_character == '\n' {
-                    output.push('\n');
-                    break;
-                }
-            }
-            continue;
-        }
-        if is_rust && character == '/' && chars.peek() == Some(&'*') {
-            chars.next();
-            in_block_comment = true;
-            continue;
-        }
-        if strip_hash && character == '#' {
-            for comment_character in chars.by_ref() {
-                if comment_character == '\n' {
-                    output.push('\n');
-                    break;
-                }
-            }
-            continue;
-        }
-        output.push(character);
+/// Code text for census matching, dispatched by file extension (bead -9ub39).
+///
+/// Routes through the kernels instead of a local comment grammar: Rust through
+/// `code_only` (which nests block comments correctly — the old loop closed at
+/// the first `*/` without depth), TOML through `toml_code_only` (which is
+/// `"`-quote-aware — the old loop stripped `#` inside strings), YAML through
+/// `yaml_code_only` (which additionally requires whitespace before `#`).
+/// Anything else passes through untouched, exactly as before.
+fn code_text_for_path(path: &Path, text: &str) -> String {
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("rs") => code_only(text).into_owned(),
+        Some("toml") => text
+            .lines()
+            .map(|line| toml_code_only(line).into_owned())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Some("yml" | "yaml") => text
+            .lines()
+            .map(|line| yaml_code_only(line).into_owned())
+            .collect::<Vec<_>>()
+            .join("\n"),
+        _ => text.to_owned(),
     }
-    output
 }
 
 fn has_allowance_row(repo_root: &Path, crate_name: &str) -> bool {
@@ -515,12 +475,12 @@ mod tests {
 
     #[test]
     fn census_ignores_comment_only_references() {
-        let rust = strip_comments(
+        let rust = code_text_for_path(
             Path::new("fixture.rs"),
             "// unowned-gate\n/* unowned-gate */\nfn clean() {}\n",
         );
         assert!(!rust.contains("unowned-gate"));
-        let toml = strip_comments(Path::new("fixture.toml"), "# unowned-gate\nname = \"clean\"\n");
+        let toml = code_text_for_path(Path::new("fixture.toml"), "# unowned-gate\nname = \"clean\"\n");
         assert!(!toml.contains("unowned-gate"));
     }
 

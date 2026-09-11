@@ -297,6 +297,36 @@ pub fn toml_code_only(line: &str) -> Cow<'_, str> {
     Cow::Borrowed(strip_toml_comment(line))
 }
 
+/// Strip a YAML `#` comment without changing the source line.
+///
+/// YAML opens a comment only at line start or after whitespace, and both quote
+/// kinds protect `#`. Routes the `#`-comment call sites that `toml_code_only`
+/// would over-strip (`key: value#fragment` keeps its tail here).
+pub fn yaml_code_only(line: &str) -> Cow<'_, str> {
+    Cow::Borrowed(strip_yaml_comment(line))
+}
+
+fn strip_yaml_comment(line: &str) -> &str {
+    let mut quote = None;
+    for (index, character) in line.char_indices() {
+        match (quote, character) {
+            (None, '"') | (None, '\'') => quote = Some(character),
+            (Some(open), character) if character == open => quote = None,
+            (None, '#')
+                if index == 0
+                    || line[..index]
+                        .chars()
+                        .next_back()
+                        .is_some_and(|previous| previous.is_whitespace()) =>
+            {
+                return &line[..index];
+            }
+            _ => {}
+        }
+    }
+    line
+}
+
 /// Read dependency keys from Cargo manifest dependency tables.
 pub fn manifest_deps(path: &Path) -> io::Result<BTreeSet<Name>> {
     let text = fs::read_to_string(path)?;
@@ -522,6 +552,23 @@ pub fn classify_scan(hits: &[ScanHit], rule_files: &[&str]) -> Result<ScanVerdic
 mod tests {
     use super::*;
     use std::io::Write;
+    #[test]
+    fn yaml_comment_needs_whitespace_and_respects_quotes() {
+        assert_eq!(yaml_code_only("# full line"), "");
+        assert_eq!(yaml_code_only("key: value # tail"), "key: value ");
+        assert_eq!(
+            yaml_code_only("key: value#fragment"),
+            "key: value#fragment"
+        );
+        assert_eq!(
+            yaml_code_only("key: \"quoted # kept\""),
+            "key: \"quoted # kept\""
+        );
+        assert_eq!(
+            yaml_code_only("key: 'single # kept'"),
+            "key: 'single # kept'"
+        );
+    }
 
     #[test]
     fn comments_and_literals_are_distinct() {

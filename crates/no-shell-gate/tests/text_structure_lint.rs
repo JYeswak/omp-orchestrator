@@ -89,23 +89,24 @@ fn scan_raw_checker_lines(root: &Path) -> Result<Vec<String>, String> {
                 )
             })?;
             let code = code_only(&text);
-            let local_matcher = [
-                "fn code_only(",
-                "fn strip_comments(",
-                "fn strip_rust_comments(",
-                "fn mask_non_code(",
-                "fn strip_toml_comment(",
-            ]
-            .iter()
-            .any(|needle| code.contains(needle));
+            // DERIVED 2026-09-11 (bead -9ub39): a local comment-matcher is any
+            // defined function whose name pairs a stripping verb with a structure
+            // noun. The five literal names this replaced missed `strip_line_comment`
+            // and `blank_block_comments` — the gate's own matchers — while covering
+            // nothing else. A fixture-only `fn` inside a string literal can still
+            // fire this; that residual matches the old rule's and is triaged as
+            // route-or-rename on sight.
+            let matcher_defs = defined_matcher_names(&code);
+            let local_matcher = !matcher_defs.is_empty();
             if local_matcher
                 && !code.contains("text_structure::code_only")
                 && !code.contains("code_and_literals")
                 && !text.contains("structure-keyed:")
             {
                 findings.push(format!(
-                    "RAW_TEXT_MATCH_IN_GATE {}:local matcher definition",
-                    path.strip_prefix(root).unwrap_or(&path).display()
+                    "RAW_TEXT_MATCH_IN_GATE {}:local matcher definition {:?}",
+                    path.strip_prefix(root).unwrap_or(&path).display(),
+                    matcher_defs
                 ));
             }
             // omp-orchestrator-nar5l: DELETED, not repointed. This read
@@ -135,6 +136,69 @@ fn scan_raw_checker_lines(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     Ok(findings)
+}
+/// A defined function whose name pairs a stripping verb with a structure noun
+/// is a local comment-matcher, whatever else it claims to be.
+fn is_local_matcher_name(name: &str) -> bool {
+    let verb = name.contains("strip")
+        || name.contains("mask")
+        || name.contains("blank")
+        || name.contains("code_only");
+    let noun = name.contains("comment") || name.contains("toml") || name.contains("code");
+    verb && noun
+}
+/// Function names actually DEFINED in blanked source (`fn name(`/either spacing).
+///
+/// `#[test]`-attributed definitions are specimens, not shipped grammars: three
+/// test names describe stripping the subject performs (`line_cite_rot`,
+/// `wired-but-inert-guard`) without implementing any. The shipped matcher, if
+/// one exists, is a non-test function and still fires. A matcher hiding inside
+/// a test body would escape; that residual is documented, not closed.
+fn defined_matcher_names(code: &str) -> Vec<&str> {
+    let lines: Vec<&str> = code.lines().collect();
+    let mut names = Vec::new();
+    for (number, line) in lines.iter().enumerate() {
+        let Some(fn_at) = line.find("fn ") else {
+            continue;
+        };
+        let rest = &line[fn_at + 3..];
+        let end = rest
+            .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .unwrap_or(rest.len());
+        if !rest[end..].trim_start().starts_with('(') {
+            continue;
+        }
+        if !is_local_matcher_name(&rest[..end]) {
+            continue;
+        }
+        let mut test_attributed = false;
+        let mut back = number;
+        while back > 0 {
+            back -= 1;
+            let above = lines[back].trim();
+            if above.is_empty() {
+                continue;
+            }
+            if above.starts_with("#[") {
+                test_attributed |= above.contains("#[test");
+                continue;
+            }
+            break;
+        }
+        if !test_attributed {
+            names.push(&rest[..end]);
+        }
+    }
+    names
+}
+
+/// `#[test]` specimens do not fire even when their names describe stripping.
+#[test]
+fn derived_matcher_rule_spares_test_specimens() {
+    let defs = defined_matcher_names("#[test]\nfn mutation_without_comment_stripping_counts_comment() {}\n");
+    assert!(defs.is_empty(), "test specimens must not fire: {defs:?}");
+    let defs = defined_matcher_names("fn strip_line_comment(line: &str) -> &str {}\n");
+    assert_eq!(defs, vec!["strip_line_comment"], "plain helpers still fire: {defs:?}");
 }
 
 #[test]
@@ -169,6 +233,36 @@ fn known_good_structure_keyed_call_is_allowed() {
     assert!(!raw_checker_line(
         "let n = text_structure::code_only(body).contains(\"needle\");"
     ));
+}
+/// DERIVATION PROOF (bead -9ub39): the rule fires on the SHAPE, not the list.
+/// `strip_block_comments` was never enumerated and fires; lookalikes pass.
+#[test]
+fn derived_matcher_rule_catches_shape_not_list() {
+    for name in [
+        "strip_line_comment",
+        "blank_block_comments",
+        "strip_comments",
+        "strip_rust_comments",
+        "mask_non_code",
+        "strip_toml_comment",
+        "strip_block_comments",
+        "code_only",
+        "code_only_lines",
+    ] {
+        assert!(is_local_matcher_name(name), "{name} must fire");
+    }
+    for name in [
+        "mask_line",
+        "code_string_literals",
+        "path_component",
+        "describe_line",
+        "encode_toml",
+        "observe_panes",
+    ] {
+        assert!(!is_local_matcher_name(name), "{name} must pass");
+    }
+    let defs = defined_matcher_names("fn strip_block_comments(x: &str) { }\nfn real() { }\n");
+    assert_eq!(defs, vec!["strip_block_comments"], "only the matcher shape: {defs:?}");
 }
 #[test]
 fn empty_gate_scan_is_an_error() {

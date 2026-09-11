@@ -11,6 +11,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use text_structure::{code_only, toml_code_only, yaml_code_only};
 
 const SELF_SOURCE: &str = "crates/no-shell-gate/src/bin/gate-reachability.rs";
 const SELF_TEST: &str = "crates/no-shell-gate/tests/gate_reachability.rs";
@@ -119,71 +120,12 @@ fn machine_name() -> String {
     "unknown".to_owned()
 }
 
-fn strip_comments(text: &str, markers: &[&str]) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    let mut output = String::with_capacity(text.len());
-    let mut block_marker: Option<&str> = None;
-    let mut quote: Option<char> = None;
-    let mut escaped = false;
-    let mut index = 0;
-    while index < chars.len() {
-        if let Some(marker) = block_marker {
-            if chars[index..].starts_with(&marker.chars().collect::<Vec<_>>()) {
-                index += marker.chars().count();
-                block_marker = None;
-            } else {
-                if chars[index] == '\n' {
-                    output.push('\n');
-                }
-                index += 1;
-            }
-            continue;
-        }
-        if let Some(quote_char) = quote {
-            let ch = chars[index];
-            output.push(ch);
-            if escaped {
-                escaped = false;
-            } else if ch == '\\' {
-                escaped = true;
-            } else if ch == quote_char {
-                quote = None;
-            }
-            index += 1;
-            continue;
-        }
-        let ch = chars[index];
-        if ch == '"' || ch == '\'' {
-            quote = Some(ch);
-            output.push(ch);
-            index += 1;
-            continue;
-        }
-        let matched = markers.iter().find(|marker| {
-            let marker_chars: Vec<char> = marker.chars().collect();
-            chars[index..].starts_with(&marker_chars)
-        });
-        if let Some(marker) = matched {
-            if *marker == "/*" {
-                block_marker = Some(marker);
-                index += marker.chars().count();
-            } else {
-                while index < chars.len() {
-                    let current = chars[index];
-                    index += 1;
-                    if current == '\n' {
-                        output.push('\n');
-                        break;
-                    }
-                }
-            }
-            continue;
-        }
-        output.push(ch);
-        index += 1;
-    }
-    output
-}
+// Comment handling routes through `text_structure` (bead -9ub39): a generic
+// marker-stripper beside the kernel is a lint finding, not a helper. Each former
+// call site now names its language: `code_only` for Rust source, `toml_code_only`
+// per line for `#`-comment files. Two drive-by corrections fall out: the old
+// helper closed a `/*` block at the NEXT `/*` rather than at `*/`, swallowing
+// code between them; and it stripped `#` inside plist XML, where `#` is content.
 
 fn json_row_value(line: &str) -> Option<serde_json::Value> {
     serde_json::from_str(line).ok()
@@ -257,11 +199,15 @@ fn workflow_triggers(root: &Path, package: &str) -> Result<Vec<String>, String> 
     for file in files {
         let text = fs::read_to_string(&file)
             .map_err(|error| format!("WORKFLOW_READ_FAILED path={} detail={error}", file.display()))?;
-        strict_workflow_parse(&file, &text)?;
-        let code = strip_comments(&text, &["#"]);
         let package_flag = format!("-p {package}");
         let package_equals = format!("-p={package}");
-        if code.lines().any(|line| line.contains(&package_flag) || line.contains(&package_equals)) {
+        // Workflow files are YAML: `#` opens a comment only after whitespace,
+        // and `//` is content (URLs). `yaml_code_only` encodes both.
+        let hit = text.lines().any(|line| {
+            let code = yaml_code_only(line);
+            code.contains(&package_flag) || code.contains(&package_equals)
+        });
+        if hit {
             triggers.push(format!("CI {}", file.strip_prefix(root).unwrap_or(&file).display()));
         }
     }
@@ -283,7 +229,9 @@ fn launchd_triggers(root: &Path, package: &str) -> Vec<String> {
         let Ok(text) = fs::read_to_string(&path) else {
             continue;
         };
-        if strip_comments(&text, &["#", "//"]).contains(package) {
+        // Plist files are XML: `#` is content (URL fragments), not a comment.
+        // The old marker set stripped it, hiding triggers in fragment URLs.
+        if code_only(&text).contains(package) {
             triggers.push(format!("launchd {}", path.strip_prefix(root).unwrap_or(&path).display()));
         }
     }
@@ -299,7 +247,7 @@ fn hook_trigger(root: &Path, package: &str) -> Option<String> {
         return None;
     }
     let source_text = fs::read_to_string(source).ok()?;
-    let source_text = strip_comments(&source_text, &["//", "/*"]);
+    let source_text = code_only(&source_text).into_owned();
     let hyphen = source_text.contains(package);
     let underscore = source_text.contains(&package.replace('-', "_"));
     (hyphen || underscore).then(|| "git pre-commit hook".to_owned())
@@ -320,8 +268,10 @@ fn crontab_text(root: &Path) -> String {
 }
 
 fn crontab_matches(text: &str, token: &str) -> Vec<String> {
-    strip_comments(text, &["#"])
-        .lines()
+    // Crontab `#` is a line comment; `toml_code_only` strips it per line with
+    // quote awareness the old marker loop lacked for `"` strings.
+    text.lines()
+        .map(|line| toml_code_only(line).into_owned())
         .enumerate()
         .filter(|(_, line)| line.split_whitespace().any(|field| field == token) || line.contains(token))
         .map(|(index, line)| format!("crontab:{}:{}", index + 1, line.trim()))
@@ -362,7 +312,7 @@ fn test_gate_files(root: &Path, package: &str) -> Vec<String> {
                 return None;
             }
             let text = fs::read_to_string(&path).ok()?;
-            let code = strip_comments(&text, &["//", "/*"]);
+            let code = code_only(&text);
             let marker = filename.contains("gate")
                 || filename.contains("ledger")
                 || filename.contains("census")

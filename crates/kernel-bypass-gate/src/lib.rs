@@ -68,6 +68,7 @@
 
 use std::fmt;
 use std::path::Path;
+use text_structure::code_only;
 
 // THE NEEDLES ARE ASSEMBLED FROM PARTS, and that is load-bearing.
 //
@@ -80,15 +81,20 @@ use std::path::Path;
 //
 // `concat!` expands at compile time, so the VALUE is the whole needle while the SOURCE
 // TEXT of this file never contains it contiguously. Splitting protects the checker from
-// its own source; blanking comments (see `blank_block_comments` / `strip_line_comment`)
-// protects it from every other file's prose. Both are required — AGENTS.md records a
+// its own source; blanking comments (`text_structure::code_only`) protects it from
+// every other file's prose. Both are required — AGENTS.md records a
 // doc comment *warning about* a needle that contained the needle and left a census GREEN
 // while its subject had been deleted.
-const NEEDLE_CAPTURE_PANE: &str = concat!("tmux ", "capture-pane");
-const NEEDLE_SEND_KEYS: &str = concat!("tmux ", "send-keys");
-const NEEDLE_ROBOT_SEND: &str = concat!("robot", "-send");
-const NEEDLE_QUEUE_READY: &str = concat!("br ", "ready");
-const NEEDLE_BEAD_CREATE: &str = concat!("br ", "create");
+// BARE WORDS ARE NOT PATTERNS. Five bare-word needles lived here until 2026-09-11
+// (`tmux capture-pane`, `tmux send-keys`, `robot-send`, `br ready`, `br create`).
+// They were deleted, not bounded: 11 of the 12 live sites they matched were prose,
+// not invocations (`.beads/issues.jsonl#3167` legs 1-10: 9 string literals, 2 flag
+// collisions), and no bound fixes a literal (`"EMPTY_SURFACE: br ready"` has word
+// neighbours on both sides). What remains are EXECUTION UNITS — `Command::new`
+// literals that name the spawned program. A unit cannot appear in prose without
+// naming a real spawn site, which is the property a bound was supposed to supply.
+// The printf leg (`--robot-send-receipt=x` is clean) passes vacuously now: there is
+// no `robot-send` needle left to collide with. That is the fix, not a gap in the leg.
 const NEEDLE_SPAWN_TMUX: &str = concat!("Command::new(", "\"tmux\")");
 const NEEDLE_SPAWN_NTM: &str = concat!("Command::new(", "\"ntm\")");
 const NEEDLE_SPAWN_BR: &str = concat!("Command::new(", "\"br\")");
@@ -109,20 +115,12 @@ const KERNEL_DISPATCH_SEND: &str = concat!("dispatch ", "robot", "-send");
 /// a violation. A pattern in any OTHER crate is a bypass.
 ///
 /// DECLARED, NOT INFERRED: adding a kernel requires adding its crate here.
+///
+/// EXECUTION UNITS ONLY. Every row names a `Command::new` program literal. A bare
+/// word (`robot-send`, `br ready`) matches prose that merely MENTIONS the kernel —
+/// error text, packet instructions, labels — which a bound cannot repair. Deleting
+/// the row, rather than bounding the needle, is what removed the 11 false sites.
 pub const KERNEL_REGISTRY: &[(&str, &str, &str)] = &[
-    (NEEDLE_CAPTURE_PANE, "tick-monitor observe", "tick-monitor"),
-    (NEEDLE_SEND_KEYS, KERNEL_DISPATCH_SEND, "tick-monitor"),
-    (NEEDLE_ROBOT_SEND, KERNEL_DISPATCH_SEND, "tick-monitor"),
-    (
-        NEEDLE_QUEUE_READY,
-        "loop-queue-filter queue",
-        "loop-queue-filter",
-    ),
-    (
-        NEEDLE_BEAD_CREATE,
-        "beads-workflow bead filing",
-        "finding",
-    ),
     (NEEDLE_SPAWN_TMUX, "tick-monitor pane access", "tick-monitor"),
     (NEEDLE_SPAWN_NTM, KERNEL_DISPATCH_SEND, "tick-monitor"),
     (
@@ -190,8 +188,24 @@ pub struct SystemicBypassAllowance {
 /// allowance with slack is an allowance that never shrinks — and because the refusal
 /// message names a one-integer edit. If this costs more than it catches, this paragraph
 /// is the evidence trail for reversing it.
-pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[];
-
+/// REFILL 2026-09-11 (bead -9ub39). The ledger above described the bare-word
+/// registry; when the five bare rows were deleted their violations went with them
+/// and the emptied ledger refused the tree with UNDECLARED_PATTERN on the one
+/// remaining true site. This row re-fills it for the execution-unit registry. The
+/// ceiling was measured on the committed tree with the new sources overlaid, per
+/// the provenance ritual above: exactly one live site,
+/// `crates/ompo-doctor/src/liveness.rs` spawning `ntm` for cass context — the same
+/// site `.beads/issues.jsonl#3167` classified as the only genuine invocation among
+/// twelve. The row ratchets it: a second `Command::new("ntm")` anywhere refuses
+/// with NEW_BYPASS, and routing liveness through a kernel refuses with
+/// CEILING_HAS_SLACK until this row is deleted. That is the debt system working,
+/// not an exemption: the count is exact in both directions.
+pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[SystemicBypassAllowance {
+    pattern: NEEDLE_SPAWN_NTM,
+    owner: "josh",
+    dies_when: "ompo-doctor liveness routes its cass-context spawn through a dispatch kernel, or its bespoke justification is renewed with cause",
+    ceiling: 1,
+}];
 /// A detected kernel bypass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bypass {
@@ -340,88 +354,16 @@ pub fn debt_verdict(report: &GateReport, ledger: &[SystemicBypassAllowance]) -> 
 
     DebtVerdict { faults }
 }
-
-/// Blank `/* … */` block comments, preserving line count and byte offsets.
+/// Comment handling lives in `text_structure::code_only`, not here.
 ///
-/// Over-stripping is the SAFE direction here: blanking too much can only report FEWER
-/// bypasses in prose, and the failure this prevents is a comment that discusses a kernel
-/// registering as a caller of it.
-pub fn blank_block_comments(source: &str) -> String {
-    let bytes = source.as_bytes();
-    let mut out = String::with_capacity(source.len());
-    let mut index = 0usize;
-    let mut in_string = false;
-    let mut depth = 0usize;
-
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if depth > 0 {
-            if byte == b'/' && index + 1 < bytes.len() && bytes[index + 1] == b'*' {
-                depth += 1;
-                out.push_str("  ");
-                index += 2;
-                continue;
-            }
-            if byte == b'*' && index + 1 < bytes.len() && bytes[index + 1] == b'/' {
-                depth -= 1;
-                out.push_str("  ");
-                index += 2;
-                continue;
-            }
-            out.push(if byte == b'\n' { '\n' } else { ' ' });
-            index += 1;
-            continue;
-        }
-        match byte {
-            b'"' => {
-                in_string = !in_string;
-                out.push('"');
-                index += 1;
-            }
-            b'\\' if in_string && index + 1 < bytes.len() => {
-                out.push('\\');
-                out.push(bytes[index + 1] as char);
-                index += 2;
-            }
-            b'/' if !in_string && index + 1 < bytes.len() && bytes[index + 1] == b'/' => {
-                // A line comment: `strip_line_comment` owns it. Copy verbatim to the
-                // newline so a `/*` inside a `//` comment cannot open a block.
-                while index < bytes.len() && bytes[index] != b'\n' {
-                    out.push(bytes[index] as char);
-                    index += 1;
-                }
-            }
-            b'/' if !in_string && index + 1 < bytes.len() && bytes[index + 1] == b'*' => {
-                depth = 1;
-                out.push_str("  ");
-                index += 2;
-            }
-            other => {
-                out.push(other as char);
-                index += 1;
-            }
-        }
-    }
-
-    out
-}
-
-/// Strip `//` line comments from a single line, respecting string literals.
-pub fn strip_line_comment(line: &str) -> &str {
-    let mut in_str = false;
-    let bytes = line.as_bytes();
-    for i in 0..bytes.len() {
-        match bytes[i] {
-            b'"' => in_str = !in_str,
-            b'\\' if in_str => {}
-            b'/' if !in_str && i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                return &line[..i];
-            }
-            _ => {}
-        }
-    }
-    line
-}
+/// Two hand matchers lived in this spot until 2026-09-11 (`blank_block_comments`,
+/// `strip_line_comment`, ~80 lines of byte-loop comment scanning). They were deleted
+/// when the gate routed through `code_only`, for the reason the lint now enforces:
+/// every local comment-stripper is a second comment grammar that drifts from the
+/// first. `code_only` blanks line and nested block comments while preserving string
+/// literals (the `Command::new` units live inside them) and line numbers. A `/*`
+/// inside a `//` comment cannot open a block; a `//` inside a string cannot close
+/// code. The legs that pinned the old matchers now pin the routing instead.
 
 /// Determine which crate a file belongs to, from a path containing `crates/<name>/`.
 ///
@@ -446,27 +388,29 @@ pub fn owning_crate(path: &str) -> Option<String> {
 ///
 /// Returns violations for lines that match a kernel's raw pattern where the
 /// file's owning crate is NOT the kernel's owning crate (the allowlist).
-/// Block comments are blanked and line comments stripped before matching.
+/// Source is routed through `text_structure::code_only` before matching:
+/// comments are blanked with offsets preserved, string literals are kept (the
+/// execution units live inside them). Line numbers are read off the blanked
+/// text, which carries every newline in place, so they match the source.
 pub fn lint_source(file: &str, source: &str) -> Vec<Bypass> {
     let crate_name = owning_crate(file);
-    let deprosed = blank_block_comments(source);
+    let code = code_only(source);
+    let code = code.as_ref();
     let mut violations = Vec::new();
-    for (index, line) in deprosed.lines().enumerate() {
-        let stripped = strip_line_comment(line);
-        for (pattern, kernel, owning) in KERNEL_REGISTRY {
-            if stripped.contains(pattern) {
-                let is_owning = crate_name.as_deref() == Some(*owning);
-                if !is_owning {
-                    violations.push(Bypass {
-                        file: file.to_owned(),
-                        line: index + 1,
-                        pattern: (*pattern).to_string(),
-                        kernel: (*kernel).to_string(),
-                    });
-                }
+    for (pattern, kernel, owning) in KERNEL_REGISTRY {
+        for (start, _) in code.match_indices(pattern) {
+            let is_owning = crate_name.as_deref() == Some(*owning);
+            if !is_owning {
+                violations.push(Bypass {
+                    file: file.to_owned(),
+                    line: code[..start].matches('\n').count() + 1,
+                    pattern: (*pattern).to_string(),
+                    kernel: (*kernel).to_string(),
+                });
             }
         }
     }
+    violations.sort_by(|a, b| a.file.cmp(&b.file).then(a.line.cmp(&b.line)));
     violations
 }
 

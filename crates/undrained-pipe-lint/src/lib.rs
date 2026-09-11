@@ -68,30 +68,6 @@ impl LintReport {
     }
 }
 
-/// Strip a line comment while respecting escaped quotes.
-pub fn strip_line_comment(line: &str) -> &str {
-    let mut in_string = false;
-    let mut escaped = false;
-    let bytes = line.as_bytes();
-    for index in 0..bytes.len() {
-        let byte = bytes[index];
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if byte == b'\\' {
-                escaped = true;
-            } else if byte == b'"' {
-                in_string = false;
-            }
-        } else if byte == b'"' {
-            in_string = true;
-        } else if byte == b'/' && bytes.get(index + 1) == Some(&b'/') {
-            return &line[..index];
-        }
-    }
-    line
-}
-
 /// Mask comments and ordinary quoted strings without changing line count.
 fn code_line(line: &str) -> String {
     let mut output = String::with_capacity(line.len());

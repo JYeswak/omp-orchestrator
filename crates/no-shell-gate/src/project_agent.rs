@@ -11,6 +11,8 @@ use std::fs;
 use std::path::Path;
 use std::str;
 
+use text_structure::yaml_code_only;
+
 pub const OMP_GRADER_PATH: &str = ".omp/agents/omp-grader.md";
 pub const REQUIRED_OUTPUT_PROPERTIES: &[&str; 9] = &[
     "verdict",
@@ -136,7 +138,7 @@ fn parse_frontmatter(text: &str) -> Result<ParsedFrontmatter, String> {
     let mut closed = false;
     for line in lines {
         let line = line.strip_suffix('\r').unwrap_or(line);
-        if strip_yaml_comment(line).trim() == "---" {
+        if yaml_code_only(line).trim() == "---" {
             closed = true;
             break;
         }
@@ -150,7 +152,8 @@ fn parse_frontmatter(text: &str) -> Result<ParsedFrontmatter, String> {
     let mut stack: Vec<(usize, String)> = Vec::new();
     let mut tools_indent = None;
     for raw in body {
-        let line = strip_yaml_comment(raw).trim_end();
+        let stripped = yaml_code_only(raw);
+        let line = stripped.trim_end();
         if line.trim().is_empty() {
             continue;
         }
@@ -223,26 +226,6 @@ fn scalar(value: &str) -> String {
     value.to_owned()
 }
 
-fn strip_yaml_comment(line: &str) -> &str {
-    let mut quote = None;
-    for (index, character) in line.char_indices() {
-        match (quote, character) {
-            (None, '"') | (None, '\'') => quote = Some(character),
-            (Some(open), character) if character == open => quote = None,
-            (None, '#')
-                if index == 0
-                    || line[..index]
-                        .chars()
-                        .next_back()
-                        .is_some_and(|previous| previous.is_whitespace()) =>
-            {
-                return &line[..index];
-            }
-            _ => {}
-        }
-    }
-    line
-}
 
 #[cfg(test)]
 mod tests {

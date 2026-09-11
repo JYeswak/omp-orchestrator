@@ -18,21 +18,9 @@ use std::path::{Path, PathBuf};
 
 // ── SCAN HELPERS ───────────────────────────────────────────────────────────────
 
-fn strip_line_comment(line: &str) -> &str {
-    let mut in_str = false;
-    let bytes = line.as_bytes();
-    for i in 0..bytes.len() {
-        match bytes[i] {
-            b'"' => in_str = !in_str,
-            b'\\' if in_str => {}
-            b'/' if !in_str && i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
-                return &line[..i];
-            }
-            _ => {}
-        }
-    }
-    line
-}
+// Comment handling routes through `text_structure::code_only` (bead -9ub39):
+// a second comment grammar beside the kernel's is a lint finding, not a helper.
+use text_structure::code_only;
 
 fn find_rs_files(base: &Path, dir: &Path, out: &mut Vec<PathBuf>) {
     let entries = match fs::read_dir(dir) {
@@ -65,7 +53,7 @@ fn is_declared(crate_src: &Path, module_name: &str) -> bool {
             Err(_) => continue,
         };
         for line in text.lines() {
-            let stripped = strip_line_comment(line);
+            let stripped = code_only(line);
             let trimmed = stripped.trim();
             if trimmed.starts_with("mod ") || trimmed.starts_with("pub mod ") {
                 let declared = trimmed

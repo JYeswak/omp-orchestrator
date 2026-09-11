@@ -23,6 +23,7 @@ unsafe_code = "forbid"
 # kill and dual-pipe contract instead of leaving either failure mode reachable.
 subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
+text-structure = { path = "../text-structure" }
 
 [dev-dependencies]
 # Dev-only ON PURPOSE: pane-truth spawns tmux; the LIBRARY remains I/O-free.
@@ -32,3 +33,4 @@ tick-monitor = { path = "../tick-monitor" }
 # restated TWO_CAPTURE_MIN_SECS against its owner.
 pane-truth = { path = "../pane-truth" }
 proptest = "1"
+text-structure = { path = "../text-structure" }

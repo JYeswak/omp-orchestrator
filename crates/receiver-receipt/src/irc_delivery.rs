@@ -9,6 +9,7 @@
 
 use std::fmt;
 use std::path::Path;
+use text_structure::code_only;
 
 
 /// Byte-for-byte the upstream interface in `dist/types/irc/bus.d.ts`.
@@ -85,22 +86,12 @@ pub fn pane_transport_cannot_use_irc_receipt(
     })
 }
 
-fn code_only_lines(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("//") {
-            continue;
-        }
-        out.push_str(line);
-        out.push('\n');
-    }
-    out
-}
-
 /// True when source maps sender exit onto IrcDeliveryReceipt without the typed refusal.
+/// Comment handling routes through `text_structure::code_only` (bead -9ub39):
+/// the old helper dropped full-line `//` comments but kept trailing ones, so a
+/// trailing mention counted as a mapping. Blanking both is strictly more correct.
 pub fn maps_sender_exit_onto_irc_receipt(text: &str) -> bool {
-    let code = code_only_lines(text);
+    let code = code_only(text);
     code.contains("IrcDeliveryReceipt")
         && (code.contains("sender_exit")
             || code.contains("sender.exit")

@@ -6,9 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kernel_bypass_gate::{
-    blank_block_comments, debt_verdict, lint_source, lint_workspace, strip_line_comment,
+    debt_verdict, lint_source, lint_workspace,
     SystemicBypassAllowance, BYPASS_DEBT, KERNEL_REGISTRY,
 };
+use text_structure::code_only;
 
 /// KNOWN-BAD: a raw tmux send-keys outside the kernel crate -> RED naming the kernel.
 #[test]
@@ -130,16 +131,18 @@ fn documented() {}
     );
 }
 
+/// ROUTING: `code_only` preserves string literals and strips comments, so the
+/// gate's matchers never see prose. This leg pins the routing, not a local helper.
 #[test]
 fn strip_preserves_string_content_with_slashes() {
     // A string containing // must NOT be stripped as a comment.
     let line = r#"    let url = "https://example.com"; // this is a comment"#;
-    let stripped = strip_line_comment(line);
+    let code = code_only(line);
     assert!(
-        stripped.contains("https://example.com"),
+        code.contains("https://example.com"),
         "string content preserved"
     );
-    assert!(!stripped.contains("this is a comment"), "comment stripped");
+    assert!(!code.contains("this is a comment"), "comment stripped");
 }
 
 /// KNOWN-GOOD on the SHIPPED path: `lint_workspace` must honour the allowlist.
@@ -235,10 +238,10 @@ fn gate_crate_never_spawns_a_subprocess() {
             continue;
         }
         let text = std::fs::read_to_string(&path).expect("read gate source");
-        for (index, line) in text.lines().enumerate() {
-            let code = strip_line_comment(line);
+        let code = code_only(&text);
+        for (index, line) in code.lines().enumerate() {
             assert!(
-                !code.contains("process::Command"),
+                !line.contains("process::Command"),
                 "{}:{} imports a subprocess; the self-immunity exemption is void",
                 path.display(),
                 index + 1
@@ -255,7 +258,7 @@ fn block_comment_prose_does_not_trigger() {
    tmux capture-pane and a br ready pipeline. */
 fn documented() {}
 ";
-    let blanked = blank_block_comments(source);
+    let blanked = code_only(source);
     assert_eq!(
         blanked.lines().count(),
         source.lines().count(),
@@ -279,6 +282,47 @@ fn handroll() { Command::new(\"tmux\").arg(\"kill-server\"); }
         "the real handroll on line 2 must survive blanking: {hits:?}"
     );
     assert_eq!(hits[0].line, 2, "line number preserved through blanking");
+}
+/// ADOPTED-VERB PROOF (bead -9ub39): the packet instruction the fleet adopted
+/// (`--robot-send-receipt=x`) must NOT register as a bypass.
+///
+/// This leg is also the tripwire against re-adding a bare `robot-send` row: the
+/// day such a row returns, this leg goes RED on the adopted verb.
+#[test]
+fn adopted_robot_send_verb_does_not_trigger() {
+    let source = "\
+// REPLY-VIA: ntm --robot-send=omp-orchestrator --panes=1 --msg-file <path>
+fn report() {}
+";
+    let hits = lint_source("crates/my-crate/src/lib.rs", source);
+    assert!(
+        hits.is_empty(),
+        "the adopted packet verb must not register as a bypass: {hits:?}"
+    );
+}
+
+/// GENUINE-SPAWN PROOF (bead -9ub39): a real raw `ntm` spawn outside the owning
+/// crate must STILL be refused, naming the dispatch kernel — and the owning
+/// crate's own spawn stays allowlisted. Deleting the bare-word rows must not
+/// cost the one genuine invocation the census found.
+#[test]
+fn genuine_ntm_spawn_outside_kernel_still_matches() {
+    let source = "\
+fn fire() {
+    Command::new(\"ntm\").args([\"--robot-send\"]).output().unwrap();
+}
+";
+    let hits = lint_source("crates/my-crate/src/lib.rs", source);
+    assert_eq!(hits.len(), 1, "the genuine spawn must still be refused: {hits:?}");
+    assert_eq!(
+        hits[0].kernel, "dispatch robot-send",
+        "the refusal must NAME the kernel: {hits:?}"
+    );
+    let own = lint_source("crates/tick-monitor/src/main.rs", source);
+    assert!(
+        own.is_empty(),
+        "the owning crate's own spawn stays allowlisted: {own:?}"
+    );
 }
 
 /// The ratchet refuses in BOTH directions, and refuses an undeclared pattern outright.

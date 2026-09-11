@@ -19,15 +19,8 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn code_only_lines(text: &str) -> String {
-    text.lines()
-        .filter(|line| {
-            let trimmed = line.trim_start();
-            !trimmed.starts_with("//")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
+// Caller census routes through `text_structure::code_only` (bead -9ub39).
+use text_structure::code_only;
 
 fn rust_sources(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -53,7 +46,7 @@ fn scan_irc_delivery_callers(crates_src_roots: &[PathBuf]) -> Result<Vec<PathBuf
         rust_sources(src, &mut files);
         for file in files {
             let text = fs::read_to_string(&file).unwrap_or_default();
-            if code_only_lines(&text).contains("IrcDeliveryReceipt") {
+            if code_only(&text).contains("IrcDeliveryReceipt") {
                 hits.push(file);
             }
         }
