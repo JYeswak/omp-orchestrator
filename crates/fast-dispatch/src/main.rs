@@ -9,7 +9,9 @@
 //!
 //! WHAT IS RUST: admission, FREE-pane selection, conductor skip, session-repo
 //! map, lock, bounded child runner, packet assembly, send orchestration.
-//! WHAT REMAINS EXTERNAL: loop-queue-filter, composer-typed.py, pane-dispatch-fence, ntm, br, tmux.
+//! WHAT REMAINS EXTERNAL: loop-queue-filter, pane-dispatch-fence, ntm, br, tmux.
+//! composer-typed.py LEFT this list on 2026-09-11: the composer oracle is now the in-repo
+//! `composer-typed` crate, called in-process. No python3, no sibling-checkout path.
 
 #[path = "dispatch_cli_contract.rs"]
 mod dispatch_cli_contract;
@@ -336,17 +338,68 @@ fn pane_is_free(session: &str, pane: &str) -> bool {
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
+/// Is the composer carrying typed operator text? IN-PROCESS, via the in-repo Rust port.
+///
+/// # What this replaced, and why it was a near-miss rather than a preference
+///
+/// This spawned `python3` against `cp().join("bin/composer-typed.py")` — a script in a SIBLING
+/// CHECKOUT, resolved through `cp()`, which this repository's own `no-shell-gate` cannot see
+/// because that gate walks THIS repository's index. Outside its jurisdiction, not hidden from it.
+///
+/// ⛔ AND THE SCRIPT WAS ALREADY DELETED HERE. `pane-dispatch-ready` records the cost verbatim at
+/// `src/main.rs:211-213`: *"The `.py` was deleted when composer-typed became a crate, so the old
+/// unconditional path made composer_rc return 99 and fail-closed EVERY pane to BUSY — a silent
+/// fleet-wide starve that needed no config to trigger."* That crate paid for this dependency and
+/// moved to the binary; `omp-orchestrator` calls the library in-process (`src/resident.rs:3762`,
+/// `:3837`). fast-dispatch was the last caller still pointing at the deleted path, with NO
+/// fallback, so its `if !is_file() { return true; }` sat one absent sibling checkout away from the
+/// same fleet-wide starve. `crates/composer-typed` is the port of that exact script
+/// (`src/lib.rs:3`); wiring it is BUILT-not-WIRED at call-site granularity and the kernel-only
+/// rule says wiring the existing kernel IS the work.
+///
+/// # ONE failure surface dies, ONE SURVIVES, and the survivor is now guarded HERE
+///
+/// The old shape read a CHILD'S EXIT STATUS and mapped `TimedOut | Unspawned` to `true`
+/// (fail-closed: refuse a pane we could not ask about). `is_typed` is a pure
+/// `(&str, &Rules) -> bool`, so there is no child, no deadline and no spawn failure: those arms
+/// CEASE TO HAVE A REFERENT rather than being preserved. This is deliberately NOT described as
+/// behaviour-preserving — a pure function cannot fail to answer.
+///
+/// ⛔ BUT THE CAPTURE STILL SPAWNS `tmux` AND CAN STILL FAIL, and on that path the kernel's answer
+/// is the ADMITTING one, so the guard below is required rather than defensive.
+/// `composer_typed::is_typed` hard-codes `if data.is_empty() { return false }`
+/// (`crates/composer-typed/src/lib.rs:189-191`), and `false` here means NOT TYPED means
+/// COMPOSER FREE means ADMIT. The old code answered `true` (refuse) for "could not ask"; the
+/// kernel answers `false` (admit) for "nothing to read". Porting without this guard would invert
+/// the safety of the exact failure mode the old error arms existed to cover.
+///
+/// ⚠️ AND THE KERNEL'S OWN RULE FOR THIS IS INERT — MEASURED 2026-09-11, reported, not fixed here.
+/// `Rules::fail_closed_on_empty` is declared (`lib.rs:45`), defaults `true` (`:53`), is
+/// disableable by name (`:66`) and is asserted by a test called `mutation_fail_closed_on_empty`
+/// (`tests/mutation.rs:67-71`) — and it is READ BY NOTHING: the only mentions in `lib.rs` are the
+/// enum arm, the field, the default and the setter, while its siblings
+/// `bright_body_is_typed` / `dim_suggestion_is_not_typed` are read at `:163,:171,:177,:184`.
+/// So the flag cannot change the empty-input answer in either position. Worse for a dispatch
+/// caller, the NAME is inverted across this seam: the binary documents `0=TYPED, 1=FREE`
+/// (`src/main.rs:3`), so "fail closed on empty" yields rc=1 = FREE = ADMIT once a gate consumes
+/// it. True to composer-typed's own contract, backwards for ours. Hence: guard at the CALLER,
+/// and do not rely on a rule named for the behaviour we want.
+///
+/// The upstream all-whitespace check in `pane_is_live` also still refuses, so this is now
+/// fail-closed in two independent places. That redundancy is deliberate: the upstream guard is an
+/// implicit empty-string path (`run_timeout(..).unwrap_or_default()`), which is the kind of
+/// protection a refactor deletes without noticing.
+///
+/// NOT IN SCOPE: the positional 25-line window at the call site. That is a separate defect with a
+/// separate remedy and it is deliberately untouched here.
 fn composer_occupied(raw_tail: &str) -> bool {
-    let script = cp().join("bin/composer-typed.py").display().to_string();
-    if !Path::new(&script).is_file() {
+    // FAIL CLOSED: nothing to read is not evidence the composer is free.
+    if raw_tail.chars().all(char::is_whitespace) {
         return true;
     }
-    let mut command = Command::new("python3");
-    command.arg(script);
-    match bounded_output_stdin(&mut command, Duration::from_secs(10), raw_tail.as_bytes()) {
-        BoundedOutcome::Completed(output) => output.status.success(),
-        BoundedOutcome::TimedOut | BoundedOutcome::Unspawned(_) => true,
-    }
+    // RAW capture, escapes intact: `typed_ansi` keys on SGR dim-vs-bright state, so stripping
+    // ANSI would compute a plausible answer from destroyed evidence.
+    composer_typed::is_typed(raw_tail, &composer_typed::Rules::default())
 }
 
 /// Ask NTM whether a pane is sitting on an interactive dialog, INSTEAD OF INFERRING IT FROM PAINT.
@@ -1251,5 +1304,48 @@ mod dispatch_result_tests {
         let value: Value = serde_json::from_str(&row).unwrap();
         assert_eq!(value["outcome"], "dispatch_transport_failed");
         assert_eq!(value["surface"]["name"], "pane_is_free");
+    }
+
+    /// KNOWN-BAD, REQUIRED BY THE PORT. A pane whose capture could not be obtained must NOT be
+    /// admitted. `run_timeout(..).unwrap_or_default()` turns an errored or timed-out `tmux
+    /// capture-pane` into an EMPTY STRING, and `composer_typed::is_typed` hard-codes
+    /// `if data.is_empty() { return false }` (`crates/composer-typed/src/lib.rs:189-191`), where
+    /// `false` means NOT TYPED means COMPOSER FREE means ADMIT.
+    ///
+    /// So this leg reddens if the guard in `composer_occupied` is ever removed: without it the
+    /// port silently converts the old `TimedOut | Unspawned => true` (refuse) into admit, on the
+    /// exact failure mode those arms existed to cover. It is the reason the kernel's own
+    /// `Rules::fail_closed_on_empty` cannot be relied on here — that flag is read by nothing.
+    #[test]
+    fn a_capture_that_could_not_be_obtained_is_never_admitted() {
+        for unobtainable in ["", " ", "\n", "\n\n", "   \t\r\n  "] {
+            assert!(
+                composer_occupied(unobtainable),
+                "an unobtainable capture ({unobtainable:?}) must read OCCUPIED so pane_is_live \
+                 refuses; admitting it reintroduces the fail-open the deleted script's error \
+                 arms used to cover"
+            );
+        }
+        // POSITIVE CONTROL on the same call: the kernel's own permissive answer for empty input is
+        // what the guard above exists to override. If this ever stops being false, the guard has
+        // become redundant and this leg's reason has changed.
+        assert!(
+            !composer_typed::is_typed("", &composer_typed::Rules::default()),
+            "composer_typed::is_typed(\"\") is expected to be FALSE (not typed = admit); the \
+             guard in composer_occupied is the only thing that makes the empty case refuse"
+        );
+    }
+
+    /// KNOWN-GOOD. An over-strict oracle that refused every pane would pass the leg above and
+    /// starve the fleet — the exact outcome `pane-dispatch-ready` recorded when the deleted `.py`
+    /// made `composer_rc` return 99 for every pane. A bare prompt with nothing typed after the
+    /// marker must read FREE.
+    #[test]
+    fn a_bare_prompt_still_reads_free() {
+        assert!(
+            !composer_occupied("╰─\n❯ \n"),
+            "a prompt marker with only strippable padding after it is an EMPTY composer; if this \
+             refuses, fast-dispatch admits nothing and the fleet starves"
+        );
     }
 }

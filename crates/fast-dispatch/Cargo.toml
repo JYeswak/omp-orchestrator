@@ -14,6 +14,7 @@ name = "fast_dispatch"
 path = "src/lib.rs"
 
 [dependencies]
+composer-typed = { path = "../composer-typed" }
 loop-switch = { path = "../loop-switch" }
 subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
