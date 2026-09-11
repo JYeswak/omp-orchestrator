@@ -1785,6 +1785,24 @@ theories could only agree with themselves.
 ```
 
 ---
+## Mined skills — the repeated mistakes, indexed by trigger
+
+Seven skills extracted from 1598 commits (2026-08-30→09-11), 3579 bead
+comments, and the negative-pattern catalogs. Each names trigger phrases, the
+pattern, narrative anti-patterns, and sha/bead-pinned negative evidence.
+Read the skill file when its triggers fire; the rules below stay authoritative
+and the skill carries the receipts.
+
+| Skill | When | One sentence |
+|---|---|---|
+| [`remote-proof`](docs/skills/remote-proof.md) | remote run, rch exec, exit code, proof lines | Both proof lines plus the denominator, or there is no verdict. |
+| [`negative-control`](docs/skills/negative-control.md) | diagnose, measure, survey, probe, absence | Validate the instrument on a guaranteed-absent subject before believing it. |
+| [`mutation-proof`](docs/skills/mutation-proof.md) | gate, leg, mutation, known-bad, ceiling | Fires-on-known-bad plus known-good plus byte-identical restore, or it is decoration. |
+| [`shared-checkout`](docs/skills/shared-checkout.md) | commit, stage, index, peer, sweep | Both pathspecs, cached-check first, read the sha back; a pathspec is not a hunk-scope. |
+| [`bead-truth`](docs/skills/bead-truth.md) | dispatch, claim, ACK, grade, close | File→claim→dispatch→ACK→verify→RELEASE→close; one ACK per packet; never self-grade. |
+| [`wiring-proof`](docs/skills/wiring-proof.md) | wire, callers, dead code, reachable | A mechanism without a caller to a reachable trigger is worth zero; walk to the root. |
+| [`figure-hygiene`](docs/skills/figure-hygiene.md) | count, cite, measure, anchor | Every number carries its producing command, tree, denominator, and positive control. |
+
 
 ## The crates — what they are, and WHICH REPOSITORY they are in
 
