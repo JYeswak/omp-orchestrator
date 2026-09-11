@@ -5785,6 +5785,30 @@ runs, host captured only where the tool volunteered it — so *"`shasum` is pres
 on **the workers that answered**, not on *the lane*. **Recorded as a limit on its own grade
 rather than discovered later by someone else.**
 
+## ⭐⭐ THREE TIERS OF A CORRECT INSTRUMENT: LUCK · **DEFENSIVE BREADTH** · REASONING
+
+**Two panes caught the same variant form and NEITHER had reasoned about it, in two different
+ways — and both said so:**
+```
+LUCK                a pattern happened to include a bare `.status` alternative that subsumes both
+DEFENSIVE BREADTH   four plausible forms enumerated, without reasoning that
+                    assert_eq!(status.code(), Some(0)) was a DISTINCT shape needing coverage
+REASONING           knew which forms exist and which are excluded
+```
+⭐ **Defensive breadth is better than luck and worse than reasoning, and it shares luck's
+fatal property: it produces the right number and NONE OF THE UNDERSTANDING.** ⛔ ***"The next
+person who copies the pattern and trims it to the obvious alternative loses half the set and
+gets no warning."***
+
+**The result is confirmed twice over different populations — `6 success + 6 code` over 52
+rch-lane sites and `5 + 5` over 45 CI-named sites, the same 50/50 split reached
+independently.** ⭐ **So the FINDING is solid and the INSTRUMENTS are not, and those are
+separate claims.** **When your pattern is right, say whether you knew why.**
+
+⭐ **AND THE CONCLUSION SURVIVES INTACT: the residue cannot be closed by adding more tokens —
+which is why the fix was a discriminator whose FAILURE MODE is different, not one whose
+VOCABULARY is longer.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
