@@ -1425,11 +1425,18 @@ mod tests {
 
     #[test]
     fn missing_and_malformed_artifacts_are_distinct_anti_vacuity_errors() {
-        let (directory, output) = fixture();
+        let (_directory, output) = fixture();
         let missing = read_inception(&output).expect_err("missing artifact must refuse");
         assert_eq!(missing.exit_code(), 2);
         assert!(matches!(missing, InceptionError::ReadbackMissing { .. }));
 
+        // `fixture()` deliberately leaves the artifact DIRECTORY absent so the
+        // leg above is a genuine ABSENCE rather than a parse failure. Planting a
+        // corrupt artifact therefore has to create that directory first: without
+        // it this `fs::write` itself fails NotFound, the malformed leg is never
+        // reached, and the distinction the test name asserts goes unmeasured.
+        fs::create_dir_all(output.parent().expect("artifact path has a parent"))
+            .expect("create artifact directory");
         fs::write(&output, "{").expect("write malformed artifact");
         let malformed = read_inception(&output).expect_err("malformed artifact must refuse");
         assert_eq!(malformed.exit_code(), 2);
