@@ -2421,6 +2421,40 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    or you pay for the same work twice** — and check it for DAMAGE too: a different aborted agent
    had left a regression plus a `100644 -> 100755` mode flip.
 
+8v. ⛔ **`cp` OVER A LIVE MACH-O SIGKILLS IT, AND RESTORING BYTE-IDENTICAL BYTES DOES NOT FIX IT
+   — macOS CACHES THE SIGNATURE PER *INODE*, NOT PER CONTENT. INSTALL VIA A FRESH INODE.**
+   Measured 2026-09-11 by the conductor, who broke `ompo` on `PATH` for three minutes doing the
+   install it had just authorised.
+
+   ```
+   cp certified -> ~/.local/bin/ompo      ompo health  rc=137   (128+9 = SIGKILL, empty output)
+   cp -p backup -> ~/.local/bin/ompo      ompo health  rc=137   <- BYTE-IDENTICAL ROLLBACK, STILL DEAD
+   ./grade-dist-good/bin/ompo-good        health       rc=0 GREEN  <- same bytes, untouched inode
+   cp -> ompo.staged (new name)           health       rc=0 GREEN  <- fresh inode, runs
+   mv -f ompo.staged ompo                 health       rc=0 GREEN  <- atomic rename, installed
+   ```
+
+   **THE ROLLBACK FAILING IS THE DISCRIMINATOR AND IT IS THE WHOLE LESSON.** A byte-identical
+   restore that stays dead **proves the kernel's objection is not to the content**. Both
+   binaries are `adhoc, linker-signed`; rewriting the pages of a running-or-cached inode
+   invalidates AMFI's cached verdict for that inode **permanently**, so every later exec of that
+   path dies regardless of what you put there. **Reaching for a bigger hammer on the bytes —
+   re-copy, re-`chmod`, re-download — cannot work, and will read as "the new binary is broken."**
+
+   **HOUSE FORM:** stage under a DIFFERENT NAME **in the destination directory**, verify it
+   there, then `mv -f` into place. The rename gives the target path a fresh inode with an
+   unpoisoned signature, and it is atomic so no window exists where the path is absent.
+   **`dcg` refuses `mv` from a repo into `$HOME`** (`core.filesystem:mv-sensitive-source-root-home`)
+   — `cd` to the destination directory and stage there.
+
+   **AND `rc=137` IS NOT AN APPLICATION EXIT CODE.** `137`, `139`, `134` are `128+signal`; an
+   empty stdout beside them means the process never ran its own code. **Do not read a signal as
+   a verdict** — same family as the restrictive-terminal rule, where a timeout is not a verdict.
+
+   **NO-CLAIM.** This is the install path on macOS with adhoc-signed cross-built binaries. It
+   says nothing about notarized artifacts, and nothing about why the signature was cached — only
+   that a fresh inode clears it, measured five ways above.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
