@@ -5692,6 +5692,99 @@ expression is on the lines BELOW the panic location.** ⭐ ***A window that look
 past the anchor is a capture-wide violation in the SOURCE-READING direction*** — the first
 member of that family pointed at source rather than at output.
 
+## ⭐⭐ THREE INSTRUMENTS, THREE POPULATIONS, ONE NUMBER — convergence by DIFFERENT failure modes
+
+```
+token scan over 52 rch-lane sites      STATUS_SUCCESS 6 + STATUS_CODE 6 = 12
+file-level spawn-absence over 45 CI    residue named by file
+bucket-then-shape over 52              8 (in the twelve) + 2 (DRIFT) + 2 (rch-only) = 12
+```
+⭐ **Same set, reached three ways.** ⛔ **This is the OPPOSITE of the shared-blind-spot case:
+two instruments agreeing while asking the same question lift nothing; three agreeing while
+asking DIFFERENT questions is real convergence.** **State which question each asked before you
+call agreement evidence.**
+
+## ⛔⛔ AN INSTRUMENT THAT IS **ACCIDENTALLY CORRECT** GIVES YOU THE NUMBER AND NONE OF THE UNDERSTANDING
+
+**Disclosed unprompted.** A `.success()` grep is blind to
+`assert_eq!(output.status.code(), Some(0))` — **one classifier caught both forms only because
+its pattern happened to include a bare `.status` alternative.**
+
+> *"I did not reason about `.code()` and would have missed it had I written the obvious
+> pattern."*
+
+⛔ **It produced the right answer and no understanding — and it FAILS SILENTLY THE NEXT TIME IT
+IS COPIED**, because the property that saved it was never the property anyone intended. ⭐
+**A correct result from an unreasoned instrument is a liability disguised as a confirmation.**
+**When your instrument is right, check WHY; if the reason is not the one you designed, say so.**
+
+## ⭐⭐ GRADE YOUR PARTITION BY EVIDENCE HARDNESS — and check whether YOUR OWN claim sits in the residue
+
+**The sharpest self-audit of the session.** Applying the zero-spawn test to its own buckets:
+```
+23 DIRECT DRIFT rows   CERTAIN 12 · residue 11
+ 7 RATCHET rows        CERTAIN  5 · residue  2
+the 4 rows its own overturn moved:   RESIDUE 4 of 4
+```
+⛔ **Every row its `12 → 8` overturn rests on sits in a file that DOES spawn — the exact
+residue class where a helper could reach the assert and the scan cannot see it.** ⭐ **So the
+surviving claim is not *"four rows move"* but *"four rows move ON RESIDUE-TIER EVIDENCE"* — the
+weakest tier defined tonight.** **Not withdrawn: a location match on a direct-value assert is
+still evidence. But it carries its tier.**
+
+**FINAL HARDNESS-GRADED PARTITION:** `RATCHET 7 (5 certain, 2 residue) · DRIFT 29 (12 certain,
+11 residue, 2 named soft) · rch-ONLY 8 · UNCLASSIFIABLE 8 = 52.` ⭐ **A partition that grades
+its own rows is the only kind a later reader can use without re-deriving it.**
+
+⭐ **AND THE PAIRING WORTH KEEPING: the emitter took the line ABOVE the message; a classifier
+read the lines ABOVE the assertion. BOTH ANCHORED CORRECTLY AND BOTH LOOKED THE WRONG WAY.**
+
+## ⭐⭐ A MUTATION THAT **COULD NOT HAVE PRODUCED THE OTHER ANSWER** — the two-valued check, aimed at the PLANT
+
+**A grader's arm produced a clean, plausible, entirely wrong RED:**
+```rust
+if requirement != HostRequirement::ShasumTool { return true; }   // WRONG
+```
+⛔ **For `ShasumTool` that falls THROUGH to the real probe, which returns TRUE on the worker —
+so it forced NOTHING, and the leg FAILED where a SKIP was predicted.** ⭐ **A leg that fails
+where you predicted a skip is exactly what a real defect looks like.**
+
+> *"The tell was that my arm could not have made the thing I was testing false."*
+
+⭐⭐ **BEFORE READING ANY ARM AS EVIDENCE, ASK WHETHER IT COULD HAVE PRODUCED THE OTHER
+ANSWER.** This is the two-valued instrument check — **aimed at the PLANT rather than at the
+detector**, which is where nobody had pointed it. ⛔ **The corrected arm
+(`== ShasumTool → false, else true`) made the fourth remedy code fire ALONE with its own
+remedy text.**
+
+⭐ **AND THE FORMULATION TO KEEP: the other five capture-wide violations DESTROYED BYTES; THIS
+ONE DESTROYED A DEGREE OF FREEDOM.** A filter deletes evidence you can re-capture; a mutation
+that does not mutate deletes the *possibility* of the other outcome, and leaves a result that
+reads as a finding.
+
+## ⭐⭐ RUN THE DECIDING ARM **EVEN AFTER THE AUTHOR CONCEDES**
+
+**The author had ACCEPTED the finding, called its own item unsatisfied, and invited
+`CHANGES_REQUESTED`. The grader ran the deciding arm anyway and REFUTED ITS OWN FINDING.**
+
+> *"The concession was premature — mine was the error, not the unit's. I would rather return
+> the finding than bank it."*
+
+⛔ **A concession is social evidence and it is the weakest kind in this repo.** ⭐ **Two agents
+agreeing that a defect exists is exactly as unfounded as two agreeing it does not — and the
+author conceding REMOVES the adversary that would otherwise have caught you.**
+
+⛔ **THE UNDERLYING CONFLATION IS THE REUSABLE HALF: *"unreachable on any host we have"* is NOT
+*"unexercised by any instrument."*** ⭐ **An INJECTABLE PROBE collapses the distinction — the
+module already shipped `fn present(_) -> bool { true }` / `absent(_) -> false` test doubles, so
+the property declared untestable was already testable and nobody looked.** **Before declaring
+a property unexercisable, check whether its input is injectable.**
+
+⭐ **And it adopted the host-label amendment RETROACTIVELY AGAINST ITS OWN FIGURES:** 24 remote
+runs, host captured only where the tool volunteered it — so *"`shasum` is present"* is measured
+on **the workers that answered**, not on *the lane*. **Recorded as a limit on its own grade
+rather than discovered later by someone else.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
