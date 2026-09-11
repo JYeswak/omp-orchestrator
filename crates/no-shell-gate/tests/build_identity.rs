@@ -48,11 +48,63 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-/// Measured 2026-09-05 BY THIS GATE'S OWN SCAN: 55 unstamped bin crates (was 41
-/// on 2026-09-01). Extraction added bins without build.rs identity. Dies when
-/// those crates emit `cargo:rustc-env=OMP_BUILD_ID`; then LOWER this number.
-/// Never raise it silently.
-const UNSTAMPED_BIN_CEILING: usize = 55;
+/// Measured 2026-09-11 BY THIS GATE'S OWN SCAN: **4** unstamped bin crates —
+/// `omp-idle-dispatch`, `ompo-doctor`, `plan-assemble`, `preregistration-gate`. History: 41
+/// on 2026-09-01, 55 on 2026-09-05, then the 75-crate stamping wave dropped it to 4 and the
+/// bound was never lowered behind it.
+///
+/// ⛔ THE CEILING SAT AT 55 AGAINST A LIVE COUNT OF 4 — **51 SLACK**, measured 2026-09-11.
+/// The stamping wave lowered the count and nobody lowered the bound behind it, so this
+/// ratchet would have waved through **fifty-one** new unnameable binaries while reporting
+/// green. That is the third rule aimed at a ratchet rather than a gate: a bound that cannot
+/// fire reads as protection and provides none, and it is strictly worse than no bound,
+/// because the repo *looks* covered.
+///
+/// ⛔ AND TWO EARLIER ATTEMPTS TO TIGHTEN IT SET **6** AND **1**, BOTH FROM THE WRONG
+/// INSTRUMENT — the bound is 4, and neither wrong value was arrived at carelessly.
+///
+/// `6` came from grepping each `Cargo.toml` for a `build-stamp` build-dependency. This gate
+/// never reads manifests: `stamps_identity` below opens `build.rs` and looks for
+/// `build_stamp::emit()` or the raw `cargo:rustc-env=OMP_BUILD_ID`, deliberately, so that a
+/// crate cannot "stamp" itself with a comment.
+///
+/// `1` came from `cargo metadata`, which OMITS `omp-idle-dispatch` because `Cargo.toml:7`
+/// excludes it. `bin_crates` below walks `crates/` on disk instead — also deliberately, per
+/// its own comment — so an excluded directory still counts here. **The roster and the
+/// workspace genuinely disagree, and this gate's answer is the one that binds this gate.**
+///
+/// **The mutation is what caught the first error.** Deleting a manifest's build-dependency
+/// left this gate GREEN — correctly, since `build.rs` still emitted. A mutation that fails to
+/// bite is the most valuable result available: the tally was plausible, internally
+/// consistent, and measured a property the gate never consults. **Derive a ratchet's floor
+/// with the ratchet's own detector, never with a proxy that looks equivalent** — and when the
+/// detector disagrees with your proxy, the detector is not the one that is wrong.
+///
+/// ⛔ WHY THESE FOUR ARE NOT SIMPLY STAMPED, which is the obvious next question.
+/// Stamping `preregistration-gate` was attempted and REVERTED. Adding a `build.rs`
+/// invalidates that crate's build cache, and `plan-assemble` DEPENDS on it, so
+/// `plan-assemble` must rebuild; its `[package.metadata.gate]` check must RUN its bin, so
+/// the pre-commit gate issues `cargo build -p plan-assemble`, which goes down the remote
+/// lane and returns
+///
+/// ```text
+/// BUILD_INCONCLUSIVE exit=102 — "Retrieved artifacts do not match the requesting host's
+/// target triple aarch64-apple-darwin after a successful remote compile on contabo"
+/// ```
+///
+/// The remote compile SUCCEEDS; the artifact is Linux and the host is darwin. Under the
+/// standing no-darwin-cross-build policy there is no admissible way to produce that
+/// artifact. **So a crate whose gate check must RUN its bin cannot absorb any
+/// cache-invalidating change — including a change to one of its dependencies.** The first
+/// diagnosis blamed the stamped crate's own cache and was refuted by reverting it: the crate
+/// went byte-identical to HEAD and the gate still failed, because the *dependency* was still
+/// dirty. Recorded rather than routed around; the bound is tightened to the honest 4.
+///
+/// A ratchet is only evidence while it is TIGHT. Lowering it is the second half of every
+/// stamping commit, not a follow-up — an untightened gain is a gain that silently regresses.
+/// This constant's own contract has always said so: LOWER it when crates are stamped, and
+/// never raise it silently.
+const UNSTAMPED_BIN_CEILING: usize = 4;
 
 fn repo_root() -> Option<PathBuf> {
     let mut cur = std::env::current_dir().ok()?;
