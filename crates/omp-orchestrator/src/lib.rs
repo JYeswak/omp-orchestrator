@@ -701,6 +701,339 @@ fn declares_gate_check(repo_root: &Path, crate_name: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// One scheduled row observed on this machine: a crontab line or a launchd job.
+///
+/// # Why this type exists — `omp-orchestrator-uldvu`, second pass
+///
+/// Acceptance leg 2 enumerates FOUR trigger classes: a `.github/workflows` entry, a `.git/hooks`
+/// script, **a crontab/launchd row**, and a `Command::new` spawn from a crate that itself has one.
+/// The first pass shipped three of them and the missing one was not hypothetical:
+///
+/// ```text
+/// crontab -l | sed -n '74p'
+/// 6,26,46 * * * * FLEET_INVOKER=SCHEDULED ~/.local/bin/fleet-composite >> …log 2>&1
+/// ```
+///
+/// `fleet-composite` is executed every twenty minutes by a live cron row, and the census called it
+/// *"a binary with no invocation site"*. **Two in-repo surfaces already knew**:
+/// `crates/wired-but-inert-guard/src/lib.rs` carries a `WIRED_ROWS` entry for
+/// `crates/fleet-composite/src/main.rs` whose stated why is *"the fleet grade must be computed ON A
+/// SCHEDULE or nobody sees a dead factor"*, and `AGENTS.md` rule 10 lists crontab in its own
+/// reachability surface set. The predicate simply did not look.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SchedulerRow {
+    /// Where the row was read from: `crontab`, or the plist's path.
+    pub surface: String,
+    /// The schedule expression, verbatim (`6,26,46 * * * *`, `@reboot`, `RunAtLoad`).
+    pub schedule: String,
+    /// The executable the row actually runs, verbatim as written.
+    pub executor: String,
+}
+
+impl SchedulerRow {
+    /// Final path component of the executor — what a crate's binary is installed AS.
+    ///
+    /// Matching is on this, by EQUALITY, never on a substring of the whole line. The crate this
+    /// census lives in is named `omp-orchestrator`, and every cron row that mentions this
+    /// checkout contains `~/Developer/omp-orchestrator/…` as a PATH. A substring probe
+    /// would read those as invocations and re-create the over-broad predicate this bead exists to
+    /// remove — existence in a line is not execution of a binary.
+    pub fn executor_name(&self) -> &str {
+        self.executor
+            .rsplit('/')
+            .next()
+            .unwrap_or(self.executor.as_str())
+    }
+}
+
+/// Pop the first whitespace-delimited token, returning it and the remainder.
+fn pop_token(text: &str) -> Option<(&str, &str)> {
+    let text = text.trim_start();
+    if text.is_empty() {
+        return None;
+    }
+    match text.find(char::is_whitespace) {
+        Some(index) => Some((&text[..index], text[index..].trim_start())),
+        None => Some((text, "")),
+    }
+}
+
+/// Is this token a `NAME=value` environment assignment rather than a command?
+///
+/// Both cron surfaces use them: as standalone lines (`MAILTO=""`) and as a prefix on the command
+/// itself (`FLEET_INVOKER=SCHEDULED /path/to/bin`). Skipping the prefix is what makes the
+/// `fleet-composite` row readable at all — its executor is the SECOND token, not the first.
+fn is_env_assignment(token: &str) -> bool {
+    let Some(equals) = token.find('=') else {
+        return false;
+    };
+    if equals == 0 {
+        return false;
+    }
+    let name = &token[..equals];
+    name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// The scheduler rows this machine exposes, and WHICH surfaces were actually readable.
+///
+/// The second field is load-bearing and is not bookkeeping. An unreadable surface and an empty
+/// surface are different repository states: `crontab -l` exits non-zero when the user has no
+/// crontab, and a predicate that treated that as *"nothing is scheduled"* would assert an absence
+/// it never measured — the exact sin in the reason string this pass is repairing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SchedulerSurfaces {
+    rows: Vec<SchedulerRow>,
+    surfaces_read: Vec<String>,
+}
+
+impl SchedulerSurfaces {
+    /// No surface was consulted. The known-bad input for the scheduler arm.
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    /// Read this machine's scheduler surfaces: the invoking user's crontab and `~/Library/LaunchAgents`.
+    ///
+    /// Bounded like `git remote` above, for the same reason: this runs EVERY tick and a wedged
+    /// `crontab` must degrade to "surface not read" rather than stall the decision loop.
+    pub fn observe() -> Self {
+        let mut surfaces = Self::default();
+        let mut crontab = std::process::Command::new("crontab");
+        crontab.arg("-l");
+        if let subprocess_contract::BoundedOutcome::Completed(output) =
+            subprocess_contract::bounded_output(
+                &mut crontab,
+                std::time::Duration::from_secs(CENSUS_SPAWN_DEADLINE_SECS),
+            )
+        {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                let count = surfaces.absorb_crontab(&text);
+                surfaces
+                    .surfaces_read
+                    .push(format!("crontab ({count} scheduled row(s))"));
+            }
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            surfaces.absorb_launchd_dir(&PathBuf::from(home).join("Library/LaunchAgents"));
+        }
+        surfaces
+    }
+
+    /// Parse crontab text. Public so a test can feed a FIXTURE crontab and get a deterministic
+    /// answer on any host — the census's own crontab differs between this Mac and a build worker.
+    pub fn from_crontab_text(text: &str) -> Self {
+        let mut surfaces = Self::default();
+        let count = surfaces.absorb_crontab(text);
+        surfaces
+            .surfaces_read
+            .push(format!("crontab ({count} scheduled row(s))"));
+        surfaces
+    }
+
+    /// Rows parsed out of one crontab body; returns how many were understood.
+    fn absorb_crontab(&mut self, text: &str) -> usize {
+        let mut added = 0usize;
+        for raw in text.lines() {
+            let line = raw.trim();
+            // COMMENTS ARE STRIPPED BEFORE MATCHING. A commented-out row is not a trigger, and
+            // this crontab carries 84 non-row lines against 50 real ones.
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (schedule, command) = if let Some(rest) = line.strip_prefix('@') {
+                // `@reboot`, `@daily`, … — one keyword then the command.
+                match pop_token(rest) {
+                    Some((keyword, command)) if !command.is_empty() => {
+                        (format!("@{keyword}"), command)
+                    }
+                    _ => continue,
+                }
+            } else {
+                // A standalone `NAME=value` line is cron configuration, never a row.
+                match pop_token(line) {
+                    Some((first, _)) if is_env_assignment(first) => continue,
+                    _ => {}
+                }
+                let mut fields: Vec<&str> = Vec::with_capacity(5);
+                let mut rest = line;
+                for _ in 0..5 {
+                    let Some((field, tail)) = pop_token(rest) else {
+                        break;
+                    };
+                    fields.push(field);
+                    rest = tail;
+                }
+                if fields.len() < 5 || rest.is_empty() {
+                    continue;
+                }
+                (fields.join(" "), rest)
+            };
+            // Strip any `NAME=value` prefix: the executor is the first token that is not one.
+            let mut command = command;
+            let executor = loop {
+                let Some((token, tail)) = pop_token(command) else {
+                    break None;
+                };
+                if is_env_assignment(token) {
+                    command = tail;
+                    continue;
+                }
+                break Some(token);
+            };
+            let Some(executor) = executor else { continue };
+            self.rows.push(SchedulerRow {
+                surface: "crontab".to_owned(),
+                schedule,
+                executor: executor.to_owned(),
+            });
+            added += 1;
+        }
+        added
+    }
+
+    /// Rows parsed out of a launchd plist directory.
+    ///
+    /// Text scan, not a plist parser: the executable is the first `<string>` after the
+    /// `ProgramArguments` or `Program` key. A binary plist is not UTF-8, contributes nothing, and
+    /// is COUNTED as unread so the reason string never claims it was consulted.
+    pub fn absorb_launchd_dir(&mut self, dir: &Path) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let (mut seen, mut unread) = (0usize, 0usize);
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("plist") {
+                continue;
+            }
+            seen += 1;
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                unread += 1;
+                continue;
+            };
+            let Some(executor) = launchd_executor(&text) else {
+                continue;
+            };
+            self.rows.push(SchedulerRow {
+                surface: path.display().to_string(),
+                schedule: launchd_schedule(&text),
+                executor,
+            });
+        }
+        self.surfaces_read.push(format!(
+            "{} ({seen} plist(s), {unread} unreadable)",
+            dir.display()
+        ));
+    }
+
+    /// The row that invokes one of `bin_names`, if any. Equality on the executor's basename.
+    pub fn invoker_of(&self, bin_names: &[String]) -> Option<&SchedulerRow> {
+        self.rows.iter().find(|row| {
+            bin_names
+                .iter()
+                .any(|name| row.executor_name() == name.as_str())
+        })
+    }
+
+    pub fn rows(&self) -> &[SchedulerRow] {
+        &self.rows
+    }
+
+    /// Which scheduler surfaces were ACTUALLY consulted, for the reason string.
+    pub fn describe(&self) -> String {
+        if self.surfaces_read.is_empty() {
+            "no scheduler surface was readable".to_owned()
+        } else {
+            self.surfaces_read.join(" + ")
+        }
+    }
+}
+
+/// First `<string>` after `ProgramArguments`/`Program` in a text plist.
+fn launchd_executor(text: &str) -> Option<String> {
+    for key in ["<key>ProgramArguments</key>", "<key>Program</key>"] {
+        let Some(offset) = text.find(key) else {
+            continue;
+        };
+        let tail = &text[offset + key.len()..];
+        let Some(open) = tail.find("<string>") else {
+            continue;
+        };
+        let value = &tail[open + "<string>".len()..];
+        if let Some(close) = value.find("</string>") {
+            let executor = value[..close].trim();
+            if !executor.is_empty() {
+                return Some(executor.to_owned());
+            }
+        }
+    }
+    None
+}
+
+/// Which launchd keys make the job fire, named rather than interpreted.
+fn launchd_schedule(text: &str) -> String {
+    let mut keys = Vec::new();
+    for key in ["RunAtLoad", "StartInterval", "StartCalendarInterval", "KeepAlive"] {
+        if text.contains(&format!("<key>{key}</key>")) {
+            keys.push(key);
+        }
+    }
+    if keys.is_empty() {
+        "launchd job (no scheduling key)".to_owned()
+    } else {
+        keys.join("+")
+    }
+}
+
+/// The binary target names a crate installs AS, which is what a scheduler row names.
+///
+/// Both forms, for the reason `crate_ships_a_bin` gives: an explicit `[[bin]] name` and Cargo's
+/// implicit `src/main.rs` binary, which takes the PACKAGE name. `omp-orchestrator` is the
+/// worked example — it has no `src/main.rs` and its only binary is `omp-target-dir`, so keying
+/// a scheduler probe on the crate's DIRECTORY name would both miss that binary and match cron
+/// rows that merely contain this checkout's path.
+pub fn crate_bin_names(repo_root: &Path, crate_name: &str) -> Vec<String> {
+    let dir = repo_root.join("crates").join(crate_name);
+    let Ok(text) = std::fs::read_to_string(dir.join("Cargo.toml")) else {
+        return Vec::new();
+    };
+    let mut names: Vec<String> = Vec::new();
+    let mut package_name: Option<String> = None;
+    let mut section = String::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            section = line.to_owned();
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "name" {
+            continue;
+        }
+        let value = value.trim().trim_matches('"').trim();
+        if value.is_empty() {
+            continue;
+        }
+        match section.as_str() {
+            "[package]" => package_name = Some(value.to_owned()),
+            "[[bin]]" => names.push(value.to_owned()),
+            _ => {}
+        }
+    }
+    if dir.join("src/main.rs").is_file() {
+        if let Some(name) = package_name {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    names
+}
+
 /// Reachability for ONE crate, by trigger, for every row in the census.
 ///
 /// # Why this function exists — `omp-orchestrator-uldvu`
@@ -720,12 +1053,20 @@ fn declares_gate_check(repo_root: &Path, crate_name: &str) -> bool {
 /// The remedy is not a new oracle: the DERIVED rows in [`census_gates`] already had a real
 /// trigger probe sitting in the same function. The coverage rows were special-cased past it.
 /// This extracts that probe so both paths answer the same question the same way, and adds the
-/// one trigger class it was missing.
+/// two trigger classes it was missing: `[package.metadata.gate]`, and — second pass —
+/// [`SchedulerSurfaces`], whose absence made the census call `fleet-composite` dead while a cron
+/// row executed it every twenty minutes.
+///
+/// **The reason string names the surfaces actually consulted and no longer asserts an absence.**
+/// *"binary with no invocation site"* was a claim about the world derived from four places we
+/// looked; when a fifth place held the invocation, the census emitted a false verdict in the
+/// confident voice. A predicate may report what it probed; it may not report what exists.
 pub fn crate_reachability(
     repo_root: &Path,
     crate_name: &str,
     hook_path: &Path,
     has_remote: bool,
+    scheduler: &SchedulerSurfaces,
 ) -> GateReachability {
     let manifest = repo_root.join("crates").join(crate_name).join("Cargo.toml");
     // Checked FIRST, because every arm below reads this file: an unreadable manifest makes
@@ -741,6 +1082,8 @@ pub fn crate_reachability(
     // callers; measuring it by "does a manifest depend on it" sends the operator to add a
     // dependency nobody should add. A binary's trigger is an INVOCATION SITE, not an edge.
     let has_bin = crate_ships_a_bin(repo_root, crate_name);
+    let bin_names = crate_bin_names(repo_root, crate_name);
+    let scheduled = scheduler.invoker_of(&bin_names);
     if callers > 0 {
         GateReachability::Reachable {
             trigger: format!("manifest dependency ({callers} caller(s))"),
@@ -758,17 +1101,62 @@ pub fn crate_reachability(
         GateReachability::Reachable {
             trigger: ".github/workflows/gate.yml".into(),
         }
+    } else if let (true, Some(row)) = (has_bin, scheduled) {
+        // LAST of the reachable arms ON PURPOSE. It can only turn an Unreachable row Reachable;
+        // it can never re-attribute a row that some earlier arm already explained. A repair that
+        // rewrites verdicts it was not asked about is indistinguishable from widening.
+        GateReachability::Reachable {
+            trigger: format!(
+                "{} row ({}) -> {}",
+                row.surface, row.schedule, row.executor
+            ),
+        }
     } else if has_bin {
         GateReachability::Unreachable {
-            reason: "binary with no invocation site: no manifest caller, not invoked by the \
-                     installed hook, no [package.metadata.gate] stanza, not declared in gate.yml"
-                .into(),
+            reason: format!(
+                "no invocation site on the surfaces probed [{}]; UNPROBED: system launchd, \
+                 shell-wrapped cron commands, and Command::new spawns from non-gate binaries",
+                probed_surfaces(hook_path, has_remote, scheduler)
+            ),
         }
     } else {
         GateReachability::Unreachable {
-            reason: "library with no manifest dependency referencing it".into(),
+            reason: format!(
+                "library with no manifest dependency referencing it; surfaces probed [{}]",
+                probed_surfaces(hook_path, has_remote, scheduler)
+            ),
         }
     }
+}
+
+/// The surfaces a refusal is entitled to name, each with the state it was in.
+///
+/// `.git/hooks/pre-commit (absent)` and `.github/workflows/*.yml (NO REMOTE …)` are different
+/// repository states from "probed and found nothing", and an operator reading a false Unreachable
+/// needs to tell them apart without re-deriving the census.
+fn probed_surfaces(hook_path: &Path, has_remote: bool, scheduler: &SchedulerSurfaces) -> String {
+    [
+        "manifest dependencies under crates/".to_owned(),
+        format!(
+            ".git/hooks/pre-commit ({})",
+            if hook_path.is_file() {
+                "installed"
+            } else {
+                "absent"
+            }
+        ),
+        "[package.metadata.gate]".to_owned(),
+        format!(
+            ".github/workflows/*.yml ({})",
+            if has_remote {
+                "remote present"
+            } else {
+                "NO REMOTE: a declared workflow cannot run"
+            }
+        ),
+        scheduler.describe(),
+    ]
+    .join(", ")
 }
 
 pub fn census_gates(repo_root: &Path) -> GateCensus {
@@ -790,6 +1178,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             | subprocess_contract::BoundedOutcome::Unspawned(_) => false,
         }
     };
+    // Read ONCE per census, not once per row: `crontab -l` is a spawn and this loop runs over
+    // every crate on disk. Bounded for the same reason `git remote` above is.
+    let scheduler = SchedulerSurfaces::observe();
 
     let mut rows = Vec::new();
     // Worker-oracle census: the ledger is the target list and this call is the production trigger.
@@ -968,7 +1359,13 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             gate: (*crate_name).into(),
             // uldvu: the SAME probe the derived rows use. These eleven were special-cased past
             // it and got an existence check instead, which no crate on disk could fail.
-            reachability: crate_reachability(repo_root, crate_name, &hook_path, has_remote),
+            reachability: crate_reachability(
+                repo_root,
+                crate_name,
+                &hook_path,
+                has_remote,
+                &scheduler,
+            ),
             // CURATED, therefore BLOCKING: this row was triaged before `leht`.
             disposition: CensusDisposition::Blocking,
         });
@@ -1025,7 +1422,8 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         // there: manifest reads are exact and cannot time out (the old grep's verdict moved
         // with machine load), and a binary's trigger is an INVOCATION SITE, not a dependency
         // edge (`ack-spine` ships a bin with zero manifest callers).
-        let reachability = crate_reachability(repo_root, crate_name, &hook_path, has_remote);
+        let reachability =
+            crate_reachability(repo_root, crate_name, &hook_path, has_remote, &scheduler);
         rows.push(GateCensusRow {
             gate: crate_name.into(),
             reachability,
