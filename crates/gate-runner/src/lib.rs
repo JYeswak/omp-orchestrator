@@ -70,6 +70,14 @@ pub const EXIT_SHORT_ROSTER: u8 = 4;
 pub const EXIT_LEDGER_DRIFT: u8 = 5;
 /// `cargo metadata` itself could not be read or parsed.
 pub const EXIT_METADATA_UNREADABLE: u8 = 6;
+/// The committed ledger FILE could not be read as a ledger: absent, unreadable, or present
+/// and carrying zero rows.
+///
+/// SEPARATE FROM [`EXIT_LEDGER_DRIFT`] ON PURPOSE. Drift means "the roster and the ledger
+/// disagree about which crates exist" — a comparison of two readable things. This means the
+/// comparison could not be made at all. Collapsing them would report the deletion of the
+/// ledger as a disagreement with it, which is the shape this code exists to prevent.
+pub const EXIT_LEDGER_UNREADABLE: u8 = 7;
 
 /// One cargo invocation the runner must make for a crate.
 ///
@@ -712,6 +720,92 @@ pub fn parse_ledger(text: &str) -> BTreeSet<String> {
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(str::to_owned)
         .collect()
+}
+
+/// How the read of the committed ledger FILE resolved.
+///
+/// # Why this type exists
+///
+/// `read_to_string(...).map(parse_ledger).unwrap_or_default()` coerces a read ERROR into the
+/// EMPTY SET, so total deletion of the roster reported "every crate is missing a row" and
+/// exited 0. The file whose only job is making deletion detectable could not detect its own
+/// deletion.
+///
+/// ABSENT, UNREADABLE AND PRESENT-BUT-EMPTY ARE THE SAME VALUE AND THREE DIFFERENT FACTS.
+/// Their remedies differ — restore a deleted file, fix permissions, repair a truncated one —
+/// so one empty set carrying no cause is the absent-vs-empty collapse living in a return type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LedgerRead {
+    /// Read, parsed, and carrying at least one row.
+    Rows(BTreeSet<String>),
+    /// The file EXISTS and yields zero rows — a truncation, not a deletion.
+    PresentButEmpty,
+    /// The file is not there at all.
+    Absent,
+    /// The file is there and could not be read. Carries the OS detail, because a permission
+    /// error and a directory-in-place-of-a-file need different repairs.
+    Unreadable(String),
+}
+
+impl LedgerRead {
+    /// Classify a `read_to_string` result. Takes the `Result` rather than a path so the
+    /// classification is testable without a filesystem.
+    #[must_use]
+    pub fn classify(result: Result<String, std::io::Error>) -> Self {
+        match result {
+            Ok(text) => {
+                let rows = parse_ledger(&text);
+                if rows.is_empty() {
+                    Self::PresentButEmpty
+                } else {
+                    Self::Rows(rows)
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Self::Absent,
+            Err(error) => Self::Unreadable(error.to_string()),
+        }
+    }
+
+    /// The rows, when there are any. `None` is the refusal path: every variant that is not
+    /// [`Self::Rows`] MUST stop the run rather than compare against an empty set.
+    #[must_use]
+    pub fn rows(&self) -> Option<&BTreeSet<String>> {
+        match self {
+            Self::Rows(rows) => Some(rows),
+            _ => None,
+        }
+    }
+
+    /// The REASON token, distinct per fact so a reader can tell which one they got.
+    #[must_use]
+    pub const fn reason(&self) -> &'static str {
+        match self {
+            Self::Rows(_) => "rows",
+            Self::PresentButEmpty => "present_but_empty",
+            Self::Absent => "absent",
+            Self::Unreadable(_) => "unreadable",
+        }
+    }
+
+    /// Where the repair lives. Three different remedies, which is why one code would not do.
+    #[must_use]
+    pub const fn remedy(&self) -> &'static str {
+        match self {
+            Self::Rows(_) => "none",
+            Self::PresentButEmpty => "the roster file is present and empty: restore its rows from git history",
+            Self::Absent => "the roster file is MISSING: restore it from git history",
+            Self::Unreadable(_) => "the roster file exists and cannot be read: check permissions and that it is a file",
+        }
+    }
+
+    /// The OS detail, when there is one.
+    #[must_use]
+    pub fn detail(&self) -> &str {
+        match self {
+            Self::Unreadable(detail) => detail,
+            _ => "none",
+        }
+    }
 }
 
 /// A gate's own declared check invocation, read from ITS OWN manifest.

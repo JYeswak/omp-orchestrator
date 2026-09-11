@@ -58,6 +58,22 @@ impl Fixture {
             )
             .expect("crate source");
         }
+        // A COMMITTED ROSTER, one row per member.
+        //
+        // Required since the ledger read became a three-way fact: an ABSENT
+        // `docs/gate-roster.txt` is now a typed refusal (`GATE_RUNNER_LEDGER_UNREAD
+        // reason=absent`, exit 7) rather than an empty set silently compared against the
+        // derived roster. These fixtures previously carried no roster at all, so every
+        // streaming leg was measuring the coerced-empty path without saying so.
+        //
+        // Writing the roster to AGREE with the members keeps these legs about STREAMING —
+        // drift and unreadability are other crates' legs and must not leak in here.
+        std::fs::create_dir_all(root.join("docs")).expect("docs dir");
+        std::fs::write(
+            root.join("docs/gate-roster.txt"),
+            format!("{}\n", crates.join("\n")),
+        )
+        .expect("roster");
         Self { root }
     }
 

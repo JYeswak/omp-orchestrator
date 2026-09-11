@@ -912,3 +912,216 @@ fn distinct_bins_are_a_fan_out_and_need_no_setup_declaration() {
         "none of them is setup, and none needed to say so"
     );
 }
+
+// ---------------------------------------------------------------------------
+// eov8a: the committed ledger read is a THREE-WAY FACT, not a value with a default.
+//
+// `read_to_string(...).map(parse_ledger).unwrap_or_default()` coerced a read ERROR into the
+// EMPTY SET, so moving `docs/gate-roster.txt` aside produced 91
+// `in_workspace_absent_from_ledger` lines and exit=0. The detector could not detect its own
+// deletion.
+// ---------------------------------------------------------------------------
+
+/// A throwaway workspace whose roster content is the variable under test.
+///
+/// `.git` is an EMPTY DIRECTORY, not a repository: it is the marker `repo_root()` stops at.
+/// No worktree is created, so the zero-worktree policy needs no exception here.
+fn ledger_fixture(name: &str, roster: Option<&str>) -> std::path::PathBuf {
+    let root =
+        std::env::temp_dir().join(format!("gate-runner-eov8a-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join(".git")).expect("marker");
+    std::fs::write(
+        root.join("Cargo.toml"),
+        "[workspace]\nresolver = \"2\"\nmembers = [\"crates/only\"]\n",
+    )
+    .expect("workspace manifest");
+    let dir = root.join("crates/only");
+    std::fs::create_dir_all(dir.join("src")).expect("crate dir");
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"only\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("crate manifest");
+    std::fs::write(
+        dir.join("src/lib.rs"),
+        "#[cfg(test)]\nmod tests {\n    #[test]\n    fn t() {}\n}\n",
+    )
+    .expect("crate source");
+    if let Some(text) = roster {
+        std::fs::create_dir_all(root.join("docs")).expect("docs dir");
+        std::fs::write(root.join("docs/gate-roster.txt"), text).expect("roster");
+    }
+    root
+}
+
+fn plan_against(root: &std::path::Path) -> (i32, String, String) {
+    // `repo_root()` walks UP FROM THE CURRENT DIRECTORY for a `.git`/`.beads` marker; there is
+    // no `--repo` flag, and passing one makes the binary print usage and exit 2 — which is how
+    // the first version of these legs failed. The fixture root IS the marker directory.
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_gate-runner"))
+        .arg("--plan")
+        .current_dir(root)
+        .output()
+        .expect("spawn gate-runner");
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        String::from_utf8_lossy(&out.stderr).into_owned(),
+    )
+}
+
+/// ACCEPTANCE 1 + 3. An ABSENT roster is a TYPED refusal naming the path, with an exit code
+/// distinct from both "agrees" and "drifted".
+///
+/// AND IT MUST NOT NAME DRIFT. A leg that reddens on any ledger problem cannot tell you which
+/// one you got wrong; that is the whole defect being fixed, so the discrimination is asserted
+/// in both directions.
+#[test]
+fn an_absent_ledger_is_a_typed_refusal_and_never_drift() {
+    let root = ledger_fixture("absent", None);
+    let (code, stdout, stderr) = plan_against(&root);
+
+    assert_eq!(
+        code,
+        i32::from(gate_runner::EXIT_LEDGER_UNREADABLE),
+        "an absent ledger must exit EXIT_LEDGER_UNREADABLE, not 0 and not drift: {stderr}"
+    );
+    assert_ne!(
+        code,
+        i32::from(EXIT_LEDGER_DRIFT),
+        "absence is not disagreement"
+    );
+    assert!(
+        stderr.contains("GATE_RUNNER_LEDGER_UNREAD"),
+        "the refusal must be typed: {stderr}"
+    );
+    assert!(stderr.contains("reason=absent"), "{stderr}");
+    assert!(
+        stderr.contains("docs/gate-roster.txt"),
+        "the refusal must name the PATH so it is actionable without a lookup: {stderr}"
+    );
+    // ACCEPTANCE 5, anti-vacuity: the population is reported on both sides, so a reader can see
+    // the refusal is about the FILE and not an empty workspace.
+    assert!(stderr.contains("entries=0"), "{stderr}");
+    assert!(stderr.contains("workspace_members=1"), "{stderr}");
+    // THE DISCRIMINATION: the old behaviour printed one LEDGER_DRIFT line per crate here.
+    assert!(
+        !stdout.contains("GATE_RUNNER_LEDGER_DRIFT"),
+        "an absent ledger must not be reported as drift against it: {stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// ACCEPTANCE 2. An EMPTY-BUT-PRESENT roster is distinguishable from an absent one.
+///
+/// Both are the empty set and they are different FACTS with different repairs: repair a
+/// truncated file versus restore a deleted one. Comments-only counts as empty, because
+/// `parse_ledger` drops comments and a commented-out roster is a truncation.
+#[test]
+fn a_present_but_empty_ledger_is_distinct_from_an_absent_one() {
+    let empty = ledger_fixture("empty", Some("# every row commented out\n\n"));
+    let (empty_code, _, empty_err) = plan_against(&empty);
+    let absent = ledger_fixture("absent2", None);
+    let (absent_code, _, absent_err) = plan_against(&absent);
+
+    assert_eq!(empty_code, i32::from(gate_runner::EXIT_LEDGER_UNREADABLE));
+    assert_eq!(absent_code, i32::from(gate_runner::EXIT_LEDGER_UNREADABLE));
+    assert!(empty_err.contains("reason=present_but_empty"), "{empty_err}");
+    assert!(absent_err.contains("reason=absent"), "{absent_err}");
+    assert_ne!(
+        empty_err, absent_err,
+        "a truncation and a deletion must not produce the same line"
+    );
+    // The REMEDIES differ, which is why one reason token would not have been enough.
+    assert_ne!(
+        gate_runner::LedgerRead::PresentButEmpty.remedy(),
+        gate_runner::LedgerRead::Absent.remedy()
+    );
+    let _ = std::fs::remove_dir_all(&empty);
+    let _ = std::fs::remove_dir_all(&absent);
+}
+
+/// ACCEPTANCE 4, NEGATIVE CONTROL. With the roster PRESENT and AGREEING the new arm must not
+/// fire. A refusal that fires on the healthy input is worse than the silent success it replaced.
+#[test]
+fn an_agreeing_ledger_does_not_trip_the_new_refusal() {
+    let root = ledger_fixture("agrees", Some("only\n"));
+    let (code, stdout, stderr) = plan_against(&root);
+
+    assert_ne!(
+        code,
+        i32::from(gate_runner::EXIT_LEDGER_UNREADABLE),
+        "the healthy input must not refuse: {stderr}"
+    );
+    assert!(
+        !stderr.contains("GATE_RUNNER_LEDGER_UNREAD"),
+        "no refusal on a present, agreeing roster: {stderr}"
+    );
+    // And it is not vacuously quiet: the plan really ran over the fixture.
+    assert!(stdout.contains("GATE_RUNNER_PLAN crates=1"), "{stdout}");
+    assert!(
+        !stdout.contains("GATE_RUNNER_LEDGER_DRIFT"),
+        "an agreeing roster has no drift: {stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// The classifier itself, without a filesystem: four facts, four reasons, and `rows()` is the
+/// refusal gate for every variant that is not `Rows`.
+#[test]
+fn the_ledger_read_classifies_four_distinct_facts() {
+    use gate_runner::LedgerRead;
+    use std::io::{Error, ErrorKind};
+
+    let rows = LedgerRead::classify(Ok("alpha\nbeta\n".to_owned()));
+    assert_eq!(rows.reason(), "rows");
+    assert_eq!(rows.rows().map(BTreeSet::len), Some(2));
+
+    let empty = LedgerRead::classify(Ok("# comment\n\n".to_owned()));
+    let absent = LedgerRead::classify(Err(Error::from(ErrorKind::NotFound)));
+    let unreadable = LedgerRead::classify(Err(Error::from(ErrorKind::PermissionDenied)));
+
+    // THE COLLAPSE THIS TYPE EXISTS TO PREVENT: three variants carry NO rows and are still
+    // three different facts. Under `unwrap_or_default` all three were one empty set.
+    for read in [&empty, &absent, &unreadable] {
+        assert!(read.rows().is_none(), "{read:?} must not yield rows");
+    }
+    let reasons: BTreeSet<&str> = [&rows, &empty, &absent, &unreadable]
+        .iter()
+        .map(|read| read.reason())
+        .collect();
+    assert_eq!(
+        reasons.len(),
+        4,
+        "every fact needs its own reason: {reasons:?}"
+    );
+    assert_eq!(empty.reason(), "present_but_empty");
+    assert_eq!(absent.reason(), "absent");
+    assert_eq!(unreadable.reason(), "unreadable");
+    // The OS detail survives only where there is one, so a reader is never shown a fabricated
+    // cause.
+    assert_ne!(unreadable.detail(), "none");
+    assert_eq!(absent.detail(), "none");
+}
+
+/// `EXIT_LEDGER_UNREADABLE` is distinct from every other code, so a consumer keying on the exit
+/// alone can tell this cause from the others.
+#[test]
+fn the_new_exit_code_is_distinct_from_every_other() {
+    let codes = [
+        EXIT_OK,
+        EXIT_GATE_FAILED,
+        EXIT_EMPTY_ROSTER,
+        EXIT_SHORT_ROSTER,
+        EXIT_LEDGER_DRIFT,
+        gate_runner::EXIT_METADATA_UNREADABLE,
+        gate_runner::EXIT_LEDGER_UNREADABLE,
+    ];
+    let distinct: BTreeSet<u8> = codes.iter().copied().collect();
+    assert_eq!(
+        distinct.len(),
+        codes.len(),
+        "exit codes must be distinct per cause: {codes:?}"
+    );
+}
