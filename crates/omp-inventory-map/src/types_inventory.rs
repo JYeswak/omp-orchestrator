@@ -239,6 +239,53 @@ pub const ALLOWED_COLLISIONS: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// Anchor for the unallowed-collision ratchet (bead zhr29).
+///
+/// MEASURED 2026-09-11: `disallowed().len() == 44` on this worktree, which
+/// includes the decided Observation seam (refused by design until convergence
+/// lands). A fresh clone reads 42, not 44: Hit and ScanReport collide only
+/// via UNTRACKED kernel-only-gate (with path-literal-guard), so both vanish
+/// there; omp-host-tool-guard contributes none (HostToolDecl, GuardDecision
+/// et al collide with nothing). Verdict also names kernel-only-gate but
+/// collides among tracked crates anyway. The gap is expected and named here,
+/// not hidden -- and it is why the bound is `<=`, never `==`.
+/// DISCIPLINE (from ADVISORY_RATCHET, read before touching this): the ceiling
+/// MUST equal the live count on the day it is written -- a number matching
+/// neither the allowance set nor the measurement masquerades as a bound. It
+/// may only FALL, and falling is a paired edit (both fields together); the
+/// consistency leg below refuses a lone edit either direction, which makes a
+/// silent raise reviewable rather than impossible. Resolving a collision (new
+/// allowance row with a true reason, rename, or unification) is the only
+/// legitimate cause of a fall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CollisionCeilingAnchor {
+    /// Live upper bound. The leg refuses `disallowed().len() > ceiling`.
+    pub ceiling: usize,
+    /// The measured value the ceiling was set from. Must move with it.
+    pub ceiling_at_recording: usize,
+    /// Unix time of the measurement.
+    pub recorded_at_unix: u64,
+}
+
+impl CollisionCeilingAnchor {
+    pub const fn ceiling(self) -> usize {
+        self.ceiling
+    }
+
+    pub const fn is_consistent(self) -> bool {
+        self.ceiling == self.ceiling_at_recording
+    }
+}
+
+pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeilingAnchor {
+    ceiling: 44,
+    ceiling_at_recording: 44,
+    recorded_at_unix: 1_789_132_372,
+};
+
+/// Live bound projection from the single ratchet anchor.
+pub const UNALLOWED_COLLISION_CEILING: usize = UNALLOWED_COLLISION_RATCHET.ceiling();
+
 /// The workspace's shared vocabulary crate. Declared, not guessed: its
 /// [`NAMED_ZEROS`] row calls it a "Re-export vocabulary crate
 /// (asupersync::types facade)", and its whole reason to exist is to be the
@@ -1524,6 +1571,36 @@ mod tests {
         assert!(
             !omp_types.reexports.is_empty(),
             "omp-types is a vocabulary crate: reexports must be non-empty"
+        );
+    }
+
+    /// RATCHET (zhr29): the unallowed-collision count may fall, never rise.
+    /// The ceiling equals the 2026-09-11 worktree measurement (44, including
+    /// the decided Observation seam and untracked kernel-only-gate's Hit and
+    /// ScanReport); a fresh clone reads fewer and passes silently, which is
+    /// expected and named, not hidden. Resolving a collision (allowance row
+    /// with a true reason, rename, unification) lowers the count; the ceiling
+    /// follows by paired edit, never leads by raising.
+    #[test]
+    fn unallowed_collision_count_does_not_rise() {
+        assert!(
+            UNALLOWED_COLLISION_RATCHET.is_consistent(),
+            "ratchet anchor drifted: ceiling and recording must move as a pair"
+        );
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root is two levels above the crate");
+        let inv = scan_workspace_types(repo).expect("scan works");
+        let count = inv.disallowed().len();
+        assert!(
+            count <= UNALLOWED_COLLISION_CEILING,
+            "unallowed collisions rose {count} > ceiling {UNALLOWED_COLLISION_CEILING}: adjudicate each (allow with a true reason, rename, or unify) -- raising the ceiling is amnesty: {}",
+            inv.disallowed()
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
         );
     }
 
