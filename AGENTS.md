@@ -7422,3 +7422,37 @@ contradiction gets laundered into a green.**
 **The honest move when you find one: make the change that moves EXACTLY ONE THING, leave every
 other number where you found it, and record the contradiction where the next reader will hit
 it.** A partial fix plus a named blocker beats a coherent-looking edit that quietly picks a side.
+
+### ⛔⛔ AND THE "COHERENT REPAIR" FOR THAT CONTRADICTION IS A **RATCHET RAISE** — DO NOT TAKE IT
+
+**I worked out the edit that turns all three red legs green at once, and then refused it.**
+`every_advisory_unreachable_row_is_named_in_the_allowance` names **18** crates that are
+unreachable and unlisted. Adding 18 rows takes `ADVISORY_ALLOWANCE.len()` from 11 to **29**;
+set the ceiling to 29 and `:391` (`ceiling == len`) and `:402` (`ceiling == live count`) both
+pass, and the naming leg passes too. **Three greens from one edit.**
+
+⛔ **It is a RATCHET RAISE — 24 → 29 — of a bound whose own message says it *may only be
+LOWERED*.** Three tests going green simultaneously is exactly what a laundered contradiction
+looks like from the outside. **The allowance is a list of things we have agreed not to fix yet;
+growing it by 18 is not repair, it is amnesty at scale.**
+
+⭐ **AND I CHECKED WHETHER THE PREDICATE WAS WRONG FIRST, BECAUSE IT HAD BEEN ONCE.**
+`omp-inventory-map` was flagged unreachable by my grep and was genuinely reachable through
+`[package.metadata.gate]`. So I sampled six of the eighteen across every trigger class:
+
+```
+fast-dispatch · fleet-truth · reap-finished-panes · inbox-monitor · verify-dispatch
+   gate-meta 0 · workflow 0 · crontab 0 · manifest 0
+loop-driver
+   workflow 1  -> .github/workflows/gate.yml:42 "#   - crates/loop-driver — previously failed…"
+   A COMMENT. Not a trigger.
+```
+
+**Six of six genuinely unwired. The predicate is right and the data is right** — so the red is
+`BUILT ≠ WIRED` at a scale of 18 crates, and **the remedy the message offers first — *"either
+wire them"* — is the real one.** Eighteen wiring jobs, not a list edit.
+
+ **THE TRAP IS THAT THE CHEAP FIX AND THE HONEST FIX HAVE OPPOSITE SIGNS HERE.** One is a
+six-line diff that greens three tests; the other is eighteen units of work that leaves them red
+for a while. **A gate whose cheapest satisfying edit is an amnesty will eventually be satisfied
+that way unless someone writes down why not.**
