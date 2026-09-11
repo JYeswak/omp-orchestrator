@@ -14,6 +14,7 @@ asupersync-conformance
 bead-availability
 bead-holder
 blocker-taxonomy
+build-stamp
 cargo-lane-budget
 commit-build-fence
 composer-typed
