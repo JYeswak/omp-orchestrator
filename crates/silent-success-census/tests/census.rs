@@ -52,7 +52,7 @@ fn output_is_deterministic_and_has_the_machine_contract() {
     assert_eq!(artifact["version"], 1);
     assert_eq!(artifact["status"], "ok");
     assert_eq!(artifact["file_count"], 1);
-    assert_eq!(artifact["positive_controls"].as_array().unwrap().len(), 3);
+    assert_eq!(artifact["positive_controls"].as_array().unwrap().len(), 2);
     assert!(artifact["predicate_counts"]["ok_zero"] == 1);
     let row = &artifact["candidates"][0];
     assert!(row["file"]
@@ -73,6 +73,20 @@ fn output_is_deterministic_and_has_the_machine_contract() {
     fs::remove_dir_all(root).expect("remove fixture");
 }
 
+/// THE POSITIVE CONTROL: the scanner must re-find real live rows in the real workspace.
+///
+/// `omp-orchestrator-poumg.5`. This replaces `positive_controls_refind_named_live_rows`, which
+/// asserted a hard-coded `(file, LINE, predicate)` table over files in OTHER crates. That test
+/// pinned line POSITIONS it did not own, so any edit above a pinned line reded this crate. It
+/// had already been re-pinned once — its own comment predicted the recurrence — and it then died
+/// again. Measured at `cb9d3941`: `crates/state-wildcard-lint/src/main.rs:78` was
+/// `report(&linted);` at HEAD and `Verdict::Clean => ExitCode::SUCCESS,` in the worktree, so the
+/// pin held only because of a PEER's uncommitted edit. Deleted, not re-pinned, per AGENTS.md.
+///
+/// THE PROPERTY IS KEPT AND STRENGTHENED. The anchors are now content-based and live in THIS
+/// crate's own `src/`, so no unrelated edit in another crate can move them — and each row is
+/// checked for predicate AND classification AND an excerpt token, where the old form checked a
+/// line number.
 #[test]
 fn positive_controls_refind_named_live_rows() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -80,45 +94,60 @@ fn positive_controls_refind_named_live_rows() {
     assert_eq!(report.status, "ok");
     assert!(report.file_count >= 3);
 
-    // Re-recorded 2026-09-05: ExitCode::SUCCESS moved 80 -> 78 when NothingToCheck
-    // gained its own arm. Dies when that match arm is reordered again.
-    let expected = [
-        (
-            "crates/admission-reason/src/main.rs",
-            40,
-            Predicate::ExitCodeSuccess,
-        ),
-        (
-            "crates/loop-tick/src/lib.rs",
-            77,
-            Predicate::UnwrapOrDefault,
-        ),
-        (
-            "crates/state-wildcard-lint/src/main.rs",
-            78,
-            Predicate::ExitCodeSuccess,
-        ),
-    ];
+    // ANTI-VACUITY (leg 4): a control that passes on an empty scan proves nothing. Assert a
+    // NONZERO found-count before asserting anything about individual rows.
     let found = report
         .positive_controls
         .iter()
         .filter(|control| control.found)
         .count();
     assert!(
-        found >= 3,
-        "positive controls must re-find at least three known rows, found {found}: {:?}",
+        found > 0,
+        "VACUOUS: the scanner re-found NO positive control. Either the scan set is empty or the \
+         detector is broken; both are errors, never a pass. controls: {:?}",
         report.positive_controls
     );
-    for (file, line, predicate) in expected {
+    assert_eq!(
+        found,
+        report.positive_controls.len(),
+        "every declared control must be re-found; a partially-found set means the detector \
+         regressed for one predicate. controls: {:?}",
+        report.positive_controls
+    );
+
+    for control in &report.positive_controls {
         assert!(
-            report.positive_controls.iter().any(|control| {
-                control.found
-                    && control.file == file
-                    && control.line == line
-                    && control.predicate == predicate
-            }),
-            "missing positive control {file}:{line} {predicate:?}: {:?}",
-            report.positive_controls
+            control.file.starts_with("crates/silent-success-census/"),
+            "a control anchored OUTSIDE this crate is hostage to another crate's author — the \
+             defect poumg.5 deleted. Offending row: {control:?}"
+        );
+        assert!(
+            control.found,
+            "positive control not re-found: {control:?}"
+        );
+        assert!(
+            control.line >= 1,
+            "a found control must report the line it was found AT; 0 means not found: {control:?}"
+        );
+        // The classification, not merely the predicate — leg 4.
+        let row = report
+            .candidates
+            .iter()
+            .find(|candidate| {
+                candidate.file == control.file
+                    && candidate.predicate == control.predicate
+                    && candidate.source_excerpt.contains(&control.excerpt_token)
+            })
+            .unwrap_or_else(|| panic!("control claims found but no candidate matches: {control:?}"));
+        assert!(
+            row.source_excerpt.contains(&control.excerpt_token),
+            "the excerpt must carry the anchoring token: {row:?}"
+        );
+        assert_eq!(
+            row.classification,
+            control.predicate.classification(),
+            "classification drifted for {:?}",
+            control.predicate
         );
     }
 }

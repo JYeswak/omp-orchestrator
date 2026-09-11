@@ -7,6 +7,7 @@
 //! no-op from a fallback or a site that needs human review.
 
 use serde::Serialize;
+use text_structure::code_and_literals;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -49,7 +50,12 @@ impl Predicate {
         }
     }
 
-    fn classification(self) -> Classification {
+    /// The classification this predicate always carries.
+    ///
+    /// Public because the positive-control leg asserts the CLASSIFICATION and not merely the
+    /// predicate (`poumg.5` leg 4): a detector that finds the row and mislabels it is a
+    /// regression the predicate check alone cannot see.
+    pub fn classification(self) -> Classification {
         match self {
             Self::OkZero => Classification::TypedNonzero,
             Self::ExitCodeSuccess | Self::ExitZero => Classification::HealthyNoop,
@@ -57,23 +63,48 @@ impl Predicate {
         }
     }
 }
-const POSITIVE_CONTROL_SPECS: [(&str, usize, Predicate); 3] = [
+/// The positive controls: rows the scanner MUST re-find, anchored by CONTENT, never by line.
+///
+/// # Why there are no line numbers here any more — `omp-orchestrator-poumg.5`
+///
+/// This table used to be `(file, LINE, predicate)` over files in OTHER crates, and it was
+/// unkeepable by construction: **any edit anywhere above a pinned line reds this crate.** It had
+/// already been re-pinned once and said so in its own comment — *"Re-recorded 2026-09-05:
+/// ExitCode::SUCCESS moved 80 -> 78 … Dies when that match arm is reordered again."* It then died
+/// again, exactly as predicted. Measured at the filing sha `cb9d3941`:
+///
+/// ```text
+/// crates/state-wildcard-lint/src/main.rs:78  at HEAD      "    report(&linted);"       NO MATCH
+/// crates/state-wildcard-lint/src/main.rs:78  in worktree  "Verdict::Clean => ExitCode::SUCCESS," MATCH
+/// ```
+///
+/// The pin was correct only because a PEER's uncommitted edit happened to shift line 78 back onto
+/// an `ExitCode::SUCCESS`. This crate was green on a dirty worktree and red in CI for that reason
+/// alone, and its own code was never implicated.
+///
+/// # Two changes, and the second matters more than the first
+///
+/// 1. **Content, not coordinate.** A control matches on `(file, predicate, token in excerpt)`, so
+///    it survives every edit that moves a line and fails only when the construct itself goes.
+/// 2. **OWNED, not foreign.** Both rows now live in THIS crate's own `src/`. A content anchor on
+///    a foreign file would still be hostage to another crate's author deleting the construct —
+///    weaker, but still someone else's decision. These cannot be moved by an unrelated edit in
+///    another crate because no other crate can edit them at all.
+///
+/// Cardinality dropped 3 -> 2 deliberately. The control's job is to prove the scanner can find
+/// ANYTHING; three fragile coordinates over foreign files were never worth more than two robust
+/// anchors this crate owns, and each row now asserts strictly more (predicate AND classification
+/// AND a token present in the excerpt) than the coordinate form ever did.
+const POSITIVE_CONTROL_SPECS: [(&str, Predicate, &str); 2] = [
     (
-        "crates/admission-reason/src/main.rs",
-        40,
+        "crates/silent-success-census/src/main.rs",
         Predicate::ExitCodeSuccess,
+        "ExitCode::SUCCESS",
     ),
     (
-        "crates/loop-tick/src/lib.rs",
-        77,
+        "crates/silent-success-census/src/lib.rs",
         Predicate::UnwrapOrDefault,
-    ),
-    // Re-recorded 2026-09-05: Clean=>SUCCESS is line 78 after NothingToCheck
-    // became its own arm at 80. Dies when that match is reordered.
-    (
-        "crates/state-wildcard-lint/src/main.rs",
-        78,
-        Predicate::ExitCodeSuccess,
+        "unwrap_or_default",
     ),
 ];
 
@@ -97,12 +128,20 @@ pub struct Candidate {
     pub reason: String,
     pub source_excerpt: String,
 }
-/// A fixed source row used to prove the census still finds known controls.
+/// A source row the census must re-find, and the evidence that it did.
+///
+/// `line` is an OBSERVATION, not a pin — `poumg.5`. It reports where the row was found and is
+/// never compared against an expected value; `0` means not found. The JSON shape is unchanged,
+/// so no consumer breaks, but the SEMANTICS inverted: this field used to be an input the scanner
+/// was graded against, and is now an output the scanner produces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PositiveControl {
     pub file: String,
+    /// Where the row was found, or `0` when `found` is false. Never an expectation.
     pub line: usize,
     pub predicate: Predicate,
+    /// The token that had to appear in the candidate's `source_excerpt` for this to match.
+    pub excerpt_token: String,
     pub found: bool,
 }
 
@@ -204,13 +243,22 @@ fn empty_counts() -> BTreeMap<Predicate, usize> {
 fn evaluate_positive_controls(candidates: &[Candidate]) -> Vec<PositiveControl> {
     POSITIVE_CONTROL_SPECS
         .into_iter()
-        .map(|(file, line, predicate)| PositiveControl {
-            file: file.to_owned(),
-            line,
-            predicate,
-            found: candidates.iter().any(|candidate| {
-                candidate.file == file && candidate.line == line && candidate.predicate == predicate
-            }),
+        .map(|(file, predicate, token)| {
+            // FIRST match wins only for REPORTING the line; `found` does not depend on which
+            // occurrence matched. A file may legitimately carry the same predicate more than
+            // once, and picking one of them must not become a new coordinate to drift against.
+            let hit = candidates.iter().find(|candidate| {
+                candidate.file == file
+                    && candidate.predicate == predicate
+                    && candidate.source_excerpt.contains(token)
+            });
+            PositiveControl {
+                file: file.to_owned(),
+                line: hit.map_or(0, |candidate| candidate.line),
+                predicate,
+                excerpt_token: token.to_owned(),
+                found: hit.is_some(),
+            }
         })
         .collect()
 }
@@ -426,70 +474,7 @@ fn is_return_context(bytes: &[u8], offset: usize) -> bool {
 
 /// Replace comments and string/character literal contents while preserving byte offsets and lines.
 fn mask_non_code(source: &str) -> String {
-    let mut bytes = source.as_bytes().to_vec();
-    let mut index = 0;
-    let mut block_depth = 0usize;
-    let mut quote = None;
-    let mut escaped = false;
-    while index < bytes.len() {
-        if block_depth > 0 {
-            if bytes.get(index..index + 2) == Some(b"/*") {
-                bytes[index] = b' ';
-                bytes[index + 1] = b' ';
-                block_depth += 1;
-                index += 2;
-            } else if bytes.get(index..index + 2) == Some(b"*/") {
-                bytes[index] = b' ';
-                bytes[index + 1] = b' ';
-                block_depth -= 1;
-                index += 2;
-            } else {
-                if bytes[index] != b'\n' {
-                    bytes[index] = b' ';
-                }
-                index += 1;
-            }
-            continue;
-        }
-        if let Some(end_quote) = quote {
-            if bytes[index] == b'\n' {
-                quote = None;
-                escaped = false;
-                index += 1;
-            } else {
-                let closes = bytes[index] == end_quote && !escaped;
-                if bytes[index] != b'\n' {
-                    bytes[index] = b' ';
-                }
-                escaped = bytes[index] == b'\\' && !escaped;
-                index += 1;
-                if closes {
-                    quote = None;
-                    escaped = false;
-                }
-            }
-            continue;
-        }
-        if bytes.get(index..index + 2) == Some(b"//") {
-            while index < bytes.len() && bytes[index] != b'\n' {
-                bytes[index] = b' ';
-                index += 1;
-            }
-        } else if bytes.get(index..index + 2) == Some(b"/*") {
-            bytes[index] = b' ';
-            bytes[index + 1] = b' ';
-            block_depth = 1;
-            index += 2;
-        } else if bytes[index] == b'"' || bytes[index] == b'\'' {
-            quote = Some(bytes[index]);
-            bytes[index] = b' ';
-            escaped = false;
-            index += 1;
-        } else {
-            index += 1;
-        }
-    }
-    String::from_utf8(bytes).unwrap_or_else(|_| source.to_owned())
+    code_and_literals(source)
 }
 
 fn line_at(source: &str, offset: usize) -> usize {
