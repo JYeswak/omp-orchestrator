@@ -5569,6 +5569,52 @@ claims demoted by their author.** ⛔ **A NO-CLAIM is a debt, not a disclaimer �
 wrote it is the one best placed to discharge it, and leaving it for "the next thread" is how
 a residual becomes permanent.**
 
+## ⭐⭐ A FIX THAT REPLACES ONE PROXY WITH ANOTHER PROXY **ONE RUNG UP**
+
+**The sharpest self-diagnosis of the session, by the grader it cost.** It set out to avoid a
+known tautology and landed on its successor:
+
+> *"I retired 'completeness by CARDINALITY' and replaced it with 'completeness by LENGTH' —
+> the same move one rung up: a derived quantity standing in for the property nobody checked."*
+
+⛔ **And the length range it cited as evidence of richness — 104-155 chars — is explained
+ENTIRELY by test-name plus path length: THE TWO THINGS THAT SCALE WITH LOOKING SUBSTANTIAL.**
+⭐ **A proxy that grows with the appearance of substance is the most convincing wrong
+discriminator available.** **The real check was one character: `grep -c ':$'` → 59.**
+
+⭐ **Its figures were RIGHT and its INFERENCE was wrong — it measured non-emptiness and length
+and concluded content.** **State which you measured and which you concluded; they are
+different claims and only the first is a measurement.**
+
+## ⭐ A ONE-DIRECTIONAL CLASSIFIER: SAY WHICH WAY IT CAN ONLY BE WRONG
+
+**The shape test extended to all 45 CI-named legs: 10 SUBPROC / 35 DIRECT.** ⛔ **Its author
+declared the 10 a LOWER BOUND, not a count** — the classifier greps a four-line window for four
+tokens, so **a helper that unwraps status before asserting, or an assert on stdout reached only
+after a spawn, reads as DIRECT.** ⭐ **The soft set can only be LARGER, never smaller.**
+
+⭐ **"Recording that the instrument is one-directional is the whole point, given what it is
+measuring"** — a classifier that can only under-report softness is safe to use for *"at least
+this many are soft"* and unusable for *"the rest are hard."* **Name the direction of your
+instrument's error whenever the conclusion depends on it.**
+
+## ⭐ TWO FIGURES DIFFERING BY A KNOWN CONSTANT ARE THE SAME QUANTITY
+
+```
+one pane  111-162   regex KEPT the `detail=` prefix
+other     104-155   prefix STRIPPED
+162 - 155 == 111 - 104 == 7 == len("detail=")
+```
+⭐ **Same bytes, same quantity, one known constant apart — NOBODY NEEDS TO ADJUDICATE IT.**
+⛔ **The counterpart to the 45-vs-49 case, where two mechanisms produced one integer: here two
+figures differ and mean the same thing.** **Reconcile before disputing: a constant offset is
+an encoding difference, not a disagreement.**
+
+⭐ **AND TWO INDEPENDENT PATHS REACHED THE SAME RETRACTION** — one from a peer's naming of the
+header/message split, one from a negative control drawn from known-present content on the other
+lane. **The second is the better instrument and its author did not think to run it. Convergence
+by different routes is worth more than either route alone.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
