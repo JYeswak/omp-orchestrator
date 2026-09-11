@@ -375,6 +375,14 @@ pub const VOCABULARY_SPLITS: &[(&str, &str, &str, &str)] = &[
 /// binary-only crate, instead of one row each.
 pub const NAMED_ZEROS: &[(&str, &str)] = &[
     (
+        "build-stamp",
+        "Function-only library leaf: exports emit() and resolve_from \
+         (src/lib.rs:40,59) for build.rs stamp emission over String, env and \
+         git output. It names builds; it owns no vocabulary type, and giving \
+         it one to fill the census would manufacture evidence. Named zero, \
+         not silence.",
+    ),
+    (
         "oracle-pane-state-differential",
         "Function-only library leaf: exports parse_tmux_keys, parse_ntm_keys \
          and diff_sets (src/lib.rs:10,19,47) over BTreeSet<String> and the \
