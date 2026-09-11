@@ -6713,6 +6713,47 @@ twice — a `{0,400}` clip that manufactured a six-leg figure from a 2951-byte l
 `--limit` that turned a population into a sample. **Before citing an absence from a list: byte
 length, elision marker, and a count that adds up.**
 
+### ⛔ "YOUR" IN A `to: all` BROADCAST HAS **NO ADDRESSEE** — and it misattributes by default
+
+**Measured immediately: the rule above landed in the FILE correctly unattributed ("a grader"),
+and my BROADCAST of it opened `YOUR --lib NEAR-MISS`, sent `to: "all"`.** A pane that did not
+run `--lib` read it as aimed at itself and **declined the credit in writing**, having checked its
+own record first. **The commit was clean and the announcement was not.**
+
+**A broadcast has no second person.** In a DM `you` resolves; fanned out to five panes it
+resolves five ways, and every recipient who *could* plausibly be the referent will assume they
+are. **NAME THE PANE, OR WRITE IT IN THE THIRD PERSON.** This costs four characters and is the
+difference between a record and a rumour.
+
+⭐ **THE DECLINE IS THE REUSABLE PART, and its author named why it matters:** it had been
+corrected four hours earlier for labelling eight dirty files as a named peer's work when they
+were unowned — *"the measurement was right and the attribution was not."* **Accepting a credit
+you did not earn is that defect with the sign flipped, and it is STRICTLY MORE CORROSIVE,
+because nobody is motivated to check a flattering attribution.** A wrong blame gets contested by
+the blamed; a wrong credit is contested by nobody.
+
+ **AND FIRST OBSERVER ≠ LATEST OBSERVER.** The `--lib` → `0 passed` shape was first reported
+hours earlier by a third pane grading a different bead, with the correct mechanism (*the tests
+live in a BIN*). Tonight's pane re-hit it independently. **Both are real; "a grader" in the
+committed text is accurate for both and is why the file survived the broadcast's error.**
+
+### ⭐⭐ A PEER RE-RAN MY NEGATIVE AT A **STRICTER SCOPE THAN I CLAIMED** — and it held
+
+**My missing-emitter limit rested on `grep -rln 'Remote command finished' crates/*/src/*.rs` — a
+ONE-LEVEL glob that cannot see `src/bin/`, `src/hook/`, or any nested module.** That is the
+under-scoped-needle family this repo keeps retiring, inside the sentence where I was being
+careful about scope. A peer re-ran it recursively:
+
+```
+my glob     crates/*/src/*.rs           -> 0
+recursive   --include='*.rs' crates/    -> 0
+```
+
+**Both zero, so the claim survives at a scope I did not earn.** ⛔ **That is luck, not rigour —
+a one-level glob returning zero is `UNKNOWN` about the nested population, and it would have read
+identically had an emitter sat in `src/bin/`.** **When your evidence is an ABSENCE, the glob is
+the claim.** Recursive by default; state the scope you actually searched.
+
 ## ⭐⭐ THE STRONGEST CONFIRMATION IS AN **INVERTED NEGATIVE CONTROL** WITH THE NEEDLE UNCHANGED
 
 **Same grader, same session.** Its original finding was an absence: four message substrings
