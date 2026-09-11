@@ -2353,6 +2353,39 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    three conforming contracts; the one packet that omitted it produced the only non-conforming
    deliverable, despite having the richest substance of the four.
 
+8r. ⛔ **A `BLOCKING` SUBAGENT RUNS IN-BAND, SO EVERY INTERRUPT KILLS IT. CHECK THE AGENT'S
+   BLOCKING FLAG BEFORE YOU SPAWN LONG WORK.** Measured 2026-09-11: **five subagents aborted at
+   ~4 minutes each**, in two waves, and the conductor diagnosed it as *"background agents cannot
+   survive the tick cadence"* — **which is false and would have cost the fleet half its
+   remaining capacity**, on a night when the Codex panes were out of tokens and background
+   agents were one of only two working vehicles.
+
+   The agent list marks some types `(BLOCKING: inline result)`. Those execute **inside the
+   conductor's own turn**, so the 5-minute orchestrator tick — or any user message — terminates
+   them mid-flight. A non-blocking type (`task`, `scout`, …) spawns a real background job that
+   **survives ticks and auto-delivers**. Re-spawned as `task`, the identical units ran straight
+   through the next tick.
+
+   ```
+   zeststream-builder   BLOCKING -> aborted at 3m40s, 3m40s, 3m40s, 4m11s, 4m11s
+   task                 background -> still running across the next tick
+   ```
+
+   **THE GENERAL DEFECT IS THE ONE THIS FILE KEEPS RECORDING: A PROPERTY OF THE INSTRUMENT READ
+   AS A PROPERTY OF THE WORLD.** *"Background agents die here"* and *"I chose an inline agent
+   type"* produce the identical observation and have opposite remedies — the first says stop
+   parallelising, the second says pass a different string. Same family as `8i`: before
+   concluding a capability is unavailable, **check the tool's own declaration of what it does.**
+   `rch exec --job` was found the same night by the same question.
+
+   **AND AN ABORTED SUBAGENT'S WORK IS NOT AUTOMATICALLY LOST — GO LOOK.** Of the five, one had
+   already written a correct fix into the worktree and was killed before committing; it was
+   verified remotely and landed as `063e67f`. Another had reached a real verdict (*"the named
+   test passes but a SIBLING fails, and that inversion is the tell"*) that was carried into the
+   re-spawn's packet. **Check `git status --porcelain` and the transcript before re-dispatching,
+   or you pay for the same work twice** — and check it for DAMAGE too: a different aborted agent
+   had left a regression plus a `100644 -> 100755` mode flip.
+
 9. **NO ACCEPTANCE IS COMPLETE WITHOUT A WIRING-PROOF LEG. The dispatch is where BUILT ≠ WIRED
    gets in.** Measured 2026-09-06, and it is the orchestrator's own defect: every acceptance
    written that session demanded fires-on-known-bad, a known-good leg, a mutation leg and
