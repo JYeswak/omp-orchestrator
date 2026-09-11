@@ -182,9 +182,31 @@ fn real_path_collision_refuses_before_replace() {
         permissions.set_mode(0o755);
         fs::set_permissions(&existing, permissions).expect("make existing owner executable");
     }
-    let result = install_binary(&built_installer(), target.path(), &identity_head(), &RepoOwnership::ThisRepo);
-    assert!(result.is_err(), "real installer replaced a pre-existing destination owner");
+    let error = install_binary(
+        &built_installer(),
+        target.path(),
+        &identity_head(),
+        &RepoOwnership::ThisRepo,
+    )
+    .expect_err("real installer replaced a pre-existing destination owner");
+    // `is_err()` alone was satisfied by the incidental IdentityMismatch a host with
+    // no derivable build id produces, so this test passed there while the clobber it
+    // names went unmeasured. Name the refusal.
+    assert!(
+        matches!(error, InstallError::DestinationNotOurs { .. }),
+        "refusal must name the collision, not an incidental identity failure: {error}"
+    );
     assert_eq!(fs::read(&existing).expect("read destination owner"), b"pre-existing-owner");
+    // BEFORE replace, not merely instead of it: nothing may be staged beside the owner.
+    let entries: Vec<_> = fs::read_dir(target.path())
+        .expect("read isolated install directory")
+        .map(|entry| entry.expect("read directory entry").file_name())
+        .collect();
+    assert_eq!(
+        entries.len(),
+        1,
+        "refusing before replace must leave the owner alone in the directory: {entries:?}"
+    );
 }
 
 #[test]

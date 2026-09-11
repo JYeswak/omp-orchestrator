@@ -98,6 +98,12 @@ pub enum InstallError {
         arch: String,
         libc: Option<String>,
     },
+    /// The install path is already occupied by a runnable artifact this
+    /// installer did not publish. Refused BEFORE anything is staged or renamed.
+    DestinationNotOurs {
+        path: String,
+        detail: String,
+    },
 }
 
 
@@ -179,6 +185,10 @@ impl fmt::Display for InstallError {
             Self::PlatformTripleUnsupported { os, arch, libc } => write!(
                 formatter,
                 "L0-PLATFORM-TRIPLE unsupported os={os} arch={arch} libc={libc:?}"
+            ),
+            Self::DestinationNotOurs { path, detail } => write!(
+                formatter,
+                "L0_DESTINATION_NOT_OURS: refusing to replace {path}: {detail}"
             ),
         }
     }
@@ -1145,6 +1155,14 @@ fn is_anonymous_sentinel(token: &str) -> bool {
             .is_some_and(|character| !character.is_ascii_alphanumeric())
 }
 
+/// Characters a generated non-hex build id may contain. `~`, `/` and `:` are
+/// deliberately absent: they are what the NEIGHBOURING rodata starts with when
+/// `strings` packs the marker against it, and admitting them is what let a whole
+/// packed run masquerade as one identity token.
+fn is_build_id_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+}
+
 fn is_fallback_build_id(token: &str) -> bool {
     let mut characters = token.bytes();
     let Some(first) = characters.next() else {
@@ -1158,7 +1176,7 @@ fn is_fallback_build_id(token: &str) -> bool {
         if character.is_ascii_alphanumeric() {
             continue;
         }
-        if matches!(character, b'-' | b'_' | b'~' | b'/' | b'.' | b':') {
+        if is_build_id_character(character) {
             separator = true;
             continue;
         }
@@ -1185,7 +1203,16 @@ fn parse_build_id(text: &str) -> Option<String> {
         } else if hex_len >= 8 {
             &value[..hex_len]
         } else {
-            value.split_whitespace().next()?
+            // A non-hex fallback id has no fixed width, so unlike the 40/64-hex
+            // branches above nothing clipped it — and `strings` emits the marker
+            // packed against the rodata that follows it
+            // (`build_id=nogit-1789100969~//Users/.../crate`), which contains no
+            // whitespace. Splitting on whitespace therefore returned the neighbour
+            // as part of the identity, and `is_fallback_build_id` accepted it
+            // because it admitted `~` and `/` as separators. Terminate the token
+            // at the first character a generated id can never contain instead.
+            let width = value.bytes().take_while(|byte| is_build_id_character(*byte)).count();
+            &value[..width]
         };
         if token.is_empty() || is_anonymous_sentinel(token) {
             return None;
@@ -1604,6 +1631,68 @@ fn restore_atomic(rollback: &Path, dest: &Path) -> Result<(), InstallError> {
     })
 }
 
+/// L0-REFUSE-BEFORE-REPLACE. Refuse an install path already owned by a runnable
+/// artifact this installer did not publish.
+///
+/// The ORDERING is the property, not the predicate: this runs before anything is
+/// staged, which is strictly earlier than the `replace_atomic` rename it guards,
+/// so a foreign owner is never even momentarily at risk and no staged temp is
+/// written beside it. Before this existed `install_binary` staged, verified the
+/// SOURCE, and then renamed over whatever sat at the destination — so a
+/// same-identity source silently clobbered a stranger's binary and the rollback
+/// copy was deleted on success, which is how `/usr/sbin/installer` would have
+/// been overwritten by a plain `installer` install.
+///
+/// OWNERSHIP DISCRIMINATOR: every binary this workspace publishes carries
+/// `#[used] BUILD_ID_MARKER` (see `src/main.rs`), so a recoverable `build_id=`
+/// token in the occupant's own bytes means it is a prior artifact of ours and
+/// replacing it is an upgrade rather than a clobber. The probe reads bytes and
+/// never EXECUTES the occupant: an unowned binary sitting at our install path is
+/// exactly the thing not to run.
+///
+/// A non-runnable occupant is not a PATH owner — no shell can invoke it — so it
+/// is debris from an interrupted install and replacing it clobbers nobody.
+///
+/// NO-CLAIM: an artifact of ours built without a derivable identity stamps the
+/// anonymous sentinel, which `parse_build_id` refuses, so it reads as foreign and
+/// its own upgrade is refused. That is fail-closed on purpose: a binary that
+/// cannot say what it was built from cannot prove it is ours.
+fn refuse_foreign_destination(dest: &Path) -> Result<(), InstallError> {
+    let metadata = match std::fs::symlink_metadata(dest) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(InstallError::IoError {
+                path: dest.display().to_string(),
+                detail: format!("stat destination failed: {error}"),
+            })
+        }
+    };
+    if !destination_is_runnable(&metadata) {
+        return Ok(());
+    }
+    if probe_build_id_string(dest).is_some() {
+        return Ok(());
+    }
+    Err(InstallError::DestinationNotOurs {
+        path: dest.display().to_string(),
+        detail: "a runnable artifact carrying no build_id marker already owns this path"
+            .to_owned(),
+    })
+}
+
+#[cfg(unix)]
+fn destination_is_runnable(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.file_type().is_symlink()
+        || (metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+}
+
+#[cfg(not(unix))]
+fn destination_is_runnable(metadata: &std::fs::Metadata) -> bool {
+    !metadata.is_dir()
+}
+
 pub fn install_binary(
     source: &Path,
     install_dir: &Path,
@@ -1630,6 +1719,7 @@ pub fn install_binary(
         })?
         .len();
     let install_path = install_dir.join(&binary_name);
+    refuse_foreign_destination(&install_path)?;
     let staged_path = stage_artifact_stream(install_dir, &binary_name, source_file, expected_len)?;
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
@@ -1945,6 +2035,108 @@ exit 0
         assert_eq!(rollback_count, 0, "successful replacement cleans its rollback file");
         std::fs::remove_dir_all(root).expect("cleanup");
     }
+    /// The refuse-before-replace guard must not become an upgrade blocker: a
+    /// destination that carries our own `build_id=` marker is a prior artifact of
+    /// ours, and installing over it is the normal upgrade path.
+    #[cfg(unix)]
+    #[test]
+    fn owned_executable_destination_is_still_upgraded() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "omp-installer-upgrade-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let install_dir = root.join("bin");
+        std::fs::create_dir_all(&install_dir).expect("install directory");
+        let source = root.join("ompo");
+        std::fs::write(
+            &source,
+            b"#!/bin/sh\n# build_id=head-42\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'ompo supervise 0.1.0 build_id=head-42'; fi\n",
+        )
+        .expect("source artifact");
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o755))
+            .expect("source permissions");
+
+        // A prior artifact OF OURS: executable, and carrying the marker.
+        let destination = install_dir.join("ompo");
+        std::fs::write(
+            &destination,
+            b"#!/bin/sh\n# build_id=head-41\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'ompo supervise 0.1.0 build_id=head-41'; fi\n",
+        )
+        .expect("previous owned artifact");
+        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o755))
+            .expect("previous artifact permissions");
+
+        let check = install_binary(&source, &install_dir, "head-42", &RepoOwnership::ThisRepo)
+            .expect("an owned marker-bearing destination must still upgrade");
+        assert!(check.consistent, "{check}");
+        assert!(
+            std::fs::read_to_string(&destination)
+                .expect("installed artifact text")
+                .contains("build_id=head-42"),
+            "the upgrade must publish the new artifact"
+        );
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
+    /// The same directory, the same install name, an occupant that is NOT ours:
+    /// refused, and refused before anything is staged.
+    #[cfg(unix)]
+    #[test]
+    fn foreign_executable_destination_is_refused_before_staging() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!(
+            "omp-installer-foreign-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let install_dir = root.join("bin");
+        std::fs::create_dir_all(&install_dir).expect("install directory");
+        let source = root.join("ompo");
+        std::fs::write(
+            &source,
+            b"#!/bin/sh\n# build_id=head-42\nif [ \"$1\" = \"--version\" ]; then printf '%s\\n' 'ompo supervise 0.1.0 build_id=head-42'; fi\n",
+        )
+        .expect("source artifact");
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o755))
+            .expect("source permissions");
+
+        let destination = install_dir.join("ompo");
+        std::fs::write(&destination, b"#!/bin/sh\nexit 0\n").expect("foreign owner");
+        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o755))
+            .expect("foreign owner permissions");
+
+        let error = install_binary(&source, &install_dir, "head-42", &RepoOwnership::ThisRepo)
+            .expect_err("a foreign runnable owner must refuse");
+        match &error {
+            InstallError::DestinationNotOurs { path, .. } => {
+                assert_eq!(path, &destination.display().to_string());
+            }
+            other => panic!("expected DestinationNotOurs, got {other:?}"),
+        }
+        assert!(error.to_string().starts_with("L0_DESTINATION_NOT_OURS"), "{error}");
+        assert_eq!(
+            std::fs::read(&destination).expect("foreign owner remains"),
+            b"#!/bin/sh\nexit 0\n"
+        );
+        let entries: Vec<_> = std::fs::read_dir(&install_dir)
+            .expect("install directory entries")
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(entries, vec!["ompo".to_owned()], "nothing may be staged: {entries:?}");
+        std::fs::remove_dir_all(root).expect("cleanup");
+    }
+
     #[test]
     fn anonymous_build_identity_is_absent_from_leg_inventory() {
         for value in ["absent", "unavailable", "unversioned"] {
@@ -1968,6 +2160,25 @@ exit 0
         let hex64 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         assert_eq!(parse_build_id(&format!("build_id={hex40}~/")), Some(hex40.to_owned()));
         assert_eq!(parse_build_id(&format!("build_id={hex64}~/")), Some(hex64.to_owned()));
+    }
+
+    /// A 40/64-hex id is clipped by width, so the packed-rodata neighbour never
+    /// reached it. A generated fallback id has no width to clip by, and the
+    /// neighbour rode in with it.
+    #[test]
+    fn packed_fallback_marker_clips_at_the_neighbouring_rodata() {
+        // Shape observed from `strings` on the real artifact: the marker, then the
+        // rodata neighbour, with no separator either can see.
+        assert_eq!(
+            parse_build_id("build_id=nogit-1789100969~//build/root/crates/installercrate"),
+            Some("nogit-1789100969".to_owned()),
+            "a packed fallback marker must yield the id, not the id plus its neighbour"
+        );
+        assert_eq!(
+            parse_build_id("build_id=v1.2.3-rc1/usr/lib"),
+            Some("v1.2.3-rc1".to_owned()),
+            "a deliberate release stamp is a fallback id too"
+        );
     }
     #[cfg(unix)]
     #[test]
