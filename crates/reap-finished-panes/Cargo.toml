@@ -20,6 +20,13 @@ serde_json = "1"
 subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
 
+# The supervisor that INVOKES this binary. A dev-dependency only: the parity
+# test asks omp-orchestrator for the exact argument list it sends and spawns
+# this crate's bin with it, so caller/callee drift reddens instead of going
+# latent. Not a runtime dependency -- the reaper is invoked over PATH.
+[dev-dependencies]
+omp-orchestrator = { path = "../omp-orchestrator" }
+
 [lints.rust]
 unsafe_code = "forbid"
 

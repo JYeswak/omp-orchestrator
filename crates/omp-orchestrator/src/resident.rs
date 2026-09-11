@@ -5368,11 +5368,33 @@ fn clear_dispatch_marker(path: &Path, pane: &str) -> Result<(), String> {
 /// directory that control-plane's own supervisor (pid 38194, launchd) writes to, so
 /// ownership of an artifact there is still inferred from a filename rather than enforced.
 fn finished_pane_reaper_args(config: &Config) -> Vec<String> {
+    reaper_args_for(&config.repo, &config.session)
+}
+
+/// The EXACT argument list the supervisor hands `reap-finished-panes`.
+///
+/// Public so a test can SPAWN the reaper with these bytes rather than merely
+/// construct them. A caller/callee argument drift is only observable by
+/// EXECUTING the callee: `finished_pane_reaper_args` returning the wrong flag
+/// and the reaper rejecting it are both perfectly well-formed in isolation,
+/// and 8nuh spent three days latent because nothing ran the pair together.
+///
+/// One authority, not two that agree today: `finished_pane_reaper_args` is a
+/// thin delegate to this, so a test pinning this list pins what the supervisor
+/// actually sends. A second copy in the test would drift exactly like the two
+/// emitters this repo has already paid for.
+///
+/// # NO-CLAIM
+///
+/// This pins the ARGUMENT LIST. It does not pin the reaper's exit code, its
+/// stdout shape, or that `~/.local/state/flywheel/reaped/` is owner-separated.
+#[must_use]
+pub fn reaper_args_for(repo: &std::path::Path, session: &str) -> Vec<String> {
     vec![
         "--repo".to_owned(),
-        config.repo.display().to_string(),
+        repo.display().to_string(),
         "--session".to_owned(),
-        config.session.clone(),
+        session.to_owned(),
     ]
 }
 async fn run_finished_pane_sweep(cx: &Cx, config: &Config) -> Result<String, String> {
