@@ -247,14 +247,42 @@ the rest route through `fail <MARKER> 75` → `exit "$status"` at `:23-29`:
 :728 / :730 CARGO_LANE_IDENTITY_UNSTABLE
 ```
 
-Seven sites, six causes. **The MESSAGE channel is already split — every site emits a distinct
-marker — and only the exit code is overloaded.** So gate rule 7 applies exactly: read the marker,
-never the 75 alone. A grep for the literal `exit 75` finds one of seven and is itself an
-instrument defect.
+⛔ **CORRECTED 2026-09-10 BY `GradeParity` GRADING `eux9p`. THE SENTENCE THAT SAT HERE — "the
+MESSAGE channel is already split, every site emits a distinct marker, and only the exit code is
+overloaded" — WAS FALSE ON BOTH HALVES, AND IT WAS WRITTEN BY THE CORRECTION THAT DISCOVERED THE
+DEFECT.** Re-measured with a positive control:
+
+```
+sites matching (exit 75|fail <MARKER> 75)   7
+marker-BEARING sites                        6     <- :185 is a BARE `exit 75`, no marker at all
+distinct marker STRINGS                     5     <- :728 and :730 SHARE CARGO_LANE_IDENTITY_UNSTABLE
+sed -n '185p' ~/.local/bin/cargo        ->  "            exit 75"
+```
+
+**So one site emits nothing parseable and two more are indistinguishable from each other.** The
+practical instruction survives and is unchanged — **read the marker, never the 75 alone**; a grep
+for the literal `exit 75` finds one site of seven and is itself an instrument defect. What does
+NOT survive is the claim that the channel needs no work: the single unmarked site is **exactly the
+one doctrine misread as "the verb is refused"**, which is mechanism, not coincidence. The remedy
+is ONE line — `fail CARGO_LOCAL_BUILD_REFUSED_BYPASS 75` at `:185`, using machinery that file
+already uses six times — and the false sentence made it look unnecessary.
+
+**AND THE DENOMINATOR DECLARATION WAS ITSELF WRONG, inside the comment declaring denominators:**
+`eux9p` comment 3 says *"6 distinct MARKERS"*, which cannot hold if one site has none and two
+share. Correct: **7 sites / 6 marker-bearing sites / 5 distinct marker strings / 1 unmarked.** The
+load-bearing figure is the last one, denominator **1**.
+
+**THIS IS STALE DOCTRINE CREATED BY A CORRECTION RATHER THAN BY DECAY** — the fourth class of it
+recorded here, and the fastest: false within the hour, in the file everyone reads first, asserting
+the negation of the finding it was written to record.
 
 **THE CORPUS CONTRADICTS ITSELF ON THIS, so check both before citing either.**
-`docs/inventories/CENSUS-ARCHIVE-INSTRUMENTS.md:48` says the bypass *"is the sanctioned local
-path"* — true before `f4e9d68`, refused after — which is the exact opposite of `:194`. Five beads
+`docs/inventories/CENSUS-ARCHIVE-INSTRUMENTS.md:68` says the bypass *"is the sanctioned local
+path"* — true before `f4e9d68`, refused after — which is the exact opposite of `:194`. **That
+file is a VERBATIM ARCHIVE and is deliberately NOT edited**; `a01a1bf` added a header stating
+that its "figures are not citable" disclaimer does not cover INSTRUCTIONS, one of which is now
+actively harmful. **That header is also why this cite moved from `:48` to `:68`** — a stale line
+number created by the very commit that fixed the contradiction, caught by `GradeParity`. Five beads
 still name `RCH_CARGO_WRAPPER_BYPASS=1 cargo test …` as their sanctioned route; every one of those
 acceptance legs now terminates at `:185` and is **unexecutable as written**.
 
