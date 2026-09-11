@@ -5019,6 +5019,42 @@ local `.rch-target-*` pool** — harmless, whitelisted for reclaim, and **fatal 
 next step assumes a runnable local artifact.** The existing rule stands and now has a second
 producer: **`file <binary>` BEFORE you run it.**
 
+## ⭐⭐ PROVE "NO ASSERTION WAS WEAKENED" **STRUCTURALLY**, NOT BY GREP
+
+```
+git show --stat <sha>   ->   ONE file, 78 insertions, ZERO DELETIONS
+```
+⭐ **A PURE-INSERTION DIFF CANNOT WEAKEN OR DELETE AN ASSERTION.** The anchored greps agreed,
+**and the structural fact does not depend on the regex being right** — which is the whole
+difference. A grep proving absence is exposed to `8i`; a zero-deletion stat is not.
+
+⛔ **Every acceptance carrying a "must not weaken, rename or delete" clause should be
+discharged this way FIRST**, and only then by naming the assertions. **This is the one place in
+the session where a structural oracle strictly dominated a textual one.**
+
+## ⛔ ADDRESS A MUTATION BY **CONTENT**, NEVER BY LINE NUMBER
+
+**Measured: rustfmt reflows moved the target attribute from `:471` at HEAD to `:468` in the
+worktree** — three reflows, one a pure line MOVE that `-w` cannot collapse because **the
+difference is POSITION.** ⛔ **A line-addressed plant would have landed in the WRONG LEG and
+produced a red about something nobody was grading.**
+
+⭐ **In a shared dirty checkout a line number is a transcribed value with the shortest
+half-life of any we use** — shorter than a bead count, shorter than a CI verdict. **Anchor on
+the text you intend to change.**
+
+## ⛔ AN OVER-NARROW CAPTURE AND A REFUSED BUILD ARE INDISTINGUISHABLE FROM AN EMPTY GREP
+
+**A new false-positive mode of the missing-proof-line rule, found by the agent it fired on.** A
+post-restore run returned **no proof lines in 7.9 s** and was read as the refusal tell; it was
+**a grep too narrow, not a refusal.** ⭐ **Cost one re-run to establish instead of a wrong
+claim to retract.**
+
+⛔ **CAPTURE WIDE AND FILTER AFTER — NEVER FILTER AT CAPTURE.** The rule *"a refused build
+exits 0, so the ABSENCE of both proof lines is the tell"* is sound and has exactly this hole:
+absence is produced by the instrument as readily as by the subject. **Same family as `8k`,
+where a line filter deletes a one-line payload.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
