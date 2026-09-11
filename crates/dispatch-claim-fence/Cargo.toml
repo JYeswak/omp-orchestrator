@@ -5,6 +5,14 @@ version = "0.1.0"
 edition = "2021"
 description = "Fail-closed claim authorization for bead dispatch packets"
 
+# THE OPERATOR SURFACE (`omp-orchestrator-dda5`). This crate had ZERO bin
+# targets, so the fail-closed admission check could only be reached by a
+# linked Rust caller; a shell-driven dispatch tick skipped it entirely. The
+# lib stays the single implementation; `src/main.rs` is argv and exit codes.
+[[bin]]
+name = "dispatch-claim-fence"
+path = "src/main.rs"
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
