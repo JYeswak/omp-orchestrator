@@ -341,6 +341,64 @@ toolchain for the same asupersync builds, so pinning buys nothing and refuses of
 2026-09-07, unpinned `rch exec` succeeded **12+ times** including the Mach-O cross-build, while
 pinned attempts returned `RCH-I005 project_excluded`.
 
+### ⭐ TO PROBE A WORKER, USE `rch exec --job -- <cmd>`. PLAIN `rch exec` REFUSES NON-BUILDS.
+
+Discovered 2026-09-11 after four agents spent an evening inferring worker state from build
+side-effects. **`rch exec` classifies its command and refuses anything that is not a
+compilation:**
+
+```
+RCH_REQUIRE_REMOTE=1 rch exec -- git rev-parse HEAD
+  -> [RCH] remote required; refusing local fallback [RCH-E301] (non-compilation command)
+
+RCH_REQUIRE_REMOTE=1 rch exec --job -- git rev-parse HEAD      <- THE SANCTIONED FORM
+```
+
+`--help`, verbatim: *"Admit an arbitrary NON-compilation job … Bypasses ONLY the compilation
+classifier: the command rides the normal selection/sync/execute/heartbeat/release rails, syncs no
+artifacts back, and its remote exit status surfaces verbatim."* **`--sync-back <dir>` is
+available and REQUIRES `--job`.** Still substrate: probe, never provision.
+
+**A worker probe that reports `BLOCKED on RCH-E301` has not hit a wall, it has used the wrong
+verb** — which is one `--help` away and was nearly filed as a blocker.
+
+### AND THE WORKER'S REPO HAS *ZERO COMMITS* — NOT SHALLOW, NOT GRAFTED, NOT DIVERGENT
+
+Measured on contabo-4 via `--job`, and it retires three competing hypotheses at once:
+
+```
+git rev-parse HEAD                    fatal: ambiguous argument 'HEAD': unknown revision …
+git rev-parse --is-shallow-repository false
+git rev-list --count --all            0          <- THE DISCRIMINATOR
+ls -la .git/shallow                   No such file or directory
+
+clone --depth 1     would be  shallow=true   count=1   .git/shallow PRESENT
+fresh-init 1 commit would be  shallow=false  count=1   .git/shallow absent
+MEASURED                      shallow=false  count=0   .git/shallow absent   <- EXCLUDES BOTH
+```
+
+**It is a `git init` with nothing ever committed, beside an rsync'd working tree.** Every symptom
+follows with no residue: `HEAD` and `HEAD~1` unresolvable because nothing is committed; an
+**explicit sha** unresolvable **while the path exists on disk** because the object database is
+EMPTY and rsync put the file there; `invalid object name` from `ls-tree` versus `ambiguous
+argument` from `rev-parse` are two phrasings of *"the odb has nothing"* — **so a detector needs
+BOTH needles; either alone misses a case.**
+
+**AND IT KILLS THE OBJECT-DIVERGENCE HYPOTHESIS BY CONSTRUCTION RATHER THAN BY PARSING A
+MESSAGE** — the reading that survived three agents and two retractions. **An empty object
+database cannot hold a DIFFERENT object under a sha; it holds NO object.**
+
+⛔ **THE STANDING CONSEQUENCE: NO OPERATION AGAINST A NAMED REVISION CAN EVER RUN UNDER `rch`** —
+not `--compare`, not `git ls-tree <sha>`, not an archive check, and **not a one-tree probe against
+anything but the working tree.** A typed `CHECKOUT_UNUSABLE` refusal is the honest answer there;
+**CI with `fetch-depth: 0` is the only surface these legs can run on.** That is a permanent
+property of the transport, **not a defect to file against a crate** — and a crate whose error
+names itself for it is misattributing (see `z1ck5`).
+
+**NO-CLAIM.** `n=1` on the fleet axis — all five probes ran on contabo-4 in one window. The
+mechanism is transport-level and should be uniform, but pinning a second worker to confirm is
+itself a violation, so this stays a declared limit rather than a fleet-wide assertion.
+
 ## ⛔ DO NOT TOUCH THE CONTABO BOXES OR ANY `rch` CONFIG ⛔
 
 Joshua: **"if agents dont stop fucking messing with the configs, they are going to get shut off and
