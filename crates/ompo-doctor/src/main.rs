@@ -1008,6 +1008,13 @@ fn run_init(rest: &[String]) -> ExitCode {
                         "backup": report.backup.as_ref().map(|p| p.display().to_string()),
                         "journal_rows": report.journal_rows,
                         "monitor_rows": report.monitor_rows,
+                        // zo6l: the 1:1 law's two counts plus the verdict. The
+                        // ratio alone is ambiguous — a virgin write is
+                        // legitimately 0:1 — so `preexisting` travels with it.
+                        "files_mutated": report.files_mutated,
+                        "backups_written": report.backups_written,
+                        "preexisting": report.preexisting,
+                        "backup_ratio_verdict": report.backup_ratio_verdict,
                     }),
                 );
                 match serde_json::to_string(&value) {
@@ -1021,9 +1028,13 @@ fn run_init(rest: &[String]) -> ExitCode {
                 // actions=0 on a second run is the IDEMPOTENCE receipt, so it is a named
                 // integer rather than a silent success.
                 println!(
-                    "OMPO_INIT artifact={} actions={} journal_rows={} monitor_rows={} backup={}",
+                    "OMPO_INIT artifact={} actions={} files_mutated={} backups_written={} preexisting={} backup_ratio={} journal_rows={} monitor_rows={} backup={}",
                     destination.display(),
                     report.actions,
+                    report.files_mutated,
+                    report.backups_written,
+                    report.preexisting,
+                    report.backup_ratio_verdict,
                     report.journal_rows,
                     report.monitor_rows,
                     report

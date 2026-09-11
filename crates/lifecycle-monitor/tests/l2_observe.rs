@@ -92,6 +92,45 @@ fn l2_observe_reports_progressing_with_measured_fresh_age() {
     assert!(age_ms(&stdout) <= l2_stall_after_ms(), "{stdout}");
 }
 
+/// The reported reason MOVES WITH THE ROW, so `reason=` is a round-trip and not
+/// a literal.
+///
+/// Self-audit finding on the leg above: it asserts `reason=INIT_REPROBE_OK`
+/// against a fixture that already carries that value, so a `last_reason`
+/// hardcoded anywhere in the observe path would satisfy it with 4 passed,
+/// 0 filtered and both proof lines — a green that proves nothing. Driving a
+/// DISTINCT reason through the same command and asserting the observed value
+/// changes with it is the only thing that separates a live field from a
+/// constant. Two sides, one assertion each way.
+#[test]
+fn the_observed_reason_moves_with_the_row_and_is_not_a_constant() {
+    let directory = tempfile::tempdir().expect("reason fixture");
+    let journal = directory.path().join("reason.jsonl");
+
+    std::fs::write(&journal, l2_row(now_secs())).expect("write canonical reason");
+    let canonical = String::from_utf8_lossy(&observe(&journal).stdout).into_owned();
+    assert!(canonical.contains("reason=INIT_REPROBE_OK"), "{canonical}");
+
+    // Same layer, same freshness, DIFFERENT reason. Only the reason may move.
+    let other = l2_row(now_secs()).replace("INIT_REPROBE_OK", "INIT_REPROBE_OTHER");
+    assert!(
+        other.contains("INIT_REPROBE_OTHER"),
+        "fixture substitution must actually apply: {other}"
+    );
+    std::fs::write(&journal, other).expect("write distinct reason");
+    let distinct = String::from_utf8_lossy(&observe(&journal).stdout).into_owned();
+
+    assert!(distinct.contains("reason=INIT_REPROBE_OTHER"), "{distinct}");
+    assert!(
+        !distinct.contains("reason=INIT_REPROBE_OK"),
+        "a hardcoded reason would still report the canonical value: {distinct}"
+    );
+    assert!(
+        distinct.contains("layer=L2 state=progressing"),
+        "only the reason may move, not the state: {distinct}"
+    );
+}
+
 /// KNOWN-BAD (0pc9, mandatory): push the observation past its threshold and the
 /// monitor reports SILENT **with an age**, not a bare false.
 ///

@@ -220,6 +220,21 @@ pub struct InitReport {
     pub backup: Option<PathBuf>,
     pub journal_rows: usize,
     pub monitor_rows: usize,
+    /// Files whose CONTENT this run actually replaced or created. Equal to
+    /// `actions` today, published separately because the 1:1 backup law is
+    /// stated over mutations, not over "something happened".
+    pub files_mutated: usize,
+    /// Snapshots this run wrote. The law is NOT a flat 1:1 against
+    /// `files_mutated`: a virgin repo mutates one file and has nothing to
+    /// snapshot, so it is legitimately 0:1. The 1:1 obligation binds only when
+    /// PRE-EXISTING CONTENT was superseded.
+    pub backups_written: usize,
+    /// Whether the artifact already existed before this run. This is what makes
+    /// 0:1 and 1:1 distinguishable instead of one ratio with two meanings.
+    pub preexisting: bool,
+    /// The 1:1 verdict, always emitted: never inferred from the ratio by a
+    /// reader who cannot see `preexisting`.
+    pub backup_ratio_verdict: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1152,10 +1167,13 @@ fn initialize_inner(
     let manifest = build_manifest(repo_root)?;
     let bytes = render_manifest(&manifest).into_bytes();
     verify_agents_ownership(repo_root, trusted_init)?;
-    let (actions, backup) = match fs::read(output) {
-        Ok(existing) if existing == bytes => (0, None),
-        Ok(_) => (1, snapshot_existing(output)?),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (1, None),
+    // ONE pre-state read answers both questions: did the artifact exist, and
+    // does its content differ. Reading twice would let the two answers come
+    // from two different moments.
+    let (preexisting, actions, backup) = match fs::read(output) {
+        Ok(existing) if existing == bytes => (true, 0, None),
+        Ok(_) => (true, 1, snapshot_existing(output)?),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (false, 1, None),
         Err(error) => {
             return Err(InceptionError::Readback {
                 path: output.to_owned(),
@@ -1184,12 +1202,38 @@ fn initialize_inner(
         path: journal_path,
         detail: format!("monitor reread failed: {error}"),
     })?;
+    // THE 1:1 LAW, stated where it can be enforced rather than left to a
+    // reader of two counts. Superseding pre-existing content without a
+    // snapshot is unrecoverable, so it is a typed refusal, not a low ratio.
+    let files_mutated = actions;
+    let backups_written = usize::from(backup.is_some());
+    let backup_ratio_verdict = if preexisting && files_mutated > 0 {
+        if backups_written == files_mutated {
+            "BACKUP_RATIO_OK_1_TO_1".to_owned()
+        } else {
+            return Err(InceptionError::Readback {
+                path: output.to_owned(),
+                detail: format!(
+                    "BACKUP_RATIO_VIOLATION backups_written={backups_written} files_mutated={files_mutated} preexisting=true"
+                ),
+            });
+        }
+    } else if files_mutated > 0 {
+        // Virgin write: nothing existed, so there is nothing to snapshot.
+        "BACKUP_RATIO_OK_VIRGIN_0_TO_1".to_owned()
+    } else {
+        "BACKUP_RATIO_OK_NO_MUTATION".to_owned()
+    };
     Ok(InitReport {
         manifest,
         actions,
         backup,
         journal_rows,
         monitor_rows,
+        files_mutated,
+        backups_written,
+        preexisting,
+        backup_ratio_verdict,
     })
 }
 
