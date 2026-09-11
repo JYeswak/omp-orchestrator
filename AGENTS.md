@@ -3918,3 +3918,85 @@ new single-valued view that reads as the opposite of what happened.**
 a peer is editing YOUR file        worktree race   -> temp-index form (or index form, bracketed)
 the index is dirty, your file clean index sweep    -> `git add -- <p> && git commit -- <p>`
 ```
+
+---
+
+## ⛔⛔ CI IS THE **ONLY** INSTRUMENT THAT COMPILES THE COMMITTED TREE (binding, 2026-09-11)
+
+**Assemble tonight's four separate findings and they close into one fact nobody had stated:**
+
+```
+local `cargo test`              compiles the WORKTREE                    (rule 8)
+`rch exec -- cargo test`        SYNCS and compiles the WORKTREE,
+                                INCLUDING UNTRACKED FILES                (d5bacc3)
+fresh clone + metadata --locked RESOLVES the committed tree. DOES NOT COMPILE IT.
+CI  (actions/checkout@v4 at the sha, full history, `cargo test`/`cargo run`)
+                                >>> COMPILES HEAD. THE ONLY ONE THAT DOES. <<<
+```
+
+⭐ **SO "DOES HEAD COMPILE" IS UNANSWERABLE BY EVERY LOCAL AND REMOTE INSTRUMENT WE HAVE.**
+`GradeUldvuP0` reached the same wall from the other side and stated it structurally rather than
+as laziness: *"there is currently NO SANCTIONED INSTRUMENT that can compile a fresh clone —
+builds are remote-only and `rch exec` syncs the WORKTREE, which is the very surface the bead is
+about."*
+
+⛔ **THAT RE-FRAMES `REACHABLE_RED_UNREAD` ENTIRELY. CI IS NOT A REDUNDANT SECOND OPINION — IT IS
+THE SOLE ORACLE FOR A PROPERTY NOTHING ELSE CAN MEASURE.** And it had produced **no verdict for
+five hours**, because `cancel-in-progress: true` on a `workflow+ref` group let every push kill
+the running gate: **14 of 15 cancelled, last real verdict four hours stale.** The fix
+(sha-keyed group on `push`) is therefore **load-bearing, not housekeeping** — measured
+immediately afterward, run `34566431257` survived **2028s to completion while two later pushes
+landed**, and delivered `GATE_RUNNER_FAILING count=16 → 7`.
+
+**OPERATIONAL CONSEQUENCES, all binding:**
+
+- **A green from any local or remote `cargo` run is evidence about the tree that was SYNCED.**
+  It is NOT evidence that HEAD compiles, and it is specifically blind to a file you never
+  committed — which is how `f1ff868` shipped a HEAD naming `crate::host_precondition` without
+  containing it, uncompilable for **4m46s**, while the suite reported `240 passed / 0 failed`.
+- **After committing, `git archive HEAD | tar -tf - | grep <file>` is the cheap check** — it
+  reads the committed tree and needs no build.
+- **A cancelled CI run is not a soft outcome. It destroys the only compile evidence that exists
+  for that commit**, which is why the old `cancel-in-progress` comment's reasoning — *a later
+  commit's whole-tree verdict strictly covers the earlier one* — was sound **only if the later
+  run finishes**, and under a wave it never did.
+- **NEVER cite a superseded run.** The oracle is *newest run whose conclusion is
+  `success|failure`*, and the reason that oracle was ever needed is this defect.
+
+**NO-CLAIM.** CI compiles HEAD; it does not prove HEAD is correct, and its verdict is still only
+as good as the gate's own legs. This row says what the instrument uniquely measures, not that the
+measurement is sufficient. **And it remains true that 51 of the last 100 runs failed with no run
+id or sha cited anywhere in `.beads/issues.jsonl`** — reachable, produced, and still unread is a
+separate open problem.
+
+---
+
+## ⛔ THE KERNEL-BYPASS GUARD PROTECTED A SPELLING NOBODY TYPES (measured 2026-09-11)
+
+**`kernel_candidate` recognised `omp-orchestrator` — the crate/bin name — and NOT `ompo`, the
+name the binary is INSTALLED and INVOKED under.** The launchd row runs
+`/Users/josh/.local/bin/ompo supervise --repo …`, and the *"kernel must be the sole shell
+command"* rule is reachable **only after `kernel_candidate` returns `Some`**:
+
+```
+echo setup; omp-orchestrator --once   ->  DENY   "must be the sole shell command"   (pinned)
+echo setup; ompo supervise --once     ->  ALLOW  "no registered kernel bypass command detected"
+                                                                              ^^^ THE HOLE
+```
+
+⭐ **THE PROTECTION APPLIED TO A SPELLING NOBODY TYPES WHILE THE ONE EVERYBODY TYPES FELL THROUGH
+TO THE PERMISSIVE TAIL.** This is this crate's OWN recorded defect class one level out — a
+classifier reaching a permissive fallthrough for an input it failed to RECOGNISE, exactly as
+`classify_hook_liveness` once made `COVERED` its default branch.
+
+**THE GENERAL RULE: A GUARD KEYED ON A NAME MUST BE KEYED ON THE NAME THE THING IS *INVOKED*
+UNDER, NOT THE NAME IT IS *BUILT* UNDER.** Crate name, bin name, installed name and argv[0] are
+four different strings, and a guard that enumerates the wrong one is not weak — **it is absent
+for the only path that matters**, while reading as present in every test that uses the build-time
+spelling.
+
+**And the diagnosis discipline is the reusable half:** the fixer named the remedy CLASS before
+editing — not class 1 (the production string was intact and three sibling commands reached it),
+not class 3 (the test name promised distinct verdicts and **the BODY was checked, not the name**)
+— **class 2, the classifier genuinely failed to accept a valid shape.** The new leg asserts
+BEHAVIOUR — which verdict for which input — rather than swapping one substring pin for another.
