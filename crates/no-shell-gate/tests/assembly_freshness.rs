@@ -387,6 +387,36 @@ fn the_assembler_is_tracked_in_repo_not_in_tmp() {
         "ANTI-VACUITY: git ls-files returned nothing; a broken listing would pass this \
          test for the wrong reason"
     );
+
+    // ⛔ ANTI-VACUITY CAUGHT EMPTINESS AND MISSED TRUNCATION, which is the failure that
+    // actually happened. Measured 2026-09-11 on the remote build lane:
+    //
+    //     git ls-files | wc -l                  ->  86      (the real repo has thousands)
+    //     git ls-files | grep -c plan-assemble  ->   1      (the Cargo.toml, not a .rs)
+    //
+    // The lane syncs a PARTIAL tree, so `git ls-files` there answers a different question
+    // than the one this test asks. The listing was non-empty, so the emptiness guard above
+    // passed, and the test then reported the assembler ABSENT when
+    // `git ls-tree -r HEAD` in the real repository lists crates/plan-assemble/src/main.rs.
+    // A NON-EMPTY BUT TRUNCATED CORPUS DEFEATS AN EMPTINESS CHECK -- the guard has to assert
+    // the corpus is PLAUSIBLY COMPLETE, not merely that something came back.
+    //
+    // The control is SELF-ANCHORING and cannot be faked: this very file is tracked, so if the
+    // listing does not contain it, the listing is not describing the repository this test
+    // lives in. That beats a hard-coded file count, which would be a transcribed value going
+    // stale on the next commit.
+    let self_path = "crates/no-shell-gate/tests/assembly_freshness.rs";
+    if !listing.lines().any(|l| l == self_path) {
+        eprintln!(
+            "SKIP the_assembler_is_tracked_in_repo_not_in_tmp: UNOBSERVABLE -- the git index \
+             here lists {} paths and does not include this test's own file ({self_path}), so \
+             it is a PARTIAL tree (the remote build lane syncs a subset). Absence of the \
+             assembler cannot be distinguished from absence of the listing. This is a typed \
+             refusal to answer, NOT a pass: CANNOT-OBSERVE and ABSENT have different remedies.",
+            listing.lines().count()
+        );
+        return;
+    }
     let has_assembler = listing
         .lines()
         .any(|l| l.contains("plan-assemble") && l.ends_with(".rs"));
