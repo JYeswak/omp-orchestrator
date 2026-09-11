@@ -4989,6 +4989,36 @@ is the only place with target granularity.** **Before building a gate, measure w
 its host can express** — a `PLAN` line listing 18 invocations reads like per-target execution
 and is a print statement.
 
+## ⛔⛔ `cargo run` UNDER `rch` IS NOT `cargo test` UNDER `rch` — the FOURTH environment axis
+
+**Measured 2026-09-11 on a run whose gate output was valid and whose exit code was not.**
+```
+[RCH] RCH-E327 remote compile on contabo-3 SUCCEEDED but returned executables for the WRONG
+      PLATFORM: this build targets aarch64-apple-darwin and the retrieved artifact(s) are ELF.
+      debug/{contabo-reclaim, dispatch-silence-watch, doctrine-retirement-gate, gate-runner, …}
+      The local target directory now holds unrunnable binaries. Treating as a build failure (102).
+Remote command finished: exit=0          <- THE GATE's exit, produced ON THE WORKER
+rch verdict:              exit=102       <- a POST-HOC verdict on the ARTIFACTS
+```
+⭐ **The test path CONSUMES RESULTS on the worker; the run path RETRIEVES EXECUTABLES to the
+host.** So a `cargo run` invocation trips a platform check **`cargo test` never reaches.** ⛔
+**NEVER read a `cargo run -p <crate>` exit code under `rch` as that program's verdict without
+separating the gate's `exit=0` from `rch`'s `exit=102`.**
+
+⭐ **AND IT IS A FOURTH CAUSE BEHIND THE ONE "HOST-SHAPED" IMPRESSION**, distinct from the
+other three:
+```
+target-dir relocation   CARGO_TARGET_DIR rewritten by the lane        target_directory
+host platform           Darwin paths hardcoded in the test            target_ownership
+repo-relative artifact  a .flywheel/ file that may not exist          sota_preflight
+artifact platform       ELF retrieved to an arm64 Darwin host         ANY `cargo run` under rch
+```
+⛔ **This one bites whoever measures a BINARY rather than a TEST**, which is why three sessions
+of target-dir reasoning never surfaced it. **It also leaves unrunnable ELF binaries in the
+local `.rch-target-*` pool** — harmless, whitelisted for reclaim, and **fatal to anyone whose
+next step assumes a runnable local artifact.** The existing rule stands and now has a second
+producer: **`file <binary>` BEFORE you run it.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
