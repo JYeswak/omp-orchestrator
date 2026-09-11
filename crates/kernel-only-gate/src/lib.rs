@@ -44,7 +44,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-/// The single production conversion site is [`ScanReport::verdict`]; there is
+/// The single production conversion site is [`HandrollScanReport::verdict`]; there is
 /// no second mapping from hits to outcome anywhere in this crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
@@ -71,15 +71,29 @@ impl fmt::Display for Verdict {
 
 /// One actionable finding. `kernel` is load-bearing, never decorative: a
 /// finding that does not name the replacement kernel fails the known-bad leg.
+///
+/// NAMED `HandrollHit`, NOT `Hit` — and `HandrollScanReport`, not `ScanReport`. This crate
+/// became tracked in 6f0dfbe, at which point both names began colliding with
+/// `path-literal-guard`'s public `Hit` and `ScanReport` and
+/// `no_public_type_name_collisions_across_crates` refused. The collision is real even though the
+/// domains are disjoint (a handroll-family match versus a path-literal match), and the remedy is
+/// a specific name rather than an allowance row: nothing consumes either type across a crate
+/// boundary (`grep -rn 'kernel_only_gate::'` outside this crate -> 0 hits), so the fix costs two
+/// names instead of a permanent exception with nothing to expire it.
+///
+/// The rename landed HERE and not in `path-literal-guard` for a second, non-aesthetic reason:
+/// that crate IS in `HOOK_SOURCE_CRATES` (`no-shell-gate/src/commit_ratchets.rs:18-24`), so a
+/// byte under its `src` would stale the installed hook and refuse every commit in the tree. This
+/// crate is not in that list, so the same fix costs the fleet nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hit {
+pub struct HandrollHit {
     pub file: String,
     pub line: usize,
     pub pattern: String,
     pub kernel: String,
 }
 
-impl fmt::Display for Hit {
+impl fmt::Display for HandrollHit {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             formatter,
@@ -176,13 +190,13 @@ fn is_eligible(path: &str) -> bool {
 
 /// Outcome of one scan pass over staged paths or a walked tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScanReport {
-    pub hits: Vec<Hit>,
+pub struct HandrollScanReport {
+    pub hits: Vec<HandrollHit>,
     pub scanned: Vec<String>,
     staged: bool,
 }
 
-impl ScanReport {
+impl HandrollScanReport {
     pub fn verdict(&self) -> Verdict {
         if self.scanned.is_empty() {
             // Same empty set, two meanings: a commit with no eligible paths
@@ -211,7 +225,7 @@ impl ScanReport {
     }
 }
 /// line structure.
-pub fn scan_source(file: &str, source: &str) -> Vec<Hit> {
+pub fn scan_source(file: &str, source: &str) -> Vec<HandrollHit> {
     let code: Cow<'_, str> = text_structure::code_only(source);
     let mut hits = Vec::new();
     for pattern in PATTERNS {
@@ -222,7 +236,7 @@ pub fn scan_source(file: &str, source: &str) -> Vec<Hit> {
         while let Some(relative) = code[base..].find(pattern.needle) {
             let offset = base + relative;
             let line = code[..offset].bytes().filter(|byte| *byte == b'\n').count() + 1;
-            hits.push(Hit {
+            hits.push(HandrollHit {
                 file: file.to_owned(),
                 line,
                 pattern: pattern.needle.to_owned(),
@@ -241,8 +255,8 @@ fn read_scored(root: &Path, relative: &str) -> Option<(String, String)> {
 
 /// Commit-path entry: score exactly the staged paths that fall in scope.
 /// Zero eligible paths is [`Verdict::NothingToCheck`], not clean.
-pub fn scan_paths<P: AsRef<str>>(root: &Path, paths: &[P]) -> ScanReport {
-    let mut report = ScanReport {
+pub fn scan_paths<P: AsRef<str>>(root: &Path, paths: &[P]) -> HandrollScanReport {
+    let mut report = HandrollScanReport {
         hits: Vec::new(),
         scanned: Vec::new(),
         staged: true,
@@ -262,7 +276,7 @@ pub fn scan_paths<P: AsRef<str>>(root: &Path, paths: &[P]) -> ScanReport {
 
 /// Repo-wide entry: walk `crates/` for eligible files. An empty scan set is
 /// [`Verdict::VacuousError`], never a pass.
-pub fn scan_tree(root: &Path) -> ScanReport {
+pub fn scan_tree(root: &Path) -> HandrollScanReport {
     fn visit(dir: &Path, out: &mut Vec<PathBuf>) {
         let entries = std::fs::read_dir(dir);
         let mut entries: Vec<_> = entries.into_iter().flatten().flatten().collect();
@@ -279,7 +293,7 @@ pub fn scan_tree(root: &Path) -> ScanReport {
             }
         }
     }
-    let mut report = ScanReport {
+    let mut report = HandrollScanReport {
         hits: Vec::new(),
         scanned: Vec::new(),
         staged: false,

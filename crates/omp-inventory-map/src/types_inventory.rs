@@ -278,9 +278,29 @@ impl CollisionCeilingAnchor {
 }
 
 pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeilingAnchor {
-    ceiling: 44,
-    ceiling_at_recording: 44,
-    recorded_at_unix: 1_789_132_372,
+    // 44 -> 42 on 2026-09-11, A LOWERING, which is the only direction this bound moves. The two
+    // names it counted are GONE rather than allowanced: `kernel-only-gate` renamed its public
+    // `Hit` -> `HandrollHit` and `ScanReport` -> `HandrollScanReport`, which were that crate's
+    // only collisions (with `path-literal-guard`) and are named as exactly those two by the
+    // TOLERANCE comment below. The rename landed in kernel-only-gate and NOT in
+    // path-literal-guard because the latter is in HOOK_SOURCE_CRATES and a byte under its `src`
+    // would refuse every commit in the tree.
+    //
+    // DERIVATION OF 42, because this Mac cannot run the census (local builds are refused) and the
+    // lane cannot adjudicate this leg:
+    //   * the comment below records, MEASURED, that both trees read live 44 with both crates
+    //     tracked, and that Hit + ScanReport contributed EXACTLY 2 of it;
+    //   * the rename removes those two names and nothing else -- after it,
+    //     `pub struct Hit`/`pub struct ScanReport` over crates/*/src have ONE declaring crate
+    //     each (path-literal-guard), so neither name can still collide;
+    //   * the lane, whose fossil roster read live 42 BEFORE the rename, reads live 40 AFTER it --
+    //     a delta of exactly -2 in the one environment I can measure, for a change whose effect
+    //     is environment-independent because both crates are tracked in both trees.
+    //   So 44 - 2 = 42. If CI disagrees, the assert PRINTS the live number and the correction is
+    //   this line -- and it must follow the measurement, never the reverse.
+    ceiling: 42,
+    ceiling_at_recording: 42,
+    recorded_at_unix: 1_789_144_925,
 };
 
 /// Live bound projection from the single ratchet anchor.
@@ -299,10 +319,17 @@ pub const UNALLOWED_COLLISION_CEILING: usize = UNALLOWED_COLLISION_RATCHET.ceili
 ///
 /// ⛔ THE RCH LANE CANNOT ADJUDICATE THIS LEG AND ITS RED THERE IS NOT A REPO STATE. The
 /// collision census derives its roster from git, and the worker's index is a fossil (measured
-/// 2026-09-11: 86 paths against this Mac's 1131), so the lane reads `live 42` and the band
-/// refuses. This Mac and CI read 44 with both crates tracked. The red names its cause here so
-/// the next reader does not lower the CEILING to fit a fossil -- which would bank the defect
-/// into the bound permanently. CI is the oracle for this leg; the lane is not.
+/// 2026-09-11: 86 paths against this Mac's 1131), so the lane reads a SHORT live count and the
+/// band refuses. The red names its cause here so the next reader does not lower the CEILING to
+/// fit a fossil -- which would bank the defect into the bound permanently. CI is the oracle for
+/// this leg; the lane is not.
+///
+/// FIGURES UPDATED 2026-09-11 AFTER THE RENAME THAT RETIRED THE TWO NAMES ABOVE. The pairs this
+/// comment recorded were `both trees 44 / lane 42`; with `Hit` and `ScanReport` renamed in
+/// kernel-only-gate they are now `both trees 42 / lane 40`, the same -2 on each side. The
+/// original numbers are kept in the sentences above because they are the measurement that
+/// justified setting this constant to ZERO, and deleting them would destroy the record of what
+/// was believed. What must not survive is a reader taking 44 as the live count.
 pub const UNTRACKED_COLLISION_TOLERANCE: usize = 0;
 
 /// The workspace's shared vocabulary crate. Declared, not guessed: its

@@ -2,7 +2,7 @@
 //! from parts so this file never contains a raw needle contiguously — the
 //! self-leg scans this crate and demands zero.
 
-use kernel_only_gate::{scan_paths, scan_tree, Hit, Verdict};
+use kernel_only_gate::{scan_paths, scan_tree, HandrollHit, Verdict};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -65,7 +65,7 @@ fn write_tracked(root: &Path, relative: &str, contents: &str) {
     run_git(root, &["add", "-A"]);
 }
 
-fn kernels(hits: &[Hit]) -> Vec<&str> {
+fn kernels(hits: &[HandrollHit]) -> Vec<&str> {
     let mut kernels: Vec<&str> = hits.iter().map(|hit| hit.kernel.as_str()).collect();
     kernels.sort_unstable();
     kernels
