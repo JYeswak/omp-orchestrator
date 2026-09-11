@@ -319,18 +319,42 @@ the next reader greps and finds it live. Recover it from history if a ruling eve
 **WHY, measured the night it was retired:**
 
 ```
-rch workers list                  4 workers, ALL linux/x86_64 -- there is NO Darwin worker
-7 crates CANNOT cross-build       chrono `clock` -> iana_time_zone -> CoreFoundation;
-                                  zigcc-aarch64-darwin resolves no _CF* symbols   (8jlpp)
-cost per failed attempt           311571 ms and 267885 ms, two builds, both dying at LINK
-                                  with `cc: error: unrecognized command-line option '-framework'`
+rch workers list       4 workers, ALL linux/x86_64 -- there is NO Darwin worker
+cost per attempt       311571 ms and 267885 ms, two builds, both dying at LINK
 and it FAILS AT LINK AFTER A CLEAN COMPILE, so `cargo check` and every `-p` test run are BLIND
 ```
 
+⛔ **CORRECTED WITHIN THE HOUR BY THE AGENT WHOSE NUMBER IT WAS: THIS RULING FIRST SAID "7 CRATES
+CANNOT CROSS-BUILD". THE MEASURED FIGURE IS ONE.** The ruling stands on the worker topology and
+the cost; **the supporting integer was inferred, not measured**, and a wrong number inside a
+ruling gets quoted forever.
+
+```
+declares chrono `clock`                         7 crates   <- NOT the predicate
+references the LOCAL timezone path              1 crate    <- verify-dispatch, 6 refs
+  fast-dispatch fleet-truth loop-driver loop-switch loop-tick pane-truth   ALL 0
+pane-truth: declares chrono/clock AND CROSS-BUILDS GREEN   exit=0 in 837993 ms
+```
+
+**A linker pulls only REFERENCED objects.** CoreFoundation is reached solely through
+`iana_time_zone::get_timezone_inner`, on the local-timezone path; `Utc::now()` never references
+it. **Declaring the feature is not using it.**
+
+⭐ **AND THE MECHANISM IS THE TRANSFERABLE PART: THE HEDGE DID NOT SURVIVE SUMMARISATION.** The
+bead's own NO-CLAIM and acceptance leg 3 said plainly *"only 2 of 7 were tested … inferred, not
+measured."* **The title said 7, and the title is what got quoted — into a bead, then a
+broadcast, then this ruling.** A caveat in the body cannot protect a number in the headline.
+**Put the denominator IN the headline, or do not put the number there.**
+
+⚠️ **AND TWO DISTINCT DARWIN LINK FAILURES ARE ON THE RECORD — DO NOT MERGE THEM.**
+`undefined symbol: _CF*` is symbol resolution (verify-dispatch). `cc: error: unrecognized
+command-line option '-framework'` is the C driver rejecting a flag (other attempts). **Different
+layers, different remedies** — the same overload class as `exit 75` and `rc=103`. If darwin is
+ever revisited, they are two causes, not two phrasings of one.
+
 **The cross-build was never load-bearing for CI or for tests** — those run Linux, where the
 whole workspace builds. It existed only to produce the handful of operator binaries that run on
-Joshua's Mac, and it bought a fragile linker path that silently excludes any crate touching an
-Apple framework.
+Joshua's Mac, and it bought a linker path that fails at a stage no routine command can see.
 
 ⚠️ **THE ONE CONSEQUENCE, stated rather than buried: the Mach-O operator binaries stop being
 refreshable through the lane.** Currently installed and arm64: `ompo`, `tick-monitor`,
