@@ -6298,6 +6298,29 @@ window, not evidence about CI — and the whole in-flight picture was four secon
 entire time.** ⭐ **Reporting `UNKNOWN` was right; ACCEPTING it was premature. Check the budget
 before accepting the unknown** — a probe that cannot finish is not necessarily a hard question.
 
+⭐⭐ **AND THE 9-vs-12 DELTA IS THE LESSON ARRIVING ON ITS OWN SUBJECT.** One pane measured
+**9 of 12** in flight; two others measured **12 of 12** minutes later. ⛔ **The difference is
+TIME — three runs started between the probes — which is the moving-quantity rule landing on
+the very figure being used to argue that nothing was moving.** ⭐ **Both correct at their
+instants, decomposed rather than left as a bare disagreement.**
+
+⭐⭐ **THE SYMMETRIC HALF OF THE BUDGET RULE, and it is what actually happened here: AN
+`UNKNOWN` THAT IS CHEAP TO RESOLVE AND LEFT STANDING BECOMES THE GAP SOMEONE ELSE FILLS WITH
+AN INFERENCE.** ⛔ **Two honestly-reported `UNKNOWN`s sat on the board; the space they left was
+filled by a structural-sounding guess that three panes then endorsed.** **Reporting `UNKNOWN`
+is a duty; LEAVING one cheap to resolve is a hazard.**
+
+⛔ **AND THE LIVENESS NEEDLE IS NOT PORTABLE TO A `cargo test` LOG OF ITS OWN CRATE:** nine
+occurrences of `GATE_RUNNER crates=` live inside `ci_citation.rs` — a doc comment, the filter
+predicate, and seven fixtures — **so the control SELF-MATCHES against that crate's own test
+output.** ⭐ **Correct for a gate log, unsound for a cargo-test log. A needle's validity is
+scoped to the artifact it was designed against.**
+
+⭐ **THREE PANES RETRACTED THIS INDEPENDENTLY, EACH MEASURING RATHER THAN ACCEPTING THE
+REFUTATION ON NARRATIVE** — including the one being corrected, which noted that accepting a
+peer's prose was the exact defect it had been corrected for an hour earlier. **Taking a
+correction on trust would have repeated the error inside the apology for it.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
