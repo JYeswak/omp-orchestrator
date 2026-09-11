@@ -1828,6 +1828,38 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    probes sharing a subject are one probe.** Ask what each mutation is allowed to touch, and check
    that the sets differ before calling them independent.
 
+7c. ⛔ **A MUTATION LEG'S *POSITIVE* ARM CAN BE VACUOUS: A SECOND MECHANISM CAN RESTORE THE
+   EXPECTED STATE AFTER THE MUTATION REMOVES THE FIRST, SO THE LEG STAYS GREEN ON THE EXACT
+   DEFECT IT EXISTS TO CATCH.** Measured 2026-09-11 on `pane-dispatch-ready`'s
+   `mutation_busy_markers_load_bearing`, fixed at `1c311ed`, and **proven by running it rather
+   than argued**.
+
+   The leg asserts a rule is load-bearing: delete the rule, the verdict must change. It asserted
+   that by comparing a STATE (`state_of(&on) == "BUSY"`). With the rule deleted, classification
+   fell through to `FREE` — and **an absent composer then fail-closed it straight back to
+   `BUSY`**. Two different causes, one observable, so the assertion could not tell *"the rule
+   fired"* from *"the rule is gone and something else failed closed."*
+
+   **A FAIL-CLOSED DEFAULT IS THE CLASSIC MASK, and it is the one to look for**, because
+   fail-closed is otherwise correct design: it makes the safe state reachable by two paths, and a
+   state-only assertion cannot name which path it took. **Assert the REASON, not just the state**
+   — the same lesson as rule 7's *pin the message AND the code*, aimed at the positive arm rather
+   than the negative one.
+
+   **THE DISCRIMINATOR IS FREE AND NOBODY RUNS IT: apply the mutation and check the arm you
+   expect to STAY GREEN, not only the one you expect to redden.** A leg whose positive arm is
+   green both with and without the subject is measuring nothing, and it reads exactly like a leg
+   that works.
+
+   **AND THE ROOT CAUSES BENEATH IT ARE A REUSABLE TRIO**, all three in one crate:
+   `which <binary>` produced EMPTY stdout on a host lacking it and that empty string was passed
+   on as an env var; `std::env::var()` returns `Ok("")` for an empty variable, **silently
+   suppressing a whole discovery ladder** — every sibling read in that same file already filtered
+   empty, this was the one that did not; and the classifier returned its missing-dependency arm
+   unconditionally, so the fail-closed rule governed an unknown exit code but not an absent file.
+   ⛔ **`var()` ACCEPTING `Ok("")` IS AN ABSENT-vs-EMPTY COLLAPSE** — rule 4a's distinction living
+   inside an environment read.
+
 8. **A `cargo` figure is NEVER evidence about a commit.** `cargo test` reads the **WORKTREE**; a
    commit sha names a **TREE**. In a shared checkout those diverge constantly, so a grade that
    cites a sha and a test count has silently mixed two tree states. Measured 2026-09-02, against
