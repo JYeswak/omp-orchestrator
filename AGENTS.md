@@ -909,6 +909,40 @@ still a silent pane; this rule only guarantees the follow-up stage has something
 The signal is *dispatched* and unclaimed, which means the dispatch ledger, not the bead, is the
 authority that closes this hole.
 
+### ⛔ AND THE INVERSE IS WORSE: **CLAIM WITHOUT DISPATCH**, WHICH READS AS A LIVE WORKER
+
+**Measured 2026-09-11, by the conductor, on a P0, while it was actively hunting this exact
+class.** `br update … --status in_progress --assignee agent=bg-uldvu-2` landed; **the agent was
+never spawned.** A tick arrived between the claim and the spawn, and the claim survived the
+interruption while the intent did not.
+
+**The skipped-claim failure above is LOUD — the bead sits `open` and the queue keeps serving it.
+Claim-without-dispatch is SILENT and strictly worse:**
+
+```
+dispatch without claim   bead open, unassigned   -> queue re-serves it, someone notices
+claim without dispatch   bead in_progress, held  -> queue SKIPS it, nobody notices, forever
+```
+
+A held bead is **removed from `br ready`**, so the one mechanism that would surface it is the
+mechanism the phantom disables. **It is a self-concealing stall.**
+
+**THE DISCRIMINATOR IS ONE COMMAND AND `br` CANNOT PROVIDE IT.** The assignee string is just
+text; `hub list` is the liveness oracle. Cross the two:
+
+```
+assignee names an agent that is NOT in `hub list`   -> phantom, re-dispatch or release
+```
+
+This was the **seventh** phantom holder found in one session. Six were dead or invented names on
+other agents' rows; **this one the conductor created itself, between two of its own tool calls.**
+
+**THE MECHANICAL FORM: CLAIM AND SPAWN IN THE SAME TURN, AND VERIFY THE AGENT APPEARS.** Never
+claim in anticipation of a dispatch you have not yet made — the window between them is exactly
+where an interrupt lands, and what survives the interrupt is the *assertion* that work is
+underway, not the work. Prefer spawning first and claiming from inside the worker, which cannot
+produce this state at all.
+
 ### A DISPATCH-ONLY INSTRUCTION IS AN UNRECORDED REQUIREMENT
 
 **The same rule, one layer up, and measured on the orchestrator 2026-09-02.** A dispatch packet
