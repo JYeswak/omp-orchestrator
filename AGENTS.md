@@ -1107,6 +1107,61 @@ resolution, and it says nothing about the other four unconsumed verbs — `dialo
 `answer-dialog`, `interrupt`, `agent-health` — each of which needs its own negative control before
 anyone trusts it.
 
+#### ⛔ A QUOTA-EXHAUSTED PANE IS `IDLE`, `DISPATCHABLE`, AND `safe_to_dispatch` — AND IT IS DEAD
+
+**Measured 2026-09-11. FOUR of five workers were unreachable for ~86 hours and every observation
+surface said they were ready for work.** This is the cause of every "silent pane" in this session,
+and the conductor spent three dispatch rounds and two wrong diagnoses before finding it.
+
+```
+tmux capture-pane -p -t <session>.<idx> -S -25 | tail
+  Error: Retry failed after 10 attempts: You have hit your ChatGPT usage limit
+  (pro plan). Try again in ~5188 min.
+
+idx3 %19  GPT-5.6-Luna   ~5188 min     idx5 %7  ~5211 min
+idx4 %20  GPT-5.6-Luna   ~5188 min     idx6 %8  GPT-5.6-Luna  ~5187 min
+idx7 %26  Muse Spark 1.3  ALIVE — the only pane that ever answered
+```
+
+**Every kernel reported them healthy.** `tick-monitor observe` listed all four as
+`dispatchable`; `ntm --robot-is-working` returned `is_working: false`, which is *true* and reads
+as *free*; `--robot-send` returned `success: true` for every packet. **Nothing is lying** — the
+packet really does arrive, the agent really does wake, it retries ten times against a quota wall
+and dies. The pane even transitions IDLE→WORKING→IDLE, which this file calls **the strongest
+receipt available**, so the receipt fires on a pane that cannot do any work at all.
+
+**This is `absent != idle` with a third value nobody modelled.** HD-0049 records that a
+nonexistent pane returns `PANE_NOT_FOUND exit=1` rather than `is_working=false`, and treats that
+collapse as closed. **Quota exhaustion is a fourth state: PRESENT, ALIVE, ANSWERING THE PROBE, AND
+INCAPABLE.** `is_working=false` is the same byte for "just finished, give me work" and "cannot
+execute for three days", and those two need opposite routing.
+
+**The diagnostic path, in order, because the first two rungs are broken:**
+
+1. `--robot-is-working` — honours `--panes` and is the correct liveness verb, but **cannot see
+   this**. It answers *are you busy*, never *are you able*.
+2. `--robot-inspect-pane` — **useless here**; it discards `--panes` (previous subsection).
+3. **`tmux capture-pane`** — the only surface that showed it. This file forbids handrolling when a
+   kernel exists; **the kernel that should answer this is measurably incapable**, so reading the
+   literal buffer is the sanctioned move *for classification*, never as a state oracle.
+
+**Do not swap accounts to route around it.** `caam` lists four alternate codex profiles and the
+swap is global: it hits every codex session on the machine including peers mid-work, a running
+agent already holds its auth so the switch revives nothing without a restart, and a restart
+destroys in-flight context. **Decided by pane 1 rather than escalated** — the in-policy option is
+to concentrate work on the live panes and let the window reset.
+
+**The reusable rule: before concluding a packet, a transport, or a worker is at fault, READ THE
+PANE.** Three dispatch rounds, a re-derived index map, a retracted "bare shell" finding and a
+rewritten probe all preceded one `capture-pane` that answered it in a line. **A provider-side
+refusal is invisible to every robot verb we consume**, and it is the cheapest thing in this list
+to check.
+
+**NO-CLAIM.** The window is what the panes PRINT (`~5188 min`); it is the provider's estimate, not
+a measurement, and it may move in either direction. This also does not establish that the four
+panes are healthy in every other respect — quota exhaustion is the defect *found*, not proof it is
+the only one.
+
 ### THE RECEIVER MUST **ANSWER**, AND NOBODY WAS EVER TOLD TO
 
 **The lifecycle chain above is missing a beat, and its absence stalled the whole session.**
