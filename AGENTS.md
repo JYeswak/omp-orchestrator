@@ -2385,9 +2385,12 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    three conforming contracts; the one packet that omitted it produced the only non-conforming
    deliverable, despite having the richest substance of the four.
 
-8r. ⛔ **A `BLOCKING` SUBAGENT RUNS IN-BAND, SO EVERY INTERRUPT KILLS IT. CHECK THE AGENT'S
-   BLOCKING FLAG BEFORE YOU SPAWN LONG WORK.** Measured 2026-09-11: **five subagents aborted at
-   ~4 minutes each**, in two waves, and the conductor diagnosed it as *"background agents cannot
+8u. ⛔ **A `BLOCKING` SUBAGENT RUNS IN-BAND, SO EVERY INTERRUPT KILLS IT. CHECK THE AGENT'S
+   BLOCKING FLAG BEFORE YOU SPAWN LONG WORK.** Added 2026-09-11. **(Filed as `8r` on first
+   write, colliding with the parse-oracle rule at `:2006` — renumbered the same session by its
+   author. A duplicate rule id makes every later citation ambiguous, and this file is cited by
+   id constantly.)** Measured: **five subagents aborted at ~4 minutes each**, in two waves, and
+   the conductor diagnosed it as *"background agents cannot
    survive the tick cadence"* — **which is false and would have cost the fleet half its
    remaining capacity**, on a night when the Codex panes were out of tokens and background
    agents were one of only two working vehicles.
