@@ -2007,6 +2007,30 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    INSTRUMENT can fire, not that your NEEDLE'S POPULATION is visible to it. That is a THIRD
    probe, and it must be drawn from inside the artifact under test.
 
+   **AND THE SCOPE OF A SWEEP IS PART OF ITS NEEDLE.** Measured the same night while counting
+   beads whose description carries an `ACCEPTANCE` heading the dispatcher cannot parse: **243 of
+   720 live rows**. A sweep that greps for that needle without scoping to the DESCRIPTION also
+   matches the **127 live rows whose populated `acceptance_criteria` FIELD merely begins with an
+   `ACCEPTANCE`-ish line** — rows that are perfectly dispatchable, because a populated field
+   means the parser never reaches the description at all. Two populations, one needle, and the
+   larger one is the wrong answer. **Say which FIELD you searched, not just which string.**
+
+   **AND "EXPOSURE" AND "VICTIMS" ARE TWO DENOMINATORS THAT BOTH SOUND LIKE THE ANSWER.** Same
+   corpus, same hour: a large set of rows carry an unparseable `ACCEPTANCE` heading (**exposure**),
+   while **victims = 0** because none of them ALSO has an empty field. A peer measured victims,
+   reported it as *"trap count = 0"*, and had every byte needed to print both. **The reassuring
+   figure was the one that got published.** Worse, the shape it named — the parenthetical — was
+   a small minority; the dominant form was inline prose after `ACCEPTANCE:`. Fixating on the
+   instance in front of you and then reporting a zero that is really about something else is how
+   the larger population stays invisible. **Print both numbers, or name which one you mean.**
+
+   **THE INTEGERS ARE DELIBERATELY NOT QUOTED HERE, AND THAT IS THIS RULE APPLIED TO ITSELF.**
+   Two agents derived the exposure independently and got **243 of 720** and **256 of 743** —
+   different definitions of "live row" and of "alone on its line", both defensible, neither "the"
+   count. The SHAPE survives every denominator: **any inline text after the heading defeats
+   `eq_ignore_ascii_case`.** The integer is true at exactly one denominator and decays like every
+   other figure in this file.
+
    **THE MEASURED CASE.** `strings $(command -v rch) | grep -c 'E327'` → **0**, repeated across
    eleven binaries, and the conclusion *"the code does not exist"* was false. The message is one
    `format!` string stored in fragments around its placeholders — the stored bytes read
