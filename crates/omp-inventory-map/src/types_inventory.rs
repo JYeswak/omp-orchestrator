@@ -286,6 +286,21 @@ pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeiling
 /// Live bound projection from the single ratchet anchor.
 pub const UNALLOWED_COLLISION_CEILING: usize = UNALLOWED_COLLISION_RATCHET.ceiling();
 
+/// Slack between the ceiling and a converged tree, and nothing else (zhr29
+/// revision after GradeCatch22's lockstep-raise mutation).
+///
+/// EXACTLY 2 today: Hit and ScanReport collide only via UNTRACKED
+/// kernel-only-gate (with path-literal-guard). A fresh clone reads 42 while
+/// this worktree reads 44, so a `==` pin would red one tree or the other and
+/// a bare `<=` leaves the upper side unconstrained (proven: raising both
+/// anchor fields to 100 stayed green). The leg enforces
+/// `live <= CEILING <= live + TOLERANCE`: raising past live+tolerance
+/// reddens, so a raise now requires the live count to actually rise. Keep
+/// small and named. DIES when kernel-only-gate is tracked (both trees read
+/// 44 -- lower this to 0) or when its Hit/ScanReport collisions resolve
+/// (lower it alongside the ceiling).
+pub const UNTRACKED_COLLISION_TOLERANCE: usize = 2;
+
 /// The workspace's shared vocabulary crate. Declared, not guessed: its
 /// [`NAMED_ZEROS`] row calls it a "Re-export vocabulary crate
 /// (asupersync::types facade)", and its whole reason to exist is to be the
@@ -1601,6 +1616,10 @@ mod tests {
                 .map(|c| c.name.as_str())
                 .collect::<Vec<_>>()
                 .join(",")
+        );
+        assert!(
+            UNALLOWED_COLLISION_CEILING <= count + UNTRACKED_COLLISION_TOLERANCE,
+            "ceiling {UNALLOWED_COLLISION_CEILING} exceeds live {count} + tolerance {UNTRACKED_COLLISION_TOLERANCE}: lower the ceiling, do not bank slack -- a raise must follow a measured rise"
         );
     }
 
