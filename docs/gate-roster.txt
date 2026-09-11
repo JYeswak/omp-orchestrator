@@ -17,6 +17,7 @@ blocker-taxonomy
 cargo-lane-budget
 commit-build-fence
 composer-typed
+contabo-reclaim
 convergence-stamp
 crate-atom-gate
 crate-soundness-verify
@@ -25,6 +26,7 @@ dispatch-claim-fence
 dispatch-saga
 dispatch-silence-watch
 dispatcher-deadman
+doctrine-retirement-gate
 extraction-roster
 fast-dispatch
 finding
@@ -52,7 +54,6 @@ m2-grading-lane
 named-test-filter-gate
 no-shell-gate
 ntm-fleet-monitor
-omp-idle-dispatch
 omp-inventory-map
 omp-orchestrator
 omp-rpc-session
