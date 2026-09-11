@@ -6,6 +6,16 @@ use crate::sha256_hex;
 
 pub const SCHEMA_ID: &str = "ompo:portal:v1";
 
+/// The portal row's schema VERSION, beside its id.
+///
+/// This is a constant rather than a literal at the emit site because the row
+/// previously spelled `"schema_version": "1"` inline in `ompo-doctor`'s
+/// `run_portal`, which made the portal schema's own identity a SECOND source of
+/// truth living in a different crate from `SCHEMA_ID`. The two halves of one
+/// contract could then drift independently, and nothing in `ompo-start` could
+/// assert what the emitted version actually was.
+pub const SCHEMA_VERSION: &str = "1";
+
 /// Hash an object after removing its self-referential data_hash field.
 #[must_use]
 pub fn data_hash_without_self(row: &serde_json::Value) -> String {

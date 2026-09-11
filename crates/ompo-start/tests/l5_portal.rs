@@ -2,6 +2,7 @@
 
 use ompo_start::portal::{
     data_hash_without_self, gates_verdict, parse_gates_aggregate, queue_depth, seal, SCHEMA_ID,
+    SCHEMA_VERSION,
 };
 use serde_json::json;
 
@@ -151,4 +152,19 @@ fn gates_verdict_present_file_is_full() {
     assert_eq!(gates["crates"], 4);
     assert_eq!(gates["fail"], 1);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// ciay, THE ROW-LEVEL SCHEMA IDENTITY: both halves of the portal row's schema
+/// contract are pinned to the LITERAL tokens the contract names, not to each
+/// other. Asserting `SCHEMA_ID == SCHEMA_ID` would be a tautology that survives
+/// any rename; these compare against the spelled-out strings, so changing
+/// either constant reddens this leg and nothing else.
+///
+/// `schema_version` is covered here because until now it was an inline literal
+/// in `ompo-doctor`'s `run_portal` -- the row emitted a version that no test in
+/// `ompo-start` could see, so deleting or changing it was undetectable.
+#[test]
+fn portal_row_schema_identity_is_contract() {
+    assert_eq!(SCHEMA_ID, "ompo:portal:v1");
+    assert_eq!(SCHEMA_VERSION, "1");
 }

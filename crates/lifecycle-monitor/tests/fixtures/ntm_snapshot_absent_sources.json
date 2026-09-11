@@ -1,0 +1,23 @@
+{
+  "_capture": {
+    "command": "ntm --robot-snapshot --capability-compact",
+    "ntm_version": "v1.31.0-4-ge4718530",
+    "captured_at": "2026-09-11T18:10:10Z",
+    "captured_by": "S1L4Src",
+    "note": "Real capture, .sources retained and the rest of the envelope elided. agent_mail and tick_monitor are ABSENT in this real snapshot, and that absence is the point of the fixture."
+  },
+  "sources": {
+    "sources": {
+      "work_coordination": {
+        "name": "work_coordination",
+        "available": true,
+        "fresh": true,
+        "reason_code": "health:ok",
+        "age_ms": 14587,
+        "updated_at": "2026-09-11T18:10:10.31849Z"
+      }
+    },
+    "all_fresh": true
+  },
+  "all_fresh": null
+}

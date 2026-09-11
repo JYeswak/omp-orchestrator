@@ -498,7 +498,7 @@ fn run_portal(rest: &[String]) -> ExitCode {
     };
     let row = json!({
         "schema_id": ompo_start::portal::SCHEMA_ID,
-        "schema_version": "1",
+        "schema_version": ompo_start::portal::SCHEMA_VERSION,
         "generated_at": now_millis(),
         "sources": sources,
         "_alerts": alerts,

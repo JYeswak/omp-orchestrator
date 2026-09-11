@@ -88,6 +88,19 @@ pub enum NtmSourceError {
     StaleSources {
         sources: Vec<String>,
     },
+    /// An EXPECTED source key is ABSENT from `.sources.sources`. UNPROVEN, never
+    /// fresh: nothing was observed about that source, which is not the same as
+    /// observing it healthy. Exit 3 (unmeasured), because this is a gap in the
+    /// reading rather than a verdict about a source that answered.
+    MissingSource {
+        sources: Vec<String>,
+    },
+    /// The source key is PRESENT but its row is JSON `null`. A third reading,
+    /// distinct from both populated and absent: the instrument named the source
+    /// and then declined to describe it.
+    NullSource {
+        source: String,
+    },
 }
 
 impl std::fmt::Display for NtmSourceError {
@@ -122,6 +135,20 @@ impl std::fmt::Display for NtmSourceError {
                 "NTM_SOURCE_STALE sources={} — stale is ERROR, never a pass",
                 sources.join(",")
             ),
+            Self::MissingSource { sources } => write!(
+                f,
+                // The prose deliberately names NO health word. A message that
+                // describes what it is not still puts those words on the wire,
+                // where a downstream substring reader can pick them up.
+                "NTM_SOURCE_MISSING_SOURCE sources={} — UNPROVEN: the key is ABSENT, \
+                 so nothing at all was observed for it",
+                sources.join(",")
+            ),
+            Self::NullSource { source } => write!(
+                f,
+                "NTM_SOURCE_NULL_ROW source={source} — UNPROVEN: the key is PRESENT \
+                 but null, a third reading distinct from populated and from absent"
+            ),
         }
     }
 }
@@ -133,7 +160,9 @@ impl std::error::Error for NtmSourceError {}
 pub fn ntm_source_exit_code(error: &NtmSourceError) -> std::process::ExitCode {
     match error {
         NtmSourceError::EmptySources => std::process::ExitCode::from(2),
-        NtmSourceError::SnapshotUnavailable { .. } => std::process::ExitCode::from(3),
+        NtmSourceError::SnapshotUnavailable { .. }
+        | NtmSourceError::MissingSource { .. }
+        | NtmSourceError::NullSource { .. } => std::process::ExitCode::from(3),
         _ => std::process::ExitCode::from(1),
     }
 }
@@ -187,6 +216,15 @@ fn get_age_ms(row: &Value, source: &str) -> Result<u64, NtmSourceError> {
 }
 
 fn map_row(source: &str, row: &Value) -> Result<NtmSourceVerdict, NtmSourceError> {
+    // THREE STATES, NOT TWO. A `null` row is PRESENT-BUT-NULL and gets its own
+    // reading; absence is handled by `require_expected_sources`, which sees the
+    // key set rather than a row. Folding these together would make it impossible
+    // to say which one the instrument actually reported.
+    if row.is_null() {
+        return Err(NtmSourceError::NullSource {
+            source: source.to_owned(),
+        });
+    }
     if !row.is_object() {
         return Err(NtmSourceError::WrongType {
             source: source.to_owned(),
@@ -261,6 +299,71 @@ pub fn gate_ntm_sources(verdicts: &[NtmSourceVerdict]) -> Result<(), NtmSourceEr
         .map(|v| format!("{}:{}", v.source, v.verdict.state.as_str()))
         .collect();
     Err(NtmSourceError::StaleSources { sources: stale })
+}
+
+/// The source keys this repository CONSUMES and therefore must be able to refuse
+/// the absence of. Measured 2026-09-11 against `ntm --robot-snapshot
+/// --capability-compact` (ntm v1.31.0-4-ge4718530): only `work_coordination` is
+/// emitted, so `agent_mail` and `tick_monitor` are ABSENT today. That is why an
+/// expected set exists at all — without it an absent source contributes no row and
+/// the aggregate reads all-fresh.
+pub const EXPECTED_NTM_SOURCES: [&str; 3] = ["agent_mail", "tick_monitor", "work_coordination"];
+
+/// CONSUME AND REFUSE: every expected source key must be PRESENT in the mapped
+/// verdicts. An absent key is UNPROVEN — never fresh, never idle, never
+/// `age_ms = 0`.
+///
+/// This is the predicate the population count deliberately does not provide:
+/// [`parse_ntm_sources`] maps whatever rows exist, so a source that vanished from
+/// the snapshot simply contributes nothing and [`gate_ntm_sources`] then reports
+/// all-fresh. Absence must enter the computation explicitly or it reads as health.
+///
+/// # Errors
+///
+/// [`NtmSourceError::EmptySources`] when nothing was observed at all — an empty
+/// scan is an ERROR, never "all fresh". [`NtmSourceError::MissingSource`] naming
+/// every expected key that is absent.
+pub fn require_expected_sources(
+    verdicts: &[NtmSourceVerdict],
+    expected: &[&str],
+) -> Result<(), NtmSourceError> {
+    if verdicts.is_empty() {
+        // ANTI-VACUITY: nothing observed is not everything healthy, and an empty
+        // expected set must not turn this into a pass either.
+        return Err(NtmSourceError::EmptySources);
+    }
+    if expected.is_empty() {
+        return Err(NtmSourceError::EmptySources);
+    }
+    let missing: Vec<String> = expected
+        .iter()
+        .filter(|name| !verdicts.iter().any(|v| v.source == **name))
+        .map(|name| (*name).to_owned())
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(NtmSourceError::MissingSource { sources: missing })
+}
+
+/// [`gate_ntm_sources`] followed by the expected-set refusal.
+///
+/// ORDER, and it is deliberate: the sources that DID answer are adjudicated
+/// first, so a stale row keeps its own naming error (`NTM_SOURCE_STALE`, exit 1)
+/// instead of being reported as an absence. Absence is adjudicated second, and
+/// crucially it is NOT reachable-only-on-failure: when every row that answered is
+/// fresh, the expected-set check still runs and still refuses. That is the whole
+/// point — a snapshot cannot pass on the strength of the sources present.
+///
+/// # Errors
+///
+/// Propagates [`gate_ntm_sources`] and then [`require_expected_sources`].
+pub fn gate_ntm_sources_requiring(
+    verdicts: &[NtmSourceVerdict],
+    expected: &[&str],
+) -> Result<(), NtmSourceError> {
+    gate_ntm_sources(verdicts)?;
+    require_expected_sources(verdicts, expected)
 }
 
 /// Run the live `ntm --robot-snapshot` under the caller's cancellation context.
