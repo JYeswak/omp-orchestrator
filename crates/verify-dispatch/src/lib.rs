@@ -527,22 +527,32 @@ mod tests {
         );
     }
 
+    /// Hermetic fixture root. `run()` skips any repo whose directory is absent
+    /// under `developer_root` (`:381`), so every test that asserts on per-repo
+    /// output MUST own that directory. Binding it to the ambient
+    /// `$HOME/Developer` — which `cfg` did, ignoring the production
+    /// `VERIFY_DEVELOPER_ROOT` override at `:158` — made these tests pass only
+    /// on a machine that happens to have `Developer/control-plane` checked
+    /// out: green on the author's Mac, and eight failures on every CI runner
+    /// and Contabo worker, where `HOME=/root`. The fixture now supplies the
+    /// repo it dispatches to.
     fn tmp_paths(tag: &str) -> (PathBuf, PathBuf) {
         let dir =
             std::env::temp_dir().join(format!("verify-dispatch-{}-{}", tag, std::process::id()));
-        let _ = fs::create_dir_all(&dir);
+        let _ = fs::create_dir_all(dir.join("developer").join("control-plane"));
         (dir.join("ledger.jsonl"), dir.join("out.jsonl"))
     }
 
     fn cfg(ledger: PathBuf, out: PathBuf, now: f64) -> VerifyDispatchConfig {
+        let developer_root = ledger
+            .parent()
+            .expect("tmp_paths always yields a parented ledger path")
+            .join("developer");
         VerifyDispatchConfig {
             ledger,
             out,
             window_h: 6.0,
-            developer_root: std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(|home| PathBuf::from(home).join("Developer"))
-                .unwrap_or_default(),
+            developer_root,
             now,
             rules: VerifyDispatchRules::default(),
         }
@@ -812,6 +822,21 @@ mod tests {
             format!("{{\"ts\":\"{ts}\",\"event\":\"dispatched\",\"repo\":\"control-plane\",\"count\":2,\"invoker\":\"TEST\"}}\n"),
         )
         .unwrap();
+        // POSITIVE CONTROL, and it is the reason this test is not trustworthy
+        // without one. The assertion below is NEGATIVE: it holds whenever the
+        // note is absent, including when the dispatch never reached the
+        // reporting path at all. That is exactly how this leg read GREEN for
+        // the entire window in which its two sibling mutation legs were RED
+        // and the repo was being skipped at `:381` — a pass with no
+        // attribution. Prove the note IS emitted with the rule ON before
+        // claiming that turning it OFF is what hid it.
+        let enabled = cfg(ledger.clone(), out.clone(), now);
+        let on = run(&enabled, &status_map(&[]));
+        assert!(
+            on.stdout.contains("predate bead-id ledgering"),
+            "positive control: with legacy_idless_reported ENABLED the note must be emitted, else the mutation below proves nothing, got {:?}",
+            on.stdout
+        );
         let mut c = cfg(ledger, out, now);
         assert!(c.rules.disable("legacy_idless_reported"));
         let r = run(&c, &status_map(&[]));
