@@ -2233,6 +2233,24 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    stamps NOW. Then re-run. **A RED that survives a `touch` is a real RED; a RED that clears
    under `touch` was never a measurement.**
 
+   ⭐ **THE DIAGNOSTIC THAT ISOLATES IT, and it is the half that stops you reaching the wrong
+   conclusion:** run `rch exec --job -- sha256sum <file>` **on the very worker that just went
+   red**. If it returns the CORRECT hash, the source there is already right and the red is a
+   STALE BUILD CACHE — not a failed sync, which is what an agent guesses first and which would
+   send it re-transferring or re-editing correct code. **The remote content oracle separates the
+   two; no local check can.**
+
+   **AND THE RESTORE MUST STILL BE PROVEN BY `sha256` + `cmp` AGAINST THE ASIDE COPY, NEVER BY
+   THE SUITE GOING GREEN** — the suite is precisely the instrument this defect corrupts, so
+   using it as the restore oracle is circular.
+
+   ⭐ **INDEPENDENTLY CORROBORATED THE SAME HOUR, DIFFERENT CRATE, DIFFERENT AGENT.** A second
+   mutation lane hit it on `crates/s1-coverage/src/main.rs` — `cp -p` restore, sha256
+   `7a3ed877…cba272` matching, `cmp` clean, `git status` empty, and the run still reported the
+   previous mutant's failure. It caught the contradiction (*the mutation was gone from the
+   source it was reading*), applied `touch`, and went green. **Two lanes, two crates, one
+   evening: this is a property of the build path, not one crate's bad luck.**
+
    **Same family as rule 8 and as tonight's borrowed-green:** three different times in one
    session, the build system's view of "what changed" diverged from the tree's, and each time an
    agent nearly reported a property of the CACHE as a property of the CODE.
