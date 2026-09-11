@@ -3453,3 +3453,142 @@ repo does not claim fresh-session coverage from a stale session. The measured wr
 is named rather than hidden: timeout, nice, env, time, stdbuf, and xargs wrappers may bypass a
 resolver that inspects only the command-position token. Until a real intercepted probe closes
 that class, wrapped invocations remain UNMEASURED/UNSAFE for coverage claims.
+
+---
+
+## An arm64 artifact that is MANDATORY and UNREBUILDABLE (binding, measured 2026-09-11)
+
+**Joshua forbade darwin builds. Two artifacts on this machine are Mach-O arm64, are required for
+normal work, and can only be refreshed by a darwin build. They are now frozen at whatever version
+they happened to be when the ruling landed.** This is not a complaint about the ruling; it is the
+consequence the ruling has, stated once so nobody rediscovers it at 23:00 with the fleet stopped.
+
+```
+.git/hooks/pre-commit          Mach-O arm64   REFUSES EVERY COMMIT when it judges itself stale
+/Users/josh/.local/bin/ompo    Mach-O arm64   the operator verb every wiring proof terminates at
+```
+
+**Both surfaced within one hour, independently, from opposite directions** — the hook froze the
+whole checkout, and `WireGradingPacket` could prove a call chain reaches `ompo supervise grade`
+in-tree and on Linux while being unable to put the call site *into the installed binary*. **Two
+surfaces, one cause.** A wiring proof that terminates at an installed binary now has a residual it
+cannot close: **the chain is REACHABLE and the shipped artifact PREDATES it.** Say so in the
+NO-CLAIM rather than calling the path live end-to-end.
+
+⛔ **THE DOCUMENTED REMEDY IS A BRICK TRAP. DO NOT FOLLOW IT.** `hook_freshness.rs:163`/`:203`
+says `cargo build --release --bin pre-commit-gate && cp target/release/pre-commit-gate
+.git/hooks/pre-commit`. **Under CONTABO-OR-BUST that build lands on a Linux x86_64 worker, and
+copying a Linux ELF onto the hook does not produce a stale hook — it produces an UNEXECUTABLE
+one, and then every commit in the repo fails to exec.** Found by `TautologicalGuard`, which
+stopped at the trap instead of running it. **The repo has already paid for this class once:** an
+x86-64 ELF reached this arm64 host and five ledger writes died with `cannot execute binary file`.
+**The remedy line silently assumes a LOCAL build, so it is unavailable to an agent under the build
+policy — and following our own documentation would have converted a refusal into a hard brick.**
+
+### `hook_freshness` itself: four defects, all measured the night it stopped the fleet
+
+1. **IT READS THE WORKTREE AND REFUSES COMMITS.** `commit_ratchets.rs:154-193` compares the hook's
+   mtime against the newest `.rs` under five `HOOK_SOURCE_CRATES`. **Any agent's UNCOMMITTED save
+   refuses EVERY other agent's commits, including commits touching none of those files.** The two
+   blocked commits were `AGENTS.md` and `loop-queue-filter`. **This is rule 8 — `cargo` reads the
+   worktree, a sha names a tree — living inside a gate.** Measured: the hook was **36 hours NEWER
+   than its committed source**; only uncommitted WIP was newer.
+2. **`src/` ONLY, NEVER `tests/`.** `newest_hook_source:187-194` walks `crates/<c>/src`.
+   **Positive control:** `no-shell-gate/tests/build_identity.rs` (22:42:49) was newer than the
+   20:29:17 hook **during a CLEAN observation.** Derived independently by three agents. An owner
+   who only touched tests will wrongly self-identify.
+3. ⭐ **IT IS A WHACK-A-MOLE ORACLE: it reports only `newest_path`, the MAX.** It named
+   `gate-reachability.rs`, then `project_agent.rs`, then `commit_ratchets.rs`. **Three agents were
+   each handed a different filename; landing any one unblocks nothing because the next-newest takes
+   its place, and nothing tells you the gate has moved on.** Self-concealing, not merely slow.
+4. ⭐ **THE CLEARING OPERATION IS SLOWER THAN THE CONDITION THAT TRIPS IT.** `TautologicalGuard`'s
+   framing, and it is stronger than "self-sealing gate": a clear at 23:18:48 **re-armed 13 seconds
+   later**. No number of reinstalls converges against a live editor. **The remedy is a QUIESCE
+   REQUEST to the owner — a fleet-coordination act, not a technical one.**
+
+⛔ **AND IT REFUSES THE OWNER'S OWN FIX.** muse could not commit the very edits that armed the
+gate, because the refusal reads worktree mtimes and its files were the worktree. **The one agent
+positioned to end the freeze by landing was the one agent the gate blocked from landing.** I
+offered "land it" as an option; muse measured that the option could not exist.
+
+**WHAT AN AGENT MAY DO WHEN THIS FIRES — nothing else:**
+
+```
+NEVER  touch the hook              mtime is not provenance; it hides a genuinely stale gate
+NEVER  git commit --no-verify      skips EVERY gate, not the one that fired
+NEVER  rebuild + reinstall         darwin build (forbidden) or an ELF brick (worse)
+DO     find the owner and ask them to quiesce or land, then tell pane 1
+```
+
+**FIND THE OWNER FROM THE DIFF, NOT THE TRACKER.** muse was identified in minutes because it had
+written the bead id into the source it was editing:
+`git diff -- crates/no-shell-gate | grep -c '^+.*9ub39'` → **5**, negative control `ZZQ-NOT-REAL`
+→ **0**. **Anchor to `^+` — an unanchored `grep -c` counts context lines** and two agents got
+different sizes for the same diff that way.
+
+**Clearing the gate is the CONDUCTOR's act and carries a mandatory disclosure:** the sha256 before
+and after (**must be identical** — mtime only), the hook's mtime against its **committed** source,
+and the statement that every other gate stayed live. **It is defensible only while the hook is
+newer than committed source.** If it ever genuinely predates committed source, there is no
+in-policy clear and the freeze is real.
+
+**NO-CLAIM.** This documents the collision; it does not resolve it. The durable fix — scope
+`hook_freshness` to staged paths, or to the hook's dependency closure, or emit the full
+over-threshold set — **cannot take effect without rebuilding the hook**, which is the forbidden
+operation. **A gate whose only escape hatch is a forbidden operation will stop the fleet every time
+it fires**, and it has now done so once.
+
+### A tracker assignee is not a hub id — the phantom-claim probe is RETRACTED
+
+**I ruled that an assignee absent from `hub list` is a phantom holder, and retired claims on it.
+It is wrong, and it was wrong in the direction that destroys live work.** **TRACKER ASSIGNEE
+STRINGS AND HUB IDS HAVE NEVER BEEN THE SAME NAMESPACE.** Measured **n=3, across three unrelated
+beads, by three agents who did not share a subject:**
+
+```
+bg-grade-uldvu-real   ->  GradeUldvuP0        live, working the bead
+bg-grade-poumg7       ->  GradePoumgFamily    live, working the bead
+bg-uldvu-3            ->  UldvuSchedulerProbe live, awaiting a non-author grade
+```
+
+**The probe cannot return the other answer** for a correctly-claimed bead whose claimant did not
+happen to name itself after its hub id — the instrument-defect shape (`8i`). **The corrected
+oracle: NO LIVE AGENT ANSWERS FOR THIS BEAD.** Being right once by coincidence — one displaced
+claim really was dead — does not validate it; that was established by OUTCOME (no commit and no
+comment after the grade), never by hub-absence.
+
+⭐ **STANDARD ADOPTED: WRITE THE HUB ID *AND THE COMMIT* INTO THE BEAD.**
+`UldvuSchedulerProbe`'s rule — the first comment on any claim binds
+`tracker assignee ↔ hub id ↔ commit ↔ state`. It generalises the thing that found muse in minutes
+(*the bead id was in the diff*) into *the hub id is in the bead*. **Verified discoverable, not
+merely local:** `grep -c UldvuSchedulerProbe .beads/issues.jsonl` → 1 and `br show` renders it, so
+it reaches a grader on another path.
+
+⛔ **AND THE AUTHOR OF THE STANDARD NAMED ITS FAILURE MODE BEFORE IT HARDENED — IT IS THE
+RETRACTED PROBE WITH THE SIGN FLIPPED.** A binding comment is **static text written once at claim
+time and never revoked**, so if its author dies, is reaped, or parks, the comment still reads
+*live, awaiting grade*. **The hub probe could only ever answer PHANTOM; the binding comment can
+only ever answer PRESENT.** Both are single-valued oracles. It is still a strict improvement —
+**under-retiring is the cheaper error**, since a stale bead merely waits while a wrongly-retired
+one loses committed work, which nearly happened three times in one night — but what it buys is
+narrow: **it resolves the NAMESPACE gap, never LIVENESS.**
+
+**So the oracle has three legs, and the third is not a liveness question at all:**
+
+```
+namespace   the bead names its hub id            binding comment, static, now standard
+liveness    that hub id is in a FRESH `hub list` re-measure AT GRADE TIME, never cached
+survival    the named commit exists in git log   <- THE ONE THAT PROTECTS THE WORK
+```
+
+⭐ **IF THE COMMIT EXISTS, GRADE IT — NEVER RETIRE IT.** The deliverable outlived its author and
+the bead needs a grader, not a sweep. A bead is genuinely abandoned only when its named hub id is
+absent from a fresh roster **AND** its stated commit is not in `git log`. Absent the third leg,
+every claim-retirement sweep is one instrument away from deleting landed work.
+
+**AND AN AUTHOR'S RELEASE IS OFTEN ONLY IN THE COMMIT MESSAGE.** `a4468ad` ends *"Bead:
+omp-orchestrator-poumg.7 (left in_progress for a non-author grade)"*. That is the **RELEASE beat**
+of `file → claim → dispatch → ACK → observe → verify → RELEASE → close`, written into the commit
+**because the tracker has no field to record a release in** — which is exactly why such a bead
+reads as unheld. Two panes refused grades the same week for the inverse (an author still holding
+`assignee`), so the gap cuts both ways.
