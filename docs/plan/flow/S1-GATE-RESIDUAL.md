@@ -48,10 +48,10 @@ both proof lines; they are NOT predictions.
 | `omp-orchestrator` | FAIL | unowned — 5 pre-existing `resident::tests` failures |
 | `ompo-doctor` | FAIL | owned — muse `%26` via `t0ixj`; `8vflj` blocked behind it |
 | `ompo-start` | ✅ **VERIFIED GREEN** | `063e67f` · `13 passed` · `exit=0` |
-| `pane-dispatch-ready` | FAIL | unowned |
+| `pane-dispatch-ready` | ✅ **FIXED** | `1c311ed` · `56 tests, 0 failed` · `exit=0` — and the ON arm was VACUOUS |
 | `receiver-receipt` | ✅ **VERIFIED GREEN** | `6f3953b` · `7 passed` · `exit=0` |
 | `silent-success-census` | repaired | `poumg.5` `7b3f78d` — grading |
-| `undrained-pipe-lint` | FAIL | unowned |
+| `undrained-pipe-lint` | ✅ **ALREADY-FIXED** | `bfced67` stale test DELETED · `19 passed` · `exit=0` |
 | `verify-dispatch` | FAIL | unowned — 8 tests, one root cause |
 
 ⚠️ **A PREMISE I GOT WRONG, corrected by measurement.** I briefed an agent that `25b8af4` and
