@@ -3785,3 +3785,136 @@ ACCEPTS duplicate keys, so it cannot prove the file parses: one job `gate`, trig
 unread-red failure is a separate and still-open problem — 51 failures in the last 100 runs with
 **no run id or sha cited anywhere in `.beads/issues.jsonl`**. It also costs runner minutes, which
 is the trade this row is making explicit rather than hiding.
+
+---
+
+## ⛔ `rch exec` SYNCS THE WORKTREE, SO EVERY REMOTE GREEN IS A **WORKTREE** GREEN (binding, 2026-09-11)
+
+**Rule 8 says `cargo` reads the WORKTREE while a sha names a TREE. THE REMOTE LANE DOES NOT
+ESCAPE THAT — it makes it worse, because the lane feels more authoritative.** `rch exec` syncs
+the working tree **including untracked files**, so a remote build compiles exactly the thing that
+is *not* committed.
+
+```
+f1ff868  23:47:36   a path-scoped commit took a CALLER while its CALLEE was UNTRACKED
+  git show f1ff868:crates/omp-orchestrator/src/host_precondition.rs   ABSENT FROM THE TREE
+  git show f1ff868:.../lib.rs     | grep -c 'pub mod host_precondition'   0
+  git show f1ff868:.../resident.rs| grep -c 'use crate::host_precondition' 1   <- swept in
+d3d76fe  23:52:22   repaired.   HEAD COULD NOT COMPILE FOR 4m46s.
+```
+
+⭐ **AND THE INSTRUMENT THAT SHOULD HAVE CAUGHT IT WAS THE ONE CONCEALING IT.** The author cited
+*"the crate is 240 passed / 0 failed / exit=0"* as evidence the sweep was harmless — **a figure
+produced by syncing the untracked file HEAD was missing.** It reported its own run as *"re-run
+AFTER the sha so it measures HEAD"*; **it measured the sha's worktree neighbourhood, a different
+object.** A worktree-syncing remote build is **structurally blind** to a file absent from HEAD.
+
+**THE CHECK, and it must read the COMMITTED TREE, not your checkout:**
+```
+git archive HEAD | tar -tf - | grep <the-file-you-depend-on>      # 0 = HEAD is broken
+```
+**AFTER PATH-SCOPING A COMMIT ON A CONTENDED FILE, ASK WHETHER WHAT YOU TOOK REFERENCES ANYTHING
+YOUR PATHSPEC COULD NOT TAKE.** A sweep that takes the caller and leaves the callee is a broken
+HEAD that **every local and every remote run hides**, because both compile the worktree.
+
+⭐ **SECOND FORM, `FreshCloneP0`'s: for `Cargo.lock` the same defect is a commit that takes a
+crate's MANIFEST and leaves its LOCK ROWS.** Invisible for the identical reason — the worktree
+resolves fine. That is the `jlb` repair arriving from the opposite direction, and it is why
+`cargo metadata --locked` **in a fresh clone** is the only instrument that returned different
+answers across all three states.
+
+**NO-CLAIM.** This does not make a remote green worthless — it bounds it. A remote `exit=0` is
+evidence about the tree that was SYNCED. To make a claim about a commit, check the commit.
+
+---
+
+## ⛔ A PARTIAL VIEW OF A CHANGE DOES NOT ERR SMALL — IT **INVERTS THE VERDICT**
+
+**`GradePoumgFamily`'s generalisation over three independent instruments in one night, and it is
+worth more than any of the three instances:**
+
+|instrument|what it showed|the truth|
+|---|---|---|
+|`git diff --cached` alone|a **destructive 1,387-line deletion**|a **CONSOLIDATION**, 1072 added against 1387 removed|
+|a join corpus containing a pasted whole-tree manifest|**full coverage**, empty complement|**two unowned crates**|
+|log greps using needles the code never prints|a **dead code path**|**209 firings of a stale image**|
+
+⭐ **IN ALL THREE THE INSTRUMENT RETURNED A CONFIDENT ANSWER OF THE OPPOSITE SIGN — not a null,
+not noise.** That is why *"can this instrument return the other answer"* has to be asked
+**before** the measurement rather than after the surprise.
+
+**THE GIT PAIR, stated once: NEITHER `git diff` NOR `git diff --cached` IS A VIEW OF A CHANGE.
+Each is a view of ONE SIDE of a boundary, and the pair is the instrument.**
+```
+git diff            worktree vs INDEX    blind to the STAGED half  -> a peer's `git add` vanishes
+git diff --cached   INDEX vs HEAD        blind to the UNSTAGED half -> the compensating edit vanishes
+git diff HEAD       worktree vs HEAD     sees BOTH -- use this one
+```
+**Four agents, including the conductor, published "a 1,387-line orphan deletion" from the
+`--cached` half alone.** One of them had already found the sibling defect an hour earlier and
+walked into this one anyway, **because a peer's number arrived pre-formed and was quoted rather
+than measured** — which is this file's borrowed-claim rule, biting inside a correction.
+
+---
+
+## ⛔ DO NOT PUBLISH A **PERMISSION** AS A **MECHANISM** ("forever" vs "we may not")
+
+**Caught by `GradeUldvuP0` on the conductor, 2026-09-11.** I wrote that five guarded test legs
+were *"unmeasurable FOREVER on the workers, since both remedies are closed by CONTABO-OR-BUST."*
+
+⭐ **CONTABO-OR-BUST SAYS BUILDS HAPPEN ON CONTABO RATHER THAN ON JOSHUA'S MAC. IT SAYS NOTHING
+ABOUT WHAT MAY BE INSTALLED ON A WORKER.** Putting `br` on a Linux worker's PATH is **worker
+provisioning** — not a build on the Mac, not a `--target`, not a cross-build, not any failure
+mode the ruling was aimed at. **It is outside an AGENT's bounds, which is a statement about US,
+never about THE WORLD.**
+
+**This repo has a monument to that exact substitution:** the STANDING AUTHORIZATION block exists
+because the orchestrator told the fleet a freeze blocked all code and routed three panes to
+audits **while 131 authorized beads sat claimable.** The recorded remedy is ATTEMPT THE
+TRANSITION; the corollary here is:
+
+> **BEFORE WRITING "FOREVER" OR "IMPOSSIBLE", NAME WHO WOULD HAVE TO APPROVE THE REMEDY AND
+> CONFIRM THEY REFUSED IT.**
+
+**The cost of getting it wrong is that the CHEAPEST remedy never gets costed**: one binary drop
+on a worker — no build, no ruling, no CI lane — versus a whole new `macos-14` job. **A bead
+recording the first as impossible never weighs it against the second.**
+
+**The correct form is `TautologicalGuard`'s and it was right before I degraded it: UNMEASURABLE
+WITH A NAMED PRECONDITION AND A REMEDY.** *"Requires an operator decision nobody has been asked
+for"* — **never** *"impossible."*
+
+⛔ **AND ONE HALF OF A CLAIM MUST NOT INHERIT THE OTHER HALF'S VERDICT.** Of those five legs, the
+four reaching `mail_sender_pane_identity` turn on whether they need the **ENV VAR PRESENT** or a
+**genuinely LIVE tmux pane** — if the variable, it is fixable in-crate and is not a worker
+question at all. **UNREAD. Read the path before classifying it.**
+
+---
+
+## The house commit form when the shared index is dirty (`FreshCloneP0`, adopted 2026-09-11)
+
+**Neither pathspec-scoped nor index-scoped committing is atomic in a single checkout — the shared
+mutable thing just moves from the worktree to the index.** This form **removes both from the
+path** instead of watching them:
+
+```
+BLOB=$(git hash-object -w <your-content>)
+GIT_INDEX_FILE=<scratch>/tmp-index git read-tree HEAD
+GIT_INDEX_FILE=<scratch>/tmp-index git update-index --cacheinfo 100644,$BLOB,<path>
+GIT_INDEX_FILE=<scratch>/tmp-index git diff --cached --numstat     # MUST list only your path
+GIT_INDEX_FILE=<scratch>/tmp-index git commit -F <msg>
+```
+Seeded from HEAD, so **no peer can stage into it**; the content is a blob you hashed, so **the
+worktree cannot change under you.**
+
+⛔ **THE RECONCILE STEP IS PART OF THE FORM, NOT AN OPTIONAL TAIL.** The REAL index still holds
+the pre-commit blob, so `git status` then shows **your own commit as a staged REVERSAL** and the
+next committer silently undoes you. Write the committed content to the worktree and
+`git add -- <path>` immediately. ⭐ **Fourth instance of the night's pattern: the remedy creates a
+new single-valued view that reads as the opposite of what happened.**
+
+**Choosing between the forms — `git diff HEAD --numstat -- <path>` is the discriminator:**
+```
+a peer is editing YOUR file        worktree race   -> temp-index form (or index form, bracketed)
+the index is dirty, your file clean index sweep    -> `git add -- <p> && git commit -- <p>`
+```
