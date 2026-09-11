@@ -520,8 +520,28 @@ pub fn render_human(report: &GuardReport) -> String {
     } else if report.is_pass() {
         output.push_str(&format!("\nWIRED-GUARD PASS ({} gates, all reachable)\n", report.checked));
     } else {
+        // ⛔ THE VERDICTS ARE ALREADY TYPED — `MissingFile` and `NotWired` are distinct
+        // variants — and this line used to collapse them into one phrase:
+        //     "{failures} of {checked} gates are BUILT but NOT WIRED"
+        //
+        // Measured 2026-09-11: the scan returned `4 of 4 BUILT but NOT WIRED`, and one of the
+        // four was `bin/challenge-lane.sh` — a path that does not exist and NEVER existed in
+        // this repository's history, for a shell script THE ONE RULE forbids. **Asserting
+        // BUILT about an absent file is simply false**, and it inflated the actionable count.
+        //
+        // `fh C69`: "no such mechanism exists" and "the mechanism exists and was not
+        // exercised" are two verdicts with two different remedies — ABSENT means build it or
+        // retire the row, INERT means wire it. The data was right and the RENDERING lied,
+        // which is why this fix is four lines and not a redesign.
+        let absent = report
+            .gates
+            .iter()
+            .filter(|gate| matches!(gate.verdict, GateVerdict::MissingFile))
+            .count();
+        let inert = report.failures.saturating_sub(absent);
         output.push_str(&format!(
-            "\nWIRED-GUARD FAIL ({} of {} gates are BUILT but NOT WIRED)\n",
+            "\nWIRED-GUARD FAIL ({} of {} gates: {inert} BUILT but NOT WIRED, {absent} ABSENT \
+             — an absent gate is not a built one; build it or retire the row)\n",
             report.failures, report.checked
         ));
     }
@@ -703,5 +723,50 @@ mod tests {
         assert!(json.contains("\\\"quotes\\\""));
         assert!(json.contains("BUILT-NOT-WIRED"));
         assert_eq!(render_capabilities_json().matches("selftest_assertions").count(), 1);
+    }
+
+    /// ⛔ THE REGRESSION THIS EXISTS FOR, measured in production 2026-09-11: the human summary
+    /// read `4 of 4 gates are BUILT but NOT WIRED` while one of the four was
+    /// `bin/challenge-lane.sh`, a path that does not exist and never has. **Asserting BUILT
+    /// about an absent file is false**, and it inflated the actionable count from 2 to 4 — a
+    /// reader sizing the wiring debt off that line sizes it double.
+    ///
+    /// The verdicts were ALREADY typed (`MissingFile` vs `NotWired`); only the rendering
+    /// collapsed them. `fh C69`: ABSENT and INERT have different remedies.
+    #[test]
+    fn the_human_summary_separates_absent_gates_from_inert_ones() {
+        let report = GuardReport {
+            checked: 3,
+            failures: 2,
+            gates: vec![
+                GateResult {
+                    gate: "bin/gone.sh",
+                    needle: "gone.sh",
+                    why: "a subject that does not exist",
+                    verdict: GateVerdict::MissingFile,
+                },
+                GateResult {
+                    gate: "crates/here/src/main.rs",
+                    needle: "here",
+                    why: "exists, nothing invokes it",
+                    verdict: GateVerdict::NotWired,
+                },
+                GateResult {
+                    gate: "crates/fine/src/main.rs",
+                    needle: "fine",
+                    why: "reachable",
+                    verdict: GateVerdict::Ok(WiredGuardInvoker::Cron),
+                },
+            ],
+        };
+        let human = render_human(&report);
+        assert!(
+            human.contains("1 BUILT but NOT WIRED") && human.contains("1 ABSENT"),
+            "absent and inert must be counted separately: {human}"
+        );
+        assert!(
+            !human.contains("2 of 3 gates are BUILT but NOT WIRED"),
+            "the collapsed phrasing asserts BUILT about an absent file: {human}"
+        );
     }
 }
