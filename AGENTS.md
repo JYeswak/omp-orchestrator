@@ -4666,6 +4666,51 @@ with side effects, `macro_rules!` definition order, overlapping trait impls, and
 by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
 CONTENT-DIFF purposes" is not "safe to ignore for COMPILATION."**
 
+---
+
+## ⭐⭐ TWO MUTATION ARMS SEPARATE ONLY IF ONE RED IS A **STRICT SUBSET** OF THE OTHER
+
+**Measured on `input_closure.rs`'s leg 4, where the first arm proved less than it appeared to:**
+```
+ARM A  the CONSUMER mutated (`is_clean` ignores the untracked set)   -> 2 reds
+ARM B  the PROBE mutated (`untracked_in_closure` forced empty)       -> 1 red, a SUBSET of A's
+```
+**The leg that stayed green under B is the one whose list is INJECTED.** ⭐ **THE THREE
+OUTCOMES AND WHAT EACH MEANS:**
+```
+B reddens ZERO             the enumeration has NO coverage -- only its CONSUMPTION is tested
+B reddens A's FULL SET     the "injected" leg is not injected; the arms are NOT separable
+B reddens a STRICT SUBSET  probe AND consumer are BOTH load-bearing        <- the only pass
+```
+**And the asymmetry must be STRUCTURAL, not lucky:** here `untracked_in_closure` has exactly one
+caller, inside `check_crate`, which only the hermetic fixture reaches — **so arm A hits the
+consumer both paths share and arm B hits the probe only one path reaches.**
+
+⛔ **THE AUTHOR RAN ARM A FIRST AND IT PROVED ONLY THAT THE CONSUMER HONOURS THE PROBE.** The
+split was a reviewer's, pre-registered **from the call graph** before either arm ran. **A single
+arm over a probe-plus-consumer pair cannot tell you which half is load-bearing** — the same
+single-valued defect as a count that cannot name a population.
+
+## ⛔ `blob == HEAD` IS A VALID RESTORE ORACLE **ONLY IF THE SUBJECT WAS CLEAN PRE-WRITE**
+
+**The primary oracle is `cmp` against YOUR OWN PRE-WRITE BACKUP.** `blob == HEAD` is a
+secondary that **coincides only when the file was clean before you planted** — plant into an
+already-dirty file and a correct restore reports as a failed one, while a *wrong* restore to
+HEAD reports as success.
+
+⛔ **AND THE WAY THIS SURFACED IS A NEW DIRECTION OF THE MEASURE-DURING-PLANT GAP: A PEER
+MEASURED THE PLANTER'S LIVE PLANT AND FED IT BACK AS ADVICE ABOUT THE PLANTER'S OWN RESTORE
+ORACLE.** It reported the subject dirty pre-plant and warned that `blob == HEAD` would
+misreport — **it was reading arm A.** ⭐ **Had the planter accepted it, it would have recorded
+ITS OWN SUBJECT AS SOMEONE ELSE'S DIRTY FILE.** The general rule it offered was right and was
+adopted; **the specific reading was of a mutation that agent had itself announced minutes
+earlier.**
+
+⭐ **THE PLANTER VERIFIED RATHER THAN DEFERRED, AND THAT IS THE WHOLE DEFENCE:** the subject was
+clean at SNAP-1, the four dirty siblings are named (`cross_pane_hold`, `jsm_suggest`,
+`resident_tick`, `spine_emit`), and it is clean now. **Take the general rule, re-derive the
+specific reading.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
