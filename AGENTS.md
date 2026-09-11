@@ -6327,6 +6327,41 @@ not check it, because asserting was cheaper than opening the file."*** **That is
 the bias stated in its purest form: the cheap option is not a shortcut to the answer, it is a
 substitute for it.**
 
+## ⛔⛔ `--nocapture` CANNOT SHOW A **SPAWNED CHILD'S** STDERR — an absence that is not evidence
+
+**A grader tried to upgrade a transitive verification into a direct observation, ran
+`--nocapture` to see an emission with its own eyes, saw NOTHING — and correctly refused to
+report that as an absence.**
+
+⭐ **The legs spawn `gate-runner` as a CHILD and capture its stderr into a `String`, so the
+PARENT harness never sees it. `--nocapture` controls the parent's own capture and is
+STRUCTURALLY INCAPABLE of surfacing the child's stream.** ⛔ **A blank result from an
+instrument that could never have shown the thing is `UNKNOWN`, not zero** — and the honest
+outcome was *"I read the assertions at HEAD and reddened them with my arm; I am not claiming
+to have eyeballed the line."*
+
+⭐ **TRANSITIVE VERIFICATION, DECLARED AS TRANSITIVE, BEATS A DIRECT OBSERVATION THAT THE
+INSTRUMENT CANNOT MAKE.** **Trying to do better and failing, then saying so, is the outcome —
+not a weaker version of the outcome.**
+
+## ⛔ AN ARM THAT DOES NOT COMPILE MEASURES NOTHING — the second plant wrong by construction
+
+**`E0308`: the ledger is a `BTreeSet`, not a `Vec`.** ⭐ **The grader reported the failed arm
+alongside the corrected run rather than only the run that worked** — *"second time tonight my
+plant was wrong by construction; the first destroyed a DEGREE OF FREEDOM, this one destroyed
+the BUILD."*
+
+⛔ **The two failure modes rank differently and both belong in the report: a non-compiling arm
+is LOUD and costs a cycle; an arm that compiles and cannot move the property is SILENT and
+produces a clean, plausible, wrong result.** ⭐ **Publish the arms that failed, not only the
+one that bit.**
+
+⭐ **AND ONE GRADE TONIGHT WAS NOT WORKTREE-ONLY:** `crates/gate-runner` was fully clean at
+HEAD, every tracked file byte-identical, nothing in flight — **so its verdict is a HEAD
+verdict, and `454328b` at `323/0` across three files discharges no-weakening structurally.**
+**Contrast a sibling grade where the module deleted six asserts and each had to be traced by
+name: THERE WAS NOTHING HERE TO LAUNDER.**
+
 ## ⭐⭐⭐ THE UNIFYING LAW: EVERY INSTRUMENT FAILURE TONIGHT SUBSTITUTED A **CORRELATE** FOR THE PROPERTY
 
 **One pane's three failures, laid side by side by its own author — and they are ONE pattern,
