@@ -331,8 +331,16 @@ fn parse_grade_claim_args(args: &[String]) -> Result<Option<GradeClaimRequest>, 
     if args.first().map(String::as_str) != Some("grade") {
         return Ok(None);
     }
-    if args.get(1).map(String::as_str) != Some("--claim") {
-        return Err("CONFIG_REFUSED grade requires --claim".to_owned());
+    // `--assign` and `--claim` are the same path under two names. The bead
+    // (9x13.1) and the supervisor doctrine name it `grade --assign`; the
+    // implementation landed as `--claim`. A verb the acceptance names and the
+    // binary refuses is an unexecutable acceptance leg, so both spellings
+    // resolve here rather than one of them being a documentation error.
+    if !matches!(
+        args.get(1).map(String::as_str),
+        Some("--claim") | Some("--assign")
+    ) {
+        return Err("CONFIG_REFUSED grade requires --claim or --assign".to_owned());
     }
     let mut config_args = Vec::new();
     let mut grader = None;
@@ -357,16 +365,30 @@ fn parse_grade_claim_args(args: &[String]) -> Result<Option<GradeClaimRequest>, 
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PeerGradeCommandOutcome {
-    Claimed(PeerGradeClaim),
+    /// A claimed grade carries its rendered packet. The two are one outcome
+    /// because a claim without a packet is the BUILT-NOT-WIRED shape this
+    /// bead exists to close: the assignment was recorded and nothing
+    /// gradeable was ever handed to the grader.
+    Claimed {
+        claim: PeerGradeClaim,
+        packet: String,
+    },
     ActivePeerGrade,
+    /// The receiver-verified candidate set was EMPTY.
     NoCandidate,
+    /// The candidate set was NON-EMPTY and selection refused over it. Kept
+    /// separate from `NoCandidate` because collapsing the two is what let one
+    /// run print `candidate_count=10 reason=no_idle_pane` on stdout and
+    /// `typed_outcome=no_receiver_verified_candidate` on stderr.
+    Skipped(PeerGradeSkip),
 }
 
 fn peer_grade_outcome_wire(outcome: &PeerGradeCommandOutcome) -> &'static str {
     match outcome {
-        PeerGradeCommandOutcome::Claimed(_) => "PEER_GRADE_CLAIMED",
+        PeerGradeCommandOutcome::Claimed { .. } => "PEER_GRADE_CLAIMED",
         PeerGradeCommandOutcome::ActivePeerGrade => "PEER_GRADE_ACTIVE",
         PeerGradeCommandOutcome::NoCandidate => "PEER_GRADE_EMPTY",
+        PeerGradeCommandOutcome::Skipped(_) => "PEER_GRADE_SKIPPED",
     }
 }
 
@@ -405,7 +427,7 @@ async fn run_peer_grade_claim(
             .iter()
             .any(|excluded| excluded == &pane.pane_id)
     });
-    let claim = match &preferred_grader {
+    let gate = match &preferred_grader {
         // Explicit routing: the full seven-reason gauntlet applies to the
         // named pane, which is not invoking and is expected idle.
         Some(preferred) => {
@@ -416,20 +438,67 @@ async fn run_peer_grade_claim(
         // are unrepresentable on this path, not merely refused.
         None => gate_peer_grading_inner(config, &mut observation, now_unix(), None, observer_pane)?,
     };
-    match claim {
-        Some(claim) if claim.bead == "<active-peer-grade>" => {
+    match gate {
+        PeerGradeGate::Claimed(claim) if claim.bead == "<active-peer-grade>" => {
             Ok(PeerGradeCommandOutcome::ActivePeerGrade)
         }
-        Some(claim) => {
+        PeerGradeGate::Claimed(claim) => {
             // Record the acquisition the way a work dispatch records its
             // claim (assignee set, claim visible): an unrecorded grading
             // dispatch is silent by construction (AGENTS.md fourth rule).
             // Status is untouched — the stage machine owns it.
             record_grader_assignment(cx, config, &claim).await?;
-            Ok(PeerGradeCommandOutcome::Claimed(claim))
+            // ORDER IS THE MECHANISM, NOT A CONVENTION. The renderer
+            // re-validates the tracker claim (`validate_bead_claim`: status
+            // in_progress AND assignee pane == grader pane), so the packet
+            // cannot be produced before the assignment write has landed, and
+            // a refused write returns above — no packet is rendered or
+            // emitted. Nothing here asserts the ordering; the data dependency
+            // enforces it.
+            let packet = render_peer_grade_packet(cx, config, &claim, observer_pane).await?;
+            Ok(PeerGradeCommandOutcome::Claimed { claim, packet })
         }
-        None => Ok(PeerGradeCommandOutcome::NoCandidate),
+        PeerGradeGate::NoCandidate => Ok(PeerGradeCommandOutcome::NoCandidate),
+        // NOT NoCandidate. A skip over a non-empty candidate set is a
+        // different fact and reaches the operator as a different line.
+        PeerGradeGate::Skipped(skip) => Ok(PeerGradeCommandOutcome::Skipped(skip)),
     }
+}
+
+/// Render the grading packet for a claimed peer grade through
+/// `dispatch_packet::render_grading_packet`.
+///
+/// 9x13.1: this is the production call site the renderer never had. The
+/// packet is what the grader receives; the selector decides WHO grades, the
+/// renderer decides WHAT they are handed, and before this both halves existed
+/// with only the first one reachable.
+///
+/// Refusals stay typed: `PacketError` carries its own `code()` and
+/// `operator_exit_code()`, so an unclaimed bead, a filed-only record, or a
+/// missing acceptance section surfaces by name and exits non-zero instead of
+/// printing a claim line over a packet that was never built.
+async fn render_peer_grade_packet(
+    cx: &Cx,
+    config: &Config,
+    claim: &PeerGradeClaim,
+    observer_pane: &str,
+) -> Result<String, String> {
+    let snapshot = load_bead_snapshot(cx, config, &claim.bead).await?;
+    dispatch_packet::render_grading_packet(
+        &snapshot,
+        &config.repo,
+        &claim.grader_pane,
+        observer_pane,
+    )
+    .map_err(|error| {
+        format!(
+            "GRADE_PACKET_REFUSED bead={} grader_pane={} observer_pane={observer_pane} \
+             code={} error={error}",
+            claim.bead,
+            claim.grader_pane,
+            error.code()
+        )
+    })
 }
 
 /// Write the grader assignment into the tracker. Mirrors the work-dispatch
@@ -465,14 +534,21 @@ async fn record_grader_assignment(
 
 fn peer_grade_command_exit(outcome: PeerGradeCommandOutcome) -> std::process::ExitCode {
     match outcome {
-        PeerGradeCommandOutcome::Claimed(claim) => {
+        PeerGradeCommandOutcome::Claimed { claim, packet } => {
             println!(
                 "{} bead={} receiver_pane={} grader_pane={} experiment=observer-requested",
-                peer_grade_outcome_wire(&PeerGradeCommandOutcome::Claimed(claim.clone())),
+                peer_grade_outcome_wire(&PeerGradeCommandOutcome::Claimed {
+                    claim: claim.clone(),
+                    packet: packet.clone(),
+                }),
                 claim.bead,
                 claim.receiver_pane,
                 claim.grader_pane,
             );
+            // The packet on stdout is the deliverable: the observer pipes it
+            // to the grader pane. A claim line alone told the operator a
+            // grade had been assigned and handed them nothing to send.
+            print!("{packet}");
             std::process::ExitCode::SUCCESS
         }
         PeerGradeCommandOutcome::ActivePeerGrade => {
@@ -480,7 +556,14 @@ fn peer_grade_command_exit(outcome: PeerGradeCommandOutcome) -> std::process::Ex
             std::process::ExitCode::from(2)
         }
         PeerGradeCommandOutcome::NoCandidate => {
+            // Reserved for a genuinely EMPTY candidate set. This line used to
+            // be printed for skips too, which is how an operator was told
+            // "nothing is gradeable" about a run with ten candidates.
             eprintln!("PEER_GRADE_EMPTY typed_outcome=no_receiver_verified_candidate");
+            std::process::ExitCode::from(2)
+        }
+        PeerGradeCommandOutcome::Skipped(skip) => {
+            eprintln!("{}", skip.refusal_line());
             std::process::ExitCode::from(2)
         }
     }
@@ -3030,11 +3113,62 @@ pub struct PeerGradeClaim {
     pub grader_assignee: String,
 }
 
+/// The three outcomes of the peer-grading gate.
+///
+/// This was `Option<PeerGradeClaim>`, which made a SKIP over a non-empty
+/// candidate set indistinguishable from an EMPTY candidate set: both reached
+/// the caller as `None`, so `grade --claim` printed
+/// `typed_outcome=no_receiver_verified_candidate` on stderr for a run whose
+/// stdout said `candidate_count=10 observed_panes=7 reason=no_idle_pane`.
+/// Absent and empty are different facts (AGENTS.md rule 4a), and a return type
+/// that cannot hold both destroys the distinction before any print site gets
+/// the chance to be careful with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PeerGradeGate {
+    /// A grading dispatch was selected.
+    Claimed(PeerGradeClaim),
+    /// The receiver-verified candidate set is EMPTY: nothing is gradeable.
+    NoCandidate,
+    /// The candidate set is NON-EMPTY and selection refused over it.
+    Skipped(PeerGradeSkip),
+}
+
+/// A skip over a KNOWN population. `candidate_count` is the denominator the
+/// refusal was computed against, so no reader has to guess whether zero
+/// candidates or zero eligible graders produced it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PeerGradeSkip {
+    pub candidate_count: usize,
+    pub observed_panes: usize,
+    /// Already `reason=`-prefixed, as produced by [`peer_grade_error_detail`].
+    pub reason_detail: String,
+}
+
+impl PeerGradeSkip {
+    /// Heartbeat-row and stdout payload.
+    pub fn ledger_detail(&self) -> String {
+        format!(
+            "candidate_count={} observed_panes={} {} next_action=continue-ranked-dispatch",
+            self.candidate_count, self.observed_panes, self.reason_detail
+        )
+    }
+
+    /// Operator-facing refusal line. Formatted from the SAME value as
+    /// [`Self::ledger_detail`], so stdout and stderr cannot name different
+    /// causes for one run — agreement is structural, not a matter of care.
+    pub fn refusal_line(&self) -> String {
+        format!(
+            "PEER_GRADE_SKIPPED typed_outcome=selection_refused candidate_count={} {}",
+            self.candidate_count, self.reason_detail
+        )
+    }
+}
+
 pub fn gate_peer_grading(
     config: &Config,
     observation: &mut Observation,
     tick: u64,
-) -> Result<Option<PeerGradeClaim>, String> {
+) -> Result<PeerGradeGate, String> {
     gate_peer_grading_inner(config, observation, tick, None, "__orchestrator__")
 }
 
@@ -3043,7 +3177,7 @@ pub fn gate_peer_grading_for_pane(
     observation: &mut Observation,
     tick: u64,
     grader_pane: &str,
-) -> Result<Option<PeerGradeClaim>, String> {
+) -> Result<PeerGradeGate, String> {
     gate_peer_grading_inner(config, observation, tick, Some(grader_pane), "__orchestrator__")
 }
 
@@ -3074,15 +3208,13 @@ fn peer_grade_error_detail(error: &loop_queue_filter::select::AssignGradeError) 
     }
 }
 
-fn peer_grading_skip(
-    config: &Config,
-    tick: u64,
-    status: &str,
-    detail: &str,
-) -> Result<Option<PeerGradeClaim>, String> {
+/// Record a skip on the heartbeat and on stdout. The row keeps its existing
+/// shape; what changed is that this no longer swallows the outcome into
+/// `Ok(None)` — the caller decides which typed outcome it was.
+fn peer_grading_skip(config: &Config, tick: u64, status: &str, detail: &str) -> Result<(), String> {
     write_heartbeat(config, tick, status, detail)?;
     println!("{status} {detail}");
-    Ok(None)
+    Ok(())
 }
 
 fn gate_peer_grading_inner(
@@ -3091,19 +3223,20 @@ fn gate_peer_grading_inner(
     tick: u64,
     preferred_grader_pane: Option<&str>,
     observer_pane: &str,
-) -> Result<Option<PeerGradeClaim>, String> {
+) -> Result<PeerGradeGate, String> {
     let candidates = LifecycleLedger::receiver_verified_candidates(
         &config.bead_lifecycle_ledger,
         config.repo.join(".beads/issues.jsonl"),
     )
     .map_err(|error| format!("PEER_GRADING_LEDGER_UNREADABLE error={error}"))?;
     if candidates.is_empty() {
-        return peer_grading_skip(
+        peer_grading_skip(
             config,
             tick,
             "PEER_GRADING_LEDGER_EMPTY",
             "reason=no_receiver_verified_candidate next_action=continue-ranked-dispatch",
-        );
+        )?;
+        return Ok(PeerGradeGate::NoCandidate);
     }
 
     // Restrict the shared selector to lifecycle-verified candidates. Selection itself is
@@ -3171,12 +3304,27 @@ fn gate_peer_grading_inner(
     } else {
         observed_panes.clone()
     };
-    let assignment = match loop_queue_filter::select::assign_peer_grade_with_ledger(
-        observer_pane,
-        &selected_panes,
-        &candidate_jsonl,
-        &ledger_text,
-    ) {
+    // A NAMED grader carries the eligibility gauntlet INSIDE the selector. The
+    // pre-check above admits it on `is_dispatchable` alone, which does not
+    // imply confirmed-idle, so a pane carrying its own dispatch must be
+    // refused where it is still known by name — once the candidate set is
+    // filtered, the only refusal left to give is about the fleet.
+    let selection = match preferred_grader_pane {
+        Some(preferred) => loop_queue_filter::select::assign_peer_grade_for_named_grader(
+            observer_pane,
+            preferred,
+            &selected_panes,
+            &candidate_jsonl,
+            &ledger_text,
+        ),
+        None => loop_queue_filter::select::assign_peer_grade_with_ledger(
+            observer_pane,
+            &selected_panes,
+            &candidate_jsonl,
+            &ledger_text,
+        ),
+    };
+    let assignment = match selection {
         Ok(assignment) => assignment,
         Err(loop_queue_filter::select::AssignGradeError::NoEligibleGrader { reason })
             if preferred_grader_pane.is_some() && reason == "no_distinct_idle_peer" =>
@@ -3191,13 +3339,15 @@ fn gate_peer_grading_inner(
             ));
         }
         Err(error) => {
-            let detail = format!(
-                "candidate_count={} observed_panes={} {} next_action=continue-ranked-dispatch",
-                candidates.len(),
-                selected_panes.len(),
-                peer_grade_error_detail(&error)
-            );
-            return peer_grading_skip(config, tick, "PEER_GRADING_SKIPPED", &detail);
+            // The skip carries its own denominator, so the caller can tell
+            // "ten candidates, no eligible grader" from "nothing to grade".
+            let skip = PeerGradeSkip {
+                candidate_count: candidates.len(),
+                observed_panes: selected_panes.len(),
+                reason_detail: peer_grade_error_detail(&error),
+            };
+            peer_grading_skip(config, tick, "PEER_GRADING_SKIPPED", &skip.ledger_detail())?;
+            return Ok(PeerGradeGate::Skipped(skip));
         }
     };
     let candidate = candidates
@@ -3212,7 +3362,7 @@ fn gate_peer_grading_inner(
     refuse_placeholder_identity("bead", &assignment.bead)?;
     refuse_placeholder_identity("receiver_pane", &candidate.identity.target.pane)?;
     refuse_placeholder_identity("grader_pane", &assignment.grader_pane)?;
-    Ok(Some(PeerGradeClaim {
+    Ok(PeerGradeGate::Claimed(PeerGradeClaim {
         bead: assignment.bead,
         receiver_pane: candidate.identity.target.pane.clone(),
         grader_pane: assignment.grader_pane,
@@ -6243,7 +6393,10 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let mut decision = decide(&observation, &authorization);
 
     if matches!(&decision, SupervisorDecision::Dispatch { .. }) {
-        if let Some(claim) = gate_peer_grading(config, &mut observation, tick)? {
+        // NoCandidate and Skipped both continue ranked dispatch, as before;
+        // they now arrive distinguishable, and the skip has already written
+        // its heartbeat row naming the candidate_count it refused over.
+        if let PeerGradeGate::Claimed(claim) = gate_peer_grading(config, &mut observation, tick)? {
             hold_intent = cross_pane_hold::HoldIntent::Grade;
 
             refuse_placeholder_identity("bead", &claim.bead)?;
@@ -7042,8 +7195,16 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
         return match outcome {
             Ok(outcome) => peer_grade_command_exit(outcome),
             Err(error) => {
+                // Same discrimination as `dispatch --render`: a bead the
+                // grader does not hold in_progress is a distinct operator
+                // condition (fix the claim) from a selector refusal.
+                let exit_code = if error.contains("code=BEAD_NOT_CLAIMED") {
+                    3
+                } else {
+                    2
+                };
                 eprintln!("{error}");
-                std::process::ExitCode::from(2)
+                std::process::ExitCode::from(exit_code)
             }
         };
     }
@@ -9912,11 +10073,19 @@ Stop: now
             },
             gate_census: Some(GateCensus { rows: Vec::new() }),
         };
-        assert!(
-            gate_peer_grading(&config, &mut no_peer, 76)
-                .expect("missing distinct peer must degrade")
-                .is_none(),
-            "no distinct peer must skip grading rather than refuse the tick"
+        let no_peer_gate = gate_peer_grading(&config, &mut no_peer, 76)
+            .expect("missing distinct peer must degrade");
+        // A skip over a KNOWN population, not an empty one: this candidate set
+        // has exactly one receiver-verified bead and no eligible grader.
+        // Before the outcome was typed both arrived as `None`.
+        assert_eq!(
+            no_peer_gate,
+            PeerGradeGate::Skipped(PeerGradeSkip {
+                candidate_count: 1,
+                observed_panes: 1,
+                reason_detail: "reason=no_distinct_idle_peer".to_owned(),
+            }),
+            "no distinct peer must skip grading over a named denominator, not refuse the tick"
         );
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
         assert!(heartbeat.contains("PEER_GRADING_SKIPPED"), "{heartbeat}");
@@ -9925,9 +10094,10 @@ Stop: now
             "{heartbeat}"
         );
 
-        let claim = gate_peer_grading(&config, &mut observation, 77)
-            .unwrap()
-            .expect("a finished peer bead must claim grading before new work");
+        let PeerGradeGate::Claimed(claim) = gate_peer_grading(&config, &mut observation, 77).unwrap()
+        else {
+            panic!("a finished peer bead must claim grading before new work");
+        };
         assert_eq!(claim.bead, "peer-bead");
         assert_eq!(claim.receiver_pane, "%1409");
         assert_eq!(claim.grader_pane, "%1414");
@@ -9954,9 +10124,11 @@ Stop: now
             },
             gate_census: Some(GateCensus { rows: Vec::new() }),
         };
-        let again = gate_peer_grading(&config, &mut still_idle, 78)
-            .unwrap()
-            .expect("the same candidate remains gradeable without a reservation");
+        let PeerGradeGate::Claimed(again) =
+            gate_peer_grading(&config, &mut still_idle, 78).unwrap()
+        else {
+            panic!("the same candidate remains gradeable without a reservation");
+        };
         assert_eq!(again.bead, "peer-bead");
         assert!(
             !again.bead.contains('<'),
@@ -10099,9 +10271,12 @@ Stop: now
         // this errored current_pane_not_dispatchable before reaching selection.
         let (_temp, config) = grade_fixture();
         let mut observation = grade_observation(vec![grade_working_pane("%26"), grade_idle_pane("%1414")]);
-        let claim = gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
-            .expect("working observer must acquire")
-            .expect("candidate exists");
+        let PeerGradeGate::Claimed(claim) =
+            gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
+                .expect("working observer must acquire")
+        else {
+            panic!("candidate exists");
+        };
         assert_eq!(claim.bead, "grade-bead");
         assert_eq!(claim.grader_pane, "%1414");
         assert_eq!(claim.grader_assignee, "pane1414-%1414");
@@ -10117,7 +10292,15 @@ Stop: now
         let mut observation = grade_observation(vec![grade_idle_pane("%26")]);
         let outcome = gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
             .expect("sole-idle observer must skip, not refuse");
-        assert!(outcome.is_none(), "observer must not self-assign: {outcome:?}");
+        assert_eq!(
+            outcome,
+            PeerGradeGate::Skipped(PeerGradeSkip {
+                candidate_count: 1,
+                observed_panes: 1,
+                reason_detail: "reason=no_idle_pane".to_owned(),
+            }),
+            "observer must not self-assign, and the skip must name its denominator"
+        );
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
         assert!(heartbeat.contains("reason=no_idle_pane"), "{heartbeat}");
     }
@@ -10143,11 +10326,155 @@ Stop: now
             grade_observation(vec![grade_working_pane("%26"), grade_working_pane("%1408")]);
         let outcome = gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
             .expect("all-working fleet must skip, not refuse");
-        assert!(outcome.is_none());
+        assert_eq!(
+            outcome,
+            PeerGradeGate::Skipped(PeerGradeSkip {
+                candidate_count: 1,
+                observed_panes: 2,
+                reason_detail: "reason=all_panes_carrying_dispatches".to_owned(),
+            })
+        );
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
         assert!(
             heartbeat.contains("reason=all_panes_carrying_dispatches"),
             "{heartbeat}"
+        );
+    }
+
+    /// Turn the one receiver-verified candidate's tracker row to `closed`, so
+    /// the admissibility filter drops it and the candidate set is genuinely
+    /// EMPTY. Same ledger, same panes — only the population differs.
+    fn close_the_candidate(config: &Config) {
+        std::fs::write(
+            config.repo.join(".beads/issues.jsonl"),
+            r#"{"id":"grade-bead","status":"closed","assignee":"pane3-%1409","comments":[{"author":"pane3-%1409","text":"DONE peer work"}]}
+"#,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_skip_over_a_nonempty_candidate_set_is_not_an_empty_candidate_set() {
+        // MEASURED LIVE 2026-09-10, one invocation, two channels:
+        //   stdout  PEER_GRADING_SKIPPED candidate_count=10 observed_panes=7 reason=no_idle_pane
+        //   stderr  PEER_GRADE_EMPTY typed_outcome=no_receiver_verified_candidate
+        // There were TEN candidates, so the stderr cause was the one thing
+        // that provably was not true. Both outcomes reached the caller as
+        // `Ok(None)`, so the distinction was destroyed in the RETURN TYPE
+        // before any print site could be careful with it.
+        let (_skip_temp, skip_config) = grade_fixture();
+        let mut sole_idle = grade_observation(vec![grade_idle_pane("%26")]);
+        let skipped = gate_peer_grading_inner(&skip_config, &mut sole_idle, 77, None, "%26")
+            .expect("a skip is not a refused tick");
+
+        let (_empty_temp, empty_config) = grade_fixture();
+        close_the_candidate(&empty_config);
+        let mut same_panes = grade_observation(vec![grade_idle_pane("%26")]);
+        let empty = gate_peer_grading_inner(&empty_config, &mut same_panes, 77, None, "%26")
+            .expect("an empty candidate set is not a refused tick either");
+
+        assert_eq!(empty, PeerGradeGate::NoCandidate);
+        assert_eq!(
+            skipped,
+            PeerGradeGate::Skipped(PeerGradeSkip {
+                candidate_count: 1,
+                observed_panes: 1,
+                reason_detail: "reason=no_idle_pane".to_owned(),
+            })
+        );
+        assert_ne!(
+            skipped, empty,
+            "the two inputs that used to be indistinguishable must now differ"
+        );
+
+        // And they stay distinct all the way to the operator's channel.
+        let skip_line = match &skipped {
+            PeerGradeGate::Skipped(skip) => skip.refusal_line(),
+            other => panic!("expected a skip: {other:?}"),
+        };
+        assert_eq!(
+            skip_line,
+            "PEER_GRADE_SKIPPED typed_outcome=selection_refused candidate_count=1 reason=no_idle_pane"
+        );
+        assert!(
+            !skip_line.contains("no_receiver_verified_candidate"),
+            "a skip over a non-empty set must never claim the set was empty: {skip_line}"
+        );
+        assert_eq!(
+            peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate),
+            "PEER_GRADE_EMPTY",
+            "the empty-set marker is reserved for the empty set"
+        );
+        assert_ne!(
+            peer_grade_outcome_wire(&PeerGradeCommandOutcome::Skipped(PeerGradeSkip {
+                candidate_count: 1,
+                observed_panes: 1,
+                reason_detail: "reason=no_idle_pane".to_owned(),
+            })),
+            peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate),
+            "one wire string for both outcomes is the collapse this bead closes"
+        );
+    }
+
+    #[test]
+    fn the_skip_row_and_the_refusal_line_cannot_name_different_causes() {
+        // Agreement is STRUCTURAL: both channels are formatted from one
+        // `PeerGradeSkip`, so stdout cannot say candidate_count=10 while
+        // stderr says the set was empty. Replays the measured 10/7 shape.
+        let skip = PeerGradeSkip {
+            candidate_count: 10,
+            observed_panes: 7,
+            reason_detail: "reason=no_idle_pane".to_owned(),
+        };
+        let ledger = skip.ledger_detail();
+        let refusal = skip.refusal_line();
+        assert_eq!(
+            ledger,
+            "candidate_count=10 observed_panes=7 reason=no_idle_pane next_action=continue-ranked-dispatch"
+        );
+        assert_eq!(
+            refusal,
+            "PEER_GRADE_SKIPPED typed_outcome=selection_refused candidate_count=10 reason=no_idle_pane"
+        );
+        for shared in ["candidate_count=10", "reason=no_idle_pane"] {
+            assert!(ledger.contains(shared), "stdout lost {shared}: {ledger}");
+            assert!(refusal.contains(shared), "stderr lost {shared}: {refusal}");
+        }
+    }
+
+    #[test]
+    fn a_named_grader_carrying_its_own_dispatch_is_refused_by_name_through_the_gate() {
+        // Sibling defect, same gate: the preferred-grader pre-check admits on
+        // `is_dispatchable` alone, and tick-monitor derives `is_dispatchable`
+        // independently of `is_working` (a DIALOG pane reads dispatchable
+        // while carrying a dispatch). Such a pane reaches selection, so the
+        // refusal must name the PANE, not the fleet. Deleting the
+        // `require_idle_grader` call in `assign_peer_grade_inner` degrades
+        // this to reason=no_idle_pane and reddens this leg.
+        let (_temp, config) = grade_fixture();
+        let dialog_pane = PaneObservation {
+            pane_id: "%1408".to_owned(),
+            state: "DIALOG".to_owned(),
+            liveness: "CONFIRMED_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: false,
+            is_working: true,
+            awaits_human: false,
+        };
+        let mut observation = grade_observation(vec![grade_idle_pane("%26"), dialog_pane]);
+        let outcome = gate_peer_grading_for_pane(&config, &mut observation, 77, "%1408")
+            .expect("a named-grader skip is not a refused tick");
+        let PeerGradeGate::Skipped(skip) = &outcome else {
+            panic!("expected a typed skip: {outcome:?}");
+        };
+        assert_eq!(
+            skip.reason_detail,
+            "reason=grader_carrying_own_dispatch pane=%1408 liveness=CONFIRMED_IDLE is_working=true",
+            "the refusal must name the pane the operator asked about"
+        );
+        assert!(
+            !skip.reason_detail.contains("no_idle_pane"),
+            "a fleet-wide cause for one named pane is the defect: {skip:?}"
         );
     }
 
@@ -10202,6 +10529,183 @@ Stop: now
         });
         assert!(error.contains("GRADE_CLAIM_FAILED"), "{error}");
         assert!(error.contains("TRACKER_REFUSED"), "{error}");
+    }
+
+    /// 9x13.1 leg 1 (KNOWN-BAD by construction): the caller is WORKING.
+    ///
+    /// The observer's state is READ from the observation and asserted NOT
+    /// CONFIRMED_IDLE before the path runs, because a green obtained with an
+    /// idle caller proves nothing about the catch-22 that motivated 9x13: the
+    /// old pre-check refused the invoker for being busy, which invoking made
+    /// it.
+    #[test]
+    fn grade_assign_renders_a_packet_for_a_working_observer() {
+        let temp = tempfile::tempdir().expect("packet fixture");
+        let bead = "grade-packet-bead";
+        let (config, _state, args, _supervisor) = open_bead_br_fixture(&temp, bead);
+        let observer = grade_working_pane("%26");
+        assert_ne!(
+            observer.liveness, "CONFIRMED_IDLE",
+            "observed caller pane {} liveness={} is_working={}: an idle caller cannot \
+             exercise the catch-22 this path exists to break",
+            observer.pane_id, observer.liveness, observer.is_working
+        );
+        assert!(observer.is_working, "caller must be carrying work: {observer:?}");
+        assert!(
+            !observer.is_dispatchable,
+            "a WORKING caller is not dispatchable, which is exactly what the old \
+             pre-check refused on: {observer:?}"
+        );
+        let claim = PeerGradeClaim {
+            bead: bead.to_owned(),
+            receiver_pane: "%1409".to_owned(),
+            grader_pane: "%1414".to_owned(),
+            grader_assignee: "pane1414-%1414".to_owned(),
+        };
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let (packet, direct) = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            record_grader_assignment(&cx, &config, &claim)
+                .await
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "assignment write failed: {error}; args={:?}",
+                        std::fs::read_to_string(&args)
+                    )
+                });
+            let packet = render_peer_grade_packet(&cx, &config, &claim, &observer.pane_id)
+                .await
+                .expect("a WORKING observer must still obtain a rendered grading packet");
+            // Leg 2 (KNOWN-GOOD, anti-bypass): the same snapshot through the
+            // renderer directly. Equality fails the moment the production path
+            // hand-builds a packet string instead of calling the renderer.
+            let snapshot = load_bead_snapshot(&cx, &config, bead)
+                .await
+                .expect("snapshot readback");
+            let direct = dispatch_packet::render_grading_packet(
+                &snapshot,
+                &config.repo,
+                &claim.grader_pane,
+                &observer.pane_id,
+            )
+            .expect("renderer accepts the claimed bead");
+            (packet, direct)
+        });
+        assert_eq!(
+            packet, direct,
+            "the production path must render THROUGH dispatch_packet::render_grading_packet, \
+             never around it"
+        );
+        assert!(
+            packet.starts_with("GRADE ASSIGNMENT (not implementation)"),
+            "{packet}"
+        );
+        assert!(packet.contains("Grader pane: %1414"), "{packet}");
+        assert!(
+            packet.contains("Observer: %26 (may be WORKING; observer is not the grader)."),
+            "{packet}"
+        );
+        assert!(packet.contains(bead), "{packet}");
+    }
+
+    /// 9x13.1 leg 6 (ORDERING, measured rather than assumed): the tracker
+    /// projection precedes the packet. Not asserted by reading source order —
+    /// the renderer re-validates the claim, so a packet BEFORE the assignment
+    /// write is unrepresentable, and the pair below observes both verdicts
+    /// from the same tracker fixture in sequence.
+    #[test]
+    fn grade_assign_refuses_a_packet_before_the_assignment_write() {
+        let temp = tempfile::tempdir().expect("ordering fixture");
+        let bead = "grade-order-bead";
+        let (config, state, _args, _supervisor) = open_bead_br_fixture(&temp, bead);
+        assert!(
+            !state.exists(),
+            "the fixture must start unclaimed or the ordering leg proves nothing"
+        );
+        let claim = PeerGradeClaim {
+            bead: bead.to_owned(),
+            receiver_pane: "%1409".to_owned(),
+            grader_pane: "%1414".to_owned(),
+            grader_assignee: "pane1414-%1414".to_owned(),
+        };
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let (before, after) = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            let before = render_peer_grade_packet(&cx, &config, &claim, "%26")
+                .await
+                .expect_err("a packet before the assignment write must refuse");
+            record_grader_assignment(&cx, &config, &claim)
+                .await
+                .expect("assignment write");
+            let after = render_peer_grade_packet(&cx, &config, &claim, "%26")
+                .await
+                .expect("the same inputs render once the claim is recorded");
+            (before, after)
+        });
+        assert!(before.contains("GRADE_PACKET_REFUSED"), "{before}");
+        assert!(before.contains("code=BEAD_NOT_CLAIMED"), "{before}");
+        assert!(after.contains("Grader pane: %1414"), "{after}");
+    }
+
+    /// 9x13.1 leg 6, second half: if `br update` fails the send must not
+    /// happen. The refusing tracker yields no assignment AND no packet.
+    #[test]
+    fn grade_assign_emits_no_packet_when_the_tracker_refuses() {
+        let temp = tempfile::tempdir().expect("refusal fixture");
+        let script = "#!/bin/sh\nprintf 'TRACKER_REFUSED reason=bead_blocked\\n'\nexit 1\n";
+        let br = executable_reaper(&temp, script);
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.repo = temp.path().to_path_buf();
+        config.br = br.display().to_string();
+        let claim = PeerGradeClaim {
+            bead: "grade-refused-bead".to_owned(),
+            receiver_pane: "%1409".to_owned(),
+            grader_pane: "%1414".to_owned(),
+            grader_assignee: "pane1414-%1414".to_owned(),
+        };
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let (record, render) = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            let record = record_grader_assignment(&cx, &config, &claim)
+                .await
+                .expect_err("a refusing tracker must not record");
+            let render = render_peer_grade_packet(&cx, &config, &claim, "%26")
+                .await
+                .expect_err("no packet may be produced from a tracker that refused");
+            (record, render)
+        });
+        assert!(record.contains("GRADE_CLAIM_FAILED"), "{record}");
+        assert!(
+            !render.contains("GRADE ASSIGNMENT"),
+            "the refusal must not carry a packet: {render}"
+        );
+    }
+
+    /// The bead and the doctrine name `grade --assign`; the implementation
+    /// landed as `--claim`. Both spellings must reach the same path or the
+    /// acceptance leg naming the other one is unexecutable.
+    #[test]
+    fn grade_parser_accepts_the_assign_spelling() {
+        let assign = parse_grade_claim_args(&[
+            "grade".to_owned(),
+            "--assign".to_owned(),
+            "--repo".to_owned(),
+            "/repo".to_owned(),
+        ])
+        .expect("--assign is the bead's spelling")
+        .expect("grade assign request");
+        let claim = parse_grade_claim_args(&[
+            "grade".to_owned(),
+            "--claim".to_owned(),
+            "--repo".to_owned(),
+            "/repo".to_owned(),
+        ])
+        .expect("--claim is the landed spelling")
+        .expect("grade claim request");
+        assert_eq!(assign, claim, "the two spellings must not diverge");
+        let wrong = parse_grade_claim_args(&["grade".to_owned(), "--grade".to_owned()])
+            .expect_err("an unknown mode flag must still refuse");
+        assert!(wrong.contains("--assign"), "{wrong}");
     }
 
 
