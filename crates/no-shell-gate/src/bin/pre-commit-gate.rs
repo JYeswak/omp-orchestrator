@@ -918,32 +918,55 @@ fn validate_staged_close_reason_policy(
     }
 
     let detection_scope =
-        "detection_only=true historical rows are reported, but only newly closed rows can refuse";
-    let head = match bounded_git_text(repo_root, &["show", "HEAD:.beads/issues.jsonl"]) {
-        Ok(text) => text.into_bytes(),
+        "detection_only=true a direct br close stores an arbitrary reason, so this gate DETECTS \
+         a bad row on the next mirror-staging commit and never prevents the close";
+
+    // TWO ABSENCES, TWO OUTCOMES. Absent from HEAD = a first commit that ADDS the mirror, so
+    // the baseline is empty. Present in HEAD and unreadable = a blind gate, which refuses.
+    let head_present = match bounded_git_text(repo_root, &["ls-tree", "--name-only", "HEAD", "--", MIRROR]) {
+        Ok(listing) => listing.lines().any(|line| line.trim() == MIRROR),
         Err(error) => {
             refusals.push(format!(
-                "close-reason-policy: CLOSE_REASON_HEAD_MIRROR_UNREADABLE path=HEAD:{MIRROR} detail={error}"
+                "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 CLOSE_REASON_HEAD_MIRROR_UNREADABLE path=HEAD:{MIRROR} reason=head_listing_failed detail={error} {detection_scope}"
             ));
             return;
         }
     };
-    let staged_mirror = match staged_blob(repo_root, MIRROR) {
-        Ok(bytes) => bytes,
+    let head_mirror = if head_present {
+        match bounded_git_text(repo_root, &["show", &format!("HEAD:{MIRROR}")]) {
+            Ok(text) => Some(text),
+            Err(error) => {
+                refusals.push(format!(
+                    "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 CLOSE_REASON_HEAD_MIRROR_UNREADABLE path=HEAD:{MIRROR} reason=present_but_unreadable detail={error} {detection_scope}"
+                ));
+                return;
+            }
+        }
+    } else {
+        None
+    };
+
+    // RESIDUAL, stated: the mirror is read from the worktree, not from the index, so a mirror
+    // staged and then edited or removed before commit is reported as unreadable rather than
+    // silently scanned from the index blob. Failing closed there is the intended direction.
+    let staged_closed = match pre_delete_citation_check::read_closed_beads_from_mirror(repo_root) {
+        Ok(rows) => rows,
         Err(error) => {
             refusals.push(format!(
-                "close-reason-policy: CLOSE_REASON_STAGED_MIRROR_UNREADABLE path={MIRROR} detail={error}"
+                "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 staged_mirror={MIRROR} {error} {detection_scope}"
             ));
             return;
         }
     };
-    let report = match pre_delete_citation_check::check_close_reason_policy_scoped(
-        &head,
-        &staged_mirror,
+    let report = match pre_delete_citation_check::check_staged_close_reason_policy(
+        head_mirror.as_deref(),
+        &staged_closed,
     ) {
         Ok(report) => report,
         Err(error) => {
-            refusals.push(format!("close-reason-policy: {error}"));
+            refusals.push(format!(
+                "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 {error} {detection_scope}"
+            ));
             return;
         }
     };
@@ -952,25 +975,26 @@ fn validate_staged_close_reason_policy(
     } else {
         "REFUSED"
     };
+    let head_mirror_state = if head_present { "PRESENT" } else { "ABSENT" };
     let _ = writeln!(
         io::stderr(),
-        "close-reason-policy: state={state} staged_mirror={MIRROR} historical_closed={} newly_closed={} verified_new_closes={} conflicts={} legacy_unrecoverable={} {detection_scope}",
-        report.historical_closed,
+        "close-reason-policy: state={state} staged_mirror={MIRROR} head_mirror={head_mirror_state} closed_beads={} newly_closed={} verified={} conflicts={} historical_closed={} {detection_scope}",
+        report.closed_beads,
         report.newly_closed,
-        report.verified_new_closes,
+        report.verified,
         report.violations.len(),
-        report.legacy_unrecoverable.len(),
+        report.historical_closed,
     );
     if !report.legacy_unrecoverable.is_empty() {
         let _ = writeln!(
             io::stderr(),
-            "close-reason-policy: state=CLOSE_REASON_WORKER_UNRECOVERABLE count={} ids={}",
+            "close-reason-policy: state=CLOSE_REASON_WORKER_UNRECOVERABLE count={} ids={} -- already closed in HEAD, reported and never refused by this commit",
             report.legacy_unrecoverable.len(),
             report.legacy_unrecoverable.join(","),
         );
     }
     for violation in report.violations {
-        refusals.push(format!("close-reason-policy: {}", violation.reason));
+        refusals.push(format!("close-reason-policy: state=REFUSED {}", violation.reason));
     }
 }
 fn validate_staged_preregistration(repo_root: &Path, staged: &[String]) -> Result<(), String> {
