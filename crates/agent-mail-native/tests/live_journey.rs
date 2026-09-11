@@ -468,6 +468,7 @@ fn a_missing_credential_refuses_before_any_io() {
 }
 
 #[test]
+#[ignore = "requires the live Agent Mail daemon"]
 fn first_resume_from_origin_succeeds_for_recipient_with_later_first_event() {
     run(async {
         let cx = Cx::current().expect("runtime installs a Cx");
@@ -500,4 +501,81 @@ fn first_resume_from_origin_succeeds_for_recipient_with_later_first_event() {
             "K0_LIVE_ASSERTION_BROKEN: returned event did not advance past origin"
         );
     });
+}
+
+/// CENSUS — the leg that makes the `#[ignore]` classification honest instead of
+/// a mute. NOT `#[ignore]`d, deliberately: it must run in the sanctioned
+/// invocation.
+///
+/// `#[ignore]` converts a visible red into an invisible hole, and
+/// `--include-ignored` has ZERO callers in this repository, so the ignored set
+/// is otherwise unguarded — a sixth live leg could arrive with no red anywhere.
+/// That is exactly how `first_resume_from_origin_succeeds_for_recipient_with_later_first_event`
+/// shipped without the attribute its own module contract (`:3-9`) requires and
+/// broke `cargo test -p agent-mail-native` wherever no credential exists.
+///
+/// Two directions, because a one-directional census is half an instrument:
+/// a leg that reaches the daemon MUST be ignored, and a hermetic leg MUST NOT
+/// be — an ignored hermetic leg is a passing test nobody runs.
+#[test]
+fn every_live_leg_is_classified_and_the_live_set_is_pinned() {
+    const SOURCE: &str = include_str!("live_journey.rs");
+    // Built with `concat!` on purpose: a literal needle would appear in this
+    // function's own source and classify the census itself as a live leg.
+    const REACHES_DAEMON: [&str; 2] = [concat!("live_", "client()"), concat!("Endpoint::", "discover()")];
+    // Pinned BY NAME so a new live leg is a deliberate edit here, never a
+    // silent arrival.
+    const EXPECTED_LIVE: [&str; 5] = [
+        "daemon_health_is_ready_and_non_empty",
+        "tool_enumeration_is_non_empty_and_covers_the_journey",
+        "round_trip_send_read_ack_and_cursor_advances_without_replay_or_gap",
+        "daemon_and_cli_oracle_agree_on_the_tail",
+        "first_resume_from_origin_succeeds_for_recipient_with_later_first_event",
+    ];
+
+    let blocks: Vec<&str> = SOURCE.split("\n#[test]").skip(1).collect();
+    assert!(
+        blocks.len() >= EXPECTED_LIVE.len() + 1,
+        "census parsed {} #[test] blocks, fewer than the {} live legs it already knows about: \
+         the PARSER is broken, not the file — an empty or short scan must never read as a pass",
+        blocks.len(),
+        EXPECTED_LIVE.len()
+    );
+
+    let mut live = Vec::new();
+    for block in &blocks {
+        let name = block
+            .lines()
+            .find_map(|line| line.strip_prefix("fn "))
+            .and_then(|rest| rest.split('(').next())
+            .expect("every #[test] block must declare a top-level fn");
+        let attributes: String = block
+            .lines()
+            .take_while(|line| !line.starts_with("fn "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let ignored = attributes.contains("#[ignore");
+        let reaches_daemon = REACHES_DAEMON.iter().any(|needle| block.contains(needle));
+        if reaches_daemon {
+            live.push(name.to_owned());
+            assert!(
+                ignored,
+                "live leg `{name}` reaches the daemon but carries no #[ignore]: a default \
+                 `cargo test -p agent-mail-native` then fails wherever no Agent Mail credential \
+                 exists, which is every Contabo worker"
+            );
+        } else {
+            assert!(
+                !ignored,
+                "hermetic leg `{name}` is #[ignore]d: an ignored leg is not a passing leg, and \
+                 --include-ignored has zero callers in this repository"
+            );
+        }
+    }
+
+    assert_eq!(
+        live, EXPECTED_LIVE,
+        "the live-leg set changed. Pin it deliberately here — an unpinned set is how an \
+         unclassified live leg arrives silently"
+    );
 }
