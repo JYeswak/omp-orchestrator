@@ -84,12 +84,13 @@ fn main() {
         .unwrap_or_else(|error| panic!("cannot write {}: {error}", out.display()));
 }
 
+include!("src/revision_env.rs");
+
 fn provenance_value(name: &str, manifest_dir: &Path) -> String {
-    std::env::var(name)
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| git_head(manifest_dir))
+    let git = git_head(manifest_dir);
+    // Presence semantics live in revision_env (unit-pinned); this adapter only
+    // supplies the two sources in preference order.
+    clean_env_value(std::env::var(name).ok()).unwrap_or(git)
 }
 
 /// Resolve the build's source identity from checkout HEAD, with a deterministic fallback.

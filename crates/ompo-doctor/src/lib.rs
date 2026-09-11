@@ -21,6 +21,7 @@ use subprocess_contract::{bounded_output, BoundedOutcome};
 
 pub mod adapter_exec;
 pub mod health_repair;
+pub(crate) mod revision_env;
 pub mod liveness;
 pub mod omp_messages;
 pub mod omp_process;
