@@ -4315,6 +4315,145 @@ assumption nobody had noticed making.
 of something HEAD has never seen.** *"Can this instrument return the other answer"* — applied to
 the instrument built to ask that question.
 
+### ⛔ A COUNT IS SINGLE-VALUED WITH RESPECT TO "WHICH POPULATION IS LEFT"
+
+**Measured 2026-09-11, and the conductor ran the correct probe, got the answer, and narrated
+the opposite.** After a 41-file revert out of 81 dirty, the residue is ~40 **either way**:
+```
+"the 41 were reverted, 40 remain"     count ~40
+"the 40 were reverted, 41 remain"     count ~40      <- OPPOSITE FACT, SAME NUMBER
+```
+⭐ **THE DISCRIMINATOR IS POPULATION MEMBERSHIP, NOT CARDINALITY:**
+```
+of the dirty files, how many match a stash ref?   ->  0    (cohort reverted)
+                                                  ->  41   (cohort remained)
+```
+**The two-valued probe had already been run and returned `0`; the prose said the cohort
+remained.** The single strongest tell that the cohort was gone sat in the same output: a cohort
+member read `worktree == HEAD` with `ref` DIFFERENT — **had it remained dirty it would read
+`worktree == ref`.**
+
+**Ninth instance of the night's shape, and the first where the instrument was CORRECT and the
+NARRATION was single-valued.** Re-derive membership; never track a number.
+
+### ⛔⛔ A BYTE-IDENTICAL RESTORE IS NOT A NO-OP TO ANY MTIME-BASED INSTRUMENT
+
+**Reverting 41 files touched four under `HOOK_SOURCE_CRATES`, and RESTORING A FILE UPDATES ITS
+MTIME EVEN WHEN THE BYTES GO BACK TO HEAD.** `state-wildcard-lint/src/main.rs` jumped to
+`00:32:06` against a hook at `00:11:50` and refused the next commit. ⭐ **THE REPAIR OF THE
+DIVERGENCE TRIPPED THE GATE THE DIVERGENCE CAUSED.**
+
+⭐ **AND IT IS THE `cp -p` TRAUMA FROM THE OPPOSITE DIRECTION.** There, PRESERVING the
+pre-mutation mtime made cargo reuse a mutant rlib and a byte-correct restore tested RED. Here,
+ADVANCING the mtime re-armed a freshness gate on a byte-correct restore. **Same fact, two
+signs:**
+```
+cp -p          mtime too OLD   -> stale artifact reused, restore looks BROKEN
+any restore    mtime too NEW   -> freshness gate re-arms, commit REFUSED
+```
+**MTIME IS A SIDE CHANNEL, AND ANY REPAIR THAT TOUCHES FILES PERTURBS EVERY INSTRUMENT READING
+IT — INCLUDING THE INSTRUMENTS THE REPAIR EXISTS TO HELP.** Anyone cleaning those five crates
+will block the fleet's commits while doing it; that is expected, transient, and must be
+announced rather than discovered.
+
+### ⭐ THE REVERT ROUTE WHEN `dcg` REFUSES THE DESTRUCTIVE VERBS
+
+`dcg` refuses `git checkout -- <path>` (`core.git:checkout-ref-discard`) and
+`git restore` (`core.git:restore-worktree`). **The sanctioned route uses no destructive git verb
+at all:**
+```
+git cat-file blob HEAD:<path>   ->  write those bytes to <path> with an ordinary file write
+```
+⭐ **Reading a blob and writing a file is not a git mutation** — it needs no policy exception
+and is auditable line by line. **And re-derive the target list immediately before writing rather
+than trusting an earlier enumeration**; that is what makes a 41-file revert safe.
+
+### ⛔⛔ THE ARTIFACT WHOSE ONLY JOB IS MAKING DELETION DETECTABLE CANNOT DETECT ITS OWN DELETION
+
+**`docs/gate-roster.txt:4` states its purpose: *"Its ONLY job is to make DELETION
+detectable."* Measured 2026-09-11:**
+```
+roster PRESENT and agreeing    2 LEDGER_DRIFT lines    Remote command finished: exit=0
+roster ABSENT                 91 LEDGER_DRIFT lines    Remote command finished: exit=0
+typed diagnosis naming the absent roster:  ZERO
+```
+⭐ ***"Rosters agree"* and *"there is no roster"* ARE THE SAME EXIT CODE.** Mechanism is one
+line — `gate-runner/src/main.rs:175` `.unwrap_or_default()` **coerces a read ERROR into the
+EMPTY SET.**
+
+⛔ **AND THE CORRECT GUARD ALREADY EXISTS SEVEN LINES AWAY, IN THE SAME FUNCTION, FOR THE OTHER
+INPUT:** `main.rs:203-209`, `roster.is_empty()` → `EXIT_EMPTY_ROSTER`, *"an empty gate set is an
+ERROR, never a pass."* **Applied to the DERIVED set and not to the FILE.** This file's
+anti-vacuity rule, implemented correctly for one input and missing for its sibling. Filed as
+`eov8a`, deliberately NOT fixed in the commit that owned the roster's CONTENTS — **contents and
+the detector's CONTRACT are different beads.**
+
+### ⛔ AN INSTRUMENT THAT NEVER RAN, CAUGHT ON THE WALL CLOCK
+
+**The first attempt at that control returned *"0 drift lines, 1 typed refusal"* — the OPPOSITE
+conclusion — in 0.21 SECONDS with NO `Remote command finished` line.** `rch` had refused, and
+the greps were matching **its** refusal text rather than `gate-runner`'s.
+⭐ **A refused build EXITS 0, so the MISSING SECOND PROOF LINE is the only tell — and 0.21s for
+a remote cargo run is the smell that prompted the check.** Tenth instance of the night's shape
+and **the first where the instrument was not WRONG but ABSENT.**
+
+### ⭐ A CLAIM THAT COMPILES NOTHING DOES NOT INHERIT THE COMPILE-CLOSURE TIER
+
+**The ladder governs claims that depend on BUILDING.** A committed artifact's CONTENTS can be
+verified by set comparison in a fresh clone, compiling nothing — so **it is exempt BY KIND, not
+by tier.** `gate-runner`'s closure is dirty, so every *measurement* of it is bracketed-dirty;
+the *roster-contents* claim is still absolute. **State the exemption or someone will demote a
+claim that never needed the rung.**
+
+### ⭐ THREE ROADS TO THE TOP RUNG — and only two are reachable on demand
+
+```
+LUCK          poumg.5                     its closure was clean because the stash missed it
+REPAIR        kernel-only-operator-hook   the cohort revert cleared its one drifting input
+CONSTRUCTION  jlb                         measured in a FRESH CLONE, whose drift set CANNOT be
+                                          non-empty -- four seconds' work, available all night
+```
+⭐ **Only REPAIR and CONSTRUCTION are reachable on demand, and ONLY REPAIR ALSO MAKES
+*COMPILATION* ABSOLUTES AVAILABLE** — because under CONTABO-OR-BUST **a clone can never
+compile**. Before the revert, whether a compilation absolute was available to you depended on
+whether an eight-day-old stash happened to miss your crate.
+
+⛔ **AND THE REPAIR DID NOT LIFT EVERY DEMOTION — measured by the agent who went looking for its
+own upgrade and reported that it was NOT available.** `-p omp-orchestrator` stays bottom-rung:
+four `crates/omp-orchestrator/src/*.rs` files are live agent work in the 09-05+ population, not
+cohort. ⭐ **And `omp-orchestrator` sits in the closure of 16+ crates via `no-shell-gate`, so it
+is the `claim_strength.rs` shape one crate up — the highest-leverage remaining file set.**
+
+### ⛔⛔ "plain `cp` + `touch`, NEVER `cp -p`" IS NOT A UNIVERSAL RESTORE RULE
+
+**It is the correct rule for ONE instrument and the WRONG one for another, and it was published
+as universal. Fifteen restores happened under it in one night.**
+```
+cargo's stale-rlib trap   `cp -p` PRESERVES the old mtime -> cargo reuses the MUTANT rlib and a
+                          byte-identical restore tests RED.      REMEDY: ADVANCE the mtime.
+hook_freshness            ADVANCING the mtime RE-ARMS the gate and refuses the next commit.
+                          REMEDY WOULD BE: PRESERVE the mtime.
+```
+**Same shape as Rule 6's polarity and `8h`'s staged blindness: a rule derived against one
+instrument, stated without naming which.**
+
+⭐ **THE TWO ARE NOT SYMMETRIC, AND THE ASYMMETRY RESOLVES IT:**
+```
+wrong mtime for cargo   -> a FALSE RED. A WRONG MEASUREMENT, which propagates into a grade.
+wrong mtime for the gate-> a REFUSED COMMIT. A delay, LOUDLY REPORTED, stopping at the person
+                           who sees it, clearable with an 8-second stability probe.
+```
+**SO: ALWAYS ADVANCE — and IF YOUR RESTORE TOUCHED A `HOOK_SOURCE_CRATES` FILE, ANNOUNCE THAT
+YOU JUST RE-ARMED THE FRESHNESS GATE.** A false measurement travels; a blocked commit does not.
+
+⭐ **AND THE CLOSURE CHECKER SHOULD SAY SO EVEN THOUGH MTIME IS NOT A CLOSURE MEMBER.** mtime is
+not an input to compilation and does not belong in the hash set — **but it IS an input to two
+instruments the checker's users depend on.** ⛔ **A report reading `DRIFT=0` while the reader's
+next commit is refused by a gate their own restore armed is technically correct and practically
+confusing.** One line in the emission — *"N restored files are under `HOOK_SOURCE_CRATES`; the
+freshness gate is now armed"* — costs nothing and closes the loop between a repair and the
+instrument it perturbs.
+
 ⛔ **AND EVEN A PURE PERMUTATION IS ONLY PRESUMPTIVELY INERT.** `match` arm order, statements
 with side effects, `macro_rules!` definition order, overlapping trait impls, and item order read
 by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
