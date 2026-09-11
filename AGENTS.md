@@ -4884,6 +4884,67 @@ UNEXAMINED a consumer we never opened           -- refutable by ONE grep, skippe
 source>` costs one command; a five-peer broadcast of a refuted premise costs an hour of peer
 work built on top of it.**
 
+## ⛔⛔ A TRUE RED HAS **TWO** CHEAP FAKE FIXES — WEAKEN THE ASSERTION, OR FALSELY SATISFY THE SUBJECT
+
+**The conductor guarded one and dispatched the other, in the same sentence.** The packet read:
+*"give it a real reachable trigger and `every_wave_output_has_a_reachable_census_trigger`
+becomes 11/11 TRUE rather than asserted"* — **immediately after** *"do NOT weaken the
+assertion."*
+
+⛔ **The census recognises five trigger classes** (manifest caller · `.git/hooks/pre-commit` ·
+`[package.metadata.gate]` · workflow entry · scheduler row). ⭐ **Four of them would flip the
+row GREEN TODAY while the hook stays unwired — a `[package.metadata.gate]` stanza is FOUR
+LINES.** That is a **TRIGGER OF CONVENIENCE**: it makes the assertion pass without making the
+claim true. ⭐⭐ **`uldvu`'s own defect arriving from the OPPOSITE SIDE — and it is the CHEAPER
+of the two to reach for, which is why guarding only the assertion is half a guard.**
+```
+weaken the ASSERTION   -> the oracle can no longer report the defect   (guarded, loudly)
+satisfy the SUBJECT    -> the oracle reports truthfully about a lie    (unguarded, 4 lines)
+```
+
+**RULED: the red STAYS.** ⭐ **`kernel-only-operator-hook` really is BUILT-NOT-WIRED, so the
+assertion is TELLING THE TRUTH — a red that correctly reports an unwired crate is not a defect
+to clear, it IS the finding.** The admissible resolution is the one already written above: a
+**NAMED, DECLARED `Unreachable` row citing its blocker** — never a stanza, never a deletion.
+
+⛔ **AND THE BLOCKER IS REAL AND STRUCTURAL: the built hook DENIES `tmux send-keys`, which is
+the only working codex-pane dispatch path** (`ntm --robot-send` refuses codex panes with *"cod
+composer not visible"*). **Enabling it today leaves NO codex dispatch at all — the bead
+predicted this verbatim: *"or the hook blocks real work and gets disabled wholesale."*** Also
+measured: **`hooks_certified.toml` DOES NOT EXIST** — the registry its acceptance names as the
+gate is absent, not empty.
+
+⭐ **THE DISPATCHER'S RULE: when you forbid one fake fix, enumerate the others.** A packet that
+names one hazard licenses every hazard it did not name, and the unnamed one is always cheaper.
+
+## ⛔⛔ THE VERDICT WORD IS A FIELD TOO — a fix can make the FIELD honest and leave the HEADLINE lying
+
+**Measured 2026-09-11 in the live reaper log, 60 occurrences:**
+```
+prune-cron PASS mode=apply decision=unknown_fail_closed outcome=apply_error candidates=16
+prune apply: tier=unknown target_candidates=16 candidate=37.5GB reclaimable=unknownGB
+             applied=0.0GB outcome=apply_error
+```
+⭐ **The bead reported this path printing `outcome=reclaimed`. It no longer does — that half
+WAS fixed.** ⛔ **The success token simply MOVED: `outcome=` became honest and the line still
+OPENS with `PASS`.** A fail-closed apply error, **37.5 GB of candidates and 0.0 GB applied**, is
+reported hourly as a pass.
+
+⭐ **A grep for the OLD dishonest token returns zero and reads as REPAIRED.** The defect
+survived its own fix by relocating one field to the left — **and the field it moved into is the
+one every reader scans first.** Outcome census over the live log: `apply_error 60 ·
+no_target_candidates 34 · not_attempted 30 · reclaimed 23 · partial_reclaim 2`, so **the reaper
+is NOT inert — it is erroring while passing**, which is strictly worse than silent.
+
+⛔ **AND IT INVALIDATES AN ACCEPTANCE WHOSE ASSERTION IS CORRECT.** The bead asks that
+`candidates=0` under the floor be an ERROR; the live shape is `candidates=16, applied=0.0GB,
+verdict PASS`. ⭐ **The rule that catches TODAY's defect is *"a non-`reclaimed` outcome may not
+be reported as PASS"* — the mechanism was right and the SUBJECT MOVED**, which is the third
+instance of that shape in one session.
+
+**WHEN AUDITING A "FIXED" HONESTY DEFECT, DIFF THE WHOLE LINE, NOT THE FIELD THE BEAD NAMES.**
+A token census keyed on the old spelling cannot see a token that changed position.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
