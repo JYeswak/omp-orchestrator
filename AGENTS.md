@@ -4046,6 +4046,133 @@ UNMEASURABLE AT HEAD BY ANYONE — including whoever tries to attribute its CI `
 MUTATION GIVES YOU — DEPENDENCY, NOT PROVENANCE. TOGETHER THEY ARE STRICTLY STRONGER THAN
 EITHER**, and unlike CI they are available immediately.
 
+### ⭐⭐ STEP 1 IS NOT PASS/FAIL — IT TELLS YOU **WHICH CLAIMS YOUR MEASUREMENT CAN CARRY**
+
+**`GradePoumgFamily`'s ladder, and it is what three agents' independent concessions converge
+on.** The drift set is the peer-owned files inside your compilation closure:
+
+```
+drift set EMPTY                      -> ABSOLUTE claims available ("this crate passes at HEAD")
+drift set NON-EMPTY but BRACKETED    -> DIFFERENTIALS available; absolutes NOT
+drift set NON-EMPTY and UNBRACKETED  -> RESOLUTION-STABILITY ONLY
+```
+
+⭐ **A CLEAN CLOSURE IS STRICTLY BETTER THAN A BRACKETED DIRTY ONE. Bracketing DETECTS that your
+closure moved; emptiness means it CANNOT.** `poumg.5` is the specimen: its 8-input closure was
+observed clean at three points spanning the whole grade, **so the common-mode assumption nobody
+states does not merely hold — it does not arise.**
+
+⛔ **A MULTI-ARM DIFFERENTIAL SILENTLY ASSUMES A CONSTANT CLOSURE, AND IN A SINGLE CHECKOUT WITH
+LIVE PEERS THAT IS PRECISELY THE ASSUMPTION NOBODY STATES.** Verifying a file is PRESENT and
+DRIFTING is not verifying it is CONSTANT. One mid-sequence write by its owner and your red and
+your green are measurements of **two different closures** — at which point you do not have a
+differential, **you have two runs.** It cannot be fixed retroactively, so:
+
+**RULE 5 EXTENSION (binding): SHA THE SUBJECT BEFORE AND AFTER EVERY RUN, *AND* SHA EVERY
+DRIFTING FILE IN THE CLOSURE ACROSS THE WHOLE ARM SEQUENCE.** The subject bracket catches a peer
+planting in YOUR file; **it does nothing about a peer editing a file your compilation READS.**
+Equal across the sequence → common-mode held and the word is earned. Unequal → **the
+differential is RETRACTED, not weakened.**
+
+⛔ **AND CLEAN-AT-t1 PLUS CLEAN-AT-t3 IS NOT CLEAN-THROUGHOUT** — a file can be edited and
+reverted between observations. Three observations against a fixed blob is a strong **BOUND**,
+never a **PROOF**.
+
+⛔ **`[dependencies]` VS `[dev-dependencies]` IS THE POLARITY THAT DECIDES THE CLOSURE, AND A
+GREP CANNOT SETTLE IT.** A path edge under `[dependencies]` of a dependency IS in your
+compilation unit; that dependency's `[dev-dependencies]` are NOT. Measured: `omp-types` reaches
+`kernel-only-operator-hook` through `lifecycle-event`'s `[dependencies]` and **is** in the unit;
+`text-structure` enters only through `subprocess-contract`'s `[dev-dependencies]` and **is not**.
+⭐ **A symbol-absence grep is about what your code NAMES, not what your compilation READS — and a
+`pub use` re-export moves a symbol between files without changing any count.** Walk the
+manifests transitively; do not grep.
+
+⛔ **THE MOST INVISIBLE MEMBER OF THE INPUT SET NOW HAS A MEASURED SPECIMEN: a dirty `build.rs`
+is COMPILED AND EXECUTED, so it changes generated code while appearing in NO source diff of the
+crate under test.** `tick-monitor/build.rs` (6/2, uncommitted) sits in `agent-mail-native`'s
+closure. **An input set of `src/**` plus manifests omits it entirely.**
+
+⭐ **AND THE GENERAL FORM OF THE CLOSED-GUARD DEFECT, which is the same shape one level up
+(`GradeCatch22`, refuting itself with its own earlier data): A CONTROL THAT WATCHES THE COARSER
+OF TWO OUTPUTS IS SINGLE-VALUED WITH RESPECT TO THE FINER ONE.** The guard emits a
+classification ROW and a leg VERDICT; every existing leg watched only the verdict, which cannot
+move because a closed guard yields a clean skip. **The row is two-valued and nobody was reading
+it.**
+
+### ⛔ FOUR DIFF INSTRUMENTS, EACH A FALSE-CLEAN FOR THE NEXT QUESTION OUT
+
+**Measured across one night, and the conductor reached for the loosest and reported its answer
+as the strictest one's.**
+
+```
+git diff              worktree vs INDEX     blind to the STAGED half   (a peer's `git add` vanishes)
+git diff --cached     INDEX vs HEAD         blind to the UNSTAGED half (the compensating edit vanishes)
+git diff -w           collapses whitespace  BLIND TO POSITION -- a MOVED identical line survives it
+strip-space + sort    collapses both        blind to POSITION *and* INDENTATION
+git diff HEAD         worktree vs HEAD      sees staged + unstaged. Use this one for "is it dirty".
+`sort` compare        line MULTISET         the true pure-permutation test
+```
+
+⭐ **"SURVIVES `-w`" DOES NOT IMPLY "DIFFERS IN CONTENT".** Proven with `cat -A`: an odd
+`-use asupersync::Cx;` / `+use asupersync::Cx;` pair was **byte-identical on both sides, `$`
+terminator included** — a line that MOVED past its neighbour. `-w` cannot collapse it because the
+difference is **POSITION, not whitespace**. A hypothesis of "invisible character or line-ending"
+was refuted by demanding the bytes; **asking for `cat -A` cost nothing and settled it.**
+
+**THE THREE-WAY SPLIT OF AN 81-FILE DIRTY SET, both instruments run over the same population:**
+```
+SUBSTANTIVE         76   real content differences
+REORDER + REINDENT  19   same lines modulo indentation -- SOME lines changed (leading whitespace)
+PURE PERMUTATION     5   `sort`-identical: no line added, removed or edited
+```
+**Two agents measured 5 and 24 and both were right** — the strict test asks *"was any line
+EDITED"*, the lenient one accepts reorder-plus-reindent. **Reporting the lenient number as the
+strict one's overstated a class as behaviourally inert.**
+
+⛔⛔ **AND THE RECONCILIATION IS SHARPER THAN A TWO-WAY SPLIT: THREE AGENTS PRODUCED THREE
+DENOMINATORS FOR ONE POPULATION AND ALL THREE WERE DEFENSIBLE — BECAUSE THE BUCKETS OVERLAP.**
+```
+dirty tracked files                         83    <- not 81
+  unreadable (staged deletions)              2    contabo-reclaim/src/{model,probe}.rs
+  whitespace-only (`-w` clears entirely)     3
+  PURE PERMUTATION (sorted-multiset equal)   4
+  CONTENT-DIFFERING                         74
+                          3 + 4 + 74 + 2 =  83
+```
+**`admission-reason/tests/planted_known_bads.rs` is BOTH `-w`-clean AND sorted-identical
+(numstat 1/1).** One agent counted it a permutation; another tested `-w` first and filed it
+whitespace-only. ⭐ **SAME FILE, SAME DATA, DIFFERENT BUCKET — a PRECEDENCE artifact, not a
+disagreement.** That is why 4 ≠ 5.
+
+⭐ **SO THE DENOMINATOR RULE GAINS A CLAUSE: IT IS NOT ENOUGH TO NAME THE FILTER, YOU MUST NAME
+THE ORDER THE FILTERS ARE APPLIED IN.** Two honest agents running identical predicates over
+identical data produce different counts if their precedence differs, and neither is wrong.
+
+⛔ **AND THE POPULATION IS LIVE — 83, NOT 81. Two files went dirty WHILE WE WERE EACH
+MEASURING.** Every figure in this section is a snapshot of a moving set, **including the one
+being written as it is written.** ⭐ **A census of a shared checkout MUST carry a timestamp AND a
+commit, and MUST be re-derived at close** — a fixed number in a bead body is false within the
+hour by the same mechanism that makes a transcribed claim status stale on arrival.
+
+⛔ **AND EVEN A PURE PERMUTATION IS ONLY PRESUMPTIVELY INERT.** `match` arm order, statements
+with side effects, `macro_rules!` definition order, overlapping trait impls, and item order read
+by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
+CONTENT-DIFF purposes" is not "safe to ignore for COMPILATION."**
+
+### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
+
+**Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
+had already settled between themselves; a phantom slot 4 in a queue, holding a peer for work that
+would never come; a contention table naming a plant restored fifteen minutes earlier; a GO
+published on `746a535` landing a file it never touched; and `rluzf` broadcast as *"unclaimed"*
+while `br show` read `in_progress · pane=%33`.
+
+⭐ **THE LAST ONE WAS CAUGHT BY THE RECEIVER, NOT THE SENDER:** it ran `br show` before touching
+a file and stopped, **avoiding a two-agent collision on an 81-file P0.** ⛔ **`br show` costs one
+command. A dispatch naming a holder, a queue slot, a free file, or an unclaimed bead MUST
+re-derive it at send time** — this file's own transcribed-value rule, aimed at the dispatcher.
+
+
 **`poumg.5` is the specimen that proves the pair is needed:** `7b3f78d` added
 `use text_structure::code_and_literals` and **never added the dep**, so it compiled at neither
 its own tree nor HEAD — **while every local AND remote run was green off a peer's UNCOMMITTED
