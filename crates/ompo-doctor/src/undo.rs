@@ -343,9 +343,20 @@ pub fn dispatch(command: &str, rest: &[String]) -> Option<u8> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::process::Command;
+    use std::time::Duration;
+    use subprocess_contract::{bounded_output, BoundedOutcome};
 
     /// A repo with control files, an initialised artifact, and therefore one backup after a
     /// divergence is planted.
+    ///
+    /// f3maq: the fixture must carry a REAL git repo with a HEAD COMMIT. This module was never
+    /// compiled, so these five legs had never run, and every one of them failed on first build
+    /// with `IdentityUnavailable { field: "source_revision" }` — `inception::initialize` shells
+    /// `git rev-parse HEAD`, which exits 128 in a directory with no commit. That is the ig4fn
+    /// class ("an empty `.git/` satisfies neither"), and the sibling fixtures in
+    /// `tests/umbrella_adapter_dispatch.rs` and `ompo-start/tests/l2_ecosystem.rs` already
+    /// init-add-commit for exactly this reason.
     fn fixture() -> tempfile::TempDir {
         let directory = tempfile::tempdir().expect("fixture");
         for relative in inception::required_control_files() {
@@ -355,7 +366,43 @@ mod tests {
             }
             fs::write(path, "fixture\n").expect("control file");
         }
+        // The SECOND reason these legs had never passed: `initialize` refuses an unstamped
+        // AGENTS.md (`UntrustedAgentsMd`), which is the ownership guard working. The fixture
+        // must carry the canonical stamp, exactly as `l2_ecosystem.rs` does — the alternative,
+        // `initialize_trusted`, would test a DIFFERENT entry point than production uses.
+        fs::write(
+            directory.path().join("AGENTS.md"),
+            format!("fixture {}\n", inception::PROJECT_AGENTS_OWNERSHIP_STAMP),
+        )
+        .expect("stamped AGENTS.md");
+        git_fixture(directory.path());
         directory
+    }
+
+    /// `git init` plus ONE commit, so `git rev-parse HEAD` resolves. Bounded like every other
+    /// subprocess in this crate; a hang here would look like a slow test rather than a fixture
+    /// defect.
+    fn git_fixture(repo: &Path) {
+        for args in [
+            vec!["init", "-q"],
+            vec!["add", "."],
+            vec![
+                "-c",
+                "user.name=ompo-doctor-test",
+                "-c",
+                "user.email=ompo-doctor-test@example.invalid",
+                "commit",
+                "-qm",
+                "fixture",
+            ],
+        ] {
+            let mut command = Command::new("git");
+            command.args(&args).current_dir(repo);
+            match bounded_output(&mut command, Duration::from_secs(10)) {
+                BoundedOutcome::Completed(output) if output.status.success() => {}
+                other => panic!("git fixture {args:?} failed: {other:?}"),
+            }
+        }
     }
 
     /// Initialise, then plant a divergence so a backup exists and the artifact differs.

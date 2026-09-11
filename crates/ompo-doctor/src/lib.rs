@@ -33,6 +33,14 @@ pub mod provenance;
 pub mod selfdoc;
 pub mod state_triad;
 pub mod umbrella;
+// f3maq: `undo.rs` was TRACKED AT HEAD with ten test functions and NO module
+// declaration anywhere in the crate, so it was never compiled and its tests
+// have never run — a vacuous green produced by an absent declaration rather
+// than an absent test. An undeclared `.rs` in `src/` is simply not built, so
+// the crate compiled and nothing complained. Declaring it is what makes those
+// ten legs real; wiring the `undo` VERB is a separate, still-open edge,
+// because the verb table and `umbrella::VERBS` both live in files peers hold.
+pub mod undo;
 pub mod upstream_report;
 
 pub const ARTIFACT_REFERENCE: &str = ".omp-orchestrator/doctor/report.json";
