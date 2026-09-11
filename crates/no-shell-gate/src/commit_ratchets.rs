@@ -40,6 +40,7 @@ pub fn run(repo_root: &Path, staged: &[String], deletions: &[String]) -> CommitR
     plan_citations(repo_root, staged, &mut report);
     census_membership(repo_root, staged, &mut report);
     hook_freshness(repo_root, staged, &mut report);
+    omp_drift(repo_root, staged, &mut report);
     let _ = deletions;
     report
 }
@@ -189,7 +190,20 @@ fn hook_freshness(repo_root: &Path, staged: &[String], report: &mut CommitRatche
 
     let current = match hook_digest::hook_source_manifest(repo_root) {
         Ok(manifest) => manifest,
-        // ANTI-VACUITY: an unreadable or empty covered set is an ERROR. A gate that cannot read
+        // A FOREIGN TREE IS NOT A REFUSAL. Every integration leg that exercises the real hook
+        // builds a synthetic git repo with no covered crates in it, so refusing there rejects a
+        // commit whose freshness is not even a question -- measured in CI 2026-09-11 as twelve
+        // red legs printing `empty_staged: CLEAN` beside exit 1.
+        Err(hook_digest::DigestError::NoCoveredCratesPresent) => {
+            report.observations.push(
+                "hook_freshness: GATE_NOT_APPLICABLE -- no declared hook source crate exists in \
+                 this tree, so there is no hook source for the installed hook to be stale against"
+                    .to_owned(),
+            );
+            return;
+        }
+        // ANTI-VACUITY, still binding for the cases that ARE about this repo: crates present with
+        // no sources under them, or a covered file that cannot be read. A gate that cannot read
         // its own inputs must refuse rather than report a freshness it never measured.
         Err(error) => {
             report
@@ -241,6 +255,199 @@ fn hook_freshness(repo_root: &Path, staged: &[String], report: &mut CommitRatche
             hook.display(),
             diff.summary()
         )),
+    }
+}
+/// OMP version drift at commit time (bead: omp-orchestrator-oqbeb). OMP ships
+/// almost daily, so version-bound claims rot routinely -- but a DRIFT refusal
+/// on every commit would re-create the zzg2x fleet block: every unrelated
+/// commit would wait on a re-census, which trains `--no-verify`. So DRIFT is
+/// an OBSERVATION, always. The ONE refusal is scoped to the satisfiable
+/// surface: landing a census artifact that disagrees with the box it was
+/// measured on -- the committer owns that file and the remedy (re-run the
+/// census) is seconds away.
+fn omp_drift(repo_root: &Path, staged: &[String], report: &mut CommitRatchetReport) {
+    let installed = probe_installed_omp();
+    let census = match omp_inventory_map::version_drift::latest_census_artifact(repo_root) {
+        omp_inventory_map::version_drift::CensusSearch::Found(path) => {
+            match std::fs::read(&path) {
+                Ok(bytes) => {
+                    match omp_inventory_map::version_drift::census_version_from_bytes(&bytes) {
+                        Ok(version) => Some(version),
+                        Err(reason) => {
+                            report.observations.push(format!(
+                                "omp_drift: UNKNOWN reason={} detail=newest census unreadable",
+                                reason.reason()
+                            ));
+                            None
+                        }
+                    }
+                }
+                Err(error) => {
+                    report.observations.push(format!(
+                        "omp_drift: UNKNOWN reason=census_unreadable:read:{error}"
+                    ));
+                    None
+                }
+            }
+        }
+        omp_inventory_map::version_drift::CensusSearch::LegacyOnly => {
+            report.observations.push(
+                "omp_drift: UNKNOWN reason=legacy_compressed_census \
+                 detail=re-census to land parseable .json"
+                    .to_owned(),
+            );
+            None
+        }
+        omp_inventory_map::version_drift::CensusSearch::None => {
+            report.observations.push(
+                "omp_drift: UNKNOWN reason=no_census_artifact detail=no census to compare against"
+                    .to_owned(),
+            );
+            None
+        }
+    };
+    let staged_census = staged_census_version(repo_root, staged, report);
+    match drift_commit_decision(
+        installed.as_deref(),
+        census.as_deref(),
+        staged_census.as_deref(),
+    ) {
+        DriftCommitDecision::Clean { version } => report.observations.push(format!(
+            "omp_drift: CLEAN installed={version} census={version}"
+        )),
+        DriftCommitDecision::StaleObserved { installed, census } => {
+            report.observations.push(format!(
+                "omp_drift: STALE installed={installed} census={census} \
+                 detail=version-bound claims cite the older tree; not this commit's blocker. \
+                 Remedy: `omp-surface-align drift --repo {}` then re-census and refresh the claims",
+                repo_root.display()
+            ));
+        }
+        DriftCommitDecision::LandingFresh { version } => report.observations.push(format!(
+            "omp_drift: CLEAN landing_fresh_census={version} detail=this commit IS the remedy"
+        )),
+        DriftCommitDecision::StaleLandingRefused { staged, installed } => {
+            report.refusals.push(format!(
+                "omp_drift: REFUSED reason=STALE_CENSUS_LANDING staged={staged} installed={installed} \
+                 detail=a census measured on another tree is unreproducible here; re-run the census \
+                 on this box before landing it"
+            ));
+        }
+        DriftCommitDecision::UnknownObserved { reason } => report
+            .observations
+            .push(format!("omp_drift: UNKNOWN reason={reason}")),
+    }
+}
+
+/// The commit-time drift DECISION, separated from probing and reporting so a
+/// mutation to the policy is attributable to a leg rather than a message.
+#[derive(Debug, PartialEq, Eq)]
+enum DriftCommitDecision {
+    /// Installed and census agree; nothing staged changes that.
+    Clean { version: String },
+    /// Drifted, but this commit stages no census: observed, never refused
+    /// (zzg2x -- refusing unrelated commits on a daily upstream event is the
+    /// fleet-blocking form).
+    StaleObserved { installed: String, census: String },
+    /// This commit lands a census matching the box: the remedy itself, which
+    /// must NEVER be refused (refusing the fix is the cruelest red).
+    LandingFresh { version: String },
+    /// This commit lands a census disagreeing with the box: refused. The
+    /// committer owns the staged file, so the refusal is satisfiable.
+    StaleLandingRefused { staged: String, installed: String },
+    /// Either side unestablished: observed, never refused. A gate that cannot
+    /// read its inputs refuses nothing.
+    UnknownObserved { reason: String },
+}
+
+/// Pure policy: installed version, repo census version, staged census version
+/// (already extracted from the staged blob, or `None` when this commit stages
+/// no census artifact).
+fn drift_commit_decision(
+    installed: Option<&str>,
+    census: Option<&str>,
+    staged_census: Option<&str>,
+) -> DriftCommitDecision {
+    use omp_inventory_map::version_drift::check_drift;
+    if let Some(staged) = staged_census {
+        return match check_drift(installed, Some(staged)) {
+            omp_inventory_map::version_drift::DriftVerdict::Current { version } => {
+                DriftCommitDecision::LandingFresh { version }
+            }
+            omp_inventory_map::version_drift::DriftVerdict::Drifted { installed, .. } => {
+                DriftCommitDecision::StaleLandingRefused {
+                    staged: staged.to_owned(),
+                    installed,
+                }
+            }
+            omp_inventory_map::version_drift::DriftVerdict::Unknown { reason } => {
+                DriftCommitDecision::UnknownObserved {
+                    reason: reason.reason(),
+                }
+            }
+        };
+    }
+    match check_drift(installed, census) {
+        omp_inventory_map::version_drift::DriftVerdict::Current { version } => {
+            DriftCommitDecision::Clean { version }
+        }
+        omp_inventory_map::version_drift::DriftVerdict::Drifted { installed, census } => {
+            DriftCommitDecision::StaleObserved { installed, census }
+        }
+        omp_inventory_map::version_drift::DriftVerdict::Unknown { reason } => {
+            DriftCommitDecision::UnknownObserved {
+                reason: reason.reason(),
+            }
+        }
+    }
+}
+
+/// Bounded `omp --version` probe. Failure is `None`, never a fabricated
+/// version: the decision maps `None` to UNKNOWN, not to CURRENT.
+fn probe_installed_omp() -> Option<String> {
+    let mut command = Command::new("omp");
+    command.args(["--version"]);
+    command.stdin(std::process::Stdio::null());
+    match bounded_output(&mut command, GIT_READ_DEADLINE) {
+        BoundedOutcome::Completed(output) if output.status.success() => {
+            omp_inventory_map::parse_omp_version(&String::from_utf8_lossy(&output.stdout)).value
+        }
+        _ => None,
+    }
+}
+
+/// Version carried by a census artifact this commit stages, read from the
+/// STAGED blob (the worktree may differ; the commit is what lands). Unreadable
+/// staged bytes are reported and treated as absent -- the landing is then
+/// judged on the repo census, and a garbage census file will fail on its own
+/// merits elsewhere.
+fn staged_census_version(
+    repo_root: &Path,
+    staged: &[String],
+    report: &mut CommitRatchetReport,
+) -> Option<String> {
+    let path = staged.iter().find(|p| {
+        p.starts_with(".flywheel/inventory-artifacts/omp-inventory-map-") && p.ends_with(".json")
+    })?;
+    match staged_blob(repo_root, path) {
+        Ok(bytes) => {
+            match omp_inventory_map::version_drift::census_version_from_bytes(&bytes) {
+                Ok(version) => Some(version),
+                Err(reason) => {
+                    report.observations.push(format!(
+                        "omp_drift: UNKNOWN reason={} detail=staged census unreadable",
+                        reason.reason()
+                    ));
+                    None
+                }
+            }
+        }
+        Err(error) => {
+            report.observations.push(format!(
+                "omp_drift: UNKNOWN reason=staged_census_unreadable detail={error}"
+            ));
+            None
+        }
     }
 }
 
@@ -697,6 +904,74 @@ mod tests {
             FreshnessVerdict::StaleUnscoped,
             "a peer's uncommitted gate edit must not refuse an unrelated commit -- refusing here \
              is unsatisfiable by the committer and blocked the whole fleet on 2026-09-11"
+        );
+    }
+    /// THE DRIFT DECISION TABLE. Row 2 is the zzg2x row: drift without a
+    /// staged census OBSERVES, because refusing it would block the fleet on a
+    /// daily upstream event. Row 3 is the satisfiable refusal. Row 4 is the
+    /// remedy-protection row: landing the fresh census must never refuse.
+    #[test]
+    fn drift_observes_unless_this_commit_lands_the_stale_census() {
+        assert_eq!(
+            drift_commit_decision(Some("omp/18.1.18"), Some("omp/18.1.18"), None),
+            DriftCommitDecision::Clean {
+                version: "18.1.18".to_owned()
+            }
+        );
+        assert_eq!(
+            drift_commit_decision(Some("omp/18.1.18"), Some("omp/18.0.11"), None),
+            DriftCommitDecision::StaleObserved {
+                installed: "18.1.18".to_owned(),
+                census: "18.0.11".to_owned(),
+            }
+        );
+        assert_eq!(
+            drift_commit_decision(
+                Some("omp/18.1.18"),
+                Some("omp/18.0.11"),
+                Some("omp/18.0.11")
+            ),
+            DriftCommitDecision::StaleLandingRefused {
+                staged: "omp/18.0.11".to_owned(),
+                installed: "18.1.18".to_owned(),
+            }
+        );
+        assert_eq!(
+            drift_commit_decision(
+                Some("omp/18.1.18"),
+                Some("omp/18.0.11"),
+                Some("omp/18.1.18")
+            ),
+            DriftCommitDecision::LandingFresh {
+                version: "18.1.18".to_owned()
+            }
+        );
+    }
+
+    /// ANTI-VACUITY for the arm: unknown sides observe with a reason, never
+    /// refuse and never pass as clean. A gate that cannot read its inputs
+    /// refuses nothing.
+    #[test]
+    fn drift_unknown_sides_observe_with_a_reason() {
+        assert_eq!(
+            drift_commit_decision(None, Some("omp/18.0.11"), None),
+            DriftCommitDecision::UnknownObserved {
+                reason: "installed_unknown:no usable installed version".to_owned()
+            }
+        );
+        assert_eq!(
+            drift_commit_decision(Some("omp/18.1.18"), None, None),
+            DriftCommitDecision::UnknownObserved {
+                reason: "census_version_absent".to_owned()
+            }
+        );
+        // A staged census with no readable installed side cannot prove the
+        // landing is stale: observe, do not refuse what cannot be shown.
+        assert_eq!(
+            drift_commit_decision(None, None, Some("omp/18.0.11")),
+            DriftCommitDecision::UnknownObserved {
+                reason: "installed_unknown:no usable installed version".to_owned()
+            }
         );
     }
 }

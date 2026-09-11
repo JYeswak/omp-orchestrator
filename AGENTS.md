@@ -1500,20 +1500,20 @@ NO-CLAIM: a manifest records the instrument's declared input coverage. FULL does
 
 Everything in this repo is built to drive OMP. Measured 2026-08-31 against the **installed** source
 at `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent` (v18.0.11, `dist/cli.js` 19 MB),
-the crates consume **none of it**. Not a thin subset, not a legacy subset — zero. Every `dist/…` path
-below is relative to that install root.
+and re-measured 2026-09-11 at v18.1.18, the crates consume **none of it**. Not a thin subset, not a
+legacy subset — zero. Every `dist/…` path below is relative to that install root.
 
 **Two columns, same day. Every number has the command that produces it:**
 
 | surface that exists | command that counts it | measured | we consume |
 |---|---|---|---|
-| CLI subcommands | `omp --help`, COMMANDS block | **39** | **0** |
-| type-surface directories under `dist/types` | `find dist/types -mindepth 1 -maxdepth 1 -type d \| wc -l` | **57** | **0** |
-| top-level declaration files beside them | `find dist/types -mindepth 1 -maxdepth 1 -name '*.d.ts' \| wc -l` | **14** | **0** |
+| CLI subcommands | `omp --help`, COMMANDS block | **39** (unchanged 18.0.11 → 18.1.18) | **0** |
+| type-surface directories under `dist/types` | `find dist/types -mindepth 1 -maxdepth 1 -type d \| wc -l` | **59** (was 57) | **0** |
+| top-level declaration files beside them | `find dist/types -mindepth 1 -maxdepth 1 -name '*.d.ts' \| wc -l` | **14** (unchanged) | **0** |
 | an RPC transport ships — `--mode=<text\|json\|rpc\|rpc-ui>` is a documented top-level flag | `omp --help \| grep -- --mode` | **1 flag, 4 modes** | **0** |
-| `omp/*` methods in the bundle | `grep -oE '"omp/[A-Za-z]+"' dist/cli.js \| sort -u` | **3** — `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer` | **0** |
+| `omp/*` methods in the bundle | `strings -a dist/cli.js \| grep -oE '"omp/[A-Za-z]+"' \| sort -u` | **3** — `omp/muxConnect`, `omp/muxPing`, `omp/muxRestartServer` (unchanged) | **0** |
 
-57 + 14 = **71 entries** under `dist/types`. Say it that way. An earlier pass published "71
+59 + 14 = **73 entries** under `dist/types` (was 57 + 14 = 71 at 18.0.11). Say it that way. An earlier pass published "71
 directories"; a worker independently measured 57 and the two disagreed. The reconciliation was that
 entries had been counted and called directories. **Neither number was fabricated — the noun attached
 to the count was wrong**, which is the same class as every other confident-wrong figure here. The
@@ -1521,6 +1521,14 @@ directories that *are* our lifecycle are named in that tree: `jsonrpc`, `tools`,
 `commands`, `session`, `task`, `goals`, `plan-mode`, `modes`, `subprocess`, `exec`, `dap`, `debug`,
 `capability`, `registry`, `extensibility`, `memories`, `mnemopi`, `memory-backend`, `irc`, `collab`,
 `live`, `eval`, `hindsight`, `autolearn`, `autoresearch`, `security`, `secrets`.
+
+**CORRECTION 2026-09-11 — `dist/cli.js` is no longer JavaScript.** At 18.1.18 it is a 135,659,152-byte
+Mach-O arm64 executable (`file` says so; `read_to_string` fails with invalid UTF-8). Every producing
+command above that grepped the bundle as text is dead at this version — the `omp/*` row now counts via
+`strings -a`, which returns the same 3 names. The census probe `omp_bundle_metadata` honestly reports
+`UNKNOWN` for this reason (see `.flywheel/inventory-artifacts/omp-inventory-map-2026-09-11.json`), and
+restoring a binary-capable probe is open follow-up, not part of this correction. The drift detector
+caught exactly this class of change on its first live run: installed 18.1.18 against the 18.0.11 census.
 
 **The zero is four greps over `crates/*/src/*`, each printed with the count it returned:**
 
@@ -1663,10 +1671,17 @@ profile-store route is not an endpoint and must return `UNKNOWN` when its candid
 validated as belonging to the profile. Revisit a mux only when a consumer requires remote
 subscriptions or control unavailable through the reader.
 
-This decision is version-bound to installed OMP 18.1.14 and the observed machine state; re-derive it
-after upgrades or profile changes.
-
-`omp-orchestrator-omp-surface-map-41b` owns turning this into the per-crate table.
+This decision is version-bound to installed OMP 18.1.18 (re-derived 2026-09-11; was 18.1.14) and the
+observed machine state; re-derive it after upgrades or profile changes. Route structure revalidated:
+`~/.omp/profiles/` carries live profiles with `agent/terminal-sessions/tmux-%N` entries, and the
+profile-root validation rule above is unchanged.
+**Drift has a detector now (2026-09-11, bead `oqbeb`).** `omp-surface-align drift --repo <path>`
+compares installed `omp --version` against the newest
+`.flywheel/inventory-artifacts/omp-inventory-map-*.json` census: exit 0 CURRENT, 2 DRIFTED, 3
+UNKNOWN (never a pass on unreadable inputs). The pre-commit gate carries the `omp_drift` arm: drift
+OBSERVES on every commit and REFUSES only a commit landing a census that disagrees with the box. A
+version-bound sentence in this file that outlives its version is the defect; run the detector before
+citing one.
 
 **NO-CLAIM.** "No crate calls OMP" is measured **for our crates only** — the four greps above scan
 `crates/*/src/*` in this repo and nothing else. **NTM may itself speak an OMP protocol beneath

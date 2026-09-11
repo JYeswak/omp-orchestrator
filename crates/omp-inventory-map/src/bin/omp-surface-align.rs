@@ -103,6 +103,9 @@ fn main() -> ExitCode {
         );
         return ExitCode::SUCCESS;
     }
+    if args.first().is_some_and(|first| first == "drift") {
+        return run_drift(args[1..].to_vec());
+    }
     let repo = flag(&args, "--repo").map_or_else(
         || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         PathBuf::from,
@@ -199,6 +202,44 @@ fn main() -> ExitCode {
             eprintln!("{error}");
             ExitCode::from(error.exit_code())
         }
+    }
+}
+
+/// `drift` subcommand: is the installed OMP newer than the last census?
+///
+/// Bead: omp-orchestrator-oqbeb. OMP ships almost daily, so version-bound
+/// claims rot routinely. This is the cheap detector: one probe plus one file
+/// read, no full census. Exit 0 = CURRENT, 2 = DRIFTED (content state, loud
+/// by design — a detector that exits 0 on drift is decoration), 3 = UNKNOWN
+/// (instrument incomplete; never a pass, never a refusal of the tree).
+fn run_drift(args: Vec<String>) -> ExitCode {
+    let repo = flag(&args, "--repo").map_or_else(
+        || std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        PathBuf::from,
+    );
+    let program = flag(&args, "--omp").map_or_else(|| PathBuf::from("omp"), PathBuf::from);
+    let installed = probe(&program, &["--version"])
+        .ok()
+        .and_then(|text| omp_inventory_map::parse_omp_version(&text).value);
+    let verdict = omp_inventory_map::version_drift::check_repo_drift(&repo, installed.as_deref());
+    println!("{}", omp_inventory_map::version_drift::render_verdict(&verdict));
+    if matches!(verdict, omp_inventory_map::version_drift::DriftVerdict::Drifted { .. }) {
+        eprintln!(
+            "OMP_DRIFT_REMEDY re-census with `omp-surface-align --repo {}` then refresh the \
+             version-bound claims (AGENTS.md route decision); file a bead if the surface moved",
+            repo.display()
+        );
+    }
+    ExitCode::from(drift_exit(&verdict))
+}
+
+/// Exit-code half of the drift decision, separated so tests pin the code
+/// alongside the message (rule 7: pinning either alone is defeasible).
+fn drift_exit(verdict: &omp_inventory_map::version_drift::DriftVerdict) -> u8 {
+    match verdict {
+        omp_inventory_map::version_drift::DriftVerdict::Current { .. } => EXIT_OK,
+        omp_inventory_map::version_drift::DriftVerdict::Drifted { .. } => EXIT_CONTENT,
+        omp_inventory_map::version_drift::DriftVerdict::Unknown { .. } => EXIT_INSTRUMENT,
     }
 }
 
@@ -675,5 +716,27 @@ mod tests {
         for code in [EXIT_CONTENT, EXIT_INSTRUMENT] {
             assert_ne!(code, 4, "4 is reserved for upstream-unreachable");
         }
+    }
+    /// Rule 7: the drift leg pins its MESSAGE and its CODE together. A leg
+    /// matching only the exit code goes green on any unrelated breakage that
+    /// exits 2; a leg matching only the line goes green on a rewording that
+    /// inverts the meaning.
+    #[test]
+    fn drift_pins_message_and_code_on_all_three_verdicts() {
+        use omp_inventory_map::version_drift::{check_drift, render_verdict, DriftVerdict};
+        let drifted = check_drift(Some("omp/18.1.18"), Some("omp/18.0.11"));
+        assert_eq!(
+            render_verdict(&drifted),
+            "OMP_DRIFT state=DRIFTED installed=18.1.18 census=18.0.11"
+        );
+        assert_eq!(drift_exit(&drifted), EXIT_CONTENT);
+        assert_eq!(drift_exit(&drifted), 2);
+        let current = check_drift(Some("omp/18.1.18"), Some("18.1.18"));
+        assert_eq!(render_verdict(&current), "OMP_DRIFT state=CURRENT version=18.1.18");
+        assert_eq!(drift_exit(&current), EXIT_OK);
+        let unknown = check_drift(None, Some("omp/18.0.11"));
+        assert!(render_verdict(&unknown).starts_with("OMP_DRIFT state=UNKNOWN reason="));
+        assert_eq!(drift_exit(&unknown), EXIT_INSTRUMENT);
+        assert!(matches!(unknown, DriftVerdict::Unknown { .. }));
     }
 }
