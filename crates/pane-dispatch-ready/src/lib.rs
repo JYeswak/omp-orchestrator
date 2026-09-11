@@ -566,20 +566,72 @@ pub fn rate_limit_refusal(is_rate_limited: bool, capture: &str) -> Option<String
         return None;
     }
     let lines: Vec<&str> = capture.lines().collect();
-    let last_limit = lines
-        .iter()
-        .rposition(|line| line.contains("usage limit"))?;
+    let Some(last_limit) = last_limit_line(&lines) else {
+        // ⛔ CLAUSE 4: A MISSING ANCHOR IS NOT AN ABSENT CONDITION. The typed field says
+        // rate-limited; if the text cannot be located we have LESS evidence, not more, and the
+        // safe reading of less evidence is refusal.
+        return Some(
+            "agent reports rate-limited and no limit line could be located in the capture -- \
+             refusing on the typed field alone rather than admitting on a failed text match"
+                .to_owned(),
+        );
+    };
     let content_after = lines[last_limit + 1..]
         .iter()
         .filter(|line| !is_composer_footer(line) && !is_limit_message_tail(line))
         .count();
-    if content_after > 0 {
+    if content_after >= SUBSTANTIVE_CONTENT_ROWS {
         return None;
     }
     Some(format!(
-        "agent reports rate-limited and nothing substantive is rendered after the limit line \
-         ({content_after} content row(s)) -- dispatch would park until reset"
+        "agent reports rate-limited and only {content_after} substantive row(s) follow the limit \
+         line (below the {SUBSTANTIVE_CONTENT_ROWS}-row recovery floor) -- dispatch would park until reset"
     ))
+}
+
+/// Rows of non-footer, non-limit-tail content that prove an agent resumed BELOW its limit line.
+///
+/// ⛔ A CHOICE, informed by three measured panes and no more. Observed: a pane dead for ~87 hours
+/// renders ONE such row (a `TODO 247/284` header), panes dead ~83 hours render ZERO, and the one
+/// working pane renders TEN. So 0 and 1 are both DEAD and 10 is ALIVE; any floor in 2..=10
+/// separates the observed population and nothing here distinguishes them.
+///
+/// ⭐ AND THE DIRECTION CHANGED WHEN THE %7 SPECIMEN ARRIVED. This started at `> 0`, optimised to
+/// never park a working agent. That was wrong once a DEAD pane was measured rendering one row:
+/// the asymmetry is not symmetric. Admitting a dead pane parks a packet for DAYS; refusing a live
+/// one costs idle capacity until the next tick, because the verdict is re-derived per tick and
+/// never cached. The floor is therefore set to FAIL CLOSED, and the earlier optimisation is
+/// superseded rather than quietly kept.
+pub const SUBSTANTIVE_CONTENT_ROWS: usize = 3;
+
+/// The LAST limit-phrase anchor, tolerant of a phrase broken across rows by a narrow pane.
+///
+/// Measured: a 19-column pane splits `ChatGPT usage limit` mid-phrase, so a line-based
+/// `contains("usage limit")` finds NOTHING on a pane that is dead for 87 hours -- a false
+/// NEGATIVE in the admitting direction. Whitespace runs are collapsed before matching because
+/// re-joining rows produces a DOUBLE space next to the existing trailing one.
+fn last_limit_line(lines: &[&str]) -> Option<usize> {
+    let mut flat = String::new();
+    let mut owner: Vec<usize> = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        for character in line.chars() {
+            if character.is_whitespace() {
+                if !flat.ends_with(' ') {
+                    flat.push(' ');
+                    owner.push(index);
+                }
+            } else {
+                flat.push(character);
+                owner.push(index);
+            }
+        }
+        if !flat.ends_with(' ') {
+            flat.push(' ');
+            owner.push(index);
+        }
+    }
+    let end = flat.rfind("usage limit")? + "usage limit".len();
+    owner.get(end.saturating_sub(1)).copied()
 }
 
 /// Blank, box-drawing-only, or the composer prompt line: paint, not work.
@@ -646,13 +698,28 @@ mod tests {
 ╰──
 ";
 
+    /// Captured live 2026-09-11 from pane %7 -- NINETEEN COLUMNS WIDE, so the limit phrase is
+    /// SPLIT MID-PHRASE across two rows. A line-based `contains("usage limit")` finds nothing
+    /// here, on a pane the typed verb reports dead for ~87 hours, and the single `TODO` header
+    /// below it is not recovery. This is the false NEGATIVE that defeats a text-only rule.
+    const DEAD_BUT_PHRASE_SPLIT: &str = "\
+  ChatGPT usage
+  limit (pro plan).
+  Try again in
+  ~5211 min.
+
+ TODO 247/284 · ☑ …
+ π  > ◒ GPT-5.6-Luna
+╰──
+";
+
     /// FIRES-ON-KNOWN-BAD: the live-limit pane is refused, and the reason names the evidence.
     #[test]
     fn a_rate_limited_pane_with_nothing_after_the_limit_line_is_refused() {
         let reason = rate_limit_refusal(true, DEAD_AFTER_LIMIT)
             .expect("a dead rate-limited pane must be refused");
         assert!(reason.contains("rate-limited"), "{reason}");
-        assert!(reason.contains("0 content row(s)"), "{reason}");
+        assert!(reason.contains("0 substantive row(s)"), "{reason}");
     }
 
     /// KNOWN-GOOD, AND THE ONE THAT MATTERS: the verb's own field says rate-limited, the pane is
@@ -673,13 +740,38 @@ mod tests {
     fn the_refusal_requires_the_typed_field_and_never_infers_it() {
         assert_eq!(rate_limit_refusal(false, DEAD_AFTER_LIMIT), None);
         assert_eq!(rate_limit_refusal(false, RECOVERED_AFTER_LIMIT), None);
+        assert_eq!(rate_limit_refusal(false, DEAD_BUT_PHRASE_SPLIT), None);
     }
 
-    /// ANTI-VACUITY: a capture with no limit line at all cannot be refused by this rule even
-    /// when the field is set, because the discriminator has nothing to anchor to.
+    /// CLAUSE 4, SCOPED: no typed field AND no limit line is a healthy pane, not a hidden one.
+    /// Refusing here would park a pane against which no evidence of any limit exists.
     #[test]
-    fn a_capture_with_no_limit_line_is_not_refused() {
-        assert_eq!(rate_limit_refusal(true, " π  > ◒ GPT-5.6-Luna\n╰──\n"), None);
+    fn no_field_and_no_limit_line_is_never_refused() {
+        assert_eq!(rate_limit_refusal(false, " π  > ◒ GPT-5.6-Luna\n╰──\n"), None);
+    }
+
+    /// ⛔ CLAUSE 4, THE OTHER HALF: field TRUE and no locatable limit line must REFUSE. A missing
+    /// anchor is not an absent condition -- it is less evidence, and the safe reading of less
+    /// evidence is refusal. Before this leg the rule admitted the deadest pane in the session.
+    #[test]
+    fn the_typed_field_with_no_locatable_limit_line_refuses() {
+        let reason = rate_limit_refusal(true, " π  > ◒ GPT-5.6-Luna\n╰──\n")
+            .expect("a typed limit with no anchor must refuse, never admit");
+        assert!(reason.contains("no limit line could be located"), "{reason}");
+    }
+
+    /// ⛔ THE 19-COLUMN PANE: the phrase is split mid-phrase, the pane is dead ~87 hours, and a
+    /// line-based matcher reads it as limit-free. Whitespace-insensitive anchoring finds it, and
+    /// the single TODO header below the line is under the recovery floor, so it is REFUSED.
+    #[test]
+    fn a_narrow_pane_that_splits_the_limit_phrase_is_still_refused() {
+        let reason = rate_limit_refusal(true, DEAD_BUT_PHRASE_SPLIT)
+            .expect("a 19-column dead pane must be refused, not admitted");
+        assert!(reason.contains("rate-limited"), "{reason}");
+        assert!(
+            !reason.contains("no limit line could be located"),
+            "the wrapped phrase must be FOUND, not fall through to the fail-closed arm: {reason}"
+        );
     }
 
     /// CLAUSE 3, the measured defect: a wrapped TAIL below the anchor line is the marker's own
@@ -697,7 +789,7 @@ mod tests {
 ";
         let reason = rate_limit_refusal(true, wrapped)
             .expect("the marker's own wrap must not read as recovery");
-        assert!(reason.contains("0 content row(s)"), "{reason}");
+        assert!(reason.contains("0 substantive row(s)"), "{reason}");
     }
 
     fn r() -> PaneDispatchReadyRules {
