@@ -11,15 +11,24 @@ use std::path::Path;
 use std::process::Command;
 
 fn ompo_start_json(repo: &Path, session: &str) -> serde_json::Value {
+    ompo_start_json_with(repo, session, &[])
+}
+
+/// Same launch, with extra flags appended. Two-sided legs need the decided
+/// side of a predicate, and a harness that can only produce one side cannot
+/// tell a live function from a constant.
+fn ompo_start_json_with(repo: &Path, session: &str, extra: &[&str]) -> serde_json::Value {
+    let mut args = vec![
+        "start",
+        "--json",
+        "--repo",
+        repo.to_str().expect("fixture path is utf8"),
+        "--session",
+        session,
+    ];
+    args.extend_from_slice(extra);
     let output = Command::new(env!("CARGO_BIN_EXE_ompo"))
-        .args([
-            "start",
-            "--json",
-            "--repo",
-            repo.to_str().expect("fixture path is utf8"),
-            "--session",
-            session,
-        ])
+        .args(&args)
         .output()
         .expect("ompo start must launch");
     assert!(
@@ -131,6 +140,35 @@ fn observability_reports_hd0009_status() {
         obs["halt"]["engaged"] == true,
         "hd0009_status and halt.engaged must not drift: {obs}"
     );
+}
+
+/// L3-OBS-HD0009 (n5tt), THE OTHER SIDE. Every Blocked-only assertion above is
+/// satisfied by a field hardcoded to the string "Blocked" -- 5 passed, both
+/// proof lines, and the value never connected to its cause. That is a SEMANTIC
+/// vacuous green that no proof-line or `0 passed` rule detects.
+///
+/// So this leg drives the same binary one flag apart and requires the value to
+/// MOVE with its named authority. A constant fails here by construction.
+#[test]
+fn hd0009_status_moves_with_the_decision_and_is_not_a_constant() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    let undecided = ompo_start_json(repo.path(), "n5tt-undecided");
+    let decided = ompo_start_json_with(repo.path(), "n5tt-decided", &["--hd-0010-decided"]);
+    let undecided_obs = observability(&undecided);
+    let decided_obs = observability(&decided);
+    println!(
+        "READBACK undecided={} decided={}",
+        undecided_obs["hd0009_status"], decided_obs["hd0009_status"]
+    );
+    assert_eq!(undecided_obs["hd0009_status"], "Blocked", "{undecided_obs}");
+    assert_ne!(
+        decided_obs["hd0009_status"], "Blocked",
+        "a constant would read Blocked on BOTH runs: {decided_obs}"
+    );
+    assert_eq!(decided_obs["hd0009_status"], "Ready", "{decided_obs}");
+    // The halt must follow the same authority, not just the status string.
+    assert_eq!(undecided_obs["halt"]["engaged"], true, "{undecided_obs}");
+    assert_eq!(decided_obs["halt"]["engaged"], false, "{decided_obs}");
 }
 
 /// Known-bad legs for the parity gate itself (yto0): the typed contract is
