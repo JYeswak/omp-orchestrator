@@ -28,6 +28,46 @@ fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
         }
     }
 }
+
+/// Per-pane `local_state.is_rate_limited`, keyed by pane index, from `ntm --robot-agent-health`.
+///
+/// ⛔ BRANCH ON `success` FIRST. A not-found payload from these verbs still carries populated,
+/// ZEROED objects, so a consumer reading a field without checking the envelope gets a plausible
+/// answer from a call that failed. Measured on two verbs, 2026-09-11.
+///
+/// ⛔ AND NEVER `local_state.safe_to_dispatch`: measured the same day, it is TRUE on two panes
+/// the same payload concurrently flags rate-limited and which are dead for ~83 hours. ANDing
+/// with it would inherit the exact defect this refusal exists to fix.
+///
+/// Unreachable, unparsable or unsuccessful -> EMPTY MAP, i.e. no additional refusal. This layer
+/// only ever SUBTRACTS from dispatchability; when it cannot ask, it leaves `classify`'s verdict
+/// exactly as it found it rather than inventing a refusal it cannot support.
+fn rate_limited_panes(session: &str) -> std::collections::BTreeMap<String, bool> {
+    let mut command = Command::new("ntm");
+    command.args([&format!("--robot-agent-health={session}"), "--no-caut"]);
+    let Some(output) = completed("ntm agent-health", spawn_timeout(command, Duration::from_secs(30)))
+    else {
+        return std::collections::BTreeMap::new();
+    };
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return std::collections::BTreeMap::new();
+    };
+    if document.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+        return std::collections::BTreeMap::new();
+    }
+    let Some(panes) = document.get("panes").and_then(serde_json::Value::as_object) else {
+        return std::collections::BTreeMap::new();
+    };
+    panes
+        .iter()
+        .filter_map(|(index, pane)| {
+            pane.get("local_state")?
+                .get("is_rate_limited")?
+                .as_bool()
+                .map(|limited| (index.clone(), limited))
+        })
+        .collect()
+}
 fn unix_seconds() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -313,6 +353,8 @@ fn run_live(
     let mut first = true;
     for s in &sess_list {
         let mut cmd = Command::new(tick_monitor::TMUX);
+        // ONE agent-health call per session, not per pane: the payload is keyed by pane index.
+        let rate_limited = rate_limited_panes(s);
         cmd.args(["list-panes", "-t", s, "-F", "#{pane_index}"]);
         let panes = completed("tmux panes", spawn_timeout(cmd, Duration::from_secs(15)))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -364,6 +406,21 @@ fn run_live(
                 v = confirm_free(v, &next, first_snapshot, current_snapshot, rules);
                 if v.state == PaneDispatchReadyState::Free {
                     v = classify_with_composer(&next, false, rules);
+                }
+            }
+            // ADDITIONAL REFUSAL, never a replacement oracle: the composer stays the authority
+            // on FREE, and a pane whose AGENT cannot work is subtracted from that set. Measured
+            // 2026-09-11: three panes of this session held a clean empty prompt under a live
+            // ~5014-minute rate limit, so FREE was true and dispatch would have parked 83 hours.
+            if v.state == PaneDispatchReadyState::Free {
+                if let Some(reason) = pane_dispatch_ready::rate_limit_refusal(
+                    rate_limited.get(pane).copied().unwrap_or(false),
+                    &txt,
+                ) {
+                    v = pane_dispatch_ready::PaneDispatchReadyVerdict {
+                        state: PaneDispatchReadyState::QuotaBlocked,
+                        reason,
+                    };
                 }
             }
             if v.state == PaneDispatchReadyState::Free {

@@ -508,9 +508,197 @@ pub fn capture_snapshot(captured_at_secs: u64, text: &str) -> CaptureSnapshot {
     )
 }
 
+/// A composer-free pane whose AGENT cannot work is dispatchable-but-useless.
+///
+/// # Why this is an ADDITIONAL refusal and not a replacement oracle
+///
+/// `classify` answers *"is the composer free?"* and it is right about that. `ntm
+/// --robot-agent-health` answers *"can this agent work?"*. Measured 2026-09-11 on four live
+/// panes, those disagree: a pane can hold a clean empty prompt directly under
+/// `You have hit your ChatGPT usage limit (pro plan). Try again in ~5014 min.` -- FREE and
+/// useless for 83 HOURS. Neither verdict replaces the other, so this layers on top; the
+/// composer remains the authority on FREE.
+///
+/// # ⛔ WHY THE TYPED FIELD ALONE IS NOT ENOUGH
+///
+/// `local_state.is_rate_limited` is itself a TEXT MATCH one layer down, and it FAILS CLOSED on a
+/// superseded marker: pane %8 reported `is_rate_limited = true` while rendering a live TODO tree
+/// BELOW the limit line -- an agent that recovered and is working. Refusing on the field alone
+/// would have parked a working agent. The discriminator is CONTENT AFTER THE LAST LIMIT LINE:
+/// the limit is live only when nothing but the composer footer follows it.
+///
+/// That is the same positional class as `wedge_reason`, inverted. `wedge_reason` fails OPEN by
+/// missing a marker above its window; this one would fail CLOSED by matching a marker that has
+/// been superseded below. Both are cured by asking about POSITION, not presence.
+///
+/// # NO-CLAIM
+///
+/// The footer recogniser is textual: a line is footer when it is blank, box-drawing only, or
+/// starts with the composer prompt glyph. A future TUI that paints something else after the
+/// limit line reads as CONTENT and this refusal declines to fire -- which is the safe direction
+/// for an ADDITIONAL refusal, because the pane keeps whatever verdict `classify` gave it.
+///
+/// ⛔ THE THRESHOLD IS A CHOICE, NOT A MEASUREMENT, and it is labelled here so it cannot inherit
+/// false authority from a fixture that never tested it. ONE substantive row is enough to decline
+/// the refusal. The fixtures separate at TEN rows against TWO, which is not a close call at any
+/// anchoring -- four different counts of the same 20-row capture were published today and all
+/// four still classified it correctly. NOTHING MEASURED HERE SAYS WHETHER THREE ROWS IS ALIVE.
+/// The boundary case -- a stale header, a half-drawn frame, a wrapped third error message -- is
+/// unexercised, and the nearest observation is a DEAD pane carrying "TODO + footer".
+///
+/// The threshold is set at one DELIBERATELY, in the direction that never parks a working agent:
+/// this layer only subtracts from dispatchability, so a miss leaves the pre-existing verdict
+/// intact while a false refusal would idle a live agent for nothing. Raise it only with a
+/// measurement of the boundary, and change this sentence when you do.
+///
+/// MEASURED ENDPOINTS on the live population, same mechanical rule: dead panes score ZERO once
+/// the title and footer are excluded (their raw count is 2, and that 2 IS the title and footer
+/// -- the exclusion clause is what collapses them), and the working pane scores 10. So `> 0` is
+/// the LEAST-INVENTED rule rather than a tuned one: every threshold in 1..9 separates the
+/// observed population identically, and nothing measured distinguishes them.
+///
+/// RE-DERIVE PER TICK, NEVER CACHE. A pane was observed leaving the limit-bearing state entirely
+/// between two reads four minutes apart -- the phrase simply absent on the second. A cached
+/// refusal would idle an agent that has already recovered.
+#[must_use]
+pub fn rate_limit_refusal(is_rate_limited: bool, capture: &str) -> Option<String> {
+    if !is_rate_limited {
+        return None;
+    }
+    let lines: Vec<&str> = capture.lines().collect();
+    let last_limit = lines
+        .iter()
+        .rposition(|line| line.contains("usage limit"))?;
+    let content_after = lines[last_limit + 1..]
+        .iter()
+        .filter(|line| !is_composer_footer(line) && !is_limit_message_tail(line))
+        .count();
+    if content_after > 0 {
+        return None;
+    }
+    Some(format!(
+        "agent reports rate-limited and nothing substantive is rendered after the limit line \
+         ({content_after} content row(s)) -- dispatch would park until reset"
+    ))
+}
+
+/// Blank, box-drawing-only, or the composer prompt line: paint, not work.
+fn is_composer_footer(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    if trimmed.starts_with('π') || trimmed.starts_with('>') {
+        return true;
+    }
+    trimmed
+        .chars()
+        .all(|character| character.is_whitespace() || ('─'..='╿').contains(&character))
+}
+
+/// CLAUSE 3: the limit message's OWN wrap or repeat is not evidence against the limit.
+///
+/// Anchoring on the LAST `usage limit` line already discards a repeated copy, but a wrapped
+/// TAIL can still fall below that anchor. Counting it was the measured defect: a two-clause
+/// rule read all five limit-bearing panes as RECOVERED because the marker's own continuation
+/// sat after it -- a positional predicate whose window includes the thing it measures.
+fn is_limit_message_tail(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with("Error: Retry")
+        || trimmed.contains("Try again in")
+        || trimmed.contains("You have hit your")
+        || trimmed.starts_with("ChatGPT usage limit")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Captured live 2026-09-11 from pane %19: rate-limited, nothing after the limit line but
+    /// the composer footer. The pane is dead for ~5014 minutes and reads FREE to the composer
+    /// oracle, which is the capacity leak this refusal exists to name.
+    const DEAD_AFTER_LIMIT: &str = "\
+ Error: Retry budget exhausted after 10 retries: You have hit your
+   ChatGPT usage limit (pro plan). Try again in ~5014 min.
+
+ Error: Retry failed after 10 attempts: You have hit your ChatGPT
+ usage limit (pro plan). Try again in ~5014 min.
+
+ π  > ◒ GPT-5.6-Luna > 📁 …ator > ⑂ main *44 +1 ?40 > S57.49
+╰──
+";
+
+    /// Captured live 2026-09-11 from pane %8 -- THE FALSE POSITIVE. `is_rate_limited` is TRUE
+    /// and the agent is WORKING: a live TODO tree renders BELOW the limit line. Refusing on the
+    /// typed field alone would have parked it.
+    const RECOVERED_AFTER_LIMIT: &str = "\
+ usage limit (pro plan). Try again in ~5013 min.
+
+ TODO
+  ├─ XT2YE · 1/10
+  │  ├─ ☑ Send xt2ye completion callback
+  │  ├─ ☐ Read xt2ye acceptance and ownership (blocked)
+  │  ╰─ … 4 more todos
+  ╰────
+
+                                  y80i Closure Verification and Handoff
+ π  > ◒ GPT-5.6-Luna > 📁 …ator > ⑂ main *44 +1 ?40
+╰──
+";
+
+    /// FIRES-ON-KNOWN-BAD: the live-limit pane is refused, and the reason names the evidence.
+    #[test]
+    fn a_rate_limited_pane_with_nothing_after_the_limit_line_is_refused() {
+        let reason = rate_limit_refusal(true, DEAD_AFTER_LIMIT)
+            .expect("a dead rate-limited pane must be refused");
+        assert!(reason.contains("rate-limited"), "{reason}");
+        assert!(reason.contains("0 content row(s)"), "{reason}");
+    }
+
+    /// KNOWN-GOOD, AND THE ONE THAT MATTERS: the verb's own field says rate-limited, the pane is
+    /// working, and the refusal DECLINES. Delete the content-after-the-line clause and this leg
+    /// reddens -- which is the whole reason the clause exists.
+    #[test]
+    fn a_recovered_pane_working_below_the_limit_line_is_not_refused() {
+        assert_eq!(
+            rate_limit_refusal(true, RECOVERED_AFTER_LIMIT),
+            None,
+            "an agent rendering work below the limit line is not rate-limited any more"
+        );
+    }
+
+    /// The typed field is a precondition, not an inference: no field, no refusal, whatever the
+    /// capture says. This refusal never invents a rate limit from pane text alone.
+    #[test]
+    fn the_refusal_requires_the_typed_field_and_never_infers_it() {
+        assert_eq!(rate_limit_refusal(false, DEAD_AFTER_LIMIT), None);
+        assert_eq!(rate_limit_refusal(false, RECOVERED_AFTER_LIMIT), None);
+    }
+
+    /// ANTI-VACUITY: a capture with no limit line at all cannot be refused by this rule even
+    /// when the field is set, because the discriminator has nothing to anchor to.
+    #[test]
+    fn a_capture_with_no_limit_line_is_not_refused() {
+        assert_eq!(rate_limit_refusal(true, " π  > ◒ GPT-5.6-Luna\n╰──\n"), None);
+    }
+
+    /// CLAUSE 3, the measured defect: a wrapped TAIL below the anchor line is the marker's own
+    /// continuation, not work. A two-clause rule counted it and read all five limit-bearing
+    /// panes as RECOVERED.
+    #[test]
+    fn the_limit_messages_own_wrap_is_not_counted_as_recovery() {
+        let wrapped = "\
+ Error: Retry budget exhausted after 10 retries: You have hit your
+   ChatGPT usage limit (pro plan).
+   Try again in ~5014 min.
+
+ π  > ◒ GPT-5.6-Luna
+╰──
+";
+        let reason = rate_limit_refusal(true, wrapped)
+            .expect("the marker's own wrap must not read as recovery");
+        assert!(reason.contains("0 content row(s)"), "{reason}");
+    }
 
     fn r() -> PaneDispatchReadyRules {
         PaneDispatchReadyRules::default()
