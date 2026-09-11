@@ -3377,8 +3377,24 @@ defect."* This file's own warning applies to itself: **a doctrine row asserting 
 licenses routing around it indefinitely, so it MUST be re-measured before it is obeyed.** Two rows,
 one night, both stale in the direction that excuses a handroll.
 
-**The live gap is a missing `[[bin]]` on `crates/finding`** — that is the fix, and it is S1-authorized
-work, not a doctrine note.
+⛔⛔ **RE-CORRECTED 2026-09-11 — THE "LIVE GAP" CLOSED FOUR DAYS AGO AND THIS ROW OUTLIVED IT.
+THIS IS THE THIRD STALE BROKEN-KERNEL ROW, AND IT IS IN THE PARAGRAPH WARNING ABOUT THE SECOND.**
+The retired text read *"the live gap is a missing `[[bin]]` on `crates/finding`."* Measured:
+
+```
+grep -c '[[bin]]' crates/finding/Cargo.toml        1     <- name = "finding", path = "src/main.rs"
+command -v finding                    /Users/josh/.local/bin/finding
+finding --help                        "usage: finding <subcommand>"   rc=0
+landed                                c79524e  2026-09-07  "give the finding kernel an operator surface [test]"
+```
+
+**The operator surface EXISTS, is installed, and runs.** So the corrected row's own remedy was
+executed the next day and the row kept telling readers to build it — the identical failure it was
+written to name, one level down. **A correction is a value and goes stale exactly like the claim
+it replaced.** Bead `ca9q` ("the finding crate is unrouted: `file()` had zero callers") is
+therefore `ALREADY-FIXED` on both halves: 14 manifest callers, 16 src refs, and a live bin.
+
+ **The re-measurement cost one command. Obeying the row would have cost a build.**
 
 ### The full loop, demonstrated end to end through kernels only
 
@@ -6753,6 +6769,50 @@ recursive   --include='*.rs' crates/    -> 0
 a one-level glob returning zero is `UNKNOWN` about the nested population, and it would have read
 identically had an emitter sat in `src/bin/`.** **When your evidence is an ABSENCE, the glob is
 the claim.** Recursive by default; state the scope you actually searched.
+
+## ⭐⭐ OUR GATE ALREADY HAD THE DENOMINATOR CHECK OUR **PROTOCOL** LACKED
+
+**Found one tick after landing the three-part proof rule, by asking whether our own instrument
+makes the mistake the humans were making.** `gate-runner` types it:
+
+```rust
+pub enum NoTestsDisposition {
+    DeclaredException { reason: &'static str },   // listed in NO_TESTS_ALLOWANCE, with a reason
+    Undeclared,                                   // "An ERROR — a crate with no tests at all
+}                                                 //  cannot gate anything."
+```
+
+and the summary line carries `no_tests=` as its own column beside `pass` / `fail` / `unmeasurable`
+/ `short`. **A crate that runs zero tests is fail-closed with a named allowance, exactly as this
+file demands of every gate — while the human callback contract accepted `test result: ok.
+0 passed` as proof for weeks.**
+
+⛔ **THE ASYMMETRY IS THE LESSON: the CODE path was held to a standard the PROSE path was not.**
+A gate gets reviewed, mutation-tested and argued over; a protocol sentence in a markdown file
+gets copied. **When you find a hole in a procedure, check whether the equivalent code already
+solved it — the fix may be a transcription rather than a design.** And the converse is the more
+common direction here: `93lo` exists because the protocol has no emitter at all.
+
+## ⛔ GIT AUTHORSHIP CANNOT ESTABLISH GRADING INDEPENDENCE — **EVERY PANE COMMITS AS `Josh`**
+
+```
+git log -1 --format='author=%an committer=%cn' c79524e   ->   author=Josh committer=Josh
+```
+
+**Every commit in this repository, from every pane, carries the same author and committer.** So
+the grading gate's *"a bead is closed by an agent who did NOT implement it"* **cannot be checked
+against git**, and an agent trying to prove its own non-authorship from commit metadata will find
+the field uniform and uninformative.
+
+**This is the `pane=` rule reaching the VCS layer.** This file already records that an agent NAME
+is not an identity — `WildStone` binds three panes — and that `pane=` is the only unique field in
+an assignee string. **Git is worse: it has no pane field at all.** The independence evidence is
+therefore the **tracker's `assignee` history plus the bead's comment trail**, never `git log`.
+
+ **OPERATIONAL CONSEQUENCE, and it is why this is not a curiosity:** when you cannot establish
+non-authorship, **do not close — record the measurement as a comment and route the close.** That
+is strictly cheaper than a contested close, and it is what an honest `UNKNOWN` looks like at the
+identity layer.
 
 ## ⭐⭐ THE STRONGEST CONFIRMATION IS AN **INVERTED NEGATIVE CONTROL** WITH THE NEEDLE UNCHANGED
 
