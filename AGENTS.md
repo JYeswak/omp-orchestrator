@@ -6814,6 +6814,47 @@ non-authorship, **do not close — record the measurement as a comment and route
 is strictly cheaper than a contested close, and it is what an honest `UNKNOWN` looks like at the
 identity layer.
 
+## ⭐⭐ RULE 10 NEEDS A DISCRIMINATOR: **POPULATION-COUPLED** DEFECT vs **PURE** DEFECT
+
+**I broadcast *"these three ratchets are rule-10, re-express per-crate or as a ratio"* after
+reading their test NAMES — `..._does_not_grow`, `..._only_falls`. That is pattern-matching on
+shape, which is the failure I had landed as doctrine ninety minutes earlier.** The advice turned
+out right; **the grounds arrived afterwards**, and only because I went to measure before
+repeating it.
+
+**Rule 10's original specimen counted a POPULATION** — `crate-atom-gate`'s ceilings moved in
+exact lockstep with workspace growth, `14` new crates producing `14` new rows of which `11` were
+compliant. **A ratchet on a DEFECT count is the opposite and is CORRECT: it going red means the
+defect got worse, which is the job.** So the test name cannot decide it. **Ask what is counted.**
+
+**The measurement that decides `the_unstamped_binary_count_only_falls`:**
+
+```
+bin targets (cargo metadata)                89
+crates whose build.rs emits OMP_BUILD_ID     6
+the ceiling's own history, at :51            "55 unstamped ... (was 41"
+```
+
+⛔ **The STAMPED count has not moved. `41 -> 55 -> 73` is the workspace growing past a frozen
+numerator.** The defect RATE is ~93% and constant; the absolute rises purely with population.
+**So it IS population-coupled, and a compliant new crate — one that ships a stamp — is
+indistinguishable at the ceiling from a non-compliant one.** That is rule 10 exactly.
+
+⭐ **AND THE RIGHT REMEDY IS NEITHER "RAISE THE CEILING" NOR A BARE RATIO.** The test's own
+message forbids the first and is right to. A ratio hides the second-order fact that **nothing is
+being stamped at all**. The per-crate form says what is actually wanted: **no crate added after
+the ratchet's baseline may be unstamped** — a compliant addition satisfies it by construction,
+and a non-compliant one reddens alone, naming itself.
+
+ **THE CONTRAST CASE IS IN THE SAME CRATE, SO THE DISCRIMINATOR IS NOT ACADEMIC:**
+`every_live_bead_carries_at_least_one_taxonomy_label` — `175` unlabelled against a ceiling of
+`59` — counts beads that are individually wrong. **Growing that number requires filing
+unlabelled beads, which no healthy activity does.** Same crate, same ratchet shape, opposite
+verdict: **that one stays as it is and the remedy is to label the 175.**
+
+**THE TEST: would a fully COMPLIANT addition move this number?** Yes → population-coupled,
+re-express per-crate. No → pure defect, leave the ratchet alone and fix the defects.
+
 ## ⭐⭐ THE STRONGEST CONFIRMATION IS AN **INVERTED NEGATIVE CONTROL** WITH THE NEEDLE UNCHANGED
 
 **Same grader, same session.** Its original finding was an absence: four message substrings
