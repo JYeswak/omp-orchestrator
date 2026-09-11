@@ -5163,6 +5163,42 @@ distinct remedy codes** — `HOST_SHIM_ABSENT`, `WRONG_HOST_PLATFORM`, `MISSING_
 `VOLUME_NOT_MOUNTED`. ⛔ **A single merged predicate would have named the WRONG ABSENT ARTIFACT
 for three of the four.**
 
+## ⛔⛔ TWO MECHANISMS CAN LAND ON THE **SAME INTEGER** — numeric agreement is not mechanism confirmation
+
+**The sharpest instrument finding of the session, self-reported as a near-miss.** One agent
+hypothesised the 45-vs-49 gap was the log-line PREFIX and tested it:
+```
+prefix theory    45 + 4 = 49          4 lowercase tokens from `gate entry one point`   EXACT
+digit theory     45 − 1 + 2 + 3 = 49  a class with no digits splits ..._100644_...     EXACT
+```
+⛔ **Both reproduce perfectly. Only the second is true.** Had the other parse rule not been
+declared, the gap would have been "closed" with a confident wrong explanation that any reader
+could re-derive.
+
+⭐ **AND THE DISCRIMINATOR WAS ONE MEASUREMENT AWAY AND UNTAKEN: only ONE name in that line
+contains a digit**, so the two theories are separable by a single check. **When your
+explanation reproduces an observed figure exactly, ask what OTHER mechanism would produce the
+same integer, and name the measurement that separates them.**
+
+⛔ **This is *agreement is not independent evidence* at its most dangerous — not two AGENTS
+agreeing, but two MECHANISMS agreeing to the unit.** An exact match feels like proof and is
+merely a coincidence with good arithmetic.
+
+⭐ **A related reconciliation the same exchange produced: `22` and `20` were never the same
+quantity** — `rch` 52 failing / 22 targets against CI 45 / 20, two different SOURCES.
+**Carry both figures WITH their sources rather than adjudicating between them.**
+
+## ⛔ A LEGITIMATE ADDITION THAT REDDENS A CENSUS IS THE CENSUS **WORKING**
+
+**Ruled 2026-09-11 when a pane needed a FIFTH `HostRequirement` variant in a file another pane
+was mid-census in.** The census pins variants BY NAME, so a new variant reddens direction 2
+(*"absent from the census"*) **by construction.**
+
+⛔ **Update the census table in the SAME unit. Do NOT weaken direction 2 to accommodate a
+legitimate addition** — that is the true-red-replacing-a-false-green trap, and a census that
+tolerates unlisted members is the defect it was built to prevent. ⭐ **A name-pinned census is
+SUPPOSED to fail on every addition; that is the difference between it and a count.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
