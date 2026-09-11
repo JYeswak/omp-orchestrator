@@ -654,18 +654,77 @@ fn last_limit_line(lines: &[&str]) -> Option<usize> {
     owner.get(end.saturating_sub(1)).copied()
 }
 
-/// Blank, box-drawing-only, or the composer prompt line: paint, not work.
+/// Blank, box-drawing-only, or an agent STATUS LINE: paint, not work.
+///
+/// ⛔ THE FIRST VERSION MISSED THE REAL FOOTER AND THAT ALONE ADMITTED A PANE DEAD 87 HOURS.
+/// It tested for a leading `π` or `>` or an all-box-drawing line. The omp/Codex status line
+/// leads with an EMOJI (`📁`) and carries `▶` and `┃`, none of which are in `'─'..='╿'`, so it
+/// counted as a substantive content row and donated the third row that flipped %7 from REFUSE
+/// to ADMIT. A recogniser keyed on the glyphs one pane happened to paint is the positional
+/// class again, one layer down.
 fn is_composer_footer(line: &str) -> bool {
-    let trimmed = line.trim();
+    // ⛔ THE PRODUCTION CAPTURE CARRIES ESCAPES. run_live captures with `-p -e`, so under SGR
+    // every row's FIRST character is U+001B and every positional test below would answer about
+    // an escape rather than a glyph. `contains` is escape-INSENSITIVE (SGR surrounds glyphs, it
+    // never splits codepoints); first-character, `starts_with` and `all(range)` are
+    // escape-DESTROYED. Stripping CSI here is what lets the positional arms survive the flag --
+    // and it is confined to this predicate, which reasons about TEXT. It is deliberately NOT
+    // applied to any ANSI-dependent oracle, where stripping would compute a plausible answer
+    // from destroyed evidence.
+    let plain = strip_csi(line);
+    let trimmed = plain.trim();
     if trimmed.is_empty() {
         return true;
     }
-    if trimmed.starts_with('π') || trimmed.starts_with('>') {
+    let Some(first) = trimmed.chars().next() else {
+        return true;
+    };
+    // The prompt glyph is ALPHABETIC (`π` is a Greek letter), so it is named explicitly.
+    if first == 'π' || first == '>' {
+        return true;
+    }
+    // ⛔ STRUCTURE, NOT A CHARACTER RANGE, AND NOT THE FRAME EITHER. The status row mixes
+    // U+1F4C1, U+25B6 and BOTH box-drawing weights, so a range whitelist keeps meeting rows it
+    // paints outside; a leading-symbol rule over-excludes the opposite way and swallows the
+    // `├─`/`│` rows of a live TODO tree, which is the very evidence of work this predicate
+    // exists to preserve. A ▶/┃ FRAME TEST WAS ALSO FALSIFIED: over a seven-pane corpus the
+    // frame appears on 5/7 and misses the two BUSIEST panes, so it would donate a phantom
+    // content row exactly where it costs most. The one invariant at 7/7 is the PATH BADGE
+    // U+1F4C1, and it sits MID-ROW on wide panes, so it is matched anywhere in the line.
+    //
+    // NO-CLAIM: 📁 is a USER-CONFIGURABLE prompt element. This is invariant over THIS FLEET'S
+    // prompt config, not over the TUI, and `a_footer_without_the_path_badge_is_still_counted`
+    // pins the residual rather than hiding it.
+    if trimmed.contains('\u{1F4C1}') {
         return true;
     }
     trimmed
         .chars()
         .all(|character| character.is_whitespace() || ('─'..='╿').contains(&character))
+}
+
+/// Remove CSI escape sequences so a TEXT predicate sees glyphs, not SGR state.
+///
+/// Scoped to the footer recogniser by design. Anything reasoning about dim-vs-bright rendering
+/// must read the RAW bytes; stripping there would destroy the evidence it keys on.
+fn strip_csi(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut chars = line.chars();
+    while let Some(character) = chars.next() {
+        if character != '\u{1B}' {
+            out.push(character);
+            continue;
+        }
+        // ESC [ ... <final byte in @..~>
+        if chars.next() == Some('[') {
+            for inner in chars.by_ref() {
+                if ('\u{40}'..='\u{7E}').contains(&inner) {
+                    break;
+                }
+            }
+        }
+    }
+    out
 }
 
 /// CLAUSE 3: the limit message's OWN wrap or repeat is not evidence against the limit.
@@ -674,64 +733,44 @@ fn is_composer_footer(line: &str) -> bool {
 /// TAIL can still fall below that anchor. Counting it was the measured defect: a two-clause
 /// rule read all five limit-bearing panes as RECOVERED because the marker's own continuation
 /// sat after it -- a positional predicate whose window includes the thing it measures.
+///
+/// ⛔ AND THE NARROW-PANE WRAP SPLITS THE DURATION ONTO ITS OWN ROW. At w=19 the message breaks
+/// as `Try again in` / `~5211 min.`, so catching only the former left `~5211 min.` counted as
+/// RECOVERY -- clause 3's defect surviving inside the very case clause 4 was written for.
 fn is_limit_message_tail(line: &str) -> bool {
     let trimmed = line.trim();
-    trimmed.starts_with("Error: Retry")
+    if trimmed.starts_with("Error: Retry")
         || trimmed.contains("Try again in")
         || trimmed.contains("You have hit your")
         || trimmed.starts_with("ChatGPT usage limit")
+        || trimmed.starts_with("limit (pro plan)")
+    {
+        return true;
+    }
+    // A bare duration continuation: `~5211 min.` and nothing else of substance.
+    let duration = trimmed.trim_start_matches('~');
+    let (digits, rest) = duration.split_at(
+        duration
+            .find(|character: char| !character.is_ascii_digit())
+            .unwrap_or(duration.len()),
+    );
+    !digits.is_empty() && rest.trim_start().starts_with("min")
 }
 
 #[cfg(test)]
 mod tests {
+    /// ⛔ VERBATIM CAPTURES, NOT DESCRIPTIONS. The first version of these fixtures was ABRIDGED
+    /// and the substituted row was the one that decides the verdict: the real %7 status row
+    /// leads with U+1F4C1 (FILE FOLDER) and carries U+25B6 and U+2503, while the abridged row
+    /// led with `π`. That single substitution moved content_after from 3 to 2 and the suite
+    /// went green over a pane dead ~87 hours. A fixture that is DESCRIBED rather than PASTED is
+    /// how a suite stays green, and it is worse inside a fixture than in a predicate because a
+    /// fixture is what everyone downstream trusts instead of re-measuring.
+    const DEAD_AFTER_LIMIT: &str = include_str!("../tests/fixtures/pane19-dead.txt");
+    const RECOVERED_AFTER_LIMIT: &str = include_str!("../tests/fixtures/pane8-alive.txt");
+    const DEAD_BUT_PHRASE_SPLIT: &str = include_str!("../tests/fixtures/pane7-dead-narrow.txt");
     use super::*;
 
-    /// Captured live 2026-09-11 from pane %19: rate-limited, nothing after the limit line but
-    /// the composer footer. The pane is dead for ~5014 minutes and reads FREE to the composer
-    /// oracle, which is the capacity leak this refusal exists to name.
-    const DEAD_AFTER_LIMIT: &str = "\
- Error: Retry budget exhausted after 10 retries: You have hit your
-   ChatGPT usage limit (pro plan). Try again in ~5014 min.
-
- Error: Retry failed after 10 attempts: You have hit your ChatGPT
- usage limit (pro plan). Try again in ~5014 min.
-
- π  > ◒ GPT-5.6-Luna > 📁 …ator > ⑂ main *44 +1 ?40 > S57.49
-╰──
-";
-
-    /// Captured live 2026-09-11 from pane %8 -- THE FALSE POSITIVE. `is_rate_limited` is TRUE
-    /// and the agent is WORKING: a live TODO tree renders BELOW the limit line. Refusing on the
-    /// typed field alone would have parked it.
-    const RECOVERED_AFTER_LIMIT: &str = "\
- usage limit (pro plan). Try again in ~5013 min.
-
- TODO
-  ├─ XT2YE · 1/10
-  │  ├─ ☑ Send xt2ye completion callback
-  │  ├─ ☐ Read xt2ye acceptance and ownership (blocked)
-  │  ╰─ … 4 more todos
-  ╰────
-
-                                  y80i Closure Verification and Handoff
- π  > ◒ GPT-5.6-Luna > 📁 …ator > ⑂ main *44 +1 ?40
-╰──
-";
-
-    /// Captured live 2026-09-11 from pane %7 -- NINETEEN COLUMNS WIDE, so the limit phrase is
-    /// SPLIT MID-PHRASE across two rows. A line-based `contains("usage limit")` finds nothing
-    /// here, on a pane the typed verb reports dead for ~87 hours, and the single `TODO` header
-    /// below it is not recovery. This is the false NEGATIVE that defeats a text-only rule.
-    const DEAD_BUT_PHRASE_SPLIT: &str = "\
-  ChatGPT usage
-  limit (pro plan).
-  Try again in
-  ~5211 min.
-
- TODO 247/284 · ☑ …
- π  > ◒ GPT-5.6-Luna
-╰──
-";
 
     /// FIRES-ON-KNOWN-BAD: the live-limit pane is refused, and the reason names the evidence.
     #[test]
@@ -810,6 +849,36 @@ mod tests {
         let reason = rate_limit_refusal(true, wrapped)
             .expect("the marker's own wrap must not read as recovery");
         assert!(reason.contains("0 substantive row(s)"), "{reason}");
+    }
+
+    /// RESIDUAL, PINNED: the footer recogniser's one 7/7 invariant is a USER-CONFIGURABLE prompt
+    /// element. A status row painted WITHOUT the path badge and without the prompt glyph is
+    /// counted as content, which pushes a dead pane toward ADMIT. This leg exists so that
+    /// property is a recorded fact rather than a surprise in someone's incident.
+    #[test]
+    fn a_footer_without_the_path_badge_is_still_counted() {
+        let no_badge = " usage limit (pro plan). Try again in ~99 min.\n Luna v2 ▶── ready\n";
+        assert!(
+            rate_limit_refusal(true, no_badge).is_some(),
+            "one uncounted row is still below the floor -- but the row IS counted, which is the \
+             residual: at floor-1 this input would flip to ADMIT"
+        );
+    }
+
+    /// ISOLATES THE PATH-BADGE ARM. This footer is the %33 shape: it leads with a BRAILLE
+    /// SPINNER (U+283C, because the pane was working) and carries no ▶, no ┃ and no box drawing,
+    /// so neither the prompt-glyph arm nor a frame test can see it. Only the 📁 arm excludes it.
+    /// Measured over a seven-pane corpus: ▶ 5/7, ┃ 5/7, ─ 5/7, π 4/7, 📁 7/7 -- the frame misses
+    /// the two BUSIEST panes, which is where a phantom content row costs most.
+    #[test]
+    fn a_spinner_led_footer_is_excluded_by_the_path_badge_alone() {
+        let spinner_footer =
+            " usage limit (pro plan). Try again in ~99 min.\n⠼ 3m · ◕ Opus 5 · 📁 ~/Developer/omp\n";
+        let reason = rate_limit_refusal(true, spinner_footer).expect("dead pane must refuse");
+        assert!(
+            reason.contains("0 substantive row(s)"),
+            "the spinner-led status row must be excluded as footer, not counted as work: {reason}"
+        );
     }
 
     fn r() -> PaneDispatchReadyRules {

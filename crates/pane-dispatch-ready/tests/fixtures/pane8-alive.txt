@@ -1,0 +1,20 @@
+ Error: Retry budget exhausted after 10 retries: You have hit your
+   ChatGPT usage limit (pro plan). Try again in ~5013 min.
+
+ Error: Retry failed after 10 attempts: You have hit your ChatGPT
+ usage limit (pro plan). Try again in ~5013 min.
+
+ TODO
+  ├─ XT2YE · 1/10
+  │  ├─ ☑ Send xt2ye completion callback
+  │  ├─ ☐ Read xt2ye acceptance and ownership (blocked)
+  │  ├─ ☐ Inspect UDS final envelope and source CLI (blocked)
+  │  ├─ ☐ Map run_cycle census gate path (blocked)
+  │  ├─ ☐ Reserve exact clean source test paths (blocked)
+  │  ├─ ☐ Design Config injection and restrictive mapping (blocked)
+  │  └─ … 4 more todos
+  └─────
+
+                                  y80i Closure Verification and Handoff
+ π  > ◕ GPT-5.6-Luna > 📁 …ator > ⑂ main *44 +1 ?40 ▶────────52%─╎┃─1M─
+╰─

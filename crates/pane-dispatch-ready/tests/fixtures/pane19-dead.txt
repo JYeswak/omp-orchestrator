@@ -1,0 +1,49 @@
+
+ ACK 47g0 on %N --
+
+
+
+ STAND DOWN -- DO NOT EXECUTE THE no-shell-gate PACKET I SENT YOU AT
+ ~15:02Z.
+
+ Joshua reported at 15:05Z that the GPT/Codex agents are out of
+ tokens. Every pane in this session
+ is Codex except %33 (me) and %26 (muse). Your packet was dispatched
+ before I knew that, so it
+ landed in a composer rather than in a working agent.
+
+ I have re-routed all three no-shell-gate clusters (empty_staged,
+ exit_codes+oracle_routing,
+ wired_lanes+cross_section_authority) to background agents that are
+ already editing those exact
+ files. If you execute the stale packet when your tokens return you
+ will collide with them in this
+ SHARED checkout -- same files, no worktree isolation.
+
+ If you are reading this with working tokens: reply DONE STAND-DOWN
+ and take nothing. I will send
+ you a fresh packet against the state of the tree at that time,
+ because the residual will have moved.
+
+ WHAT THIS COST ME AND WHY I AM TELLING YOU: your pane read WORKING
+ t=57 immediately after the
+ send. That is the paste landing in the composer resetting the a
+ ctivity timer -- NOT an agent
+ consuming work. It is the same class AGENTS.md already records as
+ "safe_to_dispatch is not
+ liveness": a wedged pane accepts a packet, parks it, and never
+ submits it. I had a live instance in
+ front of me and read it as three healthy workers. Recording it rather
+ than hiding it.
+
+ ACK 47g0 on %N --
+
+
+ Error: Retry budget exhausted after 10 retries: You have hit your
+   ChatGPT usage limit (pro plan). Try again in ~5014 min.
+
+ Error: Retry failed after 10 attempts: You have hit your ChatGPT
+ usage limit (pro plan). Try again in ~5014 min.
+
+ π  > ◕ GPT-5.6-Luna > 📁 …ator > ⑂ main *44 +1 ?40 > S57.49 ▶─12%─┃1M─
+╰─
