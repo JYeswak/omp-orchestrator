@@ -1,64 +1,103 @@
-# S1 gate residual — the 16 non-PASS crates, ENUMERATED
-
-**Extracted 2026-09-11 by pane 1 from the authoritative CI run. This is the list `pd5ua` was
-credited with delivering and did not** — a post-close audit measured 0 of 11 failing crate names
-in its comments and 2 of 11 in its body, both as prose examples rather than a classified list.
+# S1 gate residual — the 20 non-PASS crates, ENUMERATED
 
 ```
-SOURCE      gh run view 34289493517 --log      job "gate" (conclusion: failure)
-HEAD        475c70288bc66feedf97c621675d5539d95a23f5
-SUMMARY     GATE_RUNNER crates=88 pass=72 fail=12 unmeasurable=4 short=0 no_tests=0
-DERIVED     88 unique rows: 72 PASS · 12 FAIL · 4 UNMEASURABLE   <- sums to 88 AND matches
+SOURCE      run 34549975939   headSha cb9d3941   completed/failure   2026-09-11T01:16Z
+ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest "completed"
+SUMMARY     GATE_RUNNER crates=88 pass=68 fail=16 unmeasurable=4 short=0 no_tests=0
 ```
 
-## Why nobody had this list
+⚠️ **THIS DOCUMENT WAS WRONG ON ITS FIRST PUBLICATION AND THE CORRECTION IS THE POINT.** `17c632e`
+enumerated run `34289493517` / `475c702` — **two days and 83 commits stale** — and called it
+authoritative. It was authoritative only against the even-older run it replaced. Caught
+independently by two agents within minutes, **against a rule I had adopted as binding one message
+earlier**: *"the newest run whose CONCLUSION is success or failure."* `completed` and `carrying a
+verdict` are different populations — of the 8 most recent runs, **6 are `cancelled`**.
 
-⛔ **THE PER-CRATE ROWS DO NOT CARRY THE `GATE_RUNNER` TOKEN.** They are bare
-`PASS crate=… / FAIL crate=… / UNMEASURABLE crate=…` lines. `grep -c 'GATE_RUNNER'` over the whole
-run log returns **4** — the two `_PLAN` lines, `_CHECKS`, and the summary. **The instrument every
-reader was told to use cannot reach the data it is pointed at**, and the data has shipped in every
-run since `568f2dfe`.
+**The stale list was not a rounding drift — EIGHT crates moved, and it would have misrouted work
+in both directions:**
 
-⛔ **AND `gh run view --log` EMITS EVERY ROW TWICE.** A naive tally reads
-`24 FAIL / 144 PASS / 8 UNMEASURABLE`, sum **176** — a clean doubling that looks like a plausible
-failure count rather than an instrument artifact. **`sort -u` first; the sum-to-88 control is what
-catches it.** Without that control this document would have claimed 24 failing crates.
+```
+in the OLD 12, NOT failing now :  omp-idle-dispatch · reap-finished-panes
+failing now, ABSENT from OLD 12:  finding-dispatch · installer · kernel-only-operator-hook
+                                  ompo-doctor · ompo-start · receiver-receipt
+in both                        :  10
+```
 
-## FAIL — 12, each with the target that failed
+⛔ **AND `omp-idle-dispatch` DATES THE STALE RUN WITHOUT A TIMESTAMP.** `Cargo.toml:7` reads
+`exclude = ["crates/omp-idle-dispatch"]`; it is on disk and **`ABSENT` from `cargo metadata`**,
+which is where gate-runner's roster comes from. So today it cannot be a FAIL — the newest run
+classifies it `GATE_RUNNER_LEDGER_DRIFT reason=in_ledger_absent_from_workspace`. **A FAIL row for
+that crate PROVES the run predates the exclusion.** `reap-finished-panes` is the second,
+independent tell, repaired by `924e3c7`.
 
-| crate | failing test |
-|---|---|
-| `agent-mail-native` | `first_resume_from_origin_succeeds_for_recipient_with_later_first_event` |
-| `dispatch-silence-watch` | `dispatch_silence_watch_is_in_crontab` |
-| `kernel-bypass-gate` | `real_workspace_ledger_balances` |
-| `no-shell-gate` | `gate_checker_scan_is_nonempty_and_clean` |
-| `omp-idle-dispatch` | `complete_environment_passes_startup` |
-| `omp-inventory-map` | `tests::allowance_integrity_passes_on_named_decisions` |
-| `omp-orchestrator` | `unowned_target_is_rewritten_with_typed_reason,known_good_registered_target_routes_inside_registered_root,unowned_dir_receives_artifacts_only_without_the_wrapper,fleet_wrapper_matches_measured_revision` |
-| `pane-dispatch-ready` | `mutation_busy_markers_load_bearing` |
-| `reap-finished-panes` | `mutation_lock_names_holder` |
-| `silent-success-census` | `positive_controls_refind_named_live_rows` |
-| `undrained-pipe-lint` | `wired_into_ci_workflow` |
-| `verify-dispatch` | `tests::disabling_named_beads_all_closed_false_passes_open_set,tests::closed_bead_is_verified,tests::disabling_only_closed_status_counts_false_passes_open_bead,tests::empty_beads_list_is_legacy_and_no_evidence,tests::duplicate_bead_ids_are_deduped,tests::malformed_json_is_skipped,tests::open_bead_is_no_evidence,tests::partial_close_is_no_evidence` |
+## FAIL — 16
 
-## UNMEASURABLE — 4, and the two reasons are NOT the same defect
+| crate |
+|---|
+| `agent-mail-native` |
+| `dispatch-silence-watch` |
+| `finding-dispatch` |
+| `installer` |
+| `kernel-bypass-gate` |
+| `kernel-only-operator-hook` |
+| `no-shell-gate` |
+| `omp-inventory-map` |
+| `omp-orchestrator` |
+| `ompo-doctor` |
+| `ompo-start` |
+| `pane-dispatch-ready` |
+| `receiver-receipt` |
+| `silent-success-census` |
+| `undrained-pipe-lint` |
+| `verify-dispatch` |
+
+## UNMEASURABLE — 4, and the two reasons are DIFFERENT DEFECTS
 
 | crate | reason | remedy |
 |---|---|---|
-| `admission-reason` | `POLICY_UNAVAILABLE` | oracle absent at its declared path -- WIRE it |
-| `finding` | `MISSING_EXECUTABLE` | the binary does not exist -- BUILD it |
-| `loop-driver` | `POLICY_UNAVAILABLE` | oracle absent at its declared path -- WIRE it |
-| `loop-queue-filter` | `MISSING_EXECUTABLE` | the binary does not exist -- BUILD it |
+| `admission-reason` | `POLICY_UNAVAILABLE` | oracle absent at its declared path — `INERT`, **WIRE it** |
+| `finding` | `MISSING_EXECUTABLE` | the binary does not exist — **BUILD it** |
+| `loop-driver` | `POLICY_UNAVAILABLE` | oracle absent at its declared path — `INERT`, **WIRE it** |
+| `loop-queue-filter` | `MISSING_EXECUTABLE` | the binary does not exist — **BUILD it** |
 
-**Per gate rule 4a these are different verdicts with different remedies.** `MISSING_EXECUTABLE`
-says *build it*; `POLICY_UNAVAILABLE` says the oracle is absent at its declared path, so the crate
-is `INERT`, not `ABSENT`. Collapsing them into one "unmeasurable" bucket sends the reader to the
-wrong repair — which is the exact failure 4a was written for.
+**Per gate rule 4a, collapsing these into one bucket sends the reader to the wrong repair.**
+
+## LEDGER DRIFT — 2, neither is a FAIL and both need a decision
+
+| crate | reason | remedy emitted by the runner |
+|---|---|---|
+| `contabo-reclaim` | `in_workspace_absent_from_ledger` | `add_the_row` — **the crate WAS still run** |
+| `omp-idle-dispatch` | `in_ledger_absent_from_workspace` | `delete_the_row_or_restore_the_crate` |
+
+## Instrument findings — these survive the re-derivation
+
+**1. `grep -c 'GATE_RUNNER'` IS A MOVING TARGET, WHICH IS WORSE THAN A WRONG ONE.** It returns
+**4** on `475c702` and **13** on `cb9d3941`, because the newest run added `_FAILING`, `_UNMEASURABLE`
+and `_LEDGER_DRIFT` summary lines. On the older run the per-crate verdicts are bare
+`PASS crate=… / FAIL crate=…` lines carrying **no `GATE_RUNNER` token at all**, so the instrument
+everyone was pointed at could not reach the data it was aimed at. **On `cb9d3941` the names ship
+in the log directly** — `GATE_RUNNER_FAILING count=16 names=…` — so re-deriving needs no scraping.
+`86zjl`'s defect, now confirmed from three runs.
+
+**2. `gh run view --log` EMITS EVERY PER-CRATE ROW TWICE** — streamed as each crate lands, then
+again in the report, byte-identically and by design. A naive tally on the older run reads
+`24 FAIL / 144 PASS / 8 UNMEASURABLE`, **sum 176**: internally coherent, plausible, and double.
+**The sum-to-88 control catches it; a count does not.**
+
+**3. ⛔ A SOURCE THAT CONTAINS THE WHOLE POPULATION CANNOT EVIDENCE A SUBSET OF IT.** `pd5ua` was
+credited with enumerating the failing crates. Grepping its cited `docs/gate-roster.txt` for them
+returns **11 of 11** — because it is the **FULL 88-crate roster**, containing `tick-monitor`,
+`pane-truth` and `bead-availability`, all of which PASSED. Every failing crate matched for the
+identical reason every passing one did. Same class as `grep -c ompo` → 62 counting substrings.
+
+**4. AND A CORRECT TALLY OF THE WRONG RUN IS THE MOST CONVINCING KIND OF WRONG FIGURE.** The
+sum-to-88 control proves one run's internal consistency and says **nothing about which run**.
+`72+12+4 = 88` is equally true at `475c702` and irrelevant at `cb9d3941`. **The control validates
+the tally, not the oracle** — that is what defeated the first publication of this file.
 
 ## NO-CLAIM
 
-This enumerates **one run at one head**. It does not claim the 12 are still failing at `HEAD`
-today, that any one is a real defect rather than a stale test, or that the 72 PASS rows are
-correct. **Re-run the extraction against the newest run CARRYING A VERDICT before treating this as
-a work list** — "completed" and "carrying a verdict" are different populations, and several of
-these crates already have open beads whose premises must be re-derived before dispatch.
+One run at one head. It does **not** claim the 16 still fail at today's `HEAD`, that any one is a
+real defect rather than a stale test, or that the 68 PASS rows are correct. **Re-derive before
+dispatching any of them** — `dispatch-silence-watch`, `silent-success-census`, `undrained-pipe-lint`
+and `omp-inventory-map` are `poumg` children whose premises are already under re-derivation.
