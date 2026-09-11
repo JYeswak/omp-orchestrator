@@ -91,16 +91,28 @@ const SPAWN_ALLOWANCE: &[(&str, &str)] = &[
     ),
     // RETIRED 2026-09-11: `receiver-receipt` held a row reading "single tmux capture-pane read
     // at hook time; ALLOWANCE IS WEAK -- should route through the contract once the fence
-    // lands". The crate no longer contains a single `Command::new`, so the row named a spawn
-    // that does not exist and `every_allowance_row_names_a_crate_that_still_spawns` refused it
-    // by name. Removing it is the ratchet moving DOWN, which is the only direction it moves.
+    // lands", and `every_allowance_row_names_a_crate_that_still_spawns` refused it by name.
+    //
+    // ⛔ CORRECTED, same day, by GradeCloseReason: the retirement is RIGHT and the reason first
+    // written here was FALSE. It said the crate "no longer contains a single `Command::new`".
+    // It contains TWO -- src/bin/receiver-receipt.rs:94 and :239 -- and the verifying grep
+    // (`src/*.rs`) DID NOT DESCEND INTO src/bin/ while the census walks a stack from
+    // `dir.join("src")`. The census and the grep disagreed and the GREP was the blind one.
+    // The row is retirable because the crate now ROUTES: it declares subprocess-contract
+    // (Cargo.toml:24), imports `bounded_output` (:14) and applies it at the real spawn (:96);
+    // the second site is inside a `#[test]` module. RIGHT ACTION, WRONG JUSTIFICATION -- and
+    // the wrong one is what a future reader would have found when they checked, saw
+    // `Command::new`, and concluded the retirement was bogus.
     (
         "build-stamp",
         "BUILD TIME, not runtime: one site, `git rev-parse HEAD` from a build-script helper that \
-         72 crates consume as a [build-dependencies] entry. Routing it through the contract would \
-         pull subprocess-contract -- and asupersync behind it -- into 72 BUILD graphs to bound a \
-         synchronous one-shot that the build itself already bounds. Dies when the build stamp is \
-         derived without spawning a child at all",
+         71 crates consume as a [build-dependencies] entry (72 manifests name build-stamp; one \
+         is its own). Routing it through the contract would pull subprocess-contract -- and \
+         asupersync behind it -- into 71 BUILD graphs to bound a synchronous one-shot that the \
+         build itself already bounds. UNRESOLVED COUNTER-ARGUMENT, recorded rather than \
+         dismissed: a build script spawning git is still an unbounded child, and this row only \
+         asserts that the BUILD bounds it. Dies when the build stamp is derived without \
+         spawning a child at all",
     ),
     (
         "installer",
