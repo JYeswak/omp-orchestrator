@@ -2007,6 +2007,19 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    INSTRUMENT can fire, not that your NEEDLE'S POPULATION is visible to it. That is a THIRD
    probe, and it must be drawn from inside the artifact under test.
 
+   ⛔ **THE DEGENERATE CASE, AND IT IS WORSE THAN SKIPPING AN AVAILABLE CONTROL: SOMETIMES NO
+   SAME-CLASS CONTROL CAN EXIST.** For `RCH-E327` there was none to find anywhere in the
+   artifact — **no assembled code is contiguous, by construction**, so there was no second needle
+   of that class in that binary at all. The control that WAS run, `grep -c 'RCH-E'` → 16, is
+   right-artifact-WRONG-CLASS: a contiguous prefix literal standing in for an assembled code. It
+   proved the instrument fires on a class the needle was never in.
+
+   **When no same-class control CAN exist, the instrument is INAPPLICABLE and the honest verdict
+   is `UNKNOWN`, not absence.** The other sightings that night each had a cheap missing arm; this
+   one had none, which is a different and worse failure — there is no better grep, only a
+   different oracle. A runtime observation settled it, and the registry above would have settled
+   it sooner.
+
    ⛔ **AND IT GENERALISES BEYOND `grep`: ANY DIAGNOSTIC STRING YOU REASON FROM IS AN INSTRUMENT,
    AND MOST NAME A NARROWER CONDITION THAN THEY APPEAR TO.** Fourth sighting the same night, and
    the first in an error message rather than a search:
