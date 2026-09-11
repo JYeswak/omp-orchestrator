@@ -153,6 +153,36 @@ jobs:
         # workspace LOADING, so `-p <crate>` cannot dodge it and every command returns an
         # identical 101 with a completely different cause.
         run: cargo metadata --no-deps --format-version 1 > /dev/null
+      - name: Install the pre-commit hook the gates document
+        # WHY THIS EXISTS: `hook_freshness::the_installed_hook_is_not_older_than_the_source_it
+        # _enforces` was RED BY CONSTRUCTION on every CI run, and it is one of the reasons
+        # `no-shell-gate` has never gone green. Measured 2026-09-11 on run 34607406545: the leg
+        # appears in GATE_RUNNER_FAILURE_CAUSE while passing locally, so a developer clearing
+        # every local red would still never see this crate green.
+        #
+        # The precondition (tests/hook_freshness.rs:120-141) keys on repository HISTORY:
+        #   .git + history + no hook -> "a real checkout enforcing NOTHING" -> FAIL
+        #   no history               -> cannot answer -> UNMEASURED
+        #   hook present             -> compare mtimes
+        # That key was a good fix -- it refuted three environment-varying proxies in one day --
+        # but it never contemplated a THIRD environment: full history (we set fetch-depth: 0
+        # deliberately, see above), no hook, and no commits to enforce. A gate that is red by
+        # construction gets routed around, which is the slower death.
+        #
+        # THE REPAIR IS THE ONE THE TEST ITSELF PRINTS at hook_freshness.rs:162-164, so nothing
+        # is relaxed: we SATISFY the invariant instead of excusing it. Two panes independently
+        # warned that declining the leg on an environment self-declaration risks passing a
+        # developer machine that simply never installed the hook -- the exact case the
+        # precondition was built to catch. Installing carries no such risk: the assertion, the
+        # mtime comparison and the history key are all untouched.
+        #
+        # It also BUYS signal we did not have: CI now fails if the hook does not compile.
+        # Debug, not --release: the leg compares mtimes and never reads the profile.
+        run: |
+          cargo build --quiet --bin pre-commit-gate
+          cp target/debug/pre-commit-gate .git/hooks/pre-commit
+          chmod +x .git/hooks/pre-commit
+          ls -l .git/hooks/pre-commit
       - name: S1 coverage provenance
         run: cargo run --quiet -p s1-coverage -- --repo . --head HEAD --json
       - name: Gate roster is not vacuous
