@@ -240,8 +240,7 @@ pub fn health(repo: &Path) -> HealthReport {
     // 4. Build provenance. `unknown` is an honest report of a missing stamp, not a claim
     //    that the binary is stale — the discrimination this repo paid a day to learn.
     let provenance = crate::provenance::BuildProvenance::current();
-    let stamped =
-        provenance.build_commit != "unknown" && provenance.source_revision != "unknown";
+    let stamped = provenance.build_commit != "unknown" && provenance.source_revision != "unknown";
     signals.push(if stamped {
         Signal {
             name: "build_provenance",
@@ -255,8 +254,7 @@ pub fn health(repo: &Path) -> HealthReport {
             name: "build_provenance",
             severity: DoctorSeverity::Degraded,
             reason_code: "PROVENANCE_UNSTAMPED".to_owned(),
-            detail: "this build cannot state its own origin; staleness is UNMEASURED"
-                .to_owned(),
+            detail: "this build cannot state its own origin; staleness is UNMEASURED".to_owned(),
             repair_scope: None,
         }
     });
@@ -379,7 +377,10 @@ pub enum RepairError {
     OxymoronicFlags,
     UnknownScope(String),
     MissingScope,
-    Chokepoint { scope: &'static str, detail: String },
+    Chokepoint {
+        scope: &'static str,
+        detail: String,
+    },
 }
 
 impl std::fmt::Display for RepairError {
@@ -401,7 +402,10 @@ impl std::fmt::Display for RepairError {
                 SCOPES.join(",")
             ),
             Self::Chokepoint { scope, detail } => {
-                write!(formatter, "REPAIR_CHOKEPOINT_FAILED scope={scope} detail={detail}")
+                write!(
+                    formatter,
+                    "REPAIR_CHOKEPOINT_FAILED scope={scope} detail={detail}"
+                )
             }
         }
     }
@@ -474,10 +478,11 @@ pub fn repair(repo: &Path, scope: &str, mode: RepairMode) -> Result<RepairReport
 
     // The single write path. Idempotence comes from the chokepoint, not from a check here:
     // a second run reports actions == 0 and takes no backup.
-    let report = inception::initialize(repo, &artifact).map_err(|error| RepairError::Chokepoint {
-        scope,
-        detail: error.to_string(),
-    })?;
+    let report =
+        inception::initialize(repo, &artifact).map_err(|error| RepairError::Chokepoint {
+            scope,
+            detail: error.to_string(),
+        })?;
 
     let applied = if report.actions == 0 {
         Vec::new()
@@ -485,7 +490,11 @@ pub fn repair(repo: &Path, scope: &str, mode: RepairMode) -> Result<RepairReport
         vec![RepairAction {
             scope,
             kind: RepairKind::WriteThroughChokepoint,
-            detail: format!("wrote {} ({} action(s))", artifact.display(), report.actions),
+            detail: format!(
+                "wrote {} ({} action(s))",
+                artifact.display(),
+                report.actions
+            ),
             backup: report.backup.clone(),
         }]
     };
@@ -591,7 +600,11 @@ pub fn dispatch(command: &str, rest: &[String]) -> Option<u8> {
             if wants_json {
                 println!("{}", report.to_json());
             } else {
-                println!("OMPO_HEALTH {} spawns={}", report.severity.as_str(), report.spawns);
+                println!(
+                    "OMPO_HEALTH {} spawns={}",
+                    report.severity.as_str(),
+                    report.spawns
+                );
                 for signal in &report.signals {
                     println!(
                         "  {:20} {:8} {} {}",
@@ -653,6 +666,11 @@ mod tests {
     use super::*;
     use std::fs;
 
+    /// A clean REPO: control files PLUS a git repo with a HEAD commit. The
+    /// inception schema requires a non-empty source_revision (ompo-start
+    /// inception.rs:874,1263), so `git rev-parse HEAD` must succeed here; a
+    /// bare tempdir is not a repo and the legs named *_clean_repo_* prove it.
+    /// Identity is fixture-scoped (-c flags), never worker config.
     fn fixture() -> tempfile::TempDir {
         let directory = tempfile::tempdir().expect("fixture");
         for relative in inception::required_control_files() {
@@ -662,7 +680,24 @@ mod tests {
             }
             fs::write(path, "fixture\n").expect("control file");
         }
+        // The ownership trust gate (ompo-start inception verify_agents_ownership)
+        // refuses init over an AGENTS.md without the project stamp. The fixture
+        // is this project's own test, so it carries the stamp.
+        fs::write(directory.path().join("AGENTS.md"), "# omp-orchestrator fixture\n")
+            .expect("stamped AGENTS.md");
+        git(&directory, &["init", "-q"]);
+        git(&directory, &["add", "-A"]);
+        git(&directory, &["-c", "user.name=fixture", "-c", "user.email=fixture@local", "commit", "-qm", "fixture"]);
         directory
+    }
+
+    fn git(directory: &tempfile::TempDir, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .current_dir(directory.path())
+            .args(args)
+            .status()
+            .expect("git must exist for repo fixtures");
+        assert!(status.success(), "git {args:?} failed in fixture");
     }
 
     /// ACCEPTANCE A. The weight claim is tied to the real probe list, so it cannot become a
@@ -676,17 +711,27 @@ mod tests {
         );
         let directory = fixture();
         let report = health(directory.path());
-        assert_eq!(report.spawns, 0, "a health run reported spawning subprocesses");
-        assert!(!report.signals.is_empty(), "ANTI-VACUITY: no signals produced");
+        assert_eq!(
+            report.spawns, 0,
+            "a health run reported spawning subprocesses"
+        );
+        assert!(
+            !report.signals.is_empty(),
+            "ANTI-VACUITY: no signals produced"
+        );
     }
 
     /// ACCEPTANCE B. Dry-run is the DEFAULT and its actual-action list is empty.
     #[test]
     fn dry_run_is_the_default_and_performs_zero_actions() {
         let directory = fixture();
-        let (scope, mode) = parse_repair_flags(&["--scope".to_owned(), "inception".to_owned()])
-            .expect("parse");
-        assert_eq!(mode, RepairMode::DryRun, "repair must not mutate by default");
+        let (scope, mode) =
+            parse_repair_flags(&["--scope".to_owned(), "inception".to_owned()]).expect("parse");
+        assert_eq!(
+            mode,
+            RepairMode::DryRun,
+            "repair must not mutate by default"
+        );
         let report = repair(directory.path(), &scope.expect("scope"), mode).expect("dry run");
         assert!(report.applied.is_empty(), "dry-run performed actions");
         assert!(!report.planned.is_empty(), "dry-run planned nothing to do");
@@ -744,7 +789,14 @@ mod tests {
         let clean = repair(directory.path(), "inception", RepairMode::Apply).expect("clean");
         assert!(clean.applied.is_empty());
         assert_eq!(clean.reason_code, "REPAIR_NOT_NEEDED_ALREADY_VALID");
-        assert_eq!(health(directory.path()).signals.iter().filter(|s| s.name == "inception_artifact" && s.severity == DoctorSeverity::Green).count(), 1);
+        assert_eq!(
+            health(directory.path())
+                .signals
+                .iter()
+                .filter(|s| s.name == "inception_artifact" && s.severity == DoctorSeverity::Green)
+                .count(),
+            1
+        );
     }
 
     /// ACCEPTANCE F. Nothing to fix is a TYPED no-op. A silent success is
@@ -763,8 +815,12 @@ mod tests {
     /// send an operator to the wrong remedy.
     #[test]
     fn unknown_and_missing_scopes_are_distinct_typed_refusals() {
-        let unknown = repair(Path::new("/nonexistent"), "zzz-not-a-scope", RepairMode::DryRun)
-            .expect_err("must refuse");
+        let unknown = repair(
+            Path::new("/nonexistent"),
+            "zzz-not-a-scope",
+            RepairMode::DryRun,
+        )
+        .expect_err("must refuse");
         assert!(unknown.to_string().contains("REPAIR_UNKNOWN_SCOPE"));
         assert!(unknown.to_string().contains("zzz-not-a-scope"));
         assert_eq!(unknown.exit_code(), 2);
@@ -868,7 +924,14 @@ mod tests {
     /// `dispatch` declines what it does not own, so no existing verb is shadowed.
     #[test]
     fn dispatch_declines_foreign_commands() {
-        for command in ["doctor", "init", "help", "capabilities", "quickstart", "completion"] {
+        for command in [
+            "doctor",
+            "init",
+            "help",
+            "capabilities",
+            "quickstart",
+            "completion",
+        ] {
             assert_eq!(dispatch(command, &[]), None, "captured {command}");
         }
     }

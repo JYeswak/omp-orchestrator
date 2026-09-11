@@ -207,17 +207,40 @@ fn capabilities_drift_is_red() {
 /// `%7` returned CHANGES REQUESTED on both L2 observability beads. The mechanism's idempotence
 /// is already proven by `initialize_reprobes_and_second_run_has_zero_artifact_actions`; what
 /// is asserted here is the COMMAND SURFACE, and that the receipt survives it.
+
+/// Real git repo with a HEAD commit for `init` fixtures. Identity is
+/// fixture-scoped (-c flags), never worker config.
+fn git_init_commit(root: &std::path::Path) {
+    for args in [
+        ["init", "-q"].as_slice(),
+        ["add", "-A"].as_slice(),
+        ["-c", "user.name=fixture", "-c", "user.email=fixture@local", "commit", "-qm", "fixture"]
+            .as_slice(),
+    ] {
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(args)
+            .status()
+            .expect("git must exist for repo fixtures");
+        assert!(status.success(), "git {args:?} failed in fixture");
+    }
+}
 #[test]
 fn init_is_a_reachable_verb_and_reports_zero_actions_on_a_second_run() {
     let temp = tempfile::tempdir().expect("tempdir");
     let root = temp.path();
-    std::fs::create_dir_all(root.join(".git")).expect("git marker");
+    // A real git repo with a HEAD commit: `init` requires source_revision
+    // (git rev-parse HEAD must succeed) and the project AGENTS.md stamp.
+    // An empty `.git/` dir satisfies neither (ig4fn).
     std::fs::create_dir_all(root.join("docs")).expect("docs dir");
     for name in ["AGENTS.md", "CLAUDE.md", "Cargo.toml", "README.md", "SCHEMAS.toml"] {
         std::fs::write(root.join(name), b"fixture\n").expect("control file");
     }
+    std::fs::write(root.join("AGENTS.md"), b"# omp-orchestrator fixture\n")
+        .expect("stamped AGENTS.md");
     std::fs::write(root.join("docs/decisions.jsonl"), b"{\"id\":\"fixture\"}\n")
         .expect("decisions");
+    git_init_commit(root);
     let artifact = root.join(".omp-orchestrator").join("inception.json");
 
     let first = ompo()
