@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use no_shell_gate::{check_repo, scan, GateError, Verdict, Violation};
+use no_shell_gate::{check_repo, scan, tracked_files, GateError, Verdict, Violation};
 
 // ---------------------------------------------------------------- helpers
 
@@ -290,6 +290,95 @@ fn this_repo_is_clean() {
         Verdict::Clean,
         "a tracked .sh or .py is in the index — port it to Rust; the \
          exemption list is empty by design"
+    );
+}
+
+/// PROVENANCE OF THE SCAN SET, which `this_repo_is_clean` above cannot check.
+///
+/// # The hole this closes (bead omp-orchestrator-7img8)
+///
+/// `scan` enforces exactly one property of the set it is given — that it is NON-EMPTY
+/// (`src/lib.rs:137-140`, `GateError::EmptyScanSet`). That catches an index the gate could not
+/// read at all. It cannot catch a PARTIAL one, and a partial index is indistinguishable from a
+/// clean tree by every assertion this suite had: every path such a list returns really is
+/// tracked, and really has no `.sh`/`.py` extension, so the gate returns `Clean` and the
+/// repository's one rule is enforced over a fraction of the repository.
+///
+/// The two upstream guards miss it for ORTHOGONAL reasons, which is why neither covers the
+/// other: `EmptyScanSet` keys on EMPTINESS, and `check_workspace_load` keys on the FILESYSTEM
+/// (`src/lib.rs:281`, `:303` — a root manifest that exists on disk, members enumerated from
+/// disk). A tree with every file present and a decayed `.git` passes both honestly.
+///
+/// So this leg asserts the set's PROVENANCE: paths that MUST be in this repository's index. A
+/// list that omits them is not this repository's index, whatever else is true of it.
+///
+/// # Why the assertion is here and not in `scan` or `check_repo`
+///
+/// `scan` is pure and is deliberately fed SYNTHETIC sets (`clean_list_passes` above), and
+/// `check_repo` is run against FIXTURE repositories by five legs in this file. A sentinel
+/// requirement inside either would redden six legitimate controls — the fix would look like the
+/// gate working while breaking the gate's own known-good and known-bad legs. Provenance is a
+/// property of THE REPOSITORY-MODE CALL, so it is asserted where that call is made.
+///
+/// # NO-CLAIM, and it is the honest half
+///
+/// This is the OBSERVABLE half of the bead, not the IMPOSSIBLE half. It reddens the suite on a
+/// partial index; it does NOT make the installed hook refuse one at commit time, which needs a
+/// typed refusal in `src/lib.rs` and its repo-mode call site. That edit re-locks every commit in
+/// the tree (`commit_ratchets.rs:18-24` lists `no-shell-gate` in `HOOK_SOURCE_CRATES`, and
+/// `:188-195` walks that whole `src` tree by mtime), so it is sequenced as its own announced
+/// transaction rather than smuggled in beside a test.
+#[test]
+fn the_scan_set_is_this_repository_and_not_a_fragment_of_one() {
+    let root = repo_root();
+    // ⛔ THE rch LANE CANNOT HOST THIS MEASUREMENT AND MUST SAY SO RATHER THAN ERROR.
+    // `[transfer].exclude_patterns` strips `.git/`, so `ls-files` returns
+    // `fatal: not a git repository` there. That is the BLIND class: the environment cannot see
+    // the input. The discriminator is POSITIVE — the absence of `.git` is itself observed, never
+    // inferred from a failure — and the decline is printed in the words this crate already uses
+    // for it (`cited_figure_denominator.rs:139-150`), because a silent early return would be
+    // indistinguishable from a pass.
+    //
+    // MEASURED 2026-09-11 AND IT IS WHY THIS GUARD IS A POSITIVE PROBE AND NOT A CATCH-ALL: two
+    // consecutive lane runs of this target produced DIFFERENT failure sets with no source change.
+    // Run A reddened `missing_git_metadata_fails_closed` (a `.git` WAS reachable, so the
+    // fail-closed fixture found a parent repository); run B reddened `this_repo_is_clean` and
+    // `binary_is_green_on_this_repo` (no `.git` at all). The two outcomes are COMPLEMENTARY, so
+    // this target cannot be green on that lane either way — and WHICH leg is red reports whether
+    // the worker carried a decayed `.git`. A flapping failure set with no diff is an instrument
+    // symptom, not noise.
+    //
+    // A FOSSIL `.git` DOES NOT TAKE THIS BRANCH, and that is the point of the bead: the directory
+    // exists, `ls-files` succeeds, and the sentinel check below REFUSES the partial list.
+    if !root.join(".git").exists() {
+        println!(
+            "UNMEASURED reason=not_a_repo_checkout root={} -- rch strips .git/, so the index is \
+             unobservable here. This is not a pass for the subject; CI and a developer checkout \
+             are the environments that can answer it.",
+            root.display()
+        );
+        return;
+    }
+    let tracked = tracked_files(&root).expect("the index must be readable in a real checkout");
+    // Sentinels: tracked at every revision this gate has existed at, and named rather than
+    // computed, because deriving them from the same `ls-files` output they are meant to validate
+    // is the self-referential check this repository has recorded seven times.
+    for sentinel in ["AGENTS.md", "Cargo.toml", "crates/no-shell-gate/src/lib.rs"] {
+        assert!(
+            tracked.iter().any(|path| path == sentinel),
+            "PARTIAL INDEX: {sentinel} is tracked in this repository but absent from the scan \
+             set of {} paths. The set is non-empty, so EmptyScanSet cannot see this, and every \
+             path present is genuinely extension-clean — a verdict rendered on it would be a \
+             PLAUSIBLE PASS over a fraction of the tree",
+            tracked.len()
+        );
+    }
+    // ANTI-VACUITY: a sentinel list that matched nothing would make the loop above vacuous, and
+    // a scan set of one path would satisfy "contains something" while proving nothing.
+    assert!(
+        tracked.len() > 100,
+        "the index collapsed to {} paths; a shrinking scan set is how this goes vacuously green",
+        tracked.len()
     );
 }
 
