@@ -73,9 +73,19 @@ Order of value, highest first:
 beads cite a hard count; three of three sampled were stale, and one would have authorised deleting a
 live crontab executor. Verdicts: `ALREADY-FIXED` / `PREMISE-FALSE` / `STILL-LIVE`.
 
-**Never dispatch a bead whose `acceptance_criteria` is empty** — `dispatch_packet.rs:166` refuses it,
-and it is ungradeable. Fill the field FIRST; a requirement living only in a packet is invisible to
-every acceptance check.
+**Never dispatch a bead whose acceptance is UNOBTAINABLE, and note that is NOT the same as an
+empty field.** Corrected 2026-09-10 by `GradePxhmd`, verified at source: the refusal is
+`dispatch_packet.rs:310` (`PacketFieldMissing("acceptance")`, exit 2), **not `:166`** — which is a
+bare `}`. And `acceptance()` at `:172-175` **falls back to an `ACCEPTANCE` section in the
+description**, so an empty field alone does NOT refuse. It refuses only when the field is empty
+**AND** the description has no `ACCEPTANCE` heading.
+
+**Two consequences.** (1) "field is empty" and "no acceptance obtainable" are two populations, and
+every dispatchability count taken on the first is the WRONG, LARGER denominator — beads whose
+acceptance already sat in the description were never blocked. (2) Fill the field anyway: the
+GRADER reads `acceptance_criteria`, so a field holding a NO-CLAIM paragraph while the real
+`ACCEPTANCE:` sits in the description is dispatchable and still ungradeable. Three S1 beads were
+measured in exactly that state.
 
 ### 5. WHAT AM *I* DOING TO DRIVE THIS PROJECT
 

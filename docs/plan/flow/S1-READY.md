@@ -60,9 +60,19 @@ print('S1_LAYER_BEADS_WITHOUT_ACCEPTANCE=%d' % len(bad)); print(*bad[:10],sep='\
 PY
 ```
 **Expect `=0`.** Measured 2026-09-07: **0 of 144.** ✅ PASSING.
-*Rationale:* a bead with no acceptance is structurally undispatchable —
-`crates/omp-orchestrator/src/dispatch_packet.rs:166` refuses the packet with
-`PacketFieldMissing("acceptance")`.
+*Rationale:* a bead with no OBTAINABLE acceptance is structurally undispatchable —
+`crates/omp-orchestrator/src/dispatch_packet.rs:310` refuses the packet with
+`PacketFieldMissing("acceptance")` (exit 2).
+
+⛔ **CORRECTED 2026-09-10 — THE OLD CITE `:166` IS WRONG AND SO WAS ITS MECHANISM.** `:166` is a
+bare `}`. More importantly, `acceptance()` at `:172-175` falls back to an `ACCEPTANCE` section in
+the DESCRIPTION, so an empty field alone does **not** refuse — only an empty field **AND** a
+description with no `ACCEPTANCE` heading does. **R1's check above therefore measures the wrong,
+LARGER population**: a bead counted by it may be perfectly dispatchable because its acceptance
+lives in the description. R1 still passed at `0 of 144`, so the verdict is unaffected — a zero on
+an over-broad population is still a zero on the narrower one it contains. **But the check must not
+be reused as a dispatchability count**, and the rationale no longer justifies a nonzero reading.
+Found by `GradePxhmd` re-deriving S1 premises; verified at source by pane 1.
 
 ### R2 — every S1 layer bead is WIRED to its layer gate
 
