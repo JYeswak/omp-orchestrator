@@ -192,8 +192,13 @@ fn composer_repo_root() -> Result<std::path::PathBuf, String> {
 }
 
 fn composer_path() -> String {
-    if let Ok(p) = std::env::var("COMPOSER_TYPED") {
-        return p;
+    // An EMPTY `COMPOSER_TYPED` is NOT a configured path. `var()` returns `Ok("")`
+    // for `COMPOSER_TYPED=`, which silently suppressed the discovery ladder below
+    // and fail-closed every FREE pane with a BLANK path in the operator's reason
+    // ("composer discriminator missing at  "). Same empty-filter idiom `HOME` and
+    // `CP` already use in this file: omitted is a true statement, never a guess.
+    if let Some(p) = std::env::var_os("COMPOSER_TYPED").filter(|v| !v.is_empty()) {
+        return p.to_string_lossy().into_owned();
     }
     let cp = match composer_repo_root() {
         Ok(root) => root.display().to_string(),
@@ -234,7 +239,14 @@ fn classify_with_composer(
     }
     let path = composer_path();
     if !PathBuf::from(&path).is_file() {
-        return missing_composer(&path);
+        // Symmetric with `apply_composer_rc`'s unknown-rc arm: ONE rule,
+        // `composer_fail_closed`, governs BOTH composer failures. It defaults to
+        // on, so live behaviour is unchanged; disabling it is what lets a mutation
+        // leg isolate the rule actually under test from an absent discriminator.
+        if rules.composer_fail_closed {
+            return missing_composer(&path);
+        }
+        return v;
     }
     let tail = tail_n(text, 6);
     let rc = composer_rc(&tail, &path);

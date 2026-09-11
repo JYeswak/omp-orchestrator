@@ -11,27 +11,38 @@ fn rust_bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_pane-dispatch-ready"))
 }
 
-fn composer() -> PathBuf {
-    if let Some(path) = std::env::var_os("COMPOSER_TYPED") {
-        return PathBuf::from(path);
+/// A REAL composer discriminator, or `None`. NEVER a blank path: `which` prints
+/// nothing when the binary is absent, and the old helper handed that empty string
+/// to `COMPOSER_TYPED`, which reads as "configured, at ''" — so pdr-002 fail-closed
+/// to BUSY on any box without `composer-typed` (CI) while passing on a developer
+/// box that happens to have one.
+fn composer() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("COMPOSER_TYPED").filter(|v| !v.is_empty()) {
+        return Some(PathBuf::from(path));
     }
     let output = Command::new("which")
         .arg("composer-typed")
         .output()
         .expect("which composer-typed");
     let path = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    PathBuf::from(path)
+    if path.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(path))
+    }
 }
 
 fn eval_bin(args: &[&str], input: &str) -> String {
-    let mut child = Command::new(rust_bin())
+    let mut command = Command::new(rust_bin());
+    command
         .args(args)
-        .env("COMPOSER_TYPED", composer())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn");
+        .stderr(Stdio::piped());
+    if let Some(path) = composer() {
+        command.env("COMPOSER_TYPED", path);
+    }
+    let mut child = command.spawn().expect("spawn");
     child
         .stdin
         .as_mut()
@@ -100,12 +111,18 @@ fn mutation_two_capture_liveness() {
 fn mutation_busy_markers_load_bearing() {
     let input =
         "Opus 5 (1M context) │ bypass permissions\n• Working (38m 29s • esc to interrupt)\n❯ ";
+    // `composer_fail_closed` is disabled ALONGSIDE the rule under test, in this arm
+    // only. On a box with no `composer-typed` an absent discriminator fail-closes
+    // the FREE path to BUSY, so the mutation could not bite: the arm returned BUSY
+    // whether or not the busy markers existed, which proves nothing.
     let off = eval_bin(
         &[
             "--eval",
             "--mutation",
             "--disable-rule",
             "busy_markers_load_bearing",
+            "--disable-rule",
+            "composer_fail_closed",
         ],
         input,
     );
@@ -121,6 +138,15 @@ fn mutation_busy_markers_load_bearing() {
         state_of(&on),
         "BUSY",
         "rule busy_markers_load_bearing: timer+prompt is BUSY, got {on}"
+    );
+    // ANTI-VACUITY: BUSY alone does not name its cause — a missing composer
+    // fail-closes to BUSY too, so the state check alone stays green after the rule
+    // is deleted. The REASON is what pins the busy markers as the CAUSE, and it
+    // turns this arm RED on a box with or without a composer.
+    assert!(
+        on.contains("|agent is working: "),
+        "rule busy_markers_load_bearing must be the CAUSE of BUSY, not a fail-closed \
+         composer; got {on}"
     );
     println!("MUTATION RED busy_markers_load_bearing: BUSY (Working (Ns) blocks FREE)");
 }
