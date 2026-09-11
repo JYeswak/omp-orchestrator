@@ -6550,6 +6550,40 @@ the vacuous conjunction — and it refused the generous split rather than bankin
 ⭐ **BEFORE WRITING `A AND B`, ASK WHETHER `A` IMPLIES `B`.** **A conjunction over a nested
 pair is not a stricter filter; it is the same filter wearing a stronger word.**
 
+## ✅ A PRE-REGISTERED DISCRIMINATOR THAT FIRED — and the corroborator I refused to promote
+
+**The one outstanding claim of the session closed 2026-09-11, on run `34577876082` / `2deb06cd`,
+against a discriminator written down BEFORE the run existed:**
+
+```
+header-only (detail ends ':NN:NN:')     0 of 55      <- was 59 of 59
+rung 3 'GATE_RUNNER ' liveness          2            <- the exact integer predicted in writing
+rung 3 'could not compile'              0
+```
+
+**Two things make this worth a block rather than a line.**
+
+**1. THE CORROBORATOR AGREED AND I DID NOT PROMOTE IT.** `detail` length came back
+`min=94 max=6351`, which "proves" the same thing — and length was **retracted as a primary an
+hour earlier**, because a header is *long*, so "not short" is satisfied by exactly the defect it
+was written to exclude. **A retracted instrument that happens to agree with the good one is still
+retracted.** The temptation is real and one-directional: a discarded measure never asks to be
+re-promoted when it *disagrees*, only when it agrees, so promoting-on-agreement is a ratchet that
+only ever loosens. **State which instrument is the verdict and which is corroboration, and keep
+the order you committed to before you saw the data.**
+
+**2. THE PREDICTED INTEGER WAS EXACT, AND THAT IS THE CHEAPEST FORM OF THE WHOLE DISCIPLINE.**
+`2` was written down as the healthy score — one emission plus one ci-citation quoting it
+verbatim — before any run carried the repair. An exact pre-registered integer cannot be
+satisfied by a coincidence the way "nonzero" can, and it costs one sentence at prediction time
+against a whole retraction cycle at reading time. **Every figure this session got wrong was
+read first and explained afterwards; the one that was stated first came back exact.**
+
+ **NO-CLAIM, and it is the load-bearing half:** this proves the EMITTER carries messages at
+55/55 in one verdict-bearing run. It proves **nothing** about whether any of the four failing
+crates is fixed, and it does not retract `GATE_RUNNER_FAILING count=16` three runs ago —
+**different populations at different heads, which is a partial order and not a contradiction.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
