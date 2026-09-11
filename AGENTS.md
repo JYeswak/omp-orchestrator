@@ -5809,6 +5809,104 @@ separate claims.** **When your pattern is right, say whether you knew why.**
 which is why the fix was a discriminator whose FAILURE MODE is different, not one whose
 VOCABULARY is longer.**
 
+## ⭐⭐⭐ WHEN TWO MECHANISMS AGREE ON AN INTEGER, COMPARE THE **DECOMPOSITIONS** BEFORE BANKING IT
+
+**The capstone of the session's instrument thread, and it was found by an agent dissatisfied
+with a number three panes had already reconciled.**
+```
+45 CI-named sites   SUCCESS 5 + CODE 5 = 10
+52 rch-lane sites   SUCCESS 7 + CODE 5 = 12
+52 rch-lane sites   SUCCESS 6 + CODE 6 = 12    <- SAME TOTAL, DIFFERENT SPLIT
+```
+⭐ **Three agents agreed on one integer and two disagreed about what it was made of. THE TOTAL
+WAS THE COINCIDENCE; THE DECOMPOSITION WAS THE MEASUREMENT.**
+
+⛔⛔ **CHASING THE ONE-ROW DIFFERENCE FOUND THE MOST INFORMATIVE ROW OF ALL 52:**
+```
+empty_staged.rs:376   assert_eq!(output.status.code(), Some(0), …)   <- the rch lane dies HERE
+empty_staged.rs:84    assert!(output.status.success(), …)            <- CI dies HERE
+```
+⭐⭐ **That leg fails at a GENUINELY DIFFERENT ASSERTION on each lane — not a shifted line, two
+distinct checks.** **All three counts were CORRECT for their population; `6+6` vs `5+5` vs
+`7+5` is ONE LEG BEING TWO DIFFERENT FAILURES.**
+
+⛔ **AND IT UPGRADES A ROW THAT HAD BEEN DISCOUNTED.** Its cross-lane difference had been
+called *"weak, because it is itself subprocess-shaped."* ⭐ **It is stronger: the lanes STOP AT
+DIFFERENT ASSERTIONS, so they are failing for different reasons — POSITIVE evidence of
+divergence, not absence of agreement.** **It is the only row of 52 with affirmative evidence
+that the lanes differ, and it was hiding inside a reconciled count.**
+
+⭐ **THREE EARLIER RECONCILIATIONS WERE ALL RESOLVED BY DECOMPOSING** — `45+4=49` as a lane
+difference, the length ranges as a 7-byte `detail=` prefix, the crate tallies as a sorted
+multiset. ⛔ **This one was banked undecomposed, and that is exactly where the finding was.**
+
+**Agreement on a TOTAL is not agreement. Ask what each side's number is MADE OF, and treat a
+matching sum with mismatched parts as a lead rather than a confirmation.**
+
+## ⛔⛔ A PATH-SCOPED COMMIT SWEPT HALF A PEER'S PAIR AND **BROKE HEAD FOR TWENTY MINUTES**
+
+**The conductor's own error, one message after warning a peer about the mirror hazard.**
+```
+at 9176b51 (path-scoped on main.rs):  main.rs LedgerRead=2   lib.rs LedgerRead=0   HEAD BROKEN
+at HEAD after 454328b:                main.rs=2              lib.rs=2              repaired
+```
+⛔ **`git commit -- <path>` RE-READS THE WORKTREE**, so it took four lines of a peer's
+uncommitted CONSUMER while the DEFINITION sat uncommitted in the sibling file. ⭐ **I published
+that exact hazard against the RESTORE side minutes earlier and then committed it on the COMMIT
+side** — the rule fired on the category I was thinking in, not the action I was taking, for
+the fifth time tonight.
+
+⭐⭐ **AND THE STRUCTURAL LESSON IS SHARPER THAN THE MISTAKE: `git status --porcelain <onefile>`
+CANNOT SEE A BROKEN PAIR.** **Two panes independently measured `main.rs` clean and BOTH WERE
+RIGHT ABOUT THAT FILE** — the breakage lived in the RELATION between two files, and a per-file
+oracle is blind to a relation by construction.
+
+⛔ **The check that finds it is `git show HEAD:` on BOTH HALVES of the pair — which two of us
+had each run on our OWN commits and neither thought to run on someone else's.** **After any
+path-scoped commit touching a file a peer is editing, verify the pair, not the file.**
+
+## ⛔ THE ADDITION-IS-ITS-OWN-REVERT SHORTCUT HAS AN **UNSTATED PRECONDITION**
+
+**`HEAD:` is your pre-fix blob ONLY WHILE YOUR CHANGE IS UNCOMMITTED.** ⛔ **Once it lands —
+or once someone else's path-scoped commit sweeps it in — the SAME COMMAND returns the OPPOSITE
+blob.**
+
+⭐ **Measured: an arm announced against `git show HEAD:main.rs` would have "reverted" to the
+FIX, observed 5 GREEN, and read as *"my refusal is unnecessary"* — a silent no-op wearing a
+result.** **Two peers caught it in the same minute; it was re-sourced from `<fix>^` and
+`cmp`-verified byte-identical BEFORE running.** **State the precondition whenever you cite the
+shortcut.**
+
+## ⛔ CORRECTION TO MY OWN ANTI-PREFIX CHECK — COUNT `Running` LINES, NOT `test result:` LINES
+
+**I published the inherited-instrument discriminator as *"count `test result:` lines against
+the crate's target count."* It is WRONG BY EXACTLY ONE on any crate whose lib compiles
+doc-tests.**
+```
+testable targets from cargo metadata (lib 1 + bin 1 + test 17)   19
+"Running …" lines in the log                                     19   <- MATCHES
+"test result:" lines                                             20   <- DOES NOT
+the extra: "Doc-tests omp_orchestrator" / "running 0 tests"      +1
+```
+⛔ **`cargo test` emits a `test result:` line for the DOC-TEST target, which is not in the
+metadata target list — so the equality as I wrote it is FALSE BY CONSTRUCTION and a grader
+enforcing it literally would report a COMPLETE run as a PREFIX.**
+
+⭐ **The PROPERTY is sound and holds; the check named the wrong noun.** **Use `Running` lines
+against metadata targets.** ⛔ **Same family as `--lib` returning `0 passed, exit=0` under the
+crate's name, and as a character class that excludes digits: the command was right and the
+noun did not match its scope — this time in a rule I wrote to prevent exactly that.**
+
+## ⭐ A DELTA MEASURED AGAINST A TREE THAT NO LONGER EXISTS IS NOT A DELTA
+
+**A bead's item 7 predicted a crate would drop from 11 failures to 7; the grader measured 6
+and REFUSED to report it as an improvement.** ⛔ **Two commits landed after the bead was
+written, and one of the six is a peer's leg still in flight.** ⭐ **What it claimed instead is
+what it could prove at its own tree: all four guarded legs read `ok`, and none of the six
+failures is one of them.**
+
+**Report the property you can prove at YOUR tree, not the delta against a tree nobody holds.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
