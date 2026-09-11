@@ -138,6 +138,31 @@ pub enum UnmeasurablePrecondition {
     },
 }
 
+impl UnmeasurablePrecondition {
+    /// The leading token of the `Display` form, ON ITS OWN.
+    ///
+    /// # Why the code has to be separable from the message
+    ///
+    /// The full `Display` carries a free-text `detail=` that contains spaces and absolute paths,
+    /// so it cannot appear inside a comma-joined work list without destroying the list's grammar.
+    /// The code can, and **the code is what selects the remedy**: `MISSING_EXECUTABLE` means
+    /// *reach the tool*, `POLICY_UNAVAILABLE` means *supply the oracle*, and neither means *fix
+    /// the test*. `omp-orchestrator-86zjl` leg 3 exists because collapsing those into one
+    /// `unmeasurable=4` sends four different repairs to the same wrong place.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::MissingPath { .. } => "MISSING_PATH",
+            Self::MissingExecutable { .. } => "MISSING_EXECUTABLE",
+            Self::MissingScheduler { .. } => "MISSING_SCHEDULER",
+            Self::MissingDaemon { .. } => "MISSING_DAEMON",
+            Self::PolicyUnavailable { .. } => "POLICY_UNAVAILABLE",
+            Self::AllTestsSkipped { .. } => "ALL_TESTS_SKIPPED",
+            Self::FixtureScopeUnavailable { .. } => "FIXTURE_SCOPE_UNAVAILABLE",
+        }
+    }
+}
+
 fn one_line_detail(detail: &str) -> String {
     detail
         .chars()
@@ -264,6 +289,25 @@ impl CrateVerdict {
             Self::NoTests { .. } => "NO_TESTS",
         }
     }
+
+    /// The remedy-selecting qualifier for this verdict, when the class alone does not pick one.
+    ///
+    /// `None` for `PASS`, `FAIL` and `SHORT`: their remedy is already named on their own row
+    /// (`failing_targets=`, `expected=/observed=`) and appending a second token would make the
+    /// work list claim more than the verdict knows. `UNMEASURABLE` and `NO_TESTS` are the two
+    /// classes where the CLASS is not the remedy — an absent executable and an absent oracle are
+    /// both `unmeasurable=…` and are repaired in different places.
+    #[must_use]
+    pub fn reason_code(&self) -> Option<&'static str> {
+        match self {
+            Self::Passed { .. } | Self::Failed { .. } | Self::Short { .. } => None,
+            Self::Unmeasurable { reason } => Some(reason.code()),
+            Self::NoTests { disposition } => Some(match disposition {
+                NoTestsDisposition::DeclaredException { .. } => "DECLARED",
+                NoTestsDisposition::Undeclared => "UNDECLARED",
+            }),
+        }
+    }
 }
 
 /// The whole-run report.
@@ -323,6 +367,7 @@ impl GateReport {
                  workspace, not a repository with no gates.\n",
             );
         }
+        out.push_str(&self.work_list());
         for name in &self.ledger_only {
             out.push_str(&format!(
                 "GATE_RUNNER_LEDGER_DRIFT crate={name} reason=in_ledger_absent_from_workspace \
@@ -337,6 +382,97 @@ impl GateReport {
         }
         for (name, verdict) in &self.verdicts {
             out.push_str(&verdict.render_row(name));
+        }
+        out
+    }
+
+    /// ONE line per non-PASS class, naming every crate in it — `omp-orchestrator-86zjl`.
+    ///
+    /// ```text
+    /// GATE_RUNNER_FAILING count=17 names=agent-mail-native,dispatch-silence-watch,…
+    /// GATE_RUNNER_UNMEASURABLE count=4 names=admission-reason:POLICY_UNAVAILABLE,finding:MISSING_EXECUTABLE,…
+    /// GATE_RUNNER_SHORT count=0 names=NONE
+    /// GATE_RUNNER_NO_TESTS count=0 names=NONE
+    /// ```
+    ///
+    /// # Why this exists when [`CrateVerdict::render_row`] already names every crate
+    ///
+    /// **The rows were never missing, and they reconcile exactly. They were UNADDRESSABLE, which
+    /// is a different defect with a different repair.** Measured twice independently on CI run
+    /// `34543513267` (462,955 bytes, head `568f2dfe`):
+    ///
+    /// ```text
+    /// grep -c GATE_RUNNER                      ->   9   the whole documented marker family
+    /// of those 9, naming a crate verdict       ->   0   <- THE DEFECT, one prefix wide
+    /// distinct FAIL crate= names               ->  17   == the aggregate's fail=17  ✓
+    /// distinct UNMEASURABLE crate= names       ->   4   == unmeasurable=4           ✓
+    /// distinct PASS crate= names               ->  67   == pass=67, and 67+17+4=88  ✓
+    /// ```
+    ///
+    /// So nothing was wrong with the arithmetic. What was wrong is that **the one marker a
+    /// reader is told to grep cannot see a single crate identity.** The bead that produced this
+    /// method quotes those nine lines verbatim as *"THE ENTIRE per-crate output"* of the log —
+    /// an honest reading of `grep GATE_RUNNER` over half a megabyte, and wrong by ~250 rows.
+    /// AGENTS.md already records the class: *an instrument that cannot return the other answer
+    /// is not a measurement.*
+    ///
+    /// Two lesser frictions ride along, and both argue for a SUMMARY line rather than for
+    /// tagging the rows. Every row is printed twice — streamed as its crate lands, then again
+    /// in the report, byte-identically and on purpose — so `grep -c 'FAIL crate='` answers 34,
+    /// not 17. And `CHECK_FAIL crate=` contains `FAIL crate=` as a SUBSTRING, which lifts that
+    /// 34 to 42. A reader who does not already know both facts cannot reconcile the log by
+    /// counting.
+    ///
+    /// **Why not simply prefix the 250 rows instead.** Because the census is valuable precisely
+    /// because it is short: `grep GATE_RUNNER` returning nine readable lines is the summary, and
+    /// prefixing every row would return 250 and destroy it. The repair is to put the identities
+    /// INTO the summary — which is what this is. Four lines, so the census becomes thirteen and
+    /// carries the names.
+    ///
+    /// The line is therefore (a) inside the marker family a reader actually greps, (b) singular,
+    /// so counting it cannot double, and (c) self-reconciling: `count` and the length of `names`
+    /// come from the same filter over the same map that produced the aggregate, so the three
+    /// numbers cannot disagree.
+    ///
+    /// **Consumer:** an operator or agent turning a red run into claimable work — 86zjl's words,
+    /// *"no agent can claim a failing crate, no bead can cite one, and nobody can tell whether
+    /// today's 17 are yesterday's 17."* The last of those is why the names are sorted and on one
+    /// line: two runs' work lists diff.
+    ///
+    /// **Deletion condition:** when the per-crate rows themselves become addressable — a distinct
+    /// non-substring token per class, emitted exactly once per run — this line is redundant and
+    /// must go, because two places naming the same seventeen crates is the drift this crate
+    /// already pays a byte-identity test to avoid.
+    ///
+    /// **`count=0 names=NONE` is emitted for an empty class on purpose.** An absent line and a
+    /// zero line are different facts, and this repository has paid for reading the first as the
+    /// second. A green run says so in four lines rather than in silence.
+    fn work_list(&self) -> String {
+        let mut out = String::new();
+        for (token, class) in [
+            ("GATE_RUNNER_FAILING", "FAIL"),
+            ("GATE_RUNNER_UNMEASURABLE", "UNMEASURABLE"),
+            ("GATE_RUNNER_SHORT", "SHORT"),
+            ("GATE_RUNNER_NO_TESTS", "NO_TESTS"),
+        ] {
+            let names: Vec<String> = self
+                .verdicts
+                .iter()
+                .filter(|(_, verdict)| verdict.code() == class)
+                .map(|(name, verdict)| match verdict.reason_code() {
+                    Some(reason) => format!("{name}:{reason}"),
+                    None => name.clone(),
+                })
+                .collect();
+            out.push_str(&format!(
+                "{token} count={} names={}\n",
+                names.len(),
+                if names.is_empty() {
+                    "NONE".to_owned()
+                } else {
+                    names.join(",")
+                }
+            ));
         }
         out
     }

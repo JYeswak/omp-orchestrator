@@ -980,4 +980,82 @@ mod tests {
         assert_eq!(malformed.exit_code(), EXIT_AGGREGATE_MALFORMED);
         assert_ne!(missing.exit_code(), malformed.exit_code());
     }
+
+    /// THE SEAM NOBODY WAS WATCHING: `GateReport::render()` must emit a line THIS parser accepts.
+    ///
+    /// # Why this leg exists
+    ///
+    /// Every other leg in this module feeds [`parse_aggregate`] a HAND-TYPED fixture, and
+    /// `gate.yml` step 8 runs `--ci-citation local` with `if: always()` and no
+    /// `continue-on-error`. So an aggregate that the renderer emits and this parser rejects reds
+    /// the entire run — including a run in which every gate passed — and nothing in the crate
+    /// would have caught it, because the producing half and the consuming half never met in a
+    /// test. That is the fixture-drift hole `omp-orchestrator-pxhmd` was filed for, one layer up.
+    ///
+    /// All four clauses of the contract, asserted against REAL rendered output: the line starts
+    /// with `GATE_RUNNER crates=`, every token after the marker is `key=<u64>`, all six keys are
+    /// present, and `pass + fail + unmeasurable == crates`.
+    ///
+    /// **And the second clause is the one `omp-orchestrator-86zjl` put at risk.** That bead added
+    /// four `GATE_RUNNER_*` work-list lines to `render()`. This leg is what proves they did not
+    /// move, shadow, or malform the single line step 8 reads. It fires on a seventh bucket, a
+    /// renamed key, a non-numeric value, or a second candidate line — which is exactly how such
+    /// a change arrives.
+    #[test]
+    fn a_real_rendered_report_satisfies_the_aggregate_contract() {
+        let mut verdicts = std::collections::BTreeMap::new();
+        verdicts.insert(
+            "alpha".to_owned(),
+            gate_runner::CrateVerdict::Passed { targets: 3 },
+        );
+        // NON-VACUOUS ON PURPOSE: a report with nothing but passes exercises neither the `fail`
+        // key nor the sum, which are two of the four clauses.
+        verdicts.insert(
+            "bravo".to_owned(),
+            gate_runner::CrateVerdict::Failed {
+                failing: vec!["wired".to_owned()],
+                unmeasurable: None,
+            },
+        );
+        verdicts.insert(
+            "charlie".to_owned(),
+            gate_runner::CrateVerdict::Unmeasurable {
+                reason: gate_runner::UnmeasurablePrecondition::MissingExecutable {
+                    executable: "br".to_owned(),
+                    detail: "the worker carries no br".to_owned(),
+                },
+            },
+        );
+        let report = gate_runner::GateReport {
+            verdicts,
+            ledger_only: std::collections::BTreeSet::new(),
+            workspace_only: std::collections::BTreeSet::new(),
+        };
+        let rendered = report.render();
+
+        // THE ASYMMETRY, DISARMED BY ASSERTION. `main.rs` takes the FIRST line matching this
+        // prefix and `parse_aggregate` takes the LAST. They agree only while render() emits
+        // exactly one, and they would disagree SILENTLY the moment it emitted two.
+        assert_eq!(
+            rendered
+                .lines()
+                .filter(|line| line.starts_with("GATE_RUNNER crates="))
+                .count(),
+            1,
+            "exactly one line may satisfy the aggregate prefix:\n{rendered}"
+        );
+
+        let aggregate = parse_aggregate(&rendered)
+            .expect("render() must emit an aggregate this parser accepts");
+        assert_eq!(
+            aggregate, "GATE_RUNNER crates=3 pass=1 fail=1 unmeasurable=1 short=0 no_tests=0",
+            "the cited line must be the renderer's aggregate verbatim:\n{rendered}"
+        );
+
+        // And the work list 86zjl added is PRESENT and does not pretend to be the aggregate.
+        assert!(
+            rendered.contains("GATE_RUNNER_FAILING count=1 names=bravo\n"),
+            "the work list must survive beside the aggregate:\n{rendered}"
+        );
+    }
 }

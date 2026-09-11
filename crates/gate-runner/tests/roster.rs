@@ -304,6 +304,182 @@ fn measured_environment_does_not_hide_a_real_failure() {
     assert!(rendered.contains("unmeasurable=MISSING_PATH path=.git"), "{rendered}");
 }
 
+/// Pull `key=value` out of a whitespace-tokenised gate-runner line.
+fn field<'a>(line: &'a str, key: &str) -> &'a str {
+    let prefix = format!("{key}=");
+    line.split_whitespace()
+        .find_map(|token| token.strip_prefix(&prefix))
+        .unwrap_or_else(|| panic!("line {line:?} carries no {key}="))
+}
+
+/// Find the single line beginning with `token ` in a rendered report.
+fn line_with<'a>(rendered: &'a str, token: &str) -> &'a str {
+    let prefix = format!("{token} ");
+    let mut hits = rendered.lines().filter(|line| line.starts_with(&prefix));
+    let first = hits
+        .next()
+        .unwrap_or_else(|| panic!("render() emitted no `{token}` line:\n{rendered}"));
+    assert!(
+        hits.next().is_none(),
+        "`{token}` must appear EXACTLY once — a counter that can appear twice cannot be \
+         reconciled by counting:\n{rendered}"
+    );
+    first
+}
+
+/// THE RECONCILIATION LEG — `omp-orchestrator-86zjl` legs 2, 3 and 6.
+///
+/// # The defect this defends, and why "the rows exist" was not the answer
+///
+/// Re-derived twice, independently, from CI run `34543513267` (462,955 bytes, head
+/// `568f2dfe`, the newest completed run):
+///
+/// ```text
+/// grep -c GATE_RUNNER                 ->  9    the whole documented marker family
+/// of those 9, naming a crate verdict  ->  0    <- the defect
+/// distinct FAIL crate= names          -> 17    == the aggregate's fail=17
+/// ```
+///
+/// Eighty-eight named rows WERE in that log and they reconcile exactly. What was missing is a
+/// line that a reader grepping the ONE documented marker can see — the bead was filed by an
+/// honest `grep GATE_RUNNER` that returned nine lines, none of them a crate. Counting the rows
+/// instead does not rescue it either: each row is printed twice (streamed, then reported —
+/// byte-identically, and deliberately) and `CHECK_FAIL crate=` contains `FAIL crate=` as a
+/// substring, so the naive count is 42 against an aggregate of 17.
+///
+/// So this leg asserts the three numbers that must agree and pins them to one line: the
+/// aggregate's field, the count of rows in that class, and the `count=` on the work-list line,
+/// whose `names=` list must have exactly that many entries.
+///
+/// **Anti-vacuity: this fixture FAILS on purpose.** A report with `fail=0` cannot demonstrate
+/// naming — there is nothing to name — so the leg asserts `fail` is non-zero before it asserts
+/// anything reconciles. The same rule is why the demonstration run for this bead is a real red
+/// CI run and never a green one.
+///
+/// **Leg 3, in the same fixture:** the two UNMEASURABLE crates carry DIFFERENT codes.
+/// `MISSING_EXECUTABLE` is repaired by reaching a tool and `POLICY_UNAVAILABLE` by supplying an
+/// oracle; neither is repaired by fixing a test. A work list that printed both as
+/// `unmeasurable` would send both repairs to the wrong place.
+#[test]
+fn the_work_list_names_every_non_passing_crate_and_reconciles_with_the_aggregate() {
+    let md = metadata(&[
+        ("alpha", &["contract"]),
+        ("bravo", &["contract"]),
+        ("charlie", &["contract"]),
+        ("delta", &["contract"]),
+        ("foxtrot", &["contract"]),
+    ]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("fixture parses");
+    let failed_on = |target: &str| Observed {
+        passed: Vec::new(),
+        failed: vec![target.to_owned()],
+        unmeasurable: None,
+    };
+    let blocked_by = |reason: UnmeasurablePrecondition| Observed {
+        passed: Vec::new(),
+        failed: Vec::new(),
+        unmeasurable: Some(reason),
+    };
+    let mut obs = BTreeMap::new();
+    obs.insert("alpha".to_owned(), observed_pass(&["contract"]));
+    obs.insert("bravo".to_owned(), failed_on("contract"));
+    obs.insert("charlie".to_owned(), failed_on("contract"));
+    obs.insert(
+        "delta".to_owned(),
+        blocked_by(UnmeasurablePrecondition::MissingExecutable {
+            executable: "br".to_owned(),
+            detail: "fixture missing command".to_owned(),
+        }),
+    );
+    obs.insert(
+        "foxtrot".to_owned(),
+        blocked_by(UnmeasurablePrecondition::PolicyUnavailable {
+            policy: "admission-reason-differential".to_owned(),
+            detail: "fixture missing oracle".to_owned(),
+        }),
+    );
+    let ledger: BTreeSet<String> = ["alpha", "bravo", "charlie", "delta", "foxtrot"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+
+    let report = build_report(&roster, &obs, &ledger);
+    let rendered = report.render();
+    let aggregate = line_with(&rendered, "GATE_RUNNER");
+
+    // ANTI-VACUITY FIRST. A green report proves nothing about naming failures.
+    let declared_failures: usize = field(aggregate, "fail").parse().expect("fail is a number");
+    let declared_unmeasurable: usize = field(aggregate, "unmeasurable")
+        .parse()
+        .expect("unmeasurable is a number");
+    assert!(
+        declared_failures > 0 && declared_unmeasurable > 0,
+        "this leg cannot demonstrate naming from a clean run: {aggregate}"
+    );
+
+    // Pinned TOGETHER: the class that produced the exit code, and the exit code it produced.
+    assert_eq!(
+        report.exit_code(),
+        EXIT_GATE_FAILED,
+        "two failing crates and zero short ones must exit GATE_FAILED: {rendered}"
+    );
+
+    for (token, class, declared) in [
+        ("GATE_RUNNER_FAILING", "FAIL", declared_failures),
+        (
+            "GATE_RUNNER_UNMEASURABLE",
+            "UNMEASURABLE",
+            declared_unmeasurable,
+        ),
+    ] {
+        let work_list = line_with(&rendered, token);
+        let listed: Vec<&str> = field(work_list, "names").split(',').collect();
+        let counted: usize = field(work_list, "count")
+            .parse()
+            .expect("count is a number");
+        let rows = rendered
+            .lines()
+            .filter(|line| line.starts_with(&format!("{class} crate=")))
+            .count();
+        assert_eq!(
+            counted, declared,
+            "{token} disagrees with the aggregate's own tally — the mismatch 86zjl was filed \
+             for:\n{rendered}"
+        );
+        assert_eq!(
+            listed.len(),
+            declared,
+            "{token} claims {declared} but names {} — a count without that many names is not a \
+             work list:\n{rendered}",
+            listed.len()
+        );
+        assert_eq!(
+            rows, declared,
+            "{class} rows ({rows}) do not reconcile with the aggregate ({declared}); a crate \
+             counted without a row is a failure nobody can claim:\n{rendered}"
+        );
+    }
+
+    // Every failing crate is nameable FROM THE WORK LIST ALONE, with no other line consulted.
+    let failing = field(line_with(&rendered, "GATE_RUNNER_FAILING"), "names");
+    assert_eq!(failing, "bravo,charlie", "{rendered}");
+
+    // LEG 3: the remedy-selecting code travels WITH the name, and the two differ.
+    let unmeasurable = field(line_with(&rendered, "GATE_RUNNER_UNMEASURABLE"), "names");
+    assert_eq!(
+        unmeasurable, "delta:MISSING_EXECUTABLE,foxtrot:POLICY_UNAVAILABLE",
+        "an absent tool and an absent oracle have different repairs and must not share a \
+         label:\n{rendered}"
+    );
+
+    // ZERO IS NOT ABSENCE. An empty class says so rather than vanishing.
+    for token in ["GATE_RUNNER_SHORT", "GATE_RUNNER_NO_TESTS"] {
+        let line = line_with(&rendered, token);
+        assert_eq!(field(line, "count"), "0", "{rendered}");
+        assert_eq!(field(line, "names"), "NONE", "{rendered}");
+    }
+}
+
 /// ITEM 7's DECISION, asserted rather than described: a crate with no tests at all is an ERROR
 /// unless it carries a declared row.
 ///

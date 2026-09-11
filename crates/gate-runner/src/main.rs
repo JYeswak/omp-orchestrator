@@ -316,8 +316,27 @@ fn main() -> ExitCode {
             return ExitCode::from(gate_runner::EXIT_EMPTY_ROSTER);
         }
     }
+    // EACH LINE MUST BE UNAMBIGUOUS READ ALONE — `omp-orchestrator-86zjl` leg 4.
+    //
+    // This line used to read `executed=20 failed=8 declared_crates=17`, one line away from
+    // `GATE_RUNNER crates=88 pass=67 fail=17 …`, and the collision was total:
+    //
+    //   * `fail` and `failed` are the same English word over DIFFERENT denominators — 17 of 88
+    //     CRATES and 8 of 20 CHECK PHASES — and nothing on either line said which.
+    //   * `17` appeared on BOTH lines meaning different things: seventeen failing crates, and
+    //     seventeen crates that DECLARE a check. A reader who saw the second first concluded the
+    //     failures were the declarations.
+    //
+    // So every counter here is now prefixed with the noun it counts, and its denominator is a
+    // sibling on the same line: `check_phases_failed` is out of `check_phases_executed`, and
+    // `crates_declaring_checks` counts crates, not failures. The aggregate line is deliberately
+    // NOT touched — `ci_citation::parse_aggregate` requires that line to start with
+    // `GATE_RUNNER crates=`, to carry exactly six numeric keys, and to satisfy
+    // pass+fail+unmeasurable==crates. Editing it to disambiguate would red step 8 of `gate.yml`
+    // on every run, including green ones.
     println!(
-        "GATE_RUNNER_CHECKS executed={check_rows} failed={check_failures} declared_crates={}",
+        "GATE_RUNNER_CHECKS check_phases_executed={check_rows} \
+         check_phases_failed={check_failures} crates_declaring_checks={}",
         checks.len()
     );
 
