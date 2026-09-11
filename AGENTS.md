@@ -2007,6 +2007,28 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    INSTRUMENT can fire, not that your NEEDLE'S POPULATION is visible to it. That is a THIRD
    probe, and it must be drawn from inside the artifact under test.
 
+   ⛔ **AND IT GENERALISES BEYOND `grep`: ANY DIAGNOSTIC STRING YOU REASON FROM IS AN INSTRUMENT,
+   AND MOST NAME A NARROWER CONDITION THAN THEY APPEAR TO.** Fourth sighting the same night, and
+   the first in an error message rather than a search:
+
+   ```
+   Selected_worker                      prose read as an IDENTIFIER
+   RCH-E327 absent from strings         an ASSEMBLED code read as NONEXISTENT
+   "exists on disk, but not in '<rev>'" a WORKING-TREE hint read as PROOF THE REV RESOLVED
+   ```
+
+   The third cost the most and survived three agents. It was taken to mean *"the rev resolved but
+   its tree lacks the path"*, and a whole object-divergence theory was built on it. **A bogus
+   all-`deadbeef` sha produces the identical message** — so it means the rev did NOT resolve, and
+   git is being helpful about your working tree. The resolvable-but-missing case says
+   **`does not exist in '<rev>'`**, a different string that neither observation ever produced.
+   The control was one run away and was explicitly advised against as not worth spending.
+
+   **So before you reason from an error string, make it produce its OTHER answer.** If you cannot
+   make the instrument say the opposite thing, you have not established that it distinguishes the
+   two conditions at all — which is `8i`'s two-probe control aimed at a message instead of a
+   needle, and the population half above aimed at a diagnostic instead of a corpus.
+
    ⛔ **AND THE RUNG ABOVE ALL OF THIS: ASK WHETHER THE ARTIFACT SHIPS A REGISTRY FOR THE THING
    YOU ARE LOOKING FOR, BEFORE YOU SCAN ITS BYTES.** Four agents spent an hour deciding whether
    `RCH-E327` existed — `strings` sweeps over eleven binaries, a raw byte dump, a runtime
@@ -2324,6 +2346,34 @@ STILL-LIVE      re-derived and unchanged. Dispatch it.
 **A dispatch against a stale premise is indistinguishable from a dispatch against a real defect
 until the pane reports back** — which is a full unit spent to learn nothing, and it is the
 dispatcher's cost, not the worker's.
+
+### AND AN `ACCEPTANCE` HEADING IN A DESCRIPTION MUST BE ALONE ON ITS LINE
+
+**Measured 2026-09-10 with `dispatch_packet::render` itself as the oracle**, run over every live
+tracker row rather than a hand-rolled needle. The dispatcher's fallback
+(`dispatch_packet.rs:172-175` → `section_from_description`) matches the **whole line**,
+case-insensitively, after stripping leading `#` and **at most one** trailing `:`. **So any inline
+text after the heading defeats it.** All three of these are invisible to the parser while reading
+as headings to every human and matching every substring grep:
+
+```
+ACCEPTANCE: <criteria>                 <- the DOMINANT shape in this tracker
+ACCEPTANCE (run X, expect Y):          <- repeated boilerplate across many beads
+ACCEPTANCE — one of these two, not both
+```
+
+**Put the heading ALONE on its line, exactly `ACCEPTANCE`, with at most one trailing colon, and
+start the criteria on the NEXT line.**
+
+**This costs nothing while the `acceptance_criteria` FIELD is populated** — a populated field
+means the parser never reaches the description, and measured over the live corpus **zero rows
+currently reach the fallback at all, so it is dead code today.** It bites at exactly one moment:
+when an author leaves the field empty and trusts the heading. The bead then **silently stops
+being dispatchable** while looking complete to every reader and every grep.
+
+**NO-CLAIM.** This is authoring guidance, not a gate — nothing refuses a malformed heading, and
+the exposure is counterfactual rather than a live defect. Deliberately NOT filed as a bead: the
+victim count is zero, and filing for a zero is the ceremony this file forbids.
 
 ---
 
