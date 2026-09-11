@@ -1630,6 +1630,45 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    as a measurement. A token-level search (`jtgw` → 4 hits) is what separated ABSENT from INERT.
    **Before reporting absence, search for a FRAGMENT of the name, not the whole name.**
 
+4b. ⛔ **A POSITIVE CONTROL DRAWN FROM THE POPULATION IT VALIDATES IS VACUOUS — AND AN EXISTENCE
+   PREDICATE IS NOT A REACHABILITY PREDICATE.** Added 2026-09-11 after this defect was measured
+   **twice in one night, in two different crates**, the second time inside the supervisor's own
+   anti-vacuity machinery. **This is rule 4 defeated by a predicate that can never return empty.**
+
+   ```
+   omp-orchestrator/src/lib.rs:684   coverage_output_reachability
+       -> Reachable { trigger } WHEN crates/<name>/Cargo.toml .is_file()
+   omp-orchestrator/src/lib.rs:558   derived_positive_control
+       -> .find(|r| r.reachability.is_reachable())          <- the FIRST such row
+   ```
+
+   **Measured: ALL 11 `COVERAGE_WAVE_OUTPUT_CRATES` rows satisfy it trivially**, and so does
+   `crate-atom-gate` — **the crate rule 10 below records as having never been invoked by
+   anything.** So the row that proves *"this census verified SOMETHING"* is satisfied by **any
+   directory on disk with a manifest in it**, and the supervisor believed `dispatch-silence-watch`
+   reachable for a reason unrelated to whether anything calls it.
+
+   **THE TWO SHAPES, and they compose into a gate that cannot fail:**
+
+   - **EXISTENCE ≠ REACHABILITY.** `Cargo.toml` exists for every crate by construction, so the
+     predicate partitions nothing. Per rule 9 part 2, reachability means a trigger that can
+     **FIRE** — a workflow entry, a hook, a crontab/launchd row, or a `Command::new` spawn from
+     something that itself has one.
+   - **THE CONTROL MUST COME FROM OUTSIDE THE POPULATION.** Picking the first passing row as the
+     proof-of-non-vacuity means the control and the subject share a failure mode: **when the
+     predicate is wrong, the control is wrong in the same direction and cannot report it.** Same
+     defect as rule 7b's overlapping mutation sets, and as `pd5ua`'s `docs/gate-roster.txt`
+     matching **11 of 11** failing crates *because it is the full 88-crate roster* — ⛔ **A SOURCE
+     THAT CONTAINS THE WHOLE POPULATION CANNOT EVIDENCE A SUBSET OF IT.**
+
+   **THE CHEAP TEST, and it is one row:** name a subject you KNOW should fail and assert the
+   predicate rejects it. If you cannot name one, the predicate is not discriminating — that is
+   `8i`'s two-probe control aimed at a classifier instead of an instrument.
+
+   **Found by an agent that REFUSED to anchor a wiring proof on the repo's existing oracle and
+   reported why, rather than hand-rolling around it silently.** Routing around a broken kernel is
+   what keeps it broken (see KERNEL-ONLY); reporting it is what fixes it.
+
 5. **State the claim as a floor-raise.** Say what the gate mechanically enforces *and* what still
    passes. A residual "guarantees / proves / makes impossible" in a gate header is itself a defect —
    the overclaim is worse than the gap, because a reader stops looking.
