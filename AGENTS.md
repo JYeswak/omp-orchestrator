@@ -5055,6 +5055,62 @@ exits 0, so the ABSENCE of both proof lines is the tell"* is sound and has exact
 absence is produced by the instrument as readily as by the subject. **Same family as `8k`,
 where a line filter deletes a one-line payload.**
 
+## ⛔⛔ THE TRUNCATION WAS IN MY OWN GREP — the instrument produced the reading, again
+
+**Measured 2026-09-11, and the smoking gun is in the command:**
+```
+what the conductor ran:   gh run view … | grep -oE 'failing_tests[^|]{0,400}'
+                                                                   ^^^^^^^
+the real line:            2951 bytes · 45 names · ZERO ellipsis · terminates with ')'
+```
+⛔ **A 2951-byte line clipped at 400 characters showed SIX names. A crate was dispatched on
+those six; when a pane measured 45, the conductor published *"CI's renderer truncates"* and
+told the fleet to distrust every per-crate list. THE PRODUCER WAS COMPLETE THE WHOLE TIME.**
+
+⭐ **Not a stale value, not an unexamined consumer — A BOUND TYPED ONE PIPE EARLIER AND NEVER
+LOOKED AT AGAIN**, violating *capture wide and filter after* ninety minutes after publishing
+it. ⛔ **AND A PEER NEARLY SHIPPED THE INVERSE FROM THE SAME LINE**, clipped by its own
+`cut -c1-600`, caught only because the cut landed MID-TOKEN at `fleet_w` rather than at a
+boundary. **Two agents truncated one line within ten minutes toward opposite conclusions — that
+is a line long enough that every default tool clips it, and nothing in any output says so.**
+
+## ⭐⭐ TRUNCATION IS **ONE-DIRECTIONAL** EVIDENCE — presence claims are immune
+
+> **A clip can HIDE a name. It can never INVENT one.**
+
+⭐ **So every attribution built on a quoted list held, and the only class ever at risk was the
+one the conductor doubted — an ABSENCE — which then passed on re-check.** ⛔ **When you discover
+your corpus may be clipped, RE-CHECK ONLY THE ABSENCE CLAIMS.** Re-verifying presence claims is
+wasted work, and treating all conclusions as equally suspect is how one instrument defect
+becomes a general retraction.
+
+## ⭐ AN ENUMERATION THAT SHIPS ITS OWN CARDINALITY CANNOT BE SILENTLY SHORTENED
+
+```
+GATE_RUNNER_FAILING count=4 names=<4 items>   SELF-CHECKING -- a short render disagrees with itself
+FAIL crate=… failing_tests:<no count>         nothing in the output contradicts a prefix
+```
+⭐ **The self-checking line is the ONLY CI figure nobody had to re-verify all night**, and the
+field without a count ate four panes' reasoning. **It immunises against elision at EVERY layer —
+emitter, log, and display — because the disagreement is internal to the line.** ⛔ **It would
+not have saved the conductor, whose grep would have clipped the count too** — which is the
+honest bound, not a reason to skip it.
+
+## ⛔⛔ AN INHERITED FRAMING SURVIVES DATA THAT REFUTES IT IN THE SAME MESSAGE
+
+**The sharpest self-catch of the cluster.** A pane wrote *"CI's own line ends in an ellipsis"*
+and, in the SAME message, reported **45 names parsed from that line** — ⭐ **which it could only
+have done if the log contained all 45.** The claim and its refutation were adjacent.
+
+⛔ **It did not notice because it INHERITED THE FRAMING FROM THE DISPATCH rather than deriving
+it.** A figure you measure gets checked; **a framing you are handed gets used.** ⭐ **A
+dispatcher's error propagates further than a worker's, because the worker's own contradicting
+data does not trigger a re-derivation of something it never derived.**
+
+⭐ **And the attribution change is the load-bearing half: an elision in the EMITTER is a gate
+defect to FIX; an elision in a DISPLAY LAYER is a CITATION RULE.** Filing against the gate would
+have been a bead against a defect that does not exist.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
