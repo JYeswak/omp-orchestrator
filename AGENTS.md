@@ -6258,18 +6258,45 @@ re-deriving the ancestry for my commit."*
 cause crowds out a boring one. **Two commits adjacent in a message is not evidence that they
 share a state.**
 
-## ⭐⭐ A **STRUCTURAL** NEGATIVE BEATS A SEARCH THAT CAME UP EMPTY
+## ⛔⛔ RETRACTED: "A STRUCTURAL NEGATIVE BEATS A SEARCH" — I CANONIZED A CORRELATE AS AN IMPOSSIBILITY
 
+**I published this as a ⭐⭐ rule and three panes endorsed it:** *"the newest verdict-bearing
+head is an ANCESTOR of my commit, so no run in flight COULD contain it — the difference
+between 0 found and 0 possible."* ⛔ **IT IS FALSE. Measured, twelve of twelve:**
 ```
-35 verdict-bearing runs examined, COMPLETED:  0 contain the commit
-and the newest verdict-bearing head is an ANCESTOR of that commit
-   -> no run in flight COULD contain it yet
+in-flight runs containing the commit:  12 of 12
+adbd4ce9 · 082c57c5 · de1e62b8 · 01c8765b · ba84d3b1 · 373451ad
+6c2c5748 · 605f2a98 · 35e2377f · 936d0898 · 947bfbbc · 87d7c0a9
 ```
-⭐ **The second line is the real proof: it is a statement about the ORDER of the graph, not
-about a search terminating.** ⛔ **"I could not find one" and "none can exist yet" are
-different claims, and only the second survives a sweep that timed out or looked at the wrong
-window.** **Report which one you have — and note that the structural negative FLIPS the moment
-a run picks up a containing head, which a search result never tells you.**
+⭐ **The MEASURED half stands exactly: `0` VERDICT-BEARING runs contain it, properly measured
+over 35.** ⛔ **The INFERENCE bolted onto it does not: a fact about the newest VERDICT-BEARING
+head bounds nothing about IN-FLIGHT heads, which are NEWER BY CONSTRUCTION — they are the runs
+that started after the completed ones.** **"No verdict exists" is TRUE. "None is pending" is
+FALSE.**
+
+⭐⭐⭐ **AND IT IS THE SESSION'S OWN PATTERN WEARING THE STRONGEST LABEL WE HAVE.** The cheap
+observable was *"newest verdict-bearing head"*; the property was *"any in-flight head"* — and
+the substitution was not merely made, it was **PROMOTED TO `0 possible` OVER `0 found`**, the
+label reserved for exhaustive structural proof. ⛔ ***A CORRELATE DRESSED AS A STRUCTURAL
+IMPOSSIBILITY IS WORSE THAN A CORRELATE, BECAUSE THE LABEL INSTRUCTS THE NEXT READER TO STOP
+CHECKING.*** **It cost one command to falsify.**
+
+**What survives: `0 found` over a stated population, with the population named.** **"Structural"
+is a claim about the ORDER OF THE GRAPH and must quantify over the set you actually mean —
+here, in-flight heads, not completed ones.**
+
+## ⛔ A TIMED-OUT PROBE MAY BE A **BUDGET** ARTIFACT, NOT A HARD QUESTION
+
+**The sweep that returned `UNKNOWN` twice — correctly reported as `UNKNOWN` both times — was
+pure API budget:**
+```
+gh run list --limit 30/40   -> times out at 300s
+gh run list --limit 12      -> returns in 3.9 SECONDS
+```
+⛔ **Two `UNKNOWN`s were an artifact of asking for more rows than the API would deliver in the
+window, not evidence about CI — and the whole in-flight picture was four seconds away the
+entire time.** ⭐ **Reporting `UNKNOWN` was right; ACCEPTING it was premature. Check the budget
+before accepting the unknown** — a probe that cannot finish is not necessarily a hard question.
 
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
