@@ -2180,6 +2180,40 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    coincide only in the clean case, and an agent who has just used numstat-zero correctly twice
    is the most likely to reach for it on the third.**
 
+   ⛔⛔ **AND `cp -p` RESTORES THE *PRE-MUTATION MTIME*, SO A BYTE-IDENTICAL RESTORE CAN TEST
+   RED. THIS IS THE FALSE-RED TWIN AND IT AFFECTS EVERY MANDATORY KNOWN-BAD LEG IN THIS REPO.**
+   Found 2026-09-11 on `poumg.5` after a correct restore **tested RED twice**, and the agent
+   proved the source was already correct on the worker with
+   `rch exec --job -- sha256sum <file>` rather than assuming its own restore had failed.
+
+   **The mechanism, verified locally:** `cp -p` copies the SOURCE's mtime onto the destination,
+   so restoring from a `cp -p` aside-copy moves the file's mtime **BACKWARD** to before the
+   mutation. The mutant `rlib` in the worker's `target/` was compiled *after* that timestamp, so
+   **cargo's mtime fingerprint calls the source fresh and REUSES THE MUTANT ARTIFACT.** The test
+   then runs the mutant against restored source.
+
+   ```
+   cp -p mt_a mt_b   -> mt_b takes mt_a's OLDER time     <- restore moves mtime BACKWARD
+   cp    mt_a mt_b   -> mt_b takes NOW                   <- forward, cache correctly invalidated
+   ```
+
+   **`touch` fixed it with the content unchanged and `sha256` identical** — which is the proof
+   that the RED was a staleness artifact and not the code.
+
+   **THE TRAP IS THAT EVERY CORRECT INSTINCT POINTS THE WRONG WAY.** `sha256` matches, `cmp` is
+   clean, `git status` is empty — every content oracle says the restore is perfect, and the
+   suite is red anyway. The natural conclusion is *"my restore failed"* or *"the fix is wrong"*,
+   and both are false. **Content oracles cannot see a build-cache key that is not content.**
+
+   **HOUSE FORM, amended:** keep `cp -p` for the ASIDE copy (it preserves the original's
+   metadata), but after restoring, **`touch` the file** — or restore with plain `cp`, which
+   stamps NOW. Then re-run. **A RED that survives a `touch` is a real RED; a RED that clears
+   under `touch` was never a measurement.**
+
+   **Same family as rule 8 and as tonight's borrowed-green:** three different times in one
+   session, the build system's view of "what changed" diverged from the tree's, and each time an
+   agent nearly reported a property of the CACHE as a property of the CODE.
+
    **NO-CLAIM.** This makes a restore *correct*; it does not make a mutation *attributable*. A
    leg still has to show the RED was caused by the mutation and not by unrelated breakage — the
    discriminator is that the other legs stay GREEN, per rule 7.
