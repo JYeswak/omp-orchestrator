@@ -225,19 +225,27 @@ fn multiple_comments_still_verdict_posted() {
     let v = classify(multi, "AmberGate", "AmberGate", DISPATCH, NOW, DEADLINE);
     assert_eq!(v, SilenceVerdict::VerdictPosted);
 }
-// Wiring proof: dispatch-silence-watch must appear in the live crontab.
-// The conductor cron (controller-tick) runs at :18,:38,:58 — silence-watch
-// fires at :01,:21,:41, 3 minutes after each tick, so it sees the post-tick
-// board state. This test reads the LIVE crontab and asserts the entry exists.
-#[test]
-fn dispatch_silence_watch_is_in_crontab() {
-    let output = std::process::Command::new("crontab")
-        .arg("-l")
-        .output()
-        .expect("crontab -l must be runnable");
-    let text = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        text.contains("dispatch-silence-watch"),
-        "crontab must contain a dispatch-silence-watch entry — it is not wired to the conductor cadence"
-    );
-}
+// THE `dispatch_silence_watch_is_in_crontab` TEST WAS DELETED HERE — omp-orchestrator-poumg.1.
+//
+// It ran `crontab -l` and asserted this crate appeared in it. Three independent reasons it was
+// unsatisfiable rather than merely unsatisfied:
+//
+// 1. THE BINARY CANNOT BE SCHEDULED. Its usage is
+//    `dispatch-silence-watch <bead-id> <session> <dispatch-assignee> <dispatch-epoch>
+//    <deadline-secs>` — five required positionals, four of them per-dispatch facts. A cron row
+//    has no bead to name, so any entry would hard-code a bead id and an epoch and be meaningless
+//    three minutes later. Writing one would have turned this test green while protecting
+//    nothing: a fabricated trigger, which reads as protection and is worse than an unwired crate.
+//
+// 2. ITS CADENCE ANCHOR IS RETIRED. The comment said silence-watch should fire at :01,:21,:41,
+//    three minutes after `controller-tick` at :18,:38,:58. The only `controller-tick` line in
+//    the live crontab is a comment recording its own retirement by `5621319`.
+//
+// 3. IT PROBED THE OPERATOR'S LIVE CRONTAB FROM A PORTABLE SUITE, so it red every CI run and
+//    every lane run by construction — a permanent red that trains readers to ignore the crate.
+//
+// AND THE CRATE IS NOT UNWIRED. `crates/omp-orchestrator/src/resident.rs` spawns this binary per
+// dispatch (`invoke(cx, config, SILENCE_WATCH, &args)`) and parses its `detector=` verdict. The
+// wiring proof lives THERE, in the caller's own suite, at
+// `crates/omp-orchestrator/tests/silence_watch_wiring.rs` — because an engineer refactoring the
+// call site should get a RED in the crate they edited, not in this one.
