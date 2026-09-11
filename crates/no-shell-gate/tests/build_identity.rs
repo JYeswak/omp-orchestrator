@@ -103,6 +103,26 @@ use std::path::PathBuf;
 /// first time: before this commit CI read 6 against 4 and was RED; now one new omission
 /// reddens it. A ceiling is not lowered here because the honest floor IS 4.
 ///
+/// ⛔ ONE OF THOSE TWO STAMPS IS INERT AND I AM NOT HIDING IT BEHIND THE ARITHMETIC.
+/// `omp-idle-dispatch` is EXCLUDED from the workspace at the root `Cargo.toml:7`, so no
+/// workspace build ever runs its `build.rs`. Worse, and PRE-EXISTING: the crate cannot be
+/// built on ANY path today, because an excluded crate still declaring
+/// `license.workspace = true` fails before compilation —
+///
+/// ```text
+/// error: failed to parse manifest at `crates/omp-idle-dispatch/Cargo.toml`
+/// Caused by: error inheriting `license` from workspace root manifest's
+///            `workspace.package.license`
+/// Caused by: failed to find a workspace root
+/// ```
+///
+/// So this detector reads it as STAMPED while nothing can produce a binary from it at all.
+/// That is the text-keyed-oracle limit again, in the direction that FLATTERS the count
+/// rather than penalising it: the needle is in the source, the source is never compiled.
+/// The stamp is kept because it is correct the moment the crate becomes buildable, and the
+/// unbuildability is a separate defect that is not this gate's to fix — but a reader who
+/// takes "4" as "four crates away from full coverage" is reading one crate too generously.
+///
 /// ⛔ TWO MORE WERE STAMPED, REFUSED BY THE GATE, AND REVERTED — the trap above is LIVE and
 /// I re-derived it rather than inheriting it. Staging `plan-assemble` and
 /// `preregistration-gate` produced exactly the recorded failure:
