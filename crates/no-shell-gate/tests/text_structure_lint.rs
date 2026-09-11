@@ -108,8 +108,12 @@ fn scan_raw_checker_lines(root: &Path) -> Result<Vec<String>, String> {
                     path.strip_prefix(root).unwrap_or(&path).display()
                 ));
             }
-            let skip_literal_scan = path.to_string_lossy().contains("/tests/")
-                || path.ends_with("crates/omp-orchestrator/src/main.rs");
+            // omp-orchestrator-nar5l: DELETED, not repointed. This read
+            // `|| path.ends_with("crates/omp-orchestrator/src/main.rs")` -- a path absent from
+            // TREE, INDEX and WORKTREE, so the clause exempted NOTHING. Repointing it at
+            // `resident.rs` would EXTEND an exemption to a live file that never had one, which is
+            // gate self-weakening; a dead exemption is deleted, never migrated.
+            let skip_literal_scan = path.to_string_lossy().contains("/tests/");
             let mut in_test_module = false;
             for (line_number, (raw, line)) in text.lines().zip(code.lines()).enumerate() {
                 if raw.contains("#[cfg(test)]") {

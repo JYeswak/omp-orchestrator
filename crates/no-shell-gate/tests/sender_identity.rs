@@ -647,12 +647,17 @@ fn an_empty_dispatch_site_set_is_an_error() {
          floor means the literal walker stopped seeing argv",
         scanned.sites.len()
     );
+    // omp-orchestrator-nar5l: this named `crates/omp-orchestrator/src/main.rs`, a path absent
+    // from TREE, INDEX and WORKTREE -- the crate is lib-plus-`src/bin/`, so the "literal that is
+    // definitely there" was in a file that is definitely not. `resident.rs` is the dispatcher
+    // now and carries the `send-keys` argv the walker keys on. The CLAIM was true; the address
+    // was dead. Not repointed at `lib.rs`, which would resolve without carrying the behaviour.
     assert!(
         scanned
             .sites
             .iter()
-            .any(|site| site.file == "crates/omp-orchestrator/src/main.rs"),
-        "the known dispatcher crates/omp-orchestrator/src/main.rs was not found — the \
+            .any(|site| site.file == "crates/omp-orchestrator/src/resident.rs"),
+        "the known dispatcher crates/omp-orchestrator/src/resident.rs was not found — the \
          reader cannot see a literal that is definitely there"
     );
     assert!(

@@ -585,7 +585,7 @@ const USAGE: &str = "usage: refill-idle-panes [--plan|--apply|--selftest] \
 ///
 /// **`--exclude-pane` is the flag shape ALREADY IN USE in this fleet**, not a new one: the
 /// live watcher for this very session runs `tick-monitor watch --session omp-orchestrator
-/// … --exclude-pane %6 --exclude-pane %5`, and `crates/omp-orchestrator/src/main.rs:3124`
+/// … --exclude-pane %6 --exclude-pane %5`, and `crates/omp-orchestrator/src/resident.rs`
 /// is what builds those arguments. A second spelling would leave the conductor passing a
 /// flag refill does not read — indistinguishable, at the pane, from no exclusion at all.
 ///
@@ -700,8 +700,8 @@ fn resolve_session(
 ///
 /// Three sources, all pre-existing:
 /// * `--exclude-pane`, the flag `tick-monitor watch` takes;
-/// * `OMP_EXCLUDE_PANES`, the comma list `crates/omp-orchestrator/src/main.rs:372` reads;
-/// * `$TMUX_PANE`, which the same file pushes onto the same list at :379-383.
+/// * `OMP_EXCLUDE_PANES`, the comma list `crates/omp-orchestrator/src/resident.rs` reads;
+/// * `$TMUX_PANE`, which the same file pushes onto the same list.
 ///
 /// The third is the one that fixes the measured defect without anyone remembering to:
 /// refill is invoked BY the conductor from the conductor's own pane, so `$TMUX_PANE` is

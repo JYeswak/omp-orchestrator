@@ -613,8 +613,8 @@ pub fn assess_receiver_receipt(
     // WHAT I BUILT FIRST AND WITHDREW: a blanket floor refusing every verdict
     // below 75 seconds. It was wrong twice over.
     //
-    // 1. IT WOULD HAVE REGRESSED THE LIVE PATH. `crates/omp-orchestrator/src/main.rs`
-    //    takes `pre_observation` at :797 and the post capture at :580 with NO
+    // 1. IT WOULD HAVE REGRESSED THE LIVE PATH. `crates/omp-orchestrator/src/resident.rs`
+    //    takes `pre_observation` and the post capture with NO
     //    sleep between them — a span of seconds. A blanket floor turns every
     //    production receipt into INDETERMINATE, which is strictly worse than the
     //    gap it closes.
@@ -962,8 +962,8 @@ mod tests {
     /// Two legs stood here asserting that ANY span below 75 seconds yields
     /// INDETERMINATE. They passed. They were removed with the blanket floor they
     /// tested, because the floor would have regressed the live dispatch path -
-    /// `crates/omp-orchestrator/src/main.rs` captures pre at :797 and post at
-    /// :580 with no sleep between them - and because the reasoning behind them
+    /// `crates/omp-orchestrator/src/resident.rs` captures pre and post
+    /// with no sleep between them - and because the reasoning behind them
     /// was wrong: a timer RESET is unambiguous at any spacing, and an
     /// `Idle -> Working` fresh timer is the strongest receipt the fleet has.
     ///

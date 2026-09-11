@@ -46,8 +46,22 @@ fn code_without_comments(source: &str) -> String {
 #[test]
 fn finding_dispatch_has_an_external_production_caller() {
     let root = repo_root();
-    let main = fs::read_to_string(root.join("crates/omp-orchestrator/src/main.rs"))
-        .expect("omp-orchestrator production source");
+    // omp-orchestrator-nar5l: this read named `crates/omp-orchestrator/src/main.rs`, a path
+    // absent from TREE, INDEX and WORKTREE -- the crate is lib-plus-`src/bin/`. Both needles
+    // asserted below live in `resident.rs` (`git grep -ln` on each), so the CLAIM was true and
+    // only the address was dead. Repointed at the file that carries the behaviour, never at
+    // `lib.rs`, which would resolve without carrying it.
+    // AND THE FAILURE NAMES ITS OWN PATH. `.expect("omp-orchestrator production source")` panics
+    // with an `Os { code: 2 }` and NO path, so a dead citation here produced an unattributable
+    // failure -- the reader cannot tell which file went missing. That is the same
+    // error-attribution defect nar5l is about, inside nar5l's own known-bad leg.
+    let production = root.join("crates/omp-orchestrator/src/resident.rs");
+    let main = fs::read_to_string(&production).unwrap_or_else(|error| {
+        panic!(
+            "cited production source is unreadable: {} detail={error}",
+            production.display()
+        )
+    });
     let code = code_without_comments(&main);
 
     assert!(

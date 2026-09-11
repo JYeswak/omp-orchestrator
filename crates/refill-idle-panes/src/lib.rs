@@ -459,7 +459,7 @@ pub struct PaneRow {
 /// `"pane":"0"`), while every exclusion in this fleet is written as a tmux pane ID: the
 /// live watcher for this very session runs
 /// `tick-monitor watch --session omp-orchestrator … --exclude-pane %6 --exclude-pane %5`,
-/// and `crates/omp-orchestrator/src/main.rs:379` pushes `$TMUX_PANE` onto that same list.
+/// and `crates/omp-orchestrator/src/resident.rs` pushes `$TMUX_PANE` onto that same list.
 /// Assuming `%6` means index 6 is how an exclusion silently stops excluding — measured
 /// live 2026-09-03: `%5 %6 %7 %8 %9` are indices `0 1 2 3 4`.
 ///

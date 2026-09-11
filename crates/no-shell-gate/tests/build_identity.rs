@@ -157,8 +157,18 @@ fn the_stamped_crate_derives_its_id_rather_than_hoping_for_an_env_var() {
         "build.rs must DERIVE the id from git; an env var alone shipped build_id=unversioned \
          tonight even when it was exported, because cargo reused a cached artifact"
     );
-    let main_rs = root.join("crates/omp-orchestrator/src/main.rs");
-    let src = std::fs::read_to_string(&main_rs).expect("main.rs must exist");
+    // omp-orchestrator-nar5l: this named `crates/omp-orchestrator/src/main.rs`, absent from TREE,
+    // INDEX and WORKTREE -- the crate is lib-plus-`src/bin/`. `const BUILD_ID` lives in
+    // `resident.rs` (`git grep -ln 'const BUILD_ID'`), so the claim was true and the address was
+    // dead. The failure now NAMES the path: `.expect("main.rs must exist")` panicked with an
+    // `Os { code: 2 }` and no path, which made a dead citation unattributable.
+    let supervisor_rs = root.join("crates/omp-orchestrator/src/resident.rs");
+    let src = std::fs::read_to_string(&supervisor_rs).unwrap_or_else(|error| {
+        panic!(
+            "cited supervisor source is unreadable: {} detail={error}",
+            supervisor_rs.display()
+        )
+    });
     // STRIP COMMENTS FIRST. The first version grepped raw text and matched main.rs's own doc
     // comment explaining that option_env! USED to be there -- a checker whose input contains
     // prose about the thing it checks. Sixth instance of that shape this session.
