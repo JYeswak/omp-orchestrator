@@ -6651,6 +6651,68 @@ label says what was compared, the operands say what went wrong. So the fix moved
 of it. **A capture repair sized by "how many lines now carry a message" cannot see this;
 it needs a per-ASSERTION-KIND census.**
 
+## ⭐⭐ WHEN AN INSTRUMENT DEFECT IS FOUND, RE-SCOPE EVERY LIVE CLAIM **BY THE FIELD IT USED**
+
+**Volunteered unprompted by a grader whose ten beads were already closed, minutes after a
+different pane found the `assert_eq` operand gap:**
+
+> *"All three readings used leg NAMES from the crate-level failing lists, never the CAUSE TEXT —
+> so the emitter's newly-found operand gap does not touch them."*
+
+**Nobody asked, and that is the point.** A freshly-discovered instrument defect does not announce
+which conclusions it poisons. The reflex is to defend the conclusion (*"my result still holds"*);
+the correct move is to **name the FIELD each claim consumed and check whether the defect lives in
+that field.** Here three CI readings drew on `GATE_RUNNER_FAILING names=…` while the defect lives
+in `GATE_RUNNER_FAILURE_CAUSE detail=…` — **disjoint, so the immunity is STRUCTURAL rather than
+lucky, and checkable by a reader who trusts nothing.**
+
+⛔ **A BARE "MY RESULT STILL HOLDS" IS UNFALSIFIABLE AND THEREFORE WORTHLESS.** *"I used field X,
+the defect is in field Y"* is refutable in one command. **State the field, not the confidence.**
+
+ **The obligation runs to whoever FOUND the defect too:** a defect report must name the field it
+corrupts, so downstream holders can run this audit without re-deriving the mechanism.
+
+## ⛔⛔ `0 passed` IS THE **DENOMINATOR** CHECK — and it is the hole in the two-proof-line rule
+
+**Measured 2026-09-11 by a grader re-executing someone else's fix, on its first attempt:**
+
+```
+cargo test -p gate-runner --lib    test result: ok. 0 passed; 0 failed    exit=0
+cargo test -p gate-runner --bins   test result: ok. 26 passed; 0 failed   exit=0
+gate-runner's tests live in src/main.rs (15) and src/lib.rs (9) -- the BIN carries them
+```
+
+⛔ **BOTH PROOF LINES WERE PRESENT AND BOTH WERE VACUOUS.** This file's rule — *paste
+`Remote command finished: exit=<N>` AND `test result:`* — **checks that the lines EXIST and never
+that the denominator is nonzero.** A green `test result: ok. 0 passed` satisfies it completely
+while executing nothing. Had the grader stopped there it would have filed *"confirmed green"*
+from a run of zero tests, as a non-author, on the fix for a defect it had itself found.
+
+**THE RULE IS NOW THREE PARTS: the exit code, the `test result:` line, AND A NONZERO `passed`
+COUNT YOU EXPECTED IN ADVANCE.**
+
+⭐ **AND THE TWO FAILURE MODES ARE MIRRORS, HIT BY TWO PANES INSIDE TEN MINUTES.** One:
+`exit=101` with **no** `test result:` — absent-by-build, an `E0282` from the fix's own author.
+Two: `exit=0` **with** a `test result:` — absent-by-selection. **A missing line that means
+nothing ran, and a present line that also means nothing ran.** Only the count separates them.
+
+## ⭐ A NEGATIVE NEEDS A **BOUNDED DENOMINATOR**, OR IT IS AN UNBOUNDED GREP
+
+**A bead whose premise was *"these four legs fail on every Linux host"*, discharged like this:**
+
+```
+the failing list: 398 bytes · ZERO ellipsis · FIVE named legs · none of them the four
+```
+
+**Not *"I grepped and found nothing"* but *"I read the WHOLE list, it is complete, and the four
+are not in it."*** A zero from a grep is consistent with a truncated source, a clipped field, a
+wrong needle **and** a genuine absence; an enumerated list with no elision distinguishes them.
+
+ **THE ELLIPSIS CHECK IS THE CHEAP HALF AND THE ONE EVERYONE SKIPS.** This repo has paid for it
+twice — a `{0,400}` clip that manufactured a six-leg figure from a 2951-byte line, and a
+`--limit` that turned a population into a sample. **Before citing an absence from a list: byte
+length, elision marker, and a count that adds up.**
+
 ## ⭐⭐ THE STRONGEST CONFIRMATION IS AN **INVERTED NEGATIVE CONTROL** WITH THE NEEDLE UNCHANGED
 
 **Same grader, same session.** Its original finding was an absence: four message substrings
