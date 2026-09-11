@@ -2038,6 +2038,20 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    there, so a restore "proven" that way proves nothing. Run it only against a tracked path, and
    prefer `sha256` or `cmp`, which do not care about tracking state.
 
+   ⛔ **AND `numstat`-ZERO IS A VALID RESTORE PROOF *ONLY WHEN THE FILE IS OTHERWISE CLEAN* —
+   THE OBVIOUS GENERALISATION OF ITS OWN CORRECT USES IS UNSOUND.** Added 2026-09-11 by the agent
+   whose two earlier proofs invite the wrong reading. On `cq4fb` and `poumg.6` it restored a file
+   its commit did not otherwise touch, so `git diff --numstat -- <path>` → `0 0` was a sound
+   restore proof. On `poumg.5` the same command reads **`70 85` and MUST NOT be zero**: the
+   mutated file is **legitimately changed by that very commit**, so a zero there would mean the
+   fix had vanished.
+
+   **The two situations are indistinguishable from the command's output alone**, which is why the
+   proof must be `sha256` + `cmp` against the `cp`-aside copy in BOTH. `numstat` answers *"does
+   the worktree differ from HEAD"*; a restore asks *"do the bytes equal what I saved"*. **They
+   coincide only in the clean case, and an agent who has just used numstat-zero correctly twice
+   is the most likely to reach for it on the third.**
+
    **NO-CLAIM.** This makes a restore *correct*; it does not make a mutation *attributable*. A
    leg still has to show the RED was caused by the mutation and not by unrelated breakage — the
    discriminator is that the other legs stay GREEN, per rule 7.
