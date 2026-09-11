@@ -4794,6 +4794,56 @@ vacuously-green claim is derived from the old predicate's TEXT, not measured aga
 tree.** Two agents attributed that test to that file by independent routes — one from CI, one
 from the bead — **and only one of them connected it to the repair.**
 
+## ⛔⛔ AN INSTRUMENT YOU **NEVER CONSULTED** — reasoning from a mechanism to a consumer without opening the consumer
+
+**A new class, and it cost a five-peer broadcast and a peer's careful narrowing built on top of
+it.** An agent measured a real `cargo` fail-fast truncation **in its own run**, reasoned
+correctly about the mechanism, and published it as a **live defect in `gate-runner`** —
+recommending a one-flag change. ⛔ **`gate-runner` has passed `--no-fail-fast` all along, and
+its source comment NAMES THE EXACT CLAIM AS AN ALREADY-MET REQUIREMENT:**
+```
+crates/gate-runner/src/main.rs:733   "--no-fail-fast",
+crates/gate-runner/src/main.rs:715   "load-bearing and is a measured requirement, not a preference:
+                                      without it cargo test STOPS at the first failing target"
+```
+⭐ **THE DISTINCTION FROM EVERY OTHER SELF-CORRECTION TONIGHT: those were instruments that
+COULD NOT RETURN THE OTHER ANSWER. This was an instrument NEVER CONSULTED.** The mechanism was
+right and **the SUBJECT was not the thing examined** — the same shape as reading a diff to infer
+*who* changed something, and as the `--lib` noun error by the same agent an hour earlier.
+**`grep -n 'no-fail-fast' crates/gate-runner/src/main.rs` is ONE COMMAND, skipped because the
+inference felt complete.**
+
+⭐ **AND THE CATALOGUE NOW NEEDS TWO CLASSES, because one of them no discipline about OUR tools
+can reach:**
+```
+AUTHORED   instruments we built or chose -- a grep needle, a join corpus, a rev-parse guard,
+           an absolute-count ratchet, unwrap_or_default coercing a read error to empty.
+           Fixable by our own rigour.
+INHERITED  a tool's own control flow. cargo reports the IDENTICAL exit=101 whether your run was
+           complete or truncated, and exit=0 whether the crate has 1 target or 17.
+           Findable ONLY by cross-checking against a count the tool does not report.
+```
+⛔ **THE ONLY DISCRIMINATOR FOR THE INHERITED CLASS: count `test result:` LINES against the
+crate's TARGET COUNT** (`lib + tests/*.rs + doctests`). **Nothing in your own process is wrong
+when this bites**, which is what makes it the hardest kind.
+
+## ⛔⛔ A FIGURE MEASURED UNDER `rch` IS NOT COMPARABLE TO CI FOR TARGET-SHAPED ASSERTIONS
+
+**The live explanation for a 5-vs-11 discrepancy, and it matters here more than anywhere because
+EVERY BUILD IN THIS REPO RUNS UNDER `rch`.** `rch` rewrites `CARGO_TARGET_DIR` to
+`.rch-target-<worker>-pool-<hash>`. ⭐ **The six extra failures are EXACTLY the target/host-shaped
+ones:**
+```
+target_ownership  4   unowned_target_is_rewritten_with_typed_reason · fleet_wrapper_matches_measured_revision …
+target_directory  1   repository_cargo_policy_forces_the_owned_target
+sota_preflight    1   retained_jsm_suggest_has_sha_and_nonzero_named_skill
+```
+⛔ **A rewritten target dir is PRECISELY THE INPUT those tests exist to assert about**, so they
+may be **artifacts of the measurement lane rather than defects CI missed.** **Neither figure is
+wrong; they are measurements of two different environments.** ⭐ **Label every such figure with
+its LANE, and never diff an `rch` run against a CI run for a host-shaped assertion without
+resolving the environment first.** Hypothesis with a named mechanism — not converted by reading.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
