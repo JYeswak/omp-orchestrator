@@ -151,3 +151,89 @@ fn an_absent_head_mirror_is_a_baseline_but_an_unparsable_one_is_not() {
         "{error}"
     );
 }
+
+fn bead_with_comments(id: &str, close_reason: &str, comments: &[&str]) -> ClosedBead {
+    ClosedBead {
+        id: id.to_owned(),
+        close_reason: close_reason.to_owned(),
+        comments: comments.iter().map(|text| (*text).to_owned()).collect(),
+    }
+}
+
+/// 5erif KNOWN-GOOD: the authority may live in a COMMENT.
+///
+/// The reason field is unamendable without `br reopen` + `br close`, which flaps a
+/// closed bead OPEN — and zero-open-S1 is the predicate the S1 done-bar is defined
+/// over. So the evidence lives where it can be added without a state change. The
+/// specimen shape is S1L3Obs's xar6 / 0ne8 provenance comments: worker name plus
+/// the pool path the figure was observed in.
+#[test]
+fn worker_authority_in_a_comment_verifies_the_row() {
+    let head = row("open", "open", "");
+    let staged = [bead_with_comments(
+        "xar6-shape",
+        "DONE: cargo test -p ompo-doctor --test start_observability 5 passed",
+        &[
+            "PROVENANCE S1L4Src: known-good run observed on worker=contabo-4, pool path \
+             .rch-target-contabo-4-pool-9fce9d6739375f7cae8bcfc4b2e0b25b; mutation run on \
+             worker=contabo-2.",
+        ],
+    )];
+    let report =
+        check_staged_close_reason_policy(Some(&head), &staged).expect("both inputs are readable");
+    assert_eq!(report.newly_closed, 1);
+    assert_eq!(report.verified, 1, "{report:?}");
+    assert!(report.violations.is_empty(), "{report:?}");
+}
+
+/// 5erif KNOWN-BAD, THE INVARIANT THAT MUST SURVIVE: a cargo figure with NO
+/// authority in the reason AND NONE IN ANY COMMENT still refuses. Both the message
+/// substring AND the counts are asserted, because this repo has measured each pin
+/// failing alone in opposite directions.
+#[test]
+fn a_cargo_figure_with_no_authority_anywhere_still_refuses() {
+    let head = row("open", "open", "");
+    for comments in [
+        vec![],
+        vec!["PROVENANCE: ran it, looked fine"],
+        vec!["the pool path was .rch-target-contabo-4-pool-9fce9d67 but I did not record a worker"],
+    ] {
+        let staged = [bead_with_comments(
+            "bad",
+            "DONE: cargo test -p inbox-monitor 29 passed",
+            &comments,
+        )];
+        let report = check_staged_close_reason_policy(Some(&head), &staged)
+            .expect("both inputs are readable");
+        assert_eq!(report.verified, 0, "{comments:?}: {report:?}");
+        assert_eq!(report.violations.len(), 1, "{comments:?}: {report:?}");
+        assert_eq!(report.violations[0].bead_id, "bad");
+        assert!(
+            report.violations[0]
+                .reason
+                .contains("CLOSE_REASON_WORKER_MISSING"),
+            "{comments:?}: {report:?}"
+        );
+    }
+}
+
+/// A comment cannot rescue a row that states no VERDICT CLASS: the widened surface
+/// is for the execution authority only, never for the prefix policy.
+#[test]
+fn a_comment_does_not_admit_an_unsanctioned_prefix() {
+    let head = row("open", "open", "");
+    let staged = [bead_with_comments(
+        "prose",
+        "ran the tests, cargo test 4 passed",
+        &["PROVENANCE: worker=contabo-1"],
+    )];
+    let report =
+        check_staged_close_reason_policy(Some(&head), &staged).expect("both inputs are readable");
+    assert_eq!(report.verified, 0, "{report:?}");
+    assert!(
+        report.violations[0]
+            .reason
+            .contains("CLOSE_REASON_POLICY_REFUSED"),
+        "{report:?}"
+    );
+}

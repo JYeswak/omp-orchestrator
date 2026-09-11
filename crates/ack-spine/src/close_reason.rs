@@ -223,19 +223,50 @@ pub fn has_cargo_test_figure(reason: &str) -> bool {
 
 /// True when a close reason names where the figure ran: `worker=<name>`,
 /// `worker:<name>`, or `local`.
+///
+/// Trailing and leading PUNCTUATION is trimmed before comparison, because a
+/// measured row was refused on a trailing BACKTICK: `pxhmd` wrote `` `local` ``
+/// and token equality could not see it, so an honest execution authority read as
+/// absent. Prose is still refused — the word "workers", a bare "worker", and a
+/// path like `~/.local/bin` are NOT authorities, which is the direction a
+/// hand-rolled `contains("local")` check got wrong on four rows in one pass.
 #[must_use]
 pub fn has_worker_authority(reason: &str) -> bool {
-    reason.split_whitespace().any(|token| {
+    reason.split_whitespace().any(|raw| {
+        let token = raw.trim_matches(|c: char| !c.is_alphanumeric() && c != '=' && c != ':');
         token == "local" || token.starts_with("worker=") || token.starts_with("worker:")
     })
 }
 
-/// Classify a close reason against the local six-prefix policy.
+/// Classify a close reason against the local prefix policy.
 ///
 /// `None` means the caller did not read the reason and yields
 /// [`CloseReasonVerdict::Unread`] — never a verified verdict.
 #[must_use]
 pub fn classify_close_reason(reason: Option<&str>) -> CloseReasonVerdict {
+    classify_close_reason_with_external_authority(reason, false)
+}
+
+/// [`classify_close_reason`], with the execution authority allowed to live
+/// SOMEWHERE ELSE THAN THE REASON.
+///
+/// `external_authority` is true when the caller has already found `worker=<name>`,
+/// `worker:<name>` or `local` outside the reason string — in practice in the row's
+/// COMMENTS, which is where the evidence actually lives: the reason field is
+/// UNAMENDABLE without reopening a closed bead, and `zero-open-S1` is the
+/// predicate the S1 done-bar is defined over, so a gate that can only be satisfied
+/// by a status flap is asking for a state change it does not want.
+///
+/// ⛔ THIS WIDENS THE SEARCH SURFACE, NOT THE RULE. A cargo figure still needs a
+/// named tree; `external_authority = false` reproduces the old behaviour exactly,
+/// which is what [`classify_close_reason`] passes and what its own legs pin. And a
+/// comment is no more forgery-proof than a reason — both are writable by any
+/// agent — so this is a provenance convention, never a proof.
+#[must_use]
+pub fn classify_close_reason_with_external_authority(
+    reason: Option<&str>,
+    external_authority: bool,
+) -> CloseReasonVerdict {
     let Some(raw) = reason else {
         return CloseReasonVerdict::Unread;
     };
@@ -243,7 +274,7 @@ pub fn classify_close_reason(reason: Option<&str>) -> CloseReasonVerdict {
     if trimmed.trim().is_empty() {
         return CloseReasonVerdict::Empty;
     }
-    if has_cargo_test_figure(trimmed) && !has_worker_authority(trimmed) {
+    if has_cargo_test_figure(trimmed) && !has_worker_authority(trimmed) && !external_authority {
         let leading = trimmed.split_whitespace().next().unwrap_or_default().to_owned();
         return CloseReasonVerdict::CargoWorkerMissing { leading };
     }
@@ -432,5 +463,38 @@ mod tests {
     fn cargo_figure_with_worker_or_local_authority_is_verified() {
         assert!(classify_close_reason(Some("DONE: cargo test worker=contabo-3 29 passed")).is_verified());
         assert!(classify_close_reason(Some("DONE: local cargo test 29 passed")).is_verified());
+    }
+
+    /// 5erif: a measured row wrote `` `local` `` and was refused on a trailing
+    /// BACKTICK. Punctuation is trimmed; the authority is the token, not its
+    /// typography.
+    #[test]
+    fn punctuation_around_an_authority_token_does_not_hide_it() {
+        for reason in [
+            "DONE: cargo test 4 passed, `local`",
+            "DONE: cargo test 4 passed (worker=contabo-2)",
+            "DONE: cargo test 4 passed on worker:contabo-4.",
+        ] {
+            assert!(
+                classify_close_reason(Some(reason)).is_verified(),
+                "{reason:?} names its tree and must verify"
+            );
+        }
+    }
+
+    /// The other direction, and the one a hand-rolled `contains` check got wrong on
+    /// four rows in a single pass: PROSE IS NOT AN AUTHORITY.
+    #[test]
+    fn prose_and_paths_are_not_execution_authorities() {
+        for reason in [
+            "DONE: cargo test 4 passed, ran on the workers",
+            "DONE: cargo test 4 passed via ~/.local/bin/cargo",
+            "DONE: cargo test 4 passed, worker unknown",
+        ] {
+            assert!(
+                !classify_close_reason(Some(reason)).is_verified(),
+                "{reason:?} names no tree and must refuse"
+            );
+        }
     }
 }

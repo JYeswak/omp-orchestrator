@@ -445,17 +445,35 @@ pub fn check_staged_close_reason_policy(
         legacy_unrecoverable: Vec::new(),
     };
     for bead in staged_closed {
+        // The execution authority may live in the row's COMMENTS rather than its
+        // reason, and for 17 rows in this tracker it does: the reason field is
+        // UNAMENDABLE without `br reopen` + `br close`, which flaps a closed bead
+        // OPEN — and zero-open-S1 is the predicate the S1 done-bar is defined
+        // over. Four agents briefly flapped eight S1 rows before that was ruled
+        // out. The mirror this gate already reads carries the comments
+        // (`parse_closed_beads_jsonl_checked` populates them), so this widens the
+        // SEARCH SURFACE and not the rule.
+        let external_authority = bead
+            .comments
+            .iter()
+            .any(|comment| ack_spine::close_reason::has_worker_authority(comment));
         if head_closed.contains(&bead.id) {
             report.historical_closed += 1;
             let historical =
-                ack_spine::close_reason::classify_close_reason(Some(&bead.close_reason));
+                ack_spine::close_reason::classify_close_reason_with_external_authority(
+                    Some(&bead.close_reason),
+                    external_authority,
+                );
             if !historical.is_verified() {
                 report.legacy_unrecoverable.push(bead.id.clone());
             }
             continue;
         }
         report.newly_closed += 1;
-        let verdict = ack_spine::close_reason::classify_close_reason(Some(&bead.close_reason));
+        let verdict = ack_spine::close_reason::classify_close_reason_with_external_authority(
+            Some(&bead.close_reason),
+            external_authority,
+        );
         if !verdict.is_verified() {
             report.violations.push(ScopedCloseReasonViolation {
                 bead_id: bead.id.clone(),
@@ -464,9 +482,10 @@ pub fn check_staged_close_reason_policy(
             continue;
         }
         // NOTE: there is deliberately no second worker-authority arm here. The
-        // verdict above ALREADY refuses a cargo figure without `worker=`/`local`
-        // (CargoWorkerMissing, label CLOSE_REASON_WORKER_MISSING), so a local arm
-        // could only either restate it or disagree with it.
+        // verdict above ALREADY refuses a cargo figure with no authority in the
+        // reason AND none in any comment (CargoWorkerMissing, label
+        // CLOSE_REASON_WORKER_MISSING), so a local arm could only restate it or
+        // disagree with it.
         report.verified += 1;
     }
     Ok(report)
