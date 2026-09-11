@@ -47,6 +47,11 @@ pub const VERBS: &[&str] = &[
     "why",
     "health",
     "repair",
+    // f3maq: `undo` is declared, compiled and dispatched (`main.rs` verb table).
+    // It lands here and in `usage` in the SAME commit as its match arm, because
+    // `compare_verb_parity` and `every_verb_appears_in_usage` couple all three
+    // sites -- a partial wiring reds the parity leg rather than half-shipping.
+    "undo",
     // Added concurrently by %20 while pane 1 held this site. It DOES dispatch
     // (`main.rs:80  "state" => run_state(rest)`), so it is a legitimate entry --
     // it was simply missing its usage line, which `every_verb_appears_in_usage`
@@ -206,6 +211,7 @@ pub fn usage() -> String {
          \x20 validate <thing> [--repo PATH] [--json]          pure read; verifies without executing\n\
          \x20 audit [--limit N] [--repo PATH] [--json]         recent state mutations with provenance\n\
          \x20 why <id> [--repo PATH] [--json]                  provenance trace for one object\n\
+         \x20 undo <scope> [--from SHA] [--dry-run | --apply]  restore a backup; --dry-run is the DEFAULT\n\
          \x20 start [--repo PATH] [--session NAME] [--json]    run the ordered S1 walkthrough\n\
          \x20 supervise [--repo PATH] [--session NAME] [--once|--max-ticks N]  run observe -> dispatch -> receipt\n\
          \x20 portal [--repo PATH] [--session NAME] --json     emit the S1 robot portal envelope\n\

@@ -88,6 +88,12 @@ fn main() -> ExitCode {
         "messages" => run_messages(rest),
         "ps" => run_ps(rest),
         "doctor" => run_doctor_verb(rest),
+        // f3maq's remaining half: the module was declared and compiled, and the
+        // verb was still unreachable. `dispatch` returns None for a command it
+        // does not own, so the fallthrough below stays the single authority on
+        // an unknown verb rather than this arm growing a second one.
+        "undo" => ompo_doctor::undo::dispatch("undo", rest)
+            .map_or_else(|| ExitCode::from(EXIT_BAD_INVOCATION), ExitCode::from),
         other => {
             // NAMES the rejected verb. A bare usage dump leaves the caller unable to tell a
             // typo from an unimplemented verb.
