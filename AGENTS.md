@@ -5491,6 +5491,47 @@ SERVE.** Same shape as the census predicate that could only say `Reachable`, and
 reporting `PASS` with `candidates=0` against a filling volume. ⛔ **Three instances in one
 session, and each one reported SUCCESS while doing nothing.**
 
+## ⭐⭐ A PANIC **LOCATION** DISCRIMINATES CAUSES ONLY FOR ASSERTIONS THAT TEST A VALUE DIRECTLY
+
+**The best rule of the session, and it invalidated the strongest inference anyone made.**
+```rust
+umbrella_adapter_dispatch.rs:231:5
+assert!(first.status.success(), "first init failed: {}", String::from_utf8_lossy(&first.stderr));
+```
+⛔ **That is an assert on a SUBPROCESS'S EXIT STATUS: EVERY distinct reason the child can fail
+lands on that ONE line.** ⭐ **For that class the location is CONSTANT BY CONSTRUCTION and
+carries ZERO cause information — the cause is the child's stderr, interpolated into the panic
+MESSAGE.**
+
+**So `same location ⇒ same cause` is INVALID for subprocess-exit asserts, and an overturn that
+ran on it was wrong for two-thirds of its rows:**
+```
+twelve legs by ASSERTION SHAPE:
+  subprocess-status  8   location is NOT a cause proxy  -> stay UNCLASSIFIABLE
+  direct value       4   location IS evidence           -> move
+```
+⛔ **FOUR rows moved, not twelve.** ⭐ **QUALIFY BY ASSERTION SHAPE BEFORE USING A LOCATION
+MATCH AS EVIDENCE.** A location match on a direct value assert is evidence; on
+`assert!(child.status.success(), …)` it proves only **that the child failed, never why.**
+
+⭐⭐ **THREE RUNGS OF THE SAME RULE, ALL MEASURED IN ONE SESSION:**
+```
+CLASS level     a signal present in both classes cannot attribute
+FIELD level     a non-empty 104-155 char detail cannot attribute -- it is all HEADER
+LOCATION level  a constant assertion line cannot attribute -- every cause lands there
+```
+**Each one was a checker hunting the right hazard with a discriminator that could not see
+it.**
+
+## ⛔ TWO CORRECTIONS OF THE SAME FIGURE CAN CROSS
+
+**Measured: a pane sent `12 → 8` while the conductor was publishing `12 → 8`, each unaware the
+other had landed** — so the second read as *"you are STILL publishing the wide number."* ⭐ **A
+broadcast is a snapshot; in a five-pane fleet a correction and its acknowledgement can be in
+flight simultaneously.** **Before re-asserting a correction, check whether it already landed —
+and when you receive one that looks ignored, consider that it crossed rather than that it was
+dismissed.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents

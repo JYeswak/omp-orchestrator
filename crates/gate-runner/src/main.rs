@@ -31,8 +31,8 @@
 
 mod ci_citation;
 use gate_runner::{
-    build_report_scoped, check_allowance, derive_checks, derive_roster, parse_ledger, verdict_for,
-    Invocation, Observed, UnmeasurablePrecondition, EXIT_METADATA_UNREADABLE,
+    build_report_scoped, check_allowance, derive_checks, derive_roster, verdict_for, Invocation,
+    LedgerRead, Observed, UnmeasurablePrecondition, EXIT_METADATA_UNREADABLE,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -170,9 +170,38 @@ fn main() -> ExitCode {
             .collect(),
     };
 
-    let ledger = std::fs::read_to_string(repo.join(LEDGER_PATH))
-        .map(|text| parse_ledger(&text))
-        .unwrap_or_default();
+    // THE LEDGER READ IS A THREE-WAY FACT, NOT A VALUE WITH A DEFAULT.
+    //
+    // `.unwrap_or_default()` here coerced a read ERROR into the EMPTY SET, so moving
+    // `docs/gate-roster.txt` aside produced 91 `in_workspace_absent_from_ledger` lines and
+    // `exit=0`: the file whose only job is making deletion detectable could not detect its own
+    // deletion. Measured 2026-09-11 as the `8i` negative control for bead `9vbcl` — roster
+    // present and roster ABSENT were the SAME exit code, differing only in the magnitude of a
+    // drift list no exit-code consumer can see.
+    //
+    // The empty-is-an-error discipline already existed seven lines below for the DERIVED set
+    // (`GATE_RUNNER_EMPTY_ROSTER`). This applies it to the committed FILE — the asymmetric-guard
+    // shape, not a missing concept.
+    //
+    // REFUSED HERE, BEFORE THE `--plan` BRANCH, SO BOTH PATHS INHERIT IT. `ledger` feeds
+    // `build_report_scoped` at the plan branch and again after the run loop; a refusal placed in
+    // either branch would leave the other comparing against an empty set.
+    let ledger_read = LedgerRead::classify(std::fs::read_to_string(repo.join(LEDGER_PATH)));
+    let Some(ledger) = ledger_read.rows().cloned() else {
+        // ANTI-VACUITY: report the population on both sides. A zero read is the ERROR case, and
+        // naming the derived count proves the refusal is about the FILE and not an empty
+        // workspace.
+        eprintln!(
+            "GATE_RUNNER_LEDGER_UNREAD path={} reason={} entries=0 workspace_members={} \
+             detail={} remedy={}",
+            repo.join(LEDGER_PATH).display(),
+            ledger_read.reason(),
+            full_roster.len(),
+            ledger_read.detail(),
+            ledger_read.remedy()
+        );
+        return ExitCode::from(gate_runner::EXIT_LEDGER_UNREADABLE);
+    };
 
     if plan {
         let mut total = 0usize;
@@ -1107,17 +1136,38 @@ fn strip_ansi(line: &str) -> String {
 fn failure_causes(text: &str) -> Vec<(String, String)> {
     let mut causes = Vec::new();
     let mut current: Option<String> = None;
+    // (test, location-header) awaiting the MESSAGE line beneath it.
+    let mut pending: Option<(String, String)> = None;
     for line in text.lines() {
         let plain = strip_ansi(line);
         let trimmed = plain.trim();
+        if let Some((name, header)) = pending.take() {
+            if trimmed.is_empty() {
+                pending = Some((name, header));
+                continue;
+            }
+            causes.push((name, format!("{header} {trimmed}")));
+            current = None;
+            continue;
+        }
         if let Some(rest) = trimmed.strip_prefix("---- ") {
             current = rest.strip_suffix(" stdout ----").map(str::to_owned);
         } else if let Some(name) = current.clone() {
-            if trimmed.contains("panicked at") || trimmed.starts_with("assertion") {
+            if trimmed.contains("panicked at") {
+                // The HEADER carries the location and STOPS at a colon; the MESSAGE is the next
+                // non-empty line. Emitting the header alone was the first version's defect,
+                // measured across 59 of 59 CI lines: every one gave `file:line:col:` and no
+                // cause. A positional heuristic picked the wrong position.
+                pending = Some((name, trimmed.to_owned()));
+            } else if trimmed.starts_with("assertion") {
                 causes.push((name, trimmed.to_owned()));
                 current = None;
             }
         }
+    }
+    // A header with no message beneath it is still worth more than nothing.
+    if let Some((name, header)) = pending {
+        causes.push((name, header));
     }
     causes
 }
@@ -1201,7 +1251,16 @@ assertion `left == right` failed
         assert!(
             causes[0].1.contains("panicked at")
                 && causes[0].1.contains("census_membership.rs:41:5"),
-            "the cause must carry the panic SITE, not just the word: {}",
+            "the cause must carry the panic SITE: {}",
+            causes[0].1
+        );
+        // THE REGRESSION THIS EXISTS FOR. The first version emitted the panic HEADER alone,
+        // which stops at `file:line:col:` and carries no cause at all — measured across 59 of
+        // 59 lines in CI run 34574702390. A location is not a message, and a grader reading
+        // only the header still cannot classify. The message is the line BENEATH the header.
+        assert!(
+            causes[0].1.contains("assertion `left == right` failed"),
+            "the cause must carry the MESSAGE beneath the header, not only the location: {}",
             causes[0].1
         );
     }
