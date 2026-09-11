@@ -6,7 +6,8 @@
 use lifecycle_event::Layer;
 use lifecycle_monitor::ntm_sources::{
     gate_ntm_sources, gate_ntm_sources_requiring, ntm_source_exit_code, parse_ntm_sources,
-    read_live_snapshot, require_expected_sources, NtmSourceError, EXPECTED_NTM_SOURCES,
+    read_live_snapshot, require_expected_sources, require_session_source, NtmSourceError,
+    EXPECTED_NTM_SOURCES,
 };
 use lifecycle_monitor::{LayerState, MonitorError};
 use serde_json::{json, Value};
@@ -697,4 +698,123 @@ fn cli_snapshot_missing_an_expected_source_exits_three() {
     assert!(stderr.contains("agent_mail"), "{stderr}");
     assert!(!stdout.contains("NTM_SOURCES_OK"), "must not report OK: {stdout}");
     println!("YR2G_CLI_MISSING_SOURCE exit=3");
+}
+
+// ---------------------------------------------------------------------------------------
+// SESSION-SCOPED CONSUME AND REFUSE (bead x11g). Measured 2026-09-11 with ntm
+// v1.31.0-4-ge4718530: `.sources.sources | keys` = ["work_coordination"], and
+// `ntm --help` shows `--robot-snapshot` takes NO session argument, so no
+// invocation of this build emits a session-named key. The bar is therefore that a
+// consumer asking about a session is REFUSED, not answered with the global row.
+// ---------------------------------------------------------------------------------------
+
+#[test]
+fn an_absent_session_named_source_is_unproven() {
+    // KNOWN-BAD: today's real capture. Asking about a session gets nothing.
+    let snapshot: Value = serde_json::from_str(CAPTURED_SNAPSHOT).expect("fixture is JSON");
+    let verdicts = parse_ntm_sources(&snapshot).expect("the real capture parses");
+    let error = require_session_source(&verdicts, "omp-orchestrator")
+        .expect_err("no row is keyed by the session");
+    let rendered = error.to_string();
+    println!("SESSION_ABSENT: {rendered}");
+    assert!(
+        matches!(&error, NtmSourceError::MissingSource { sources }
+            if sources == &["omp-orchestrator".to_owned()]),
+        "{error:?}"
+    );
+    assert!(rendered.contains("omp-orchestrator"), "{rendered}");
+    assert_eq!(ntm_source_exit_code(&error), std::process::ExitCode::from(3));
+}
+
+#[test]
+fn the_global_row_does_not_satisfy_a_question_about_a_session() {
+    // The collapse this refuses: work_coordination is present and fresh, and it is
+    // NOT an observation of any particular session.
+    let snapshot = snapshot_with(all_expected());
+    let verdicts = parse_ntm_sources(&snapshot).expect("complete snapshot parses");
+    require_expected_sources(&verdicts, &EXPECTED_NTM_SOURCES).expect("global floor is met");
+    let error = require_session_source(&verdicts, "omp-orchestrator")
+        .expect_err("a fresh global row is not a session observation");
+    assert!(matches!(error, NtmSourceError::MissingSource { .. }), "{error:?}");
+    println!("SESSION_NOT_GLOBAL: {error}");
+}
+
+#[test]
+fn a_session_named_source_that_is_present_passes() {
+    // KNOWN-GOOD: if ntm ever emits a session-keyed row, the gate must stop
+    // refusing without any code change. Over-strictness control for x11g.
+    let mut sources = all_expected();
+    sources["omp-orchestrator"] = populated("omp-orchestrator");
+    let snapshot = snapshot_with(sources);
+    let verdicts = parse_ntm_sources(&snapshot).expect("four rows parse");
+    require_session_source(&verdicts, "omp-orchestrator").expect("the session row is present");
+    gate_ntm_sources_requiring(&verdicts, &EXPECTED_NTM_SOURCES).expect("still passes the floor");
+    println!("SESSION_PRESENT_OK");
+}
+
+#[test]
+fn an_unnamed_session_is_not_a_satisfied_session() {
+    // ANTI-VACUITY: an empty session name must not pass by matching nothing, and an
+    // empty scan is still an error.
+    let snapshot = snapshot_with(all_expected());
+    let verdicts = parse_ntm_sources(&snapshot).expect("complete snapshot parses");
+    assert!(matches!(
+        require_session_source(&verdicts, ""),
+        Err(NtmSourceError::EmptySources)
+    ));
+    assert!(matches!(
+        require_session_source(&[], "omp-orchestrator"),
+        Err(NtmSourceError::EmptySources)
+    ));
+    println!("SESSION_ANTI_VACUITY both=EmptySources");
+}
+
+#[test]
+fn cli_require_session_exits_three_when_no_row_is_keyed_by_it() {
+    // The acceptance's verb at the binary: `--require-session` must refuse.
+    let dir = tempfile::tempdir().expect("cli fixture");
+    let journal = fresh_all_layers_journal(&dir);
+    let snapshot = write_snapshot(
+        &dir,
+        "session.json",
+        r#"{"sources":{"sources":{
+            "work_coordination":{"available":true,"fresh":true,"reason_code":"health:ok","age_ms":1},
+            "agent_mail":{"available":true,"fresh":true,"reason_code":"health:ok","age_ms":1},
+            "tick_monitor":{"available":true,"fresh":true,"reason_code":"health:ok","age_ms":1}
+        }}}"#,
+    );
+    let output = gate_with_snapshot(
+        &journal,
+        &["--snapshot-file", &snapshot, "--require-session", "omp-orchestrator"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(3), "stdout={stdout} stderr={stderr}");
+    assert!(stderr.contains("NTM_SOURCE_MISSING_SOURCE"), "{stderr}");
+    assert!(stderr.contains("omp-orchestrator"), "{stderr}");
+    assert!(!stdout.contains("NTM_SOURCES_OK"), "must not report OK: {stdout}");
+    println!("YR2G_CLI_SESSION_MISSING exit=3");
+}
+
+#[test]
+fn cli_without_require_session_is_unchanged() {
+    // The flag is OPT-IN: omitting it must leave every pre-existing invocation
+    // byte-identical in behaviour.
+    let dir = tempfile::tempdir().expect("cli fixture");
+    let journal = fresh_all_layers_journal(&dir);
+    let snapshot = write_snapshot(
+        &dir,
+        "nosession.json",
+        r#"{"sources":{"sources":{
+            "work_coordination":{"available":true,"fresh":true,"reason_code":"health:ok","age_ms":1},
+            "agent_mail":{"available":true,"fresh":true,"reason_code":"health:ok","age_ms":1},
+            "tick_monitor":{"available":true,"fresh":true,"reason_code":"health:ok","age_ms":1}
+        }}}"#,
+    );
+    let output = gate_with_snapshot(&journal, &["--snapshot-file", &snapshot]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{stdout}");
+    assert!(stdout.contains("NTM_SOURCES_OK count=3"), "{stdout}");
+    assert!(!stdout.contains("NTM_SESSION_OBSERVED"), "{stdout}");
+    println!("YR2G_CLI_NO_SESSION_FLAG exit=0");
 }

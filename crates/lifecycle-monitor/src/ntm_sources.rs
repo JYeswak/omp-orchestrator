@@ -309,6 +309,40 @@ pub fn gate_ntm_sources(verdicts: &[NtmSourceVerdict]) -> Result<(), NtmSourceEr
 /// the aggregate reads all-fresh.
 pub const EXPECTED_NTM_SOURCES: [&str; 3] = ["agent_mail", "tick_monitor", "work_coordination"];
 
+/// CONSUME AND REFUSE, session-scoped (bead x11g): the snapshot must carry a row
+/// keyed by the SESSION the consumer is asking about, not merely the global
+/// `work_coordination` row.
+///
+/// Measured 2026-09-11, ntm v1.31.0-4-ge4718530: `.sources.sources` carries ONE
+/// key, `work_coordination`, and `ntm --help` shows `--robot-snapshot` takes NO
+/// session argument — so no invocation of this build produces a session-named
+/// key. A consumer that asks "is session X observed?" therefore gets nothing, and
+/// nothing must read as UNPROVEN rather than as the global row's health.
+///
+/// `session` is compared verbatim against the map key. It is the caller's session
+/// name, not a pattern: a fuzzy match would let `work_coordination` satisfy a
+/// question about a session, which is the collapse this refuses.
+///
+/// # Errors
+///
+/// [`NtmSourceError::EmptySources`] for an empty scan or an empty session name —
+/// an unnamed session is not a satisfied one. [`NtmSourceError::MissingSource`]
+/// naming the session when no row is keyed by it.
+pub fn require_session_source(
+    verdicts: &[NtmSourceVerdict],
+    session: &str,
+) -> Result<(), NtmSourceError> {
+    if verdicts.is_empty() || session.is_empty() {
+        return Err(NtmSourceError::EmptySources);
+    }
+    if verdicts.iter().any(|v| v.source == session) {
+        return Ok(());
+    }
+    Err(NtmSourceError::MissingSource {
+        sources: vec![session.to_owned()],
+    })
+}
+
 /// CONSUME AND REFUSE: every expected source key must be PRESENT in the mapped
 /// verdicts. An absent key is UNPROVEN — never fresh, never idle, never
 /// `age_ms = 0`.

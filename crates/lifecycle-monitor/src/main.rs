@@ -11,7 +11,7 @@ use asupersync::Cx;
 use lifecycle_event::{DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode};
 use lifecycle_monitor::ntm_sources::{
     gate_ntm_sources_requiring, ntm_source_exit_code, parse_ntm_sources, read_live_snapshot,
-    read_snapshot_file, NtmSourceError, EXPECTED_NTM_SOURCES,
+    read_snapshot_file, require_session_source, NtmSourceError, EXPECTED_NTM_SOURCES,
 };
 use lifecycle_monitor::{
     gate_claimed_write_readback, gate_freshness_verdict, journal_for_host, load_metrics,
@@ -164,13 +164,20 @@ async fn run_ntm_sources_gate(cx: &Cx, args: &[String]) -> ExitCode {
     // EXPECTED SET is checked so an absent source cannot pass on the strength of
     // the ones present. The old call `gate_ntm_sources(&verdicts)` is REPLACED,
     // not supplemented — two gates on this site could disagree about one snapshot.
-    match gate_ntm_sources_requiring(&verdicts, &EXPECTED_NTM_SOURCES) {
-        Ok(()) => {
-            println!("NTM_SOURCES_OK count={}", verdicts.len());
-            ExitCode::SUCCESS
-        }
-        Err(error) => fail_ntm(error),
+    if let Err(error) = gate_ntm_sources_requiring(&verdicts, &EXPECTED_NTM_SOURCES) {
+        return fail_ntm(error);
     }
+    // Session scope is OPT-IN (`--require-session <NAME>`): a caller asking about a
+    // specific session must be refused when no row is keyed by it, rather than
+    // reading the global work_coordination row as an answer about that session.
+    if let Some(session) = flag(args, "--require-session") {
+        if let Err(error) = require_session_source(&verdicts, session) {
+            return fail_ntm(error);
+        }
+        println!("NTM_SESSION_OBSERVED session={session}");
+    }
+    println!("NTM_SOURCES_OK count={}", verdicts.len());
+    ExitCode::SUCCESS
 }
 
 /// The single production conversion from typed NTM error to process exit.
