@@ -174,17 +174,24 @@ fn hook_freshness(repo_root: &Path, _staged: &[String], report: &mut CommitRatch
         return;
     }
 
-    // UNTRACKED SOURCE IN THE COVERED SET IS LOUD, NEVER BAKED. `build.rs` enumerates from disk
-    // because the cross-build worker has no object database (measured: `git ls-tree -r HEAD` ->
-    // "fatal: Not a valid object name HEAD", `git ls-files` -> 0 rows), so the tracked-ness check
-    // lives HERE, where git works. A file present on disk and absent from HEAD would otherwise be
-    // stamped into an artifact no clean clone can reproduce - the E0583 class, aimed at the gate
-    // that refuses every commit.
-    for path in untracked_covered_sources(repo_root) {
-        report.refusals.push(format!(
-            "hook_freshness: REFUSED reason=UNTRACKED_COVERED_SOURCE path={path} \
-             detail=a source the hook is built from is absent from HEAD, so the stamp would \
-             describe a tree no clean checkout can reproduce; commit it or remove it"
+    // UNTRACKED SOURCE IN THE COVERED SET IS OBSERVED, NEVER A REFUSAL
+    // (4seud completes 7h8kr). `build.rs` enumerates from disk because the
+    // cross-build worker has no object database, so the tracked-ness check
+    // lives HERE, where git works. Refusing here blocked the whole fleet on
+    // one peer's unfinished file -- unsatisfiable by any other committer, the
+    // zzg2x shape with a different reason string. The file IS named (loud),
+    // and the heal carries it to the worker via `--overlay-path` so the
+    // rebuilt stamp converges instead of going stale forever on bytes the
+    // tracked-only sync can never deliver (measured failure mode, not theory:
+    // without the overlay the disk manifest always differs from any
+    // worker-built stamp). CI runs from clean checkouts where untracked files
+    // do not exist, so it stays the hard backstop.
+    let untracked = untracked_covered_sources(repo_root);
+    for path in &untracked {
+        report.observations.push(format!(
+            "hook_freshness: UNTRACKED_OBSERVED path={path} \
+             detail=a source the hook is built from is absent from HEAD; commit it or remove it, \
+             and until then the rebuilt stamp carries it by overlay"
         ));
     }
 
@@ -226,12 +233,8 @@ fn hook_freshness(repo_root: &Path, _staged: &[String], report: &mut CommitRatch
         // the wrong move: every gate-source change used to owe a manual
         // cross-build plus install dance, which trains `--no-verify`. The
         // stale hook still runs VALID old logic, and CI enforces the new
-        // logic from a clean checkout, so the commit lands and the hook
-        // rebuilds itself in the background instead of blocking the fleet.
-        // The history that earned the old scoping is kept verbatim below so
-        // the next reader knows what not to reintroduce.
         FreshnessVerdict::Stale => {
-            let heal = ensure_heal(repo_root);
+            let heal = ensure_heal(repo_root, &untracked);
             report.observations.push(format!(
                 "hook_freshness: STALE_HEALING hook={} {} heal={} log={} \
                  detail=a covered source differs from the stamp; this commit lands, \
@@ -506,15 +509,24 @@ impl HealOutcome {
         }
     }
 }
-
 /// The exact heal command, pure and pinned by tests. Shape: cross-build the
 /// hook for Mac via the job rails, verify Mach-O BEFORE install (never
 /// install garbage over the working hook), atomic rename into place, release
 /// the lock. Every step appends to the log; the log is the audit trail.
-fn heal_command(repo_root: &Path) -> Vec<String> {
+///
+/// `untracked` covered sources ride as `--overlay-path`: the worker sync
+/// delivers tracked paths only, so without the overlay the rebuilt stamp
+/// could never include them and the tree would read STALE forever on bytes no
+/// rebuild can see. With it the stamp converges whether the peer commits the
+/// file (tracked, same bytes) or deletes it (next heal has no overlay).
+fn heal_command(repo_root: &Path, untracked: &[String]) -> Vec<String> {
     let root = repo_root.display().to_string();
+    let mut overlays = String::new();
+    for path in untracked {
+        overlays.push_str(&format!(" --overlay-path {path}"));
+    }
     let script = format!(
-        "rch exec --job --result-dir target/mac-bins -- sh -c 'cargo build --release -j 2 \
+        "rch exec --job --result-dir target/mac-bins{overlays} -- sh -c 'cargo build --release -j 2 \
          --target-dir target/mac-build --config '\\''build.target=\"aarch64-apple-darwin\"'\\'' \
          --config '\\''target.aarch64-apple-darwin.linker=\"/usr/local/bin/zigcc-aarch64-darwin\"'\\'' \
          -p no-shell-gate --bin pre-commit-gate && cp \
@@ -534,7 +546,7 @@ fn heal_command(repo_root: &Path) -> Vec<String> {
 /// Ensure a heal is in flight. Single-flight via an atomic lock dir; stale
 /// locks reaped by age. Never refuses: every failure arm returns a
 /// `Requested { spawned: false }` that the caller reports as an observation.
-fn ensure_heal(repo_root: &Path) -> HealOutcome {
+fn ensure_heal(repo_root: &Path, untracked: &[String]) -> HealOutcome {
     let lock = heal_lock_path(repo_root);
     match std::fs::create_dir(&lock) {
         Ok(()) => {}
@@ -551,7 +563,7 @@ fn ensure_heal(repo_root: &Path) -> HealOutcome {
             }
         }
     }
-    let command = heal_command(repo_root);
+    let command = heal_command(repo_root, untracked);
     match Command::new(&command[0])
         .args(&command[1..])
         .stdin(std::process::Stdio::null())
@@ -918,21 +930,15 @@ mod tests {
     fn a_stale_stamp_heals_and_never_refuses() {
         assert_eq!(freshness_verdict(true), FreshnessVerdict::Clean);
         assert_eq!(freshness_verdict(false), FreshnessVerdict::Stale);
-        // The enum is the refusal's grave: there is no variant that a
-        // reporting arm could render as a refusal without failing this match.
         let verdict = freshness_verdict(false);
         assert_ne!(format!("{verdict:?}"), "Clean");
         assert!(!format!("{verdict:?}").contains("Refuse"));
     }
 
-    /// The heal command shape is pinned: cross-build the hook for Mac, verify
-    /// Mach-O BEFORE install, atomic rename into place, release the lock.
-    /// A reordering that installs before verifying (or drops the lock
-    /// release) passes every other leg and fails here.
     #[test]
     fn heal_command_builds_verifies_then_atomically_installs() {
         let root = Path::new("/repo");
-        let command = heal_command(root);
+        let command = heal_command(root, &[]);
         assert_eq!(command[0], "sh");
         let script = &command[2];
         let build = script.find("cargo build").expect("must cross-build");
@@ -951,6 +957,25 @@ mod tests {
         assert!(script.contains("--bin pre-commit-gate"), "heals the hook binary");
         assert!(script.contains("HEAL_INSTALLED"), "success is recorded");
         assert!(script.contains("HEAL_FAILED"), "failure is recorded, not silent");
+    }
+
+    /// Untracked covered sources ride as `--overlay-path`: the worker sync
+    /// delivers tracked paths only, so without the overlay the rebuilt stamp
+    /// could never include them. An empty list adds no flag.
+    #[test]
+    fn heal_command_overlays_untracked_sources() {
+        let root = Path::new("/repo");
+        let plain = heal_command(root, &[])[2].clone();
+        assert!(!plain.contains("--overlay-path"), "no overlay flag when nothing is untracked");
+        let overlaid = heal_command(
+            root,
+            &["crates/no-shell-gate/src/new.rs".to_owned()],
+        )[2]
+            .clone();
+        assert!(
+            overlaid.contains("--overlay-path crates/no-shell-gate/src/new.rs"),
+            "untracked covered source must reach the worker"
+        );
     }
     /// THE DRIFT DECISION TABLE. Row 2 is the zzg2x row: drift without a
     /// staged census OBSERVES, because refusing it would block the fleet on a

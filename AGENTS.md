@@ -407,11 +407,14 @@ build darwin"* is Joshua's ruling and the routine lane is the Linux one-liner at
 section documents the ONE path that the retirement did not contemplate, because it is an
 operational necessity rather than a preference.
 
-**WHY IT IS UNAVOIDABLE.** `.git/hooks/pre-commit` is a **Mach-O arm64** binary; local builds are
-refused; there is no Darwin worker. `hook_freshness` refuses every commit in the tree while the
-installed hook is older than any `HOOK_SOURCE_CRATE` source. So **editing a hook source crate
-requires a cross-build or the tree stays locked forever.** Measured 2026-09-11: two such locks cost
-the fleet roughly forty minutes.
+**WHY IT WAS UNAVOIDABLE.** `.git/hooks/pre-commit` is a **Mach-O arm64** binary; local builds are
+refused; there is no Darwin worker. [SUPERSEDED 2026-09-11 by auto-heal (`7h8kr`/`4seud`): the
+routine path is now `STALE_HEALING` — the commit lands and `heal_command`
+(`crates/no-shell-gate/src/commit_ratchets.rs`, pinned by test) cross-builds and atomically
+reinstalls in the background. Manual rebuild is the fallback, not the form.] Previously:
+`hook_freshness` refused every commit in the tree while the installed hook was older than any
+`HOOK_SOURCE_CRATE` source, so editing a hook source crate required a cross-build or the tree
+stayed locked forever.
 
 **IT HAS RUN AND IT WORKS.** Three darwin cross-builds succeeded on 2026-09-11; two produced hook
 binaries, and one of those is the binary gating every commit in this tree:
