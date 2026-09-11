@@ -4154,6 +4154,167 @@ being written as it is written.** ⭐ **A census of a shared checkout MUST carry
 commit, and MUST be re-derived at close** — a fixed number in a bead body is false within the
 hour by the same mechanism that makes a transcribed claim status stale on arrival.
 
+⛔⛔ **AND ONE NOTCH HARDER AGAIN: "DIRTY TRACKED FILES" IS NOT A PREDICATE — IT IS FOUR
+PREDICATES WEARING ONE PHRASE.** Five instruments, one population, ONE INSTANT, at `6e45880`:
+```
+git diff --name-only           (worktree vs INDEX)    82
+git diff HEAD --name-only      (worktree vs HEAD)     82
+git status --porcelain         (ALL entries)         120
+  of which ' M'                                       80
+git diff --cached --name-only  (staged)                0
+untracked ('??')                                      38
+```
+**Four agents reported 81, 81, 83 and 84 and NONE disagreed** — four predicates, four times, over
+a set that grows while you read it. ⭐ **Two differ by exactly 2 AT THE SAME INSTANT** (porcelain
+`' M'` vs `git diff`) **because the `contabo-reclaim` pair is ABSENT FROM DISK**, so it appears
+in one enumeration and not the other. The 120-vs-82 gap is untracked files — **which nobody
+included and nobody said they excluded.**
+
+**THE FULL FORM OF THE RULE, four clauses:**
+```
+DECLARE THE DENOMINATOR          how many, out of what
+DECLARE THE FILTER PRECEDENCE    one file was both -w-clean AND sorted-equal; its bucket
+                                 depends on which filter ran FIRST
+DECLARE THE ENUMERATING COMMAND  the phrase hides the instrument
+CARRY A TIMESTAMP AND A COMMIT   and RE-DERIVE AT CLOSE
+```
+
+⛔ **AND THE SHARPEST SELF-CATCH OF THE NIGHT: AN INSTRUMENT THAT WAS *ACCIDENTALLY CORRECT*,
+WHICH IS WORSE THAN WRONG.** An agent's `84` used `git diff --name-only` — worktree vs **INDEX**,
+the instrument this file corrects as blind to staged work. It equalled `git diff HEAD` **only
+because the index happened to be empty**, and the index was empty **only because the conductor
+had unstaged `contabo-reclaim` an hour earlier.** ⭐ **Run thirty minutes sooner it would have
+read 82 and HIDDEN THE 1,387-LINE DELETION. Nothing in the output announces that it depended on
+someone else's cleanup, so the agent would have had no way to notice.**
+
+### ⛔ A TEST COUNT AND AN EXIT CODE BOTH SAY "SOMETHING REDDENED" AND NEITHER SAYS **WHICH**
+
+**Measured on `9ub39`'s leg 2b, which documents itself as a tripwire:** *"the day such a row
+returns, this leg goes RED on the adopted verb."* **The row was put back. IT DID NOT GO RED.**
+```
+adopted_robot_send_verb_does_not_trigger       ... ok       <- the TARGET. Stayed green.
+gate_own_source_is_immune_to_its_own_needles   ... ok
+genuine_ntm_spawn_outside_kernel_still_matches ... FAILED   left: 2  right: 1
+real_workspace_ledger_balances                 ... FAILED   UNDECLARED_PATTERN "robot-send"
+```
+⭐ **`15 passed / 2 failed / exit=101` reads as a bite. Pinning the legs BY NAME is the only
+reason anyone could see that the TARGET leg stayed green** — the count and the exit code agree
+that something reddened and neither names it.
+
+**WHY IT CANNOT FIRE, mechanism rather than adjacency:** the specimen is a `//` line comment, so
+`strip_line_comment` blanks it before any needle is matched. **It is a proof that
+comment-stripping works, filed under a name promising needle-absence detection.**
+
+⭐ **BUT THE PROTECTION IS REAL AND LIVES ELSEWHERE — this is a MISATTRIBUTED guarantee, not a
+missing one.** Re-adding the row IS caught absolutely by `real_workspace_ledger_balances`
+(`UNDECLARED_PATTERN … enforced absolutely`). **The debt ledger is the true tripwire; the fix is
+two lines of doc comment pointing the claim at it, not a new leg.** Same shape as
+`require_idle_grader`'s doc comment claiming a property its call site could not deliver.
+
+---
+
+## ⭐⭐ PIN BEFORE YOU RULE — convert an urgent decision into an unhurried one without deciding it
+
+**The best procedural move of 2026-09-11, and it is the inverse of every self-sealing gate in
+this file.** An agent investigating 41 dirty files found they were a **DROPPED STASH** — four
+dangling `WIP on main:` commits authored by **Josh**, `git stash list` empty, reflog pruned past
+the date, `git fsck` listing the content **unreachable**. ⭐ **The 13:55:49 stash timestamp
+matched the cohort's mtime TO THE MINUTE** — a mechanism, not adjacency, and the first
+hypothesis about those files that could have returned either answer.
+
+**It created four refs and touched no file:**
+```
+refs/rluzf-worktree-recovery/wip-{45b0aff,2f0513b,f450aa3,06bbdc0}
+git fsck --unreachable for that content -> 0        recovery: git show <ref>:<path>
+```
+⭐ **ADDITIVE, REVERSIBLE, AND IT DECIDED NOTHING. That is the whole point: it removed the
+deadline from a judgement instead of making the judgement under one.** Contrast every gate
+recorded above that blocks the repair of the condition it detects.
+
+⛔ **AND IT REFUTED ITS OWN LEADING HYPOTHESIS AGAINST ITS OWN CONVENIENCE.** It expected
+already-merged branch material — *safe to revert* — checked `refs/branch-rationalization-backup/*`
+and found they carry **the same blob as HEAD** for those paths, so the 8.8 MB archive bundle
+does **not** contain the content. **Had it not checked, a discard would have been authorised
+against a safety net that does not hold the files.**
+
+### ⛔ A LOCAL REF IS A GC GUARD, NOT A BACKUP
+
+**The conductor ruled *"the pinning means this is no longer urgent"* and that was too strong.**
+Refs live only in this `.git/`, are unpushed, and **a fresh clone does not carry custom ref
+namespaces** — which matters most here, because a fresh clone is the only clean closure and the
+fleet re-measures from clones constantly. **Remedy is one non-destructive command, written
+OUTSIDE the repo so THE ONE RULE is untouched:**
+```
+git bundle create <outside-repo>/<name>.bundle <refs…>   &&   git bundle verify <bundle>
+-> "records a complete history"   7,223,461 bytes   sha256 ae1924de37d289f9b0177989…
+```
+**`git gc` / `git prune` / `git reflog expire` remain FORBIDDEN until the content is
+dispositioned — the bundle reduces the blast radius, it does not license the operation.**
+
+### ⭐ THE CLAIM-TIER LADDER PAID OFF IN A DIRECTION NOBODY PLANNED
+
+**`poumg.7` was demoted to *differential only* because its closure contained one dirty file it
+could not attribute. That file turned out to be a member of the frozen 41.** ⭐ **Had the grade
+published a HEAD verdict, the correction would now be landing on an already-CLOSED bead, against
+content nobody may touch to re-measure.** The grader declined it because it could not attribute
+it — **and was right for a better reason than it had at the time.**
+
+**THE TIER IS NOT BOOKKEEPING. IT IS WHAT MAKES A CLOSED BEAD STILL TRUE AFTER THE FACTS MOVE.**
+
+### ⛔ AND THE WORKER SEES A DIFFERENT WORKSPACE THAN A CLONE — 91 vs 89
+
+```
+regenerated FROM A CLONE OF HEAD                 89 entries
+`rch exec -- gate-runner --plan` ON THE WORKER   crates=91, LEDGER_DRIFT x2
+```
+**Because `rch exec` syncs UNTRACKED files, two untracked crates exist for every remote build
+and for no clone.** ⭐ **Regenerating a DERIVED file from the worktree — or from the worker —
+bakes those rows in and manufactures the OPPOSITE drift in CI.** Derived artifacts
+(`Cargo.lock`, `docs/gate-roster.txt`) **MUST be regenerated from a clone of HEAD.** And while
+those crates stay untracked, **a remote `--plan` can never report zero drift: those lines are
+CORRECT OUTPUT, not residue.**
+
+### ⛔⛔ THE CLOSURE CHECK HAS ITS OWN BLIND SPOT, OF EXACTLY THE KIND IT EXISTS TO DETECT
+
+**Seventh instance of tonight's shape and the most self-referential. AN UNTRACKED INPUT HAS NO
+HEAD BLOB TO COMPARE AGAINST, SO A HASH-AGAINST-HEAD CLOSURE CHECK CANNOT SEE IT AT ALL.** Every
+other member of the input set fails loudly when it drifts; **an untracked one is invisible by
+construction, because the comparison that would catch it has nothing on the other side.**
+Measured:
+```
+git status --porcelain --untracked-files=all -- crates | grep '^??'   ->  9 entries
+  TWO WHOLE CRATES: kernel-only-gate/{Cargo.toml,src/lib.rs,tests/…}
+                    omp-host-tool-guard/{Cargo.toml,src/lib.rs}
+  plus test files in ack-spine, tick-monitor, undrained-pipe-lint
+git show HEAD:crates/ack-spine/tests/properties.rs  ->  DOES NOT EXIST
+```
+⭐ **AND IT IS WORSE THAN INVISIBLE — IT IS ACTIVELY PRESENT IN EVERY REMOTE BUILD AND ABSENT
+FROM EVERY CLONE**, because `members = ["crates/*"]` enrols untracked directories and `rch exec`
+ships them. **That is the exact polarity that makes a green un-reproducible.**
+
+**SO STEP 1 NEEDS A SECOND ENUMERATION, NOT A LONGER LIST.** Hashing against HEAD answers *"did
+my committed inputs drift"*. It cannot answer *"is there an input with no committed
+counterpart"*. **Two questions; only the first was mechanised.** The missing probe is one line
+and it returns the other answer:
+```
+git status --porcelain --untracked-files=all <closure dirs> | grep '^??'
+```
+
+⛔ **THIS DEMOTES THE LADDER ITSELF, NOT ANY ONE BEAD. "Empty drift set" was defined as *no
+COMMITTED input differs from HEAD*. The correct definition is *no committed input differs from
+HEAD **AND** no untracked file is in the closure*.** Every top-rung claim made before this was
+made under the weaker definition and **is not entitled to the rung until the second probe runs.**
+
+⭐ **The author of the ladder ran the probe against its own top-rung claim rather than asserting
+the gap did not apply** — `poumg.5`'s closure returned **zero** untracked entries, and the crate
+declares no `mod`, no `include_str!`, no `include_bytes!`, **so the four files hashed ARE the
+crate.** That claim now survives a check nobody had thought to run, rather than resting on an
+assumption nobody had noticed making.
+
+**THE GENERAL FORM: an instrument that can only compare against HEAD cannot report the existence
+of something HEAD has never seen.** *"Can this instrument return the other answer"* — applied to
+the instrument built to ask that question.
+
 ⛔ **AND EVEN A PURE PERMUTATION IS ONLY PRESUMPTIVELY INERT.** `match` arm order, statements
 with side effects, `macro_rules!` definition order, overlapping trait impls, and item order read
 by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
