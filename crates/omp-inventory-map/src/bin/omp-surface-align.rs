@@ -49,6 +49,7 @@ use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use omp_inventory_map::alignment::{
     self, AlignmentError, AlignmentReport, SurfaceEntry, DELIBERATELY_NOT,
+    DELIBERATELY_NOT_ROWS,
 };
 use omp_inventory_map::{parse_cli_commands, parse_omp_version, parse_transport_modes};
 use ompo_doctor::omp_process::{read_processes, ProcessProbeVerdict};
@@ -135,10 +136,8 @@ fn main() -> ExitCode {
         return ExitCode::from(EXIT_CONTENT);
     }
     println!(
-        "ALIGN_TIER1 packages_scanned={} declarations={} allowance_rows={}",
-        consumers.packages_scanned,
-        consumers.declarations.len(),
-        DELIBERATELY_NOT.len()
+        "{}",
+        tier1_line(consumers.packages_scanned, consumers.declarations.len())
     );
 
     // ---- TIER 2: needs the installed artifact -------------------------------------
@@ -233,6 +232,17 @@ fn print_report(report: &AlignmentReport) {
         report.rows.len(),
         report.packages_scanned
     );
+}
+
+/// Render the tier-1 line. The allowance figure is READ FROM the table, never restated as a
+/// literal here: a second hand-maintained copy of `DELIBERATELY_NOT.len()` is exactly what
+/// drifted to 37 while the table held 75 and reddened CI while the crate was locally green.
+fn tier1_line(packages_scanned: usize, declarations: usize) -> String {
+    format!(
+        "ALIGN_TIER1 packages_scanned={packages_scanned} declarations={declarations} \
+         allowance_rows={}",
+        DELIBERATELY_NOT.len()
+    )
 }
 
 /// Every allowance row must carry its owner, reason and death condition. A row nobody can
@@ -597,16 +607,47 @@ mod tests {
 
     /// The allowance list contains reviewed cross-axis, placeholder, and CLI decisions and
     /// validates every field at the gate trigger.
+    ///
+    /// The size is READ FROM `DELIBERATELY_NOT_ROWS`, never restated. A second literal here
+    /// is what reddened CI on 2026-09-11: the table held 75 rows and this line still said
+    /// 37, so the crate was green on a hand-patched worktree and red on committed bytes.
     #[test]
     fn allowance_integrity_passes_on_named_decisions() {
         assert!(allowance_integrity().is_ok());
-        assert_eq!(DELIBERATELY_NOT.len(), 37);
+        assert_eq!(
+            DELIBERATELY_NOT.len(),
+            DELIBERATELY_NOT_ROWS,
+            "the table changed size; update DELIBERATELY_NOT_ROWS, the one reviewed figure"
+        );
         assert!(DELIBERATELY_NOT
             .iter()
             .any(|row| row.kind == "cli" && row.name == "ps"));
         assert!(DELIBERATELY_NOT
             .iter()
             .any(|row| row.kind == "transport_mode" && row.name == "value"));
+    }
+
+    /// The tier-1 line must report the LIVE allowance count. A hand-written figure here
+    /// would read as a measurement while being a claim, and would drift silently the next
+    /// time a row is added.
+    #[test]
+    fn the_tier1_line_reports_the_live_allowance_count() {
+        let rendered = tier1_line(11, 7);
+        let reported = rendered
+            .split("allowance_rows=")
+            .nth(1)
+            .expect("tier-1 line must name allowance_rows")
+            .trim()
+            .parse::<usize>()
+            .expect("allowance_rows must be a number");
+        assert_eq!(
+            reported,
+            DELIBERATELY_NOT.len(),
+            "the reported allowance count must be read from the table, not restated: \
+             {rendered}"
+        );
+        assert!(rendered.contains("packages_scanned=11"));
+        assert!(rendered.contains("declarations=7"));
     }
 
     /// `--repo` must be honoured, or the gate would silently measure whatever directory it

@@ -82,6 +82,15 @@ pub struct DeliberateNonConsumption {
     pub dies_when: &'static str,
 }
 
+/// The reviewed size of [`DELIBERATELY_NOT`]. THE SINGLE PLACE this figure is written.
+///
+/// Every site that needs the count reads this constant; none restates the number. Two
+/// hand-maintained copies is the defect that reddened CI on 2026-09-11 while the crate was
+/// green on a hand-patched worktree: the table held 75 rows and a second pin, in
+/// `bin/omp-surface-align.rs`, still said 37. Changing this one number moves every site
+/// that reads it, which is what makes the divergence unrepeatable rather than merely fixed.
+pub const DELIBERATELY_NOT_ROWS: usize = 75;
+
 /// Deliberate non-consumption rows. Each row keeps an otherwise-visible surface in the map
 /// while recording the owner, reason, and condition that retires the decision.
 pub const DELIBERATELY_NOT: &[DeliberateNonConsumption] = &[
@@ -852,11 +861,16 @@ mod tests {
         );
     }
 
-    /// The two cross-axis/placeholder rows and 35 generated CLI exclusions are
-    /// deliberate, owned, and retirable.
+    /// The cross-axis and placeholder rows and the generated CLI exclusions are
+    /// deliberate, owned, and retirable. The size is read from [`DELIBERATELY_NOT_ROWS`],
+    /// never restated: a second copy of the figure is the bug this crate already shipped.
     #[test]
     fn the_deliberately_not_allowances_are_named_and_retirable() {
-        assert_eq!(DELIBERATELY_NOT.len(), 75);
+        assert_eq!(
+            DELIBERATELY_NOT.len(),
+            DELIBERATELY_NOT_ROWS,
+            "the table changed size; update DELIBERATELY_NOT_ROWS, the one reviewed figure"
+        );
         let cli = DELIBERATELY_NOT
             .iter()
             .find(|row| row.kind == "cli" && row.name == "ps")
