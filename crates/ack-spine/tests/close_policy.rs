@@ -14,7 +14,14 @@ use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 
-/// The eight tokens documented by AGENTS.md.
+/// The nine tokens documented by AGENTS.md.
+///
+/// `BUILT-AND-TESTED` is the ninth, added under `uqnut`'s EXTEND ruling: a grader
+/// that re-executed a bead green WITHOUT a mutation leg has earned a verdict that
+/// `DONE` does not carry, and forcing it behind `DONE` deletes the distinction.
+/// The refused property is unchanged — a reason must state its verdict CLASS —
+/// and `VERDICT:` (a label with no class) and `DUPLICATE` (a disposition, not a
+/// verdict) are still refused, which the legs below assert.
 const DOCUMENTED_PREFIXES: &[&str] = &[
     "MUTATION-VERIFIED",
     "MUTATION-NOT-REQUIRED",
@@ -23,6 +30,7 @@ const DOCUMENTED_PREFIXES: &[&str] = &[
     "APPROVED",
     "PREMISE-FALSE",
     "ALREADY-FIXED",
+    "BUILT-AND-TESTED",
     "WONTFIX",
 ];
 
@@ -86,6 +94,44 @@ fn complete_and_partially_close_attempts_are_refused_with_admitted_prefixes() {
                 "refusal must name admitted prefix {prefix}: {rendered}"
             );
         }
+    }
+}
+
+/// `uqnut`: the EXTENSION admits a precise verdict and does NOT admit an absent
+/// one. This is the known-bad that must survive the extension — if it ever passes,
+/// the set stopped requiring a verdict class and became a free-text field.
+#[test]
+fn extending_the_set_does_not_admit_a_label_or_a_disposition() {
+    for reason in [
+        "VERDICT: the thing works",
+        "DUPLICATE of omp-orchestrator-abc",
+        "fixed it",
+        "BUILT it and shipped",
+        "BUILT-AND-TESTEDish prose",
+    ] {
+        let verdict = classify_close_reason(Some(reason));
+        assert!(
+            matches!(verdict, CloseReasonVerdict::PolicyRefused { .. }),
+            "{reason:?} states no verdict class and must be refused, got {verdict:?}"
+        );
+    }
+}
+
+/// The admitted side, so the leg above cannot pass by refusing everything.
+#[test]
+fn built_and_tested_is_admitted_with_its_boundary() {
+    for reason in [
+        "BUILT-AND-TESTED: 23 passed, 0 filtered, worker=contabo-4",
+        "BUILT-AND-TESTED 23 passed",
+        "BUILT-AND-TESTED",
+    ] {
+        assert_eq!(
+            classify_close_reason(Some(reason)),
+            CloseReasonVerdict::Verified {
+                prefix: ClosePrefix::BuiltAndTested
+            },
+            "{reason:?} must be admitted"
+        );
     }
 }
 

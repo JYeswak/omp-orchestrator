@@ -66,6 +66,12 @@ pub enum ClosePrefix {
     PremiseFalse,
     /// The work was already completed by another landed change.
     AlreadyFixed,
+    /// The work was re-executed green by a grader, WITHOUT a mutation leg — so it
+    /// is verified to pass and NOT verified to be load-bearing. Admitted because
+    /// forcing it behind `DONE` would delete the distinction a grader deliberately
+    /// recorded, which is `uqnut`'s EXTEND ruling: the refused property is that a
+    /// reason must state its verdict CLASS, and this states one.
+    BuiltAndTested,
     /// The work will not be done, with the reason recorded.
     WontFix,
 }
@@ -86,6 +92,7 @@ impl ClosePrefix {
         Self::Approved,
         Self::PremiseFalse,
         Self::AlreadyFixed,
+        Self::BuiltAndTested,
         Self::WontFix,
     ];
 
@@ -100,6 +107,7 @@ impl ClosePrefix {
             Self::Approved => "APPROVED",
             Self::PremiseFalse => "PREMISE-FALSE",
             Self::AlreadyFixed => "ALREADY-FIXED",
+            Self::BuiltAndTested => "BUILT-AND-TESTED",
             Self::WontFix => "WONTFIX",
         }
     }
@@ -169,13 +177,20 @@ impl fmt::Display for CloseReasonVerdict {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Verified { prefix } => write!(formatter, "CLOSE_REASON_VERIFIED prefix={prefix}"),
-            Self::PolicyRefused { leading } => write!(
-                formatter,
-                "CLOSE_REASON_POLICY_REFUSED leading={leading} -- a reason must start with one of \
-                 MUTATION-VERIFIED, MUTATION-NOT-REQUIRED, MUTATION-ATTRIBUTED, DONE, APPROVED, \
-                 PREMISE-FALSE, ALREADY-FIXED, WONTFIX; the local guard refuses this, but a \
-                 direct br close bypasses it, so read the status back"
-            ),
+            // The admitted set is RENDERED FROM `ClosePrefix::ALL`, not retyped.
+            // It was a hand-written literal, so extending the set left the refusal
+            // naming eight tokens while nine were admitted — a message that lies
+            // about the rule it is enforcing, and one more copy of one law.
+            Self::PolicyRefused { leading } => {
+                let admitted: Vec<&str> =
+                    ClosePrefix::ALL.iter().map(|prefix| prefix.as_str()).collect();
+                write!(
+                    formatter,
+                    "CLOSE_REASON_POLICY_REFUSED leading={leading} -- a reason must start with one of {}; \
+                     the local guard refuses this, but a direct br close bypasses it, so read the status back",
+                    admitted.join(", ")
+                )
+            }
             Self::CargoWorkerMissing { leading } => write!(
                 formatter,
                 "CLOSE_REASON_WORKER_MISSING leading={leading} -- cargo test figures must name worker=<name> or local"
@@ -370,8 +385,9 @@ mod tests {
         assert_ne!(done, mutation);
         assert_eq!(
             ClosePrefix::ALL.len(),
-            8,
-            "the policy names exactly eight prefixes"
+            9,
+            "the policy names exactly nine prefixes; BUILT-AND-TESTED is the ninth, \
+             added under uqnut's EXTEND ruling"
         );
         let mut tokens: Vec<&str> = ClosePrefix::ALL.iter().map(|p| p.as_str()).collect();
         let before = tokens.len();
