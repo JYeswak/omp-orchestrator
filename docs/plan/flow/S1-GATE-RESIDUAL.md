@@ -1,10 +1,29 @@
 # S1 gate residual — the 20 non-PASS crates, ENUMERATED
 
 ```
-SOURCE      run 34549975939   headSha cb9d3941   completed/failure   2026-09-11T01:16Z
+SOURCE      run 34569451324   headSha 3093989    completed/failure   2026-09-11T06:19Z
 ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest "completed"
-SUMMARY     GATE_RUNNER crates=88 pass=68 fail=16 unmeasurable=4 short=0 no_tests=0
+SUMMARY     GATE_RUNNER_PLAN crates=89 · FAILING count=4 · UNMEASURABLE count=4
+FAILING     no-shell-gate · omp-inventory-map · omp-orchestrator · ompo-doctor
+UNMEASURABLE admission-reason:POLICY_UNAVAILABLE · finding:MISSING_EXECUTABLE
+             loop-driver:POLICY_UNAVAILABLE · loop-queue-filter:MISSING_EXECUTABLE
+
+SUPERSEDED  34566431257 / 98e44cc  06:01Z  FAILING count=7
+SUPERSEDED  34549975939 / cb9d3941 01:16Z  FAILING count=16
 ```
+
+⭐⭐ **FAILING WENT 16 → 7 → 4 IN ONE SESSION, AND THE TRAJECTORY IS ONLY VISIBLE BECAUSE THE
+GATE CAN PRODUCE VERDICTS AGAIN.** Before `2d25494`, `cancel-in-progress: true` on a
+`workflow+ref` group meant every push killed the running gate: **14 of 15 cancelled, last real
+verdict four hours stale.** After the sha-keyed fix, **six verdict-bearing runs in forty
+minutes.** ⛔ **The 16 → 7 → 4 improvement was happening the whole time and NOTHING COULD SEE
+IT** — the crates were being repaired while the only instrument that compiles the committed tree
+was being cancelled before it could say so.
+
+⛔ **RE-DERIVE BEFORE CITING, per this document's own history: it named a superseded run
+authoritative TWICE.** One command:
+`gh run list --limit 25 --json databaseId,conclusion,headSha` → newest with conclusion
+`success|failure`. **`completed` and `carrying a verdict` are different populations.**
 
 ⚠️ **THIS DOCUMENT WAS WRONG ON ITS FIRST PUBLICATION AND THE CORRECTION IS THE POINT.** `17c632e`
 enumerated run `34289493517` / `475c702` — **two days and 83 commits stale** — and called it
