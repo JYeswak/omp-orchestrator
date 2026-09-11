@@ -7386,3 +7386,39 @@ was legible as a PARTIAL rather than as a success.
 announcing details in one verdict-bearing run. It says nothing about whether any failing crate
 is fixed — `GATE_RUNNER_FAILING` is unchanged — and nothing about assertion macros other than
 `assert_eq!`/`assert_ne!`, which no run has yet exercised.
+
+## ⛔⛔ A TEST CAN BE **UNSATISFIABLE**, AND THE TELL IS A **MOVING FAILURE MESSAGE**
+
+**Measured 2026-09-11 in `census_membership.rs`. `the_ratchet_deadline_is_a_real_number_and_not_a_sentiment`
+holds two assertions that cannot both hold:**
+
+```
+:391   ceiling == ADVISORY_ALLOWANCE.len()      -> wants 11
+:402   ceiling == live advisory count            -> wants 29
+```
+
+**No value satisfies both.** At `ceiling = 24` it fails at `:391`; at `ceiling = 11` it fails at
+`:402`. **The verdict is FAILED either way, so the pass/fail signal carries no information about
+whether you are getting closer** — and three separate ceiling edits all "failed the same test."
+
+⭐ **THE DETECTION TECHNIQUE, and it costs one extra run: PERTURB THE INPUT AND WATCH WHICH
+ASSERTION FIRES.** A test with one binding constraint keeps failing at the same line with a
+shrinking gap. **A test whose failure LINE MOVES while the verdict stays red is conjunctive, and
+the constraints may be mutually exclusive.** I only saw it because I read the message after each
+edit instead of the status — `:402` → `:391` was the whole finding, and a `grep -c FAILED`
+would have shown `1` every time.
+
+⛔ **AND THE COROLLARY FOR REMEDIES: A GATE THAT NAMES ITS OWN FIX CAN STILL BE WRONG.**
+`an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails` printed *"delete them and
+LOWER ADVISORY_CEILING to match"* — naming two rows. Deleting one was right. Deleting the other
+moved it into the violation set of a DIFFERENT leg in the same file that lists it as unreachable
+and therefore REQUIRED. **The gate prescribing a remedy is not the only gate reading that list.**
+
+ **So: re-run the WHOLE TARGET after taking a test's advice, never just the test that gave
+it** — and when two legs disagree about one subject, the fix belongs in whichever predicate is
+wrong, not in the data both are reading. **Editing the data to satisfy one leg is how a
+contradiction gets laundered into a green.**
+
+**The honest move when you find one: make the change that moves EXACTLY ONE THING, leave every
+other number where you found it, and record the contradiction where the next reader will hit
+it.** A partial fix plus a named blocker beats a coherent-looking edit that quietly picks a side.
