@@ -20,8 +20,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::panic::catch_unwind;
 use std::path::{Path, PathBuf};
 
-/// The literal is CONSTRUCTED, never spelled: this file lives under `tests/`, which the
-/// gate does not scan, but spelling it would still be a specimen this repo forbids.
+/// The literal is CONSTRUCTED, never spelled: `k0h1e` moved `tests/` INTO the gate's floor, so
+/// this file is now scannable by the staged gate, and spelling the literal would make it a
+/// specimen this repo forbids.
 fn planted_line() -> String {
     format!("const REPO: &str = \"{USER_HOME_LITERAL}\";\n")
 }
@@ -286,4 +287,78 @@ fn the_guards_own_source_is_clean_without_an_exclusion() {
             .all(|row| !row.file.contains("path-literal-guard")),
         "the self-reference must be a MECHANISM, never an allowlist row"
     );
+}
+
+/// THE SWEEP'S NARROWING IS MEASURED, NOT ASSUMED — and it cannot go stale in silence.
+///
+/// `omp-orchestrator-k0h1e` widened the GATE (staged mode) to `{src,tests}` and left the sweep
+/// reading `src` alone, because files under `crates/*/tests` carry literals this unit does not
+/// repair. A narrowing nobody re-examines is how a declared hole becomes a permanent one, so this
+/// leg pins the REASON rather than the decision: every deferred subdir must still hold at least
+/// one violation. The day the deferred tree is clean, this leg REDDENS and says WIDEN.
+///
+/// KNOWN-GOOD / over-strictness control in the same run: the walked floor is clean (the sweep
+/// leg above), so this cannot pass for a scanner that flags everything.
+#[test]
+fn the_repo_wide_narrowing_is_load_bearing() {
+    let deferred = path_literal_guard::repo_wide_deferred_subdirs();
+    if deferred.is_empty() {
+        assert_eq!(
+            path_literal_guard::REPO_WIDE_SUBDIRS,
+            path_literal_guard::SCANNED_CRATE_SUBDIRS,
+            "nothing is deferred, so the sweep must walk the gate's whole floor"
+        );
+        return;
+    }
+
+    let root = repo_root();
+    let crates_dir = root.join("crates");
+    for subdir in &deferred {
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        let mut stack: Vec<PathBuf> = Vec::new();
+        for entry in fs::read_dir(&crates_dir).expect("read crates/") {
+            let directory = entry.expect("crates/ entry").path().join(subdir);
+            if directory.is_dir() {
+                stack.push(directory);
+            }
+        }
+        // ANTI-VACUITY: an unwalkable deferred tree is an ERROR, never an empty pass.
+        assert!(
+            !stack.is_empty(),
+            "no crates/*/{subdir} directory exists, so the deferral describes nothing"
+        );
+        while let Some(directory) = stack.pop() {
+            for entry in fs::read_dir(&directory).expect("read deferred directory") {
+                let path = entry.expect("deferred entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    candidates.push(path);
+                }
+            }
+        }
+        assert!(
+            !candidates.is_empty(),
+            "crates/*/{subdir} holds no .rs file, so the deferral describes nothing"
+        );
+
+        let report = scan_paths(&root, &candidates);
+        assert_eq!(
+            report.scanned.len(),
+            candidates.len(),
+            "every deferred .rs file is in the gate's floor and must be READ: {report:?}"
+        );
+        assert_eq!(
+            report.verdict(),
+            Verdict::Violation,
+            "crates/*/{subdir} is CLEAN, so the sweep's narrowing no longer buys anything -- \
+             WIDEN path_literal_guard::REPO_WIDE_SUBDIRS to include {subdir} and delete this \
+             deferral (omp-orchestrator-k0h1e)"
+        );
+        println!(
+            "SWEEP-DEFERRAL {subdir}: {} file(s) read, {} still violating",
+            report.scanned.len(),
+            report.hits.len()
+        );
+    }
 }

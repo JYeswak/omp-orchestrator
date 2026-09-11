@@ -34,6 +34,10 @@ pub mod commit_serialization;
 pub mod def_ids;
 pub mod firing_ledger;
 pub mod head_compiles;
+/// ONE authority for the hook's covered source set and its content digest
+/// (`omp-orchestrator-zzg2x`). Declared in `src/` deliberately: a scope declaration sitting
+/// OUTSIDE the digest's own input could be edited without moving the stamp.
+pub mod hook_digest;
 pub mod project_agent;
 use std::fmt;
 use std::path::Path;

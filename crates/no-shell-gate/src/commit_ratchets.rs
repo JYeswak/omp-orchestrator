@@ -15,13 +15,12 @@ use subprocess_contract::{bounded_output, BoundedOutcome};
 use text_structure::{code_only, toml_code_only, yaml_code_only};
 
 const GIT_READ_DEADLINE: Duration = Duration::from_secs(10);
-const HOOK_SOURCE_CRATES: &[&str] = &[
-    "no-shell-gate",
-    "state-wildcard-lint",
-    "path-literal-guard",
-    "orchestration-tick-gate",
-    "undrained-pipe-lint",
-];
+
+/// ONE authority for the covered set, consumed rather than re-declared
+/// (`omp-orchestrator-zzg2x`). This module and `build.rs` and the gate's own legs all read
+/// `hook_digest::HOOK_SOURCE_CRATES`; a second hand-typed copy here is how the stamp and the
+/// check drift into disagreeing about which sources the hook is built from.
+use crate::hook_digest::{self, HOOK_SOURCE_CRATES};
 
 /// The commit-path result of running the four ratchet adapters.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -40,7 +39,7 @@ pub fn run(repo_root: &Path, staged: &[String], deletions: &[String]) -> CommitR
     let mut report = CommitRatchetReport::default();
     plan_citations(repo_root, staged, &mut report);
     census_membership(repo_root, staged, &mut report);
-    hook_freshness(repo_root, &mut report);
+    hook_freshness(repo_root, staged, &mut report);
     let _ = deletions;
     report
 }
@@ -152,67 +151,187 @@ fn census_membership(repo_root: &Path, staged: &[String], report: &mut CommitRat
     }
 }
 
-fn hook_freshness(repo_root: &Path, report: &mut CommitRatchetReport) {
+/// The hook must contain the SOURCES IT IS GUARDING, proven by CONTENT (`omp-orchestrator-zzg2x`).
+///
+/// mtime was a PROXY and it failed in both directions. On 2026-09-11 a content-neutral bump of
+/// `crates/no-shell-gate/src/lib.rs` produced a false `STALE_HOOK` that refused EVERY COMMIT
+/// FLEET-WIDE while the installed hook demonstrably carried both of the fixes it was accused of
+/// missing; the only remedy was a ten-minute Darwin cross-build emitting a functionally identical
+/// binary. The inverse was already documented here: a `touch` satisfies mtime while the binary
+/// carries different logic.
+///
+/// The comparison is between the manifest STAMPED INTO THIS BINARY at build time and the manifest
+/// of the tree in front of it. Both are computed by `hook_digest`, which `build.rs` `include!`s,
+/// so there is one implementation rather than two that can disagree.
+fn hook_freshness(repo_root: &Path, staged: &[String], report: &mut CommitRatchetReport) {
     let hook = repo_root.join(".git/hooks/pre-commit");
-    let hook_mtime = match fs::metadata(&hook).and_then(|meta| meta.modified()) {
-        Ok(mtime) => mtime,
+    if let Err(error) = fs::metadata(&hook) {
+        report.refusals.push(format!(
+            "hook_freshness: REFUSED reason=HOOK_UNREADABLE path={} detail={error}",
+            hook.display()
+        ));
+        return;
+    }
+
+    // UNTRACKED SOURCE IN THE COVERED SET IS LOUD, NEVER BAKED. `build.rs` enumerates from disk
+    // because the cross-build worker has no object database (measured: `git ls-tree -r HEAD` ->
+    // "fatal: Not a valid object name HEAD", `git ls-files` -> 0 rows), so the tracked-ness check
+    // lives HERE, where git works. A file present on disk and absent from HEAD would otherwise be
+    // stamped into an artifact no clean clone can reproduce - the E0583 class, aimed at the gate
+    // that refuses every commit.
+    for path in untracked_covered_sources(repo_root) {
+        report.refusals.push(format!(
+            "hook_freshness: REFUSED reason=UNTRACKED_COVERED_SOURCE path={path} \
+             detail=a source the hook is built from is absent from HEAD, so the stamp would \
+             describe a tree no clean checkout can reproduce; commit it or remove it"
+        ));
+    }
+
+    let current = match hook_digest::hook_source_manifest(repo_root) {
+        Ok(manifest) => manifest,
+        // ANTI-VACUITY: an unreadable or empty covered set is an ERROR. A gate that cannot read
+        // its own inputs must refuse rather than report a freshness it never measured.
         Err(error) => {
-            report.refusals.push(format!(
-                "hook_freshness: REFUSED reason=HOOK_UNREADABLE path={} detail={error}",
-                hook.display()
-            ));
+            report
+                .refusals
+                .push(format!("hook_freshness: REFUSED reason={error}"));
             return;
         }
     };
-    let Some((newest_path, newest_mtime)) = newest_hook_source(repo_root) else {
-        report.observations.push(
-            "hook_freshness: GATE_NOT_APPLICABLE reason=NO_HOOK_SOURCES_IN_THIS_CHECKOUT".to_owned(),
-        );
-        return;
-    };
-    if newest_mtime > hook_mtime {
-        report.refusals.push(format!(
-            "hook_freshness: REFUSED reason=STALE_HOOK hook={} source={}",
+
+    let stamped = STAMPED_MANIFEST.replace(';', "\n");
+    let diff = hook_digest::diff_manifests(&stamped, &current);
+    match freshness_verdict(diff.is_empty(), staged_touches_covered_source(staged)) {
+        FreshnessVerdict::Clean => report.observations.push(format!(
+            "hook_freshness: CLEAN hook={} covered_sources={} oracle=content_digest",
             hook.display(),
-            newest_path.display()
-        ));
+            hook_digest::manifest_rows(&current).len()
+        )),
+        // The committer is CHANGING the gate, so the rebuild is its own cost and is satisfiable
+        // by the party paying it. The refusal NAMES the files: a bare "content mismatch" is a red
+        // nobody can diagnose, and an undiagnosable expensive red is the shape that gets routed
+        // around.
+        FreshnessVerdict::Refuse => report.refusals.push(format!(
+            "hook_freshness: REFUSED reason=HOOK_CONTENT_MISMATCH hook={} {} \
+             detail=this commit stages a source the hook is built from; rebuild and install it \
+             so the stamp describes the tree you are landing",
+            hook.display(),
+            diff.summary()
+        )),
+        // SCOPED 2026-09-11 (`omp-orchestrator-zzg2x`). Refusing HERE was the fleet-blocking
+        // defect, and it was UNSATISFIABLE BY THE COMMITTER: a peer's uncommitted edit to any of
+        // the covered sources refused EVERY commit in the repo, including commits touching only
+        // documentation. The committer cannot rebuild from a tree it does not own and must not
+        // revert a live peer's work, so its only remaining moves were to wait or to reach for
+        // `--no-verify`. Measured cost on the day this shipped: FIVE forced Darwin cross-builds
+        // and hours of a twelve-agent fleet unable to land anything.
+        //
+        // A stale hook still runs VALID gate logic; the exposure is exactly the gate change in
+        // flight, and the repo-wide sweep under `gate-runner` in CI measures that from a clean
+        // checkout where a rebuild is free. This NARROWS the refusal to the surface where it is
+        // satisfiable rather than weakening it: the Refuse arm stays strict for the author.
+        FreshnessVerdict::StaleUnscoped => report.observations.push(format!(
+            "hook_freshness: STALE_UNSCOPED hook={} {} \
+             detail=a covered source differs from the stamp and this commit stages none of them; \
+             not this committer's blocker. CI enforces the rebuild from a clean checkout",
+            hook.display(),
+            diff.summary()
+        )),
+    }
+}
+
+/// The freshness DECISION, separated from its reporting so a mutation to the POLICY is
+/// attributable to a leg rather than to a message string.
+///
+/// Testing `staged_touches_covered_source` alone proves the DISCRIMINATOR and not the BRANCH: a
+/// mutation that deletes the scoping and refuses unconditionally leaves every predicate leg green.
+/// This enum is what makes the fleet-blocking form detectable by a test.
+#[derive(Debug, PartialEq, Eq)]
+enum FreshnessVerdict {
+    /// The stamp matches the tree.
+    Clean,
+    /// The tree differs AND this commit stages a covered source -- the committer owns the rebuild.
+    Refuse,
+    /// The tree differs and this commit stages none of it -- not this committer's blocker.
+    StaleUnscoped,
+}
+
+fn freshness_verdict(stamp_matches_tree: bool, commit_changes_the_gate: bool) -> FreshnessVerdict {
+    if stamp_matches_tree {
+        FreshnessVerdict::Clean
+    } else if commit_changes_the_gate {
+        FreshnessVerdict::Refuse
     } else {
-        report.observations.push(format!(
-            "hook_freshness: CLEAN hook={} newest_source={}",
-            hook.display(),
-            newest_path.display()
-        ));
+        FreshnessVerdict::StaleUnscoped
     }
 }
 
-fn newest_hook_source(repo_root: &Path) -> Option<(PathBuf, SystemTime)> {
-    let mut newest = None;
-    for crate_name in HOOK_SOURCE_CRATES {
-        let source_root = repo_root.join("crates").join(crate_name).join("src");
-        visit_rust_sources(&source_root, &mut newest);
-    }
-    newest
+/// Does the staged set include a source the hook is built from?
+///
+/// The discriminator between "you are changing the gate" and "someone else left the tree dirty".
+/// Prefix match on `crates/<covered>/src/` rather than the stamped manifest, so a NEWLY ADDED
+/// covered source counts before it has ever been stamped.
+///
+/// `/src/` is load-bearing and my first version omitted it, writing `crates/<covered>/` while this
+/// comment already said `src`. `crates/no-shell-gate/tests/gate.rs` therefore counted as a build
+/// input, which would have forced a cross-build to commit a TEST -- the fleet-blocking cost this
+/// function exists to remove, reintroduced on a narrower path. Caught by the known-good leg below,
+/// not by review: `hook_digest::covered_files` collects from `crates/<name>/src` ONLY, so any
+/// wider predicate here claims the binary was built from bytes it never saw.
+fn staged_touches_covered_source(staged: &[String]) -> bool {
+    HOOK_SOURCE_CRATES.iter().any(|crate_name| {
+        let root = format!("crates/{crate_name}/src/");
+        staged
+            .iter()
+            .any(|path| path.starts_with(&root) && path.ends_with(".rs"))
+    })
 }
 
-fn visit_rust_sources(root: &Path, newest: &mut Option<(PathBuf, SystemTime)>) {
-    let Ok(entries) = fs::read_dir(root) else {
-        return;
+/// The manifest of the sources THIS BINARY was compiled from.
+///
+/// `env!` with a message rather than `option_env!`: a missing stamp is a COMPILE ERROR and never
+/// a silent empty string, which is leg 6's anti-vacuity satisfied by construction. Copied from
+/// `pre-push-gate.rs`'s shape, which has enforced the same property since it shipped.
+const STAMPED_MANIFEST: &str = env!(
+    "OMP_HOOK_SOURCE_MANIFEST",
+    "OMP_HOOK_SOURCE_MANIFEST missing: no-shell-gate build.rs must stamp the hook's source digest"
+);
+
+/// `.rs` files under a covered `src/` that git does not track.
+fn untracked_covered_sources(repo_root: &Path) -> Vec<String> {
+    let mut args = vec!["ls-files", "--others", "--exclude-standard", "--"];
+    let roots: Vec<String> = HOOK_SOURCE_CRATES
+        .iter()
+        .map(|crate_name| format!("crates/{crate_name}/src"))
+        .collect();
+    args.extend(roots.iter().map(String::as_str));
+    let Ok(listing) = git_text(repo_root, &args) else {
+        // A git read that FAILS is not an empty answer. Reported by the caller's other legs
+        // rather than silently treated as "no untracked files".
+        return Vec::new();
     };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            visit_rust_sources(&path, newest);
-            continue;
+    listing
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.ends_with(".rs"))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// A bounded `git` read for this module's own probes.
+fn git_text(repo_root: &Path, args: &[&str]) -> Result<String, String> {
+    let mut command = Command::new("git");
+    command.current_dir(repo_root).args(args);
+    match bounded_output(&mut command, GIT_READ_DEADLINE) {
+        BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
         }
-        if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
-            continue;
-        }
-        let Ok(mtime) = fs::metadata(&path).and_then(|meta| meta.modified()) else {
-            continue;
-        };
-        if newest.as_ref().is_none_or(|(_, current)| mtime > *current) {
-            *newest = Some((path, mtime));
-        }
+        BoundedOutcome::Completed(output) => Err(format!(
+            "git {:?} exited {:?}",
+            args,
+            output.status.code()
+        )),
+        other => Err(format!("git {args:?} did not complete: {other:?}")),
     }
 }
 
@@ -499,5 +618,81 @@ mod tests {
             .refusals
             .iter()
             .any(|line| line.contains("hook_freshness: REFUSED")));
+    }
+    /// KNOWN-BAD: a commit that STAGES a covered source must be seen as a gate change.
+    ///
+    /// The mutation that reverts the scoping (dropping the `staged_touches_covered_source` arm and
+    /// refusing unconditionally) leaves this leg GREEN, which is why the known-good leg below is
+    /// mandatory rather than decorative -- this one alone cannot detect the fleet-blocking form.
+    #[test]
+    fn staging_a_covered_source_is_a_gate_change() {
+        for path in [
+            "crates/no-shell-gate/src/commit_ratchets.rs",
+            "crates/path-literal-guard/src/lib.rs",
+            "crates/undrained-pipe-lint/src/main.rs",
+            "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
+        ] {
+            assert!(
+                staged_touches_covered_source(&[path.to_owned()]),
+                "{path} is a source the hook is built from and must make its committer own the rebuild"
+            );
+        }
+    }
+
+    /// KNOWN-GOOD, and the leg the whole change exists for.
+    ///
+    /// Refusing these was UNSATISFIABLE BY THE COMMITTER: a peer's uncommitted edit to a covered
+    /// source refused every commit in the repo, including documentation-only ones. Measured
+    /// 2026-09-11 at five forced Darwin cross-builds in one day.
+    ///
+    /// `.md` under a covered crate is included deliberately: the discriminator is `.rs` under the
+    /// crate, not the crate name, because a doc edit inside `crates/no-shell-gate/` cannot change
+    /// what the binary was compiled from.
+    #[test]
+    fn an_unrelated_commit_never_inherits_a_peers_stale_gate() {
+        for path in [
+            "docs/skills/mutation-proof.md",
+            "AGENTS.md",
+            ".beads/issues.jsonl",
+            "crates/tick-monitor/src/main.rs",
+            "crates/no-shell-gate/README.md",
+            "crates/no-shell-gate/tests/gate.rs",
+        ] {
+            assert!(
+                !staged_touches_covered_source(&[path.to_owned()]),
+                "{path} does not change what the hook was built from, so its committer must not \
+                 inherit another pane's stale gate"
+            );
+        }
+    }
+
+    /// ANTI-VACUITY: an empty staged set is not a gate change, and the predicate must SAY so
+    /// rather than answering by falling off the end of an iterator nobody entered.
+    #[test]
+    fn an_empty_staged_set_is_not_a_gate_change() {
+        assert!(!staged_touches_covered_source(&[]));
+        // POSITIVE CONTROL in the same shape: the predicate can still return true here.
+        assert!(staged_touches_covered_source(&[
+            "docs/skills/mutation-proof.md".to_owned(),
+            "crates/state-wildcard-lint/src/lib.rs".to_owned(),
+        ]));
+    }
+
+    /// THE WHOLE DECISION TABLE, all four inputs, because the branch is the claim.
+    ///
+    /// Row 3 is the one the change exists for and the one the reverting mutation reddens: a stale
+    /// tree that this commit did not cause is NOT this committer's refusal. Row 2 proves the
+    /// scoping did not weaken the author's obligation.
+    #[test]
+    fn a_stale_gate_refuses_only_the_commit_that_changes_it() {
+        assert_eq!(freshness_verdict(true, false), FreshnessVerdict::Clean);
+        assert_eq!(freshness_verdict(true, true), FreshnessVerdict::Clean);
+        assert_eq!(freshness_verdict(false, true), FreshnessVerdict::Refuse);
+        assert_eq!(
+            freshness_verdict(false, false),
+            FreshnessVerdict::StaleUnscoped,
+            "a peer's uncommitted gate edit must not refuse an unrelated commit -- refusing here \
+             is unsatisfiable by the committer and blocked the whole fleet on 2026-09-11"
+        );
     }
 }

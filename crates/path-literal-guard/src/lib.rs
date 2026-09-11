@@ -142,7 +142,7 @@ pub enum SkipReason {
 impl fmt::Display for SkipReason {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::OutOfScope => formatter.write_str("outside crates/*/src/**.rs"),
+            Self::OutOfScope => write!(formatter, "outside {}", scan_scope_description()),
             Self::Absent => formatter.write_str("absent from the worktree (staged deletion)"),
         }
     }
@@ -313,9 +313,12 @@ impl ScanReport {
         );
         match self.mode {
             ScanMode::RepoWide => format!(
-                "DECLARED SCOPE repo-wide: every .rs under crates/*/src, {} file(s) read, \
-                 untracked included. An empty scan set is an ERROR, not a pass. {common}.",
-                self.scanned.len()
+                "DECLARED SCOPE repo-wide: every .rs under {}, {} file(s) read, \
+                 untracked included; DEFERRED from the sweep: {:?} (in the gate's floor, not \
+                 walked here). An empty scan set is an ERROR, not a pass. {common}.",
+                repo_wide_scope_description(),
+                self.scanned.len(),
+                repo_wide_deferred_subdirs()
             ),
             ScanMode::StagedPaths => {
                 let out = self
@@ -330,12 +333,13 @@ impl ScanReport {
                     .count();
                 format!(
                     "DECLARED SCOPE staged set only: {} staged path(s) read, {} outside \
-                     crates/*/src/**.rs, {} absent from the worktree. A literal in an \
+                     {}, {} absent from the worktree. A literal in an \
                      UNSTAGED or UNTRACKED file is not this commit's problem and cannot \
                      refuse it; only `cargo test -p path-literal-guard` (repo-wide mode) \
                      claims the repository is clean. {common}.",
                     self.scanned.len(),
                     out,
+                    scan_scope_description(),
                     absent
                 )
             }
@@ -355,9 +359,66 @@ pub fn repo_root() -> PathBuf {
 
 /// THE ONE ELIGIBILITY PREDICATE, shared by both modes.
 ///
-/// True for a repo-relative path that is a `.rs` file under `crates/<crate>/src/`.
+/// True for a repo-relative path that is a `.rs` file under one of [`SCANNED_CRATE_SUBDIRS`].
 /// Both modes route through this, so a scoped run and a sweep can never disagree about
 /// WHAT is in scope — only about which subset was read.
+/// The per-crate subdirectories this gate scans, and the SINGLE source of the printed scope.
+///
+/// `omp-orchestrator-k0h1e`. `src` alone was the scope, and `%20` proved the gap by staging a real
+/// home-path literal under `tests/` and watching it LAND (`25a7e5b`, reverted `fd9f6f3`): both
+/// gates printed `GATE_NOT_APPLICABLE` and said so honestly, so the hole was declared rather than
+/// hidden — and a declared hole still ships the literal.
+///
+/// ITEM 5 IS NOT PRESERVATION, IT IS THE WORK. The scope was PRINTED but HAND-TYPED at five
+/// message sites across two crates. That is the count-in-prose defect wearing a different noun: a
+/// scope in prose is wrong the moment the predicate moves, and widening `src` to `{src,tests}`
+/// would have left four sites claiming otherwise. Every runtime message now derives from this
+/// const, so the predicate and its advertisement cannot disagree.
+pub const SCANNED_CRATE_SUBDIRS: &[&str] = &["src", "tests"];
+
+/// The printed scope, derived. `crates/*/{src,tests}/**.rs` today; whatever the const says after.
+pub fn scan_scope_description() -> String {
+    if SCANNED_CRATE_SUBDIRS.len() == 1 {
+        return format!("crates/*/{}/**.rs", SCANNED_CRATE_SUBDIRS[0]);
+    }
+    format!("crates/*/{{{}}}/**.rs", SCANNED_CRATE_SUBDIRS.join(","))
+}
+
+/// The subdirectories the REPO-WIDE sweep actually walks, and a DECLARED subset of the
+/// staged floor rather than a second opinion about it.
+///
+/// `omp-orchestrator-k0h1e` widened the GATE (staged mode, which is what refuses a commit) to
+/// `{src,tests}`. The sweep is a separate claim with a separate cost: measured 2026-09-11,
+/// EIGHT files under `crates/*/tests` carry a forbidden literal today (`crates/*/src`: zero),
+/// so walking the wider floor here would turn `cargo test -p path-literal-guard` red on
+/// pre-existing content this unit does not repair.
+///
+/// THE HOLE IS DECLARED, NOT HIDDEN, AND IT IS PINNED: `the_repo_wide_narrowing_is_load_bearing`
+/// proves the deferred subdirs still hold hits, so the day they are cleaned the leg reddens and
+/// says WIDEN instead of leaving a narrowing nobody re-examines. A subset that cannot go stale.
+pub const REPO_WIDE_SUBDIRS: &[&str] = &["src"];
+
+/// The printed repo-wide scope, derived from the floor the walker uses — never from the staged
+/// one. Advertising `{src,tests}` while reading only `src` is an advertisement not pinned to its
+/// predicate, which is the exact defect this unit exists to delete.
+#[must_use]
+pub fn repo_wide_scope_description() -> String {
+    if REPO_WIDE_SUBDIRS.len() == 1 {
+        return format!("crates/*/{}/**.rs", REPO_WIDE_SUBDIRS[0]);
+    }
+    format!("crates/*/{{{}}}/**.rs", REPO_WIDE_SUBDIRS.join(","))
+}
+
+/// The subdirs in the gate's floor that the sweep defers, derived from both consts.
+#[must_use]
+pub fn repo_wide_deferred_subdirs() -> Vec<&'static str> {
+    SCANNED_CRATE_SUBDIRS
+        .iter()
+        .filter(|subdir| !REPO_WIDE_SUBDIRS.contains(*subdir))
+        .copied()
+        .collect()
+}
+
 pub fn is_in_scan_scope(relative: &Path) -> bool {
     if !relative
         .extension()
@@ -372,8 +433,12 @@ pub fn is_in_scan_scope(relative: &Path) -> bool {
             _ => None,
         })
         .collect();
-    // crates / <crate> / src / ... / <file>.rs
-    parts.len() >= 4 && parts[0] == "crates" && parts[2] == "src"
+    // crates / <crate> / <subdir> / ... / <file>.rs
+    parts.len() >= 4
+        && parts[0] == "crates"
+        && SCANNED_CRATE_SUBDIRS
+            .iter()
+            .any(|subdir| parts[2] == std::ffi::OsStr::new(subdir))
 }
 
 /// Read one file and collect hits, returning them with the offending line texts.
@@ -440,9 +505,11 @@ pub fn scan(root: &Path) -> ScanReport {
     for entry in entries {
         let entry = entry
             .unwrap_or_else(|error| panic!("cannot enumerate {}: {error}", crates_dir.display()));
-        let src = entry.path().join("src");
-        if src.is_dir() {
-            stack.push(src);
+        for subdir in REPO_WIDE_SUBDIRS {
+            let directory = entry.path().join(subdir);
+            if directory.is_dir() {
+                stack.push(directory);
+            }
         }
     }
 
@@ -644,7 +711,9 @@ mod tests {
     fn staged_set_with_no_eligible_file_is_nothing_to_check_not_clean() {
         let root = std::env::temp_dir().join(format!("plg-ntc-{}", std::process::id()));
         fs::create_dir_all(root.join("crates/example/src")).expect("create fixture tree");
-        let report = scan_paths(&root, &["AGENTS.md", "crates/example/tests/it.rs"]);
+        // k0h1e: the second path used to be crates/example/tests/it.rs, which is now IN scope.
+        // NothingToCheck must stay reachable, so the input is a path outside the widened floor.
+        let report = scan_paths(&root, &["AGENTS.md", "crates/example/benches/b.rs"]);
         assert!(report.scanned.is_empty(), "{:?}", report.scanned);
         assert_eq!(report.verdict(), Verdict::NothingToCheck);
         assert!(
@@ -676,19 +745,158 @@ mod tests {
     /// The shared predicate: both modes agree on the floor, including the boundaries the
     /// module docs promise are OUT of scope.
     #[test]
+    fn the_printed_scope_is_derived_from_the_predicate_not_typed() {
+        // ITEM 5. The scope was PRINTED but HAND-TYPED at five sites across two crates, which is
+        // the count-in-prose defect wearing a different noun: a scope in prose is wrong the moment
+        // the predicate moves. Assert the description names EVERY scanned subdir and nothing else.
+        let described = scan_scope_description();
+        for subdir in SCANNED_CRATE_SUBDIRS {
+            assert!(
+                described.contains(subdir),
+                "the printed scope {described} omits {subdir}, which the predicate accepts"
+            );
+        }
+        assert!(
+            described.starts_with("crates/*/") && described.ends_with("/**.rs"),
+            "the description must stay a path glob a reader can act on: {described}"
+        );
+        // ANTI-VACUITY: an empty subdir list would describe a scope that accepts nothing while
+        // is_in_scan_scope returned false for everything -- a silently disabled gate.
+        assert!(
+            !SCANNED_CRATE_SUBDIRS.is_empty(),
+            "an empty scanned-subdir list is a disabled gate, not a narrow one"
+        );
+    }
+
+    /// ITEM 3 — NON-REGRESSION ON `oej2`, and it is the leg that matters.
+    ///
+    /// Widening the floor must not widen the SELECTION. A commit staging one unrelated file must
+    /// not be refused because some other file — untracked or merely unstaged — carries a literal.
+    /// That fleet block is why the narrow scope existed, so trading a silent gap for a fleet stall
+    /// would be strictly worse than leaving the gap.
+    #[test]
+    fn a_literal_in_an_unstaged_test_file_cannot_refuse_an_unrelated_commit() {
+        let root = std::env::temp_dir().join(format!("plg-k0h1e-{}", std::process::id()));
+        fs::create_dir_all(root.join("crates/example/src")).expect("create fixture src");
+        fs::create_dir_all(root.join("crates/example/tests")).expect("create fixture tests");
+        fs::write(root.join("crates/example/src/lib.rs"), "fn main() {}\n").expect("clean file");
+        // The violation lives in a tests/ file that is NOW IN SCOPE but is NOT in the staged set.
+        let planted = format!("const P: &str = \"{}\";\n", USER_HOME_LITERAL);
+        fs::write(root.join("crates/example/tests/it.rs"), &planted).expect("planted file");
+
+        // POSITIVE CONTROL FIRST: staged, that same file MUST refuse -- otherwise the negative
+        // below passes for a gate that cannot see tests/ at all, which is the bug being fixed.
+        let staged_it = scan_paths(&root, &["crates/example/tests/it.rs"]);
+        assert_eq!(
+            staged_it.verdict(),
+            Verdict::Violation,
+            "a literal STAGED in a tests/ file must be refused: {staged_it:?}"
+        );
+
+        // THE NON-REGRESSION: stage only the clean file. The planted literal is one directory
+        // away, in scope, and unstaged -- it must be invisible.
+        let unrelated = scan_paths(&root, &["crates/example/src/lib.rs"]);
+        assert_eq!(
+            unrelated.verdict(),
+            Verdict::Clean,
+            "an unstaged literal must not refuse an unrelated commit -- that is the oej2 fleet \
+             block this scope was narrowed to prevent: {unrelated:?}"
+        );
+        assert_eq!(unrelated.scanned.len(), 1, "only the staged file may be read");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// ITEM 5 AT THE SECOND SITE. `k0h1e` widened the GATE's floor to `{src,tests}`, and the
+    /// repo-wide walker still reads `src` alone -- deliberately, because eight files under
+    /// `crates/*/tests` carry a literal today. That is a legitimate narrowing and an ILLEGITIMATE
+    /// advertisement: before this leg the repo-wide line printed `crates/*/{src,tests}/**.rs`
+    /// while the walker never opened a `tests/` directory. A label describing a predicate its
+    /// command never evaluates -- the same shape as a message naming orphans while its condition
+    /// counts entry points.
+    #[test]
+    fn the_repo_wide_line_never_advertises_a_subdir_the_sweep_defers() {
+        let deferred = repo_wide_deferred_subdirs();
+        let described = repo_wide_scope_description();
+        for subdir in &deferred {
+            assert!(
+                !described.contains(subdir),
+                "the sweep advertises {subdir} in {described} but its walker is seeded from \
+                 {REPO_WIDE_SUBDIRS:?}"
+            );
+        }
+
+        // The narrowing must be DECLARED, not silent: the runtime line names every deferred
+        // subdir, so a reader learns the sweep is narrower than the gate from the verdict itself.
+        let root = std::env::temp_dir().join(format!("plg-sweepfloor-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("crates/example/src")).expect("create fixture src");
+        fs::create_dir_all(root.join("crates/example/tests")).expect("create fixture tests");
+        fs::write(root.join("crates/example/src/lib.rs"), "fn main() {}\n").expect("clean file");
+        let planted = format!("const P: &str = \"{}\";\n", USER_HOME_LITERAL);
+        fs::write(root.join("crates/example/tests/it.rs"), &planted).expect("planted file");
+
+        let report = scan(&root);
+        let line = report.declared_scope_line();
+        assert!(
+            line.contains(&described),
+            "the repo-wide line must print the floor it walked: {line}"
+        );
+        for subdir in &deferred {
+            assert!(
+                line.contains("DEFERRED") && line.contains(subdir),
+                "a deferred subdir must be named in the verdict, not omitted: {line}"
+            );
+        }
+        // POSITIVE CONTROL for the same fixture: the file the sweep defers IS refused when it
+        // reaches the gate, so this leg cannot pass for a scope that sees tests/ nowhere at all.
+        assert_eq!(
+            scan_paths(&root, &["crates/example/tests/it.rs"]).verdict(),
+            Verdict::Violation,
+            "the gate's floor must still refuse the literal the sweep defers"
+        );
+        assert_eq!(report.scanned.len(), 1, "the sweep read only the src file");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// ANTI-VACUITY ON THE SUBSET ITSELF. An empty sweep floor is a disabled sweep, and a floor
+    /// carrying a subdir the gate does not accept would make the sweep claim MORE than the gate
+    /// enforces -- the overclaim direction, which is worse than the narrowing.
+    #[test]
+    fn the_sweep_floor_is_a_nonempty_subset_of_the_gate_floor() {
+        assert!(
+            !REPO_WIDE_SUBDIRS.is_empty(),
+            "an empty sweep floor reads as a clean repository while opening nothing"
+        );
+        for subdir in REPO_WIDE_SUBDIRS {
+            assert!(
+                SCANNED_CRATE_SUBDIRS.contains(subdir),
+                "the sweep walks {subdir}, which the gate's own predicate rejects"
+            );
+        }
+    }
+
+    #[test]
     fn eligibility_predicate_matches_the_declared_floor() {
         for inside in [
             "crates/x/src/lib.rs",
             "crates/x/src/bin/y.rs",
             "crates/x/src/a/b/c.rs",
+            // omp-orchestrator-k0h1e: tests/ moved INTO the floor. %20 proved the gap by staging
+            // a real home-path literal under tests/ and watching it LAND (25a7e5b, reverted at
+            // fd9f6f3). This row used to sit in the `outside` list below.
+            "crates/x/tests/it.rs",
+            "crates/x/tests/nested/it.rs",
         ] {
             assert!(
                 is_in_scan_scope(Path::new(inside)),
                 "{inside} must be in scope"
             );
         }
+        // STILL OUTSIDE, and deliberately so: widening `src` to `{src,tests}` must not become
+        // "every .rs anywhere". benches/, build.rs and a bare src/ outside crates/ stay out.
         for outside in [
-            "crates/x/tests/it.rs",
             "crates/x/benches/b.rs",
             "crates/x/build.rs",
             "crates/x/src/lib.toml",
