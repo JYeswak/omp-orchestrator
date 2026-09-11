@@ -36,7 +36,7 @@
 use omp_orchestrator::{
     census_gates, crates_on_disk, CensusDisposition, GateCensus, GateReachability,
     ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX, ADVISORY_RATCHET,
-    UNTRACKED_ADVISORY_TOLERANCE,
+    untriaged_amnesty_rows,
     advisory_ratchet_overdue, ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER,
     PRE_LEHT_BLOCKING_ROWS,
 };
@@ -297,15 +297,21 @@ fn every_advisory_unreachable_row_is_named_in_the_allowance() {
 // `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails` still guard every
 // remaining row, so no property lost a guard.
 
-/// RATCHET LEG 2. The ceiling bounds the set, so adding a name is a visible diff
-/// and cannot be done by accident.
+/// RATCHET LEG 2. The ceiling bounds UNTRIAGED AMNESTY -- rows whose reason states no death
+/// condition -- so adding one is a visible diff and cannot be done by accident.
+///
+/// It used to bound `ADVISORY_ALLOWANCE.len()`. That could not tell growth from regression
+/// (tvqqg): a COMPLIANT new crate needs a row and breached the bound exactly as a defect
+/// would. The row count is now governed per-row by the naming leg and the stale-row leg; what
+/// a ratchet can honestly forbid is amnesty granted without a stated death condition.
 #[test]
 fn the_allowance_never_grows_past_its_ceiling() {
+    let untriaged = untriaged_amnesty_rows();
     assert!(
-        ADVISORY_ALLOWANCE.len() <= ADVISORY_CEILING,
-        "ADVISORY_ALLOWANCE has {} rows against a ceiling of {ADVISORY_CEILING}. The ceiling \
-         moves only with the measurement (band-enforced in the deadline leg).",
-        ADVISORY_ALLOWANCE.len()
+        untriaged.len() <= ADVISORY_CEILING,
+        "UNTRIAGED AMNESTY grew to {} rows against a ceiling of {ADVISORY_CEILING}: {untriaged:?}. \
+         Give the new row a real `Dies when ...`, or wire the crate. The ceiling only falls.",
+        untriaged.len()
     );
     // Every row must carry a REASON, not an empty string. franken_lean's principle:
     // writing the reason forces the author to say why, which is the sentence a
@@ -398,22 +404,33 @@ fn the_ratchet_deadline_is_a_real_number_and_not_a_sentiment() {
     // arithmetic rather than trust the comment.
     assert_eq!(ADVISORY_RATCHET_DEADLINE_TICKS * 90 / 3600, 5, "5 hours");
 
-    // THE SLACK HOLE, closed by a BAND, not by equality (ky6yx 2026-09-11).
-    // Equality is unsatisfiable across trees: this worktree reads 29 advisory
-    // (27 named + 2 untracked) while a fresh clone reads 27, so `==` is red in
-    // exactly one place. The band keeps both directions honest: a rise past the
-    // ceiling reddens (growth), and a ceiling past live+tolerance reddens
-    // (banked slack). The tolerance is exactly the untracked contribution,
-    // named in UNTRACKED_ADVISORY_TOLERANCE, not a cushion.
+    // UNACKNOWLEDGED GROWTH, PER CRATE (tvqqg). This used to read `live <= ADVISORY_CEILING`,
+    // which conflated a COMPLIANT new advisory crate with a regression -- fleet-idle-monitor,
+    // correct and tested and carrying a full row in UNWIRED_LANE_ALLOWANCE, breached `live 30
+    // > ceiling 29` exactly as a defect would, and every future compliant crate would too.
+    // The honest invariant is not how MANY advisory crates exist but whether each one is
+    // ACKNOWLEDGED, and the refusal now names the crate instead of printing arithmetic.
     let census = census_gates(&repo_root());
-    let live = census.advisory_gates().len();
+    let named: std::collections::BTreeSet<&str> =
+        ADVISORY_ALLOWANCE.iter().map(|(name, _)| *name).collect();
+    let unacknowledged: Vec<&str> = census
+        .advisory_gates()
+        .iter()
+        .map(|row| row.gate.as_str())
+        .filter(|gate| !named.contains(gate))
+        .collect();
     assert!(
-        live <= ADVISORY_CEILING,
-        "unacknowledged advisory growth: live {live} > ceiling {ADVISORY_CEILING} -- wire the difference or row it, never raise blind"
+        unacknowledged.is_empty(),
+        "unacknowledged advisory crates: {unacknowledged:?} -- wire each one or give it an \
+         ADVISORY_ALLOWANCE row with a real `Dies when ...`. Never raise a ceiling to hide it."
     );
+    // BANKED SLACK, on the ratchet's own subject. A ceiling above the live untriaged count is
+    // headroom nobody measured, so it must fall to meet it.
+    let untriaged = untriaged_amnesty_rows().len();
     assert!(
-        ADVISORY_CEILING <= live + UNTRACKED_ADVISORY_TOLERANCE,
-        "banked slack: ceiling {ADVISORY_CEILING} exceeds live {live} + tolerance {UNTRACKED_ADVISORY_TOLERANCE} -- lower the ceiling, do not bank headroom"
+        ADVISORY_CEILING <= untriaged,
+        "banked slack: ceiling {ADVISORY_CEILING} exceeds live untriaged amnesty {untriaged} -- \
+         lower the ceiling, do not bank headroom"
     );
 }
 

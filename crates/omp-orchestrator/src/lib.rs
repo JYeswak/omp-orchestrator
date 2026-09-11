@@ -445,6 +445,7 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("wired-but-inert-guard", "advisory scanner nothing invokes (06-gates clause 3 exclusion); gate-runner names it only as fixture exemption. Dies when a lane needs the guard."),
     ("kernel-only-gate", "INERT: complete source-half gate (scan_source/scan_paths/scan_tree, 7 passing legs) with no bin and no caller; tracked 2026-09-11 so CI can compile it at all. The remedy is WIRE, not amnesty -- bead omp-orchestrator-kernel-only-gate-wr2 demands an installable commit-path gate. Dies when the pre-commit binary or gate-runner invokes it."),
     ("omp-host-tool-guard", "INERT: fail-closed evaluator for parent-declared OMP host tools (set_host_tools / host_tool_call), 11 passing legs; tracked 2026-09-11 so CI can compile it at all. Nothing in this repo drives that RPC seam yet, so it has no honest caller. Dies when an OMP-driving surface routes host_tool_call through it, or the row goes with the crate if it is retired."),
+    ("fleet-idle-monitor", "decision kernel for 47g0, landed at 7c90fbd ahead of its conductor; the caller that routes a tick through it is item 9 of that bead and is not yet re-armed. It already carries a full row in wired_lanes' UNWIRED_LANE_ALLOWANCE (owner: fleet-idle-monitor conductor owner) and owed one here too -- two registries, one crate, and only one of them was checked. Dies when a tick routes its queue through fleet_idle_monitor::tick, or when control-plane's cron-invoked fleet-idle-monitor is repointed at this crate; retire BOTH rows together."),
 ];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdvisoryRatchetAnchor {
@@ -540,20 +541,55 @@ impl AdvisoryRatchetAnchor {
 /// `live <= CEILING <= live+TOL` holds 29<=29<=31 here and 27<=29<=29 in CI.
 /// Equality (`==`) was unsatisfiable across the two trees; the band is the
 /// instrument that fits both. s2-gate is the one never-wire row.
+///
+/// ⛔⛔ RE-KEYED 2026-09-11 (tvqqg): THE SUBJECT OF THIS ANCHOR IS NO LONGER A CRATE COUNT.
+///
+/// Keyed on an absolute count of advisory crates, this ratchet **could not tell growth from
+/// regression** — AGENTS.md rule 10, at n=1 and with the cleanest possible specimen.
+/// `fleet-idle-monitor` landed as a correct, tested, deliberately-unwired kernel carrying a
+/// full reason/owner/dies_when row in `UNWIRED_LANE_ALLOWANCE`, and it breached `live 30 >
+/// ceiling 29` **exactly as a defect would**. Every future compliant crate breaches
+/// identically, so the leg was red by construction — and a gate that is red by construction
+/// gets routed around, which this repo names as the slower death.
+///
+/// The bound now counts **UNTRIAGED AMNESTY**: allowance rows whose reason states no death
+/// condition. That is the quantity which genuinely must never grow, and it is immune to the
+/// defect above: a compliant new crate states its `dies_when` and cannot breach, while a row
+/// waved through with "untriaged" does. Ceiling **29 -> 7**, a FALL, paired as the anchor
+/// discipline requires, measured the day it was written: exactly 7 of 29 rows carry no death
+/// condition — the six 2026-09-02 derived-membership rows plus `s2-gate`, whose never-wire
+/// ruling is a decision rather than a pending triage. It may only fall further, and it falls
+/// by TRIAGING a row (giving it a real dies_when) or by the crate being wired.
+///
+/// What replaced the live-count assert is strictly stronger and count-blind: every live
+/// advisory crate must be NAMED in the allowance, and an unnamed one is reported BY NAME
+/// rather than as arithmetic.
 pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
-    ceiling: 29,
-    ceiling_at_recording: 29,
-    recorded_at_unix: 1_789_135_452,
+    ceiling: 7,
+    ceiling_at_recording: 7,
+    recorded_at_unix: 1_789_142_400,
 };
 
-/// Slack between the ceiling and a converged tree, and nothing else (ky6yx).
+/// True when an allowance reason states no death condition, i.e. the row is UNTRIAGED amnesty.
 ///
-/// ZERO since 2026-09-11: its own death condition arrived. It read EXACTLY 2 for the untracked
-/// advisory pair kernel-only-gate + omp-host-tool-guard, present in this worktree and absent
-/// from a fresh clone; both are now TRACKED, so both trees read the same live count and the
-/// band collapses to equality. A pin whose death condition has arrived and which is not killed
-/// becomes tomorrow's stale allowance.
-pub const UNTRACKED_ADVISORY_TOLERANCE: usize = 0;
+/// Textual by necessity: the allowance is a `&[(&str, &str)]` table and the death condition is
+/// prose. NO-CLAIM, stated rather than hidden: this recognises the phrasing the table actually
+/// uses (`Dies when …` / `dies_when=…`) and would miss a row that expressed the same thing in
+/// other words. It is a floor on triage, not a proof of it.
+#[must_use]
+pub fn is_untriaged_amnesty(reason: &str) -> bool {
+    !reason.contains("ies when") && !reason.contains("dies_when")
+}
+
+/// The untriaged amnesty rows, by crate name. The ratchet subject.
+#[must_use]
+pub fn untriaged_amnesty_rows() -> Vec<&'static str> {
+    ADVISORY_ALLOWANCE
+        .iter()
+        .filter(|(_, reason)| is_untriaged_amnesty(reason))
+        .map(|(name, _)| *name)
+        .collect()
+}
 
 /// Compatibility projection from the single ratchet anchor.
 pub const ADVISORY_CEILING: usize = ADVISORY_RATCHET.ceiling();
