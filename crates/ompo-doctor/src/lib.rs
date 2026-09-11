@@ -524,9 +524,15 @@ fn write_report_bytes(path: &Path, bytes: &[u8]) -> Result<(), DoctorError> {
         file.sync_all().map_err(|error| fail(error.to_string()))?;
     }
     fs::rename(&temp, path).map_err(|error| fail(error.to_string()))?;
-    if let Ok(dir) = fs::File::open(parent) {
-        let _ = dir.sync_all();
-    }
+    // The parent fsync is what makes the RENAME survive a crash, so its
+    // failure is typed like the other three steps. It used to be
+    // `if let Ok(dir) = … { let _ = dir.sync_all(); }`, which advertised four
+    // durability guarantees and delivered three-and-a-half: both the open and
+    // the sync failure were discarded (found in grading, GateEmptyStaged).
+    let directory = fs::File::open(parent).map_err(|error| fail(error.to_string()))?;
+    directory
+        .sync_all()
+        .map_err(|error| fail(error.to_string()))?;
     Ok(())
 }
 
