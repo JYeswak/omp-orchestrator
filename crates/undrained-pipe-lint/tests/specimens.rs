@@ -185,30 +185,34 @@ fn run() -> Option<String> {
 #[test]
 fn oracle_compare_split_helper_is_flagged_with_actionable_lines() {
     let mut lines = vec![String::new(); 243];
-    lines.extend([
-        "fn wait_deadline(mut child: Child) {",
-        "    loop {",
-        "        let _status = child.id();",
-        "        match child.try_wait() {",
-        "            Ok(Some(_)) => return,",
-        "            Ok(None) => return,",
-        "            Err(_) => return,",
-        "        }",
-        "    }",
-        "}",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "fn spawn_timeout(mut cmd: Command) {",
-        "    let mut child = cmd",
-        "        .stdout(Stdio::piped())",
-        "        .stderr(Stdio::piped());",
-        "    wait_deadline(child);",
-        "}",
-    ].into_iter().map(str::to_owned));
+    lines.extend(
+        [
+            "fn wait_deadline(mut child: Child) {",
+            "    loop {",
+            "        let _status = child.id();",
+            "        match child.try_wait() {",
+            "            Ok(Some(_)) => return,",
+            "            Ok(None) => return,",
+            "            Err(_) => return,",
+            "        }",
+            "    }",
+            "}",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "fn spawn_timeout(mut cmd: Command) {",
+            "    let mut child = cmd",
+            "        .stdout(Stdio::piped())",
+            "        .stderr(Stdio::piped());",
+            "    wait_deadline(child);",
+            "}",
+        ]
+        .into_iter()
+        .map(str::to_owned),
+    );
     let source = lines.join("\n");
     assert_eq!(
         find_detailed_violations_in_source(&source),
@@ -244,32 +248,34 @@ fn mutation_removing_stderr_pipe_retires_violation() {
     }
 }"#;
     assert_eq!(find_violations_in_source(source).len(), 1);
-    let repaired = source.replace(
-        ".stderr(Stdio::piped())",
-        ".stderr(Stdio::null())",
-    );
+    let repaired = source.replace(".stderr(Stdio::piped())", ".stderr(Stdio::null())");
     assert!(
         find_violations_in_source(&repaired).is_empty(),
         "mutation removing stderr piping must make this site safe"
     );
 }
-/// blocking CI step. The positive control proves the probe can detect absence.
-fn workflow_invokes_lint(workflow: &str) -> bool {
-    workflow.lines().any(|line| {
-        line.contains("cargo run --quiet -p undrained-pipe-lint -- .")
-    })
-}
-
-#[test]
-fn wired_into_ci_workflow() {
-    let workflow = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.github/workflows/gate.yml"))
-        .expect("gate.yml not found — the wiring probe cannot run without the CI surface");
-    assert!(workflow_invokes_lint(&workflow), "CI must invoke the lint");
-    assert!(
-        !workflow_invokes_lint("run: cargo test -p another-crate"),
-        "positive control: unrelated workflow must not count as lint wiring"
-    );
-}
+// THE `wired_into_ci_workflow` TEST WAS DELETED HERE — omp-orchestrator-poumg.6.
+//
+// It grepped `.github/workflows/gate.yml` for the literal
+// `cargo run --quiet -p undrained-pipe-lint -- .` and failed CI on its absence. The line was
+// deleted deliberately by `omp-orchestrator-fsu7`, which replaced a twelve-job YAML fan-out with
+// ONE `gate-runner` entry point: each gate now declares its own invocation in its OWN
+// `Cargo.toml` under `[package.metadata.gate]`, so `gate.yml` no longer names this crate at all
+// and by design never will again.
+//
+// So the test pinned an implementation detail of a superseded mechanism while the invariant it
+// defended HELD — and the same CI run proved it: run 34549975939 (head cb9d3941) emitted
+// `CHECK_PASS crate=undrained-pipe-lint phase=0` in the very run where this test asserted CI
+// does not invoke the lint.
+//
+// NOT RE-POINTED AT THE gate-runner LINE, and that is the repo rule rather than a preference:
+// re-pinning a wording probe at the new wording manufactures the next stale test. It would also
+// be wrong on the facts, since the string to pin no longer exists in that file.
+//
+// DO NOT "RESTORE THE WIRING" BY ADDING A JOB TO gate.yml. That is the fan-out fsu7 removed, and
+// believing this crate unwired is precisely the false conclusion the deleted test produced. The
+// wiring lives in this crate's own `[package.metadata.gate]`, is executed by `gate-runner --run`,
+// and is observable as a `CHECK_PASS crate=undrained-pipe-lint` row in any completed gate run.
 
 /// ANTI-VACUITY positive control (clause 6): an empty scan set must be a TYPED
 /// error (exit 3), never a phantom violation (exit 1).
@@ -321,7 +327,8 @@ fn cli_empty_scan_set_exits_three() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("UNDRAINED-PIPE-LINT ERROR: empty scan set"),
+        String::from_utf8_lossy(&output.stderr)
+            .contains("UNDRAINED-PIPE-LINT ERROR: empty scan set"),
         "exit 3 must carry the typed empty-scan error"
     );
 
