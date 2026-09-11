@@ -868,7 +868,9 @@ fn author_panes(
     out
 }
 
-fn tmux_pane_id(raw: &str) -> Option<String> {
+/// Validated `%N` tmux pane id. Shared with the supervisor claim path so the
+/// `--grader` flag and the selector resolve the same identity.
+pub fn tmux_pane_id(raw: &str) -> Option<String> {
     let pane = raw.trim();
     let digits = pane.strip_prefix('%')?;
     if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {

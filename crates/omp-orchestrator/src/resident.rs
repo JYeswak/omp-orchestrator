@@ -321,15 +321,38 @@ fn parse_close_readback_args(args: &[String]) -> Result<Option<CloseRequest>, St
         reason: reason.to_owned(),
     }))
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GradeClaimRequest {
+    config_args: Vec<String>,
+    grader: Option<String>,
+}
 
-fn parse_grade_claim_args(args: &[String]) -> Result<Option<Vec<String>>, String> {
+fn parse_grade_claim_args(args: &[String]) -> Result<Option<GradeClaimRequest>, String> {
     if args.first().map(String::as_str) != Some("grade") {
         return Ok(None);
     }
     if args.get(1).map(String::as_str) != Some("--claim") {
         return Err("CONFIG_REFUSED grade requires --claim".to_owned());
     }
-    Ok(Some(args[2..].to_vec()))
+    let mut config_args = Vec::new();
+    let mut grader = None;
+    let mut rest = &args[2..];
+    while let Some((head, tail)) = rest.split_first() {
+        if head == "--grader" {
+            let Some(pane) = tail.first() else {
+                return Err("CONFIG_REFUSED grade --claim --grader requires a pane".to_owned());
+            };
+            if loop_queue_filter::select::tmux_pane_id(pane).is_none() {
+                return Err(format!("CONFIG_REFUSED grade --grader pane is not a tmux pane id: {pane}"));
+            }
+            grader = Some(pane.clone());
+            rest = &tail[1..];
+        } else {
+            config_args.push(head.clone());
+            rest = tail;
+        }
+    }
+    Ok(Some(GradeClaimRequest { config_args, grader }))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -350,8 +373,14 @@ fn peer_grade_outcome_wire(outcome: &PeerGradeCommandOutcome) -> &'static str {
 async fn run_peer_grade_claim(
     cx: &Cx,
     config: &Config,
-    grader_pane: &str,
+    observer_pane: &str,
+    preferred_grader: Option<&str>,
 ) -> Result<PeerGradeCommandOutcome, String> {
+    // The invoker is the OBSERVER, never implicitly the grader: observers may
+    // be working by contract, so no activity check on the caller can gate
+    // this path (that check was the catch-22 — invoking made the pane
+    // WORKING, which the old pre-check then refused). Eligibility is decided
+    // on the TARGET pane by the selector below, where it is sound.
     let mut monitor_args = vec![
         "observe".to_owned(),
         "--session".to_owned(),
@@ -376,29 +405,69 @@ async fn run_peer_grade_claim(
             .iter()
             .any(|excluded| excluded == &pane.pane_id)
     });
-    if !observation
-        .panes
-        .iter()
-        .any(|pane| pane.pane_id == grader_pane && pane.is_dispatchable)
-    {
-        return Err(format!(
-            "PEER_GRADING_REFUSED grader_pane={grader_pane} reason=current_pane_not_dispatchable"
-        ));
-    }
-    match gate_peer_grading_for_pane(config, &mut observation, now_unix(), grader_pane)? {
+    let claim = match &preferred_grader {
+        // Explicit routing: the full seven-reason gauntlet applies to the
+        // named pane, which is not invoking and is expected idle.
+        Some(preferred) => {
+            gate_peer_grading_for_pane(config, &mut observation, now_unix(), preferred)?
+        }
+        // Default: the selector picks the best idle non-observer peer. The
+        // observer is excluded by construction, so self-picks (and self-grades)
+        // are unrepresentable on this path, not merely refused.
+        None => gate_peer_grading_inner(config, &mut observation, now_unix(), None, observer_pane)?,
+    };
+    match claim {
         Some(claim) if claim.bead == "<active-peer-grade>" => {
             Ok(PeerGradeCommandOutcome::ActivePeerGrade)
         }
-        Some(claim) => Ok(PeerGradeCommandOutcome::Claimed(claim)),
+        Some(claim) => {
+            // Record the acquisition the way a work dispatch records its
+            // claim (assignee set, claim visible): an unrecorded grading
+            // dispatch is silent by construction (AGENTS.md fourth rule).
+            // Status is untouched — the stage machine owns it.
+            record_grader_assignment(cx, config, &claim).await?;
+            Ok(PeerGradeCommandOutcome::Claimed(claim))
+        }
         None => Ok(PeerGradeCommandOutcome::NoCandidate),
     }
+}
+
+/// Write the grader assignment into the tracker. Mirrors the work-dispatch
+/// claim write (`br update --assignee`, same invoke/require rails) minus the
+/// status transition, which belongs to the stage machine, not the claim path.
+/// A tracker refusal surfaces with the tracker's own reason: the assignment
+/// write is the authoritative probe, never a field read about it.
+async fn record_grader_assignment(
+    cx: &Cx,
+    config: &Config,
+    claim: &PeerGradeClaim,
+) -> Result<(), String> {
+    let args = vec![
+        "update".to_owned(),
+        claim.bead.clone(),
+        "--assignee".to_owned(),
+        claim.grader_assignee.clone(),
+    ];
+    let output = invoke(cx, config, &config.br, &args).await.map_err(|error| {
+        format!(
+            "GRADE_CLAIM_FAILED bead={} grader_pane={} reason=RECORD_COMMAND_FAILED error={error}",
+            claim.bead, claim.grader_pane
+        )
+    })?;
+    require_success(&config.br, output).map_err(|error| {
+        format!(
+            "GRADE_CLAIM_FAILED bead={} grader_pane={} reason=TRACKER_REFUSED detail={error}",
+            claim.bead, claim.grader_pane
+        )
+    })?;
+    Ok(())
 }
 
 fn peer_grade_command_exit(outcome: PeerGradeCommandOutcome) -> std::process::ExitCode {
     match outcome {
         PeerGradeCommandOutcome::Claimed(claim) => {
             println!(
-                "{} bead={} receiver_pane={} grader_pane={} experiment=self-service",
+                "{} bead={} receiver_pane={} grader_pane={} experiment=observer-requested",
                 peer_grade_outcome_wire(&PeerGradeCommandOutcome::Claimed(claim.clone())),
                 claim.bead,
                 claim.receiver_pane,
@@ -2958,6 +3027,7 @@ pub struct PeerGradeClaim {
     pub bead: String,
     pub receiver_pane: String,
     pub grader_pane: String,
+    pub grader_assignee: String,
 }
 
 pub fn gate_peer_grading(
@@ -2965,7 +3035,7 @@ pub fn gate_peer_grading(
     observation: &mut Observation,
     tick: u64,
 ) -> Result<Option<PeerGradeClaim>, String> {
-    gate_peer_grading_inner(config, observation, tick, None)
+    gate_peer_grading_inner(config, observation, tick, None, "__orchestrator__")
 }
 
 pub fn gate_peer_grading_for_pane(
@@ -2974,7 +3044,7 @@ pub fn gate_peer_grading_for_pane(
     tick: u64,
     grader_pane: &str,
 ) -> Result<Option<PeerGradeClaim>, String> {
-    gate_peer_grading_inner(config, observation, tick, Some(grader_pane))
+    gate_peer_grading_inner(config, observation, tick, Some(grader_pane), "__orchestrator__")
 }
 
 fn peer_grade_error_detail(error: &loop_queue_filter::select::AssignGradeError) -> String {
@@ -3020,6 +3090,7 @@ fn gate_peer_grading_inner(
     observation: &mut Observation,
     tick: u64,
     preferred_grader_pane: Option<&str>,
+    observer_pane: &str,
 ) -> Result<Option<PeerGradeClaim>, String> {
     let candidates = LifecycleLedger::receiver_verified_candidates(
         &config.bead_lifecycle_ledger,
@@ -3101,7 +3172,7 @@ fn gate_peer_grading_inner(
         observed_panes.clone()
     };
     let assignment = match loop_queue_filter::select::assign_peer_grade_with_ledger(
-        "__orchestrator__",
+        observer_pane,
         &selected_panes,
         &candidate_jsonl,
         &ledger_text,
@@ -3145,6 +3216,7 @@ fn gate_peer_grading_inner(
         bead: assignment.bead,
         receiver_pane: candidate.identity.target.pane.clone(),
         grader_pane: assignment.grader_pane,
+        grader_assignee: assignment.grader_assignee,
     }))
 }
 
@@ -6930,7 +7002,7 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
     let config_args = if close_request.is_some() || dispatch_request.is_some() {
         Vec::new()
     } else if let Some(request) = &grade_request {
-        request.clone()
+        request.config_args.clone()
     } else {
         args.clone()
     };
@@ -6953,16 +7025,19 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
         }
 
     };
-    if grade_request.is_some() {
-        let grader_pane = env::var("TMUX_PANE").unwrap_or_default();
-        if grader_pane.trim().is_empty() {
+    if let Some(request) = grade_request {
+        // The invoker is the OBSERVER (it may be working — observers may work
+        // by contract); the grader is selected, never assumed to be self.
+        // `--grader %P` names an explicit preferred grader instead.
+        let observer_pane = env::var("TMUX_PANE").unwrap_or_default();
+        if observer_pane.trim().is_empty() {
             eprintln!("PEER_GRADING_REFUSED reason=current_pane_unresolved");
             return std::process::ExitCode::from(2);
         }
         let outcome = runtime.block_on(async {
             let cx =
                 Cx::current().ok_or_else(|| "SUPERVISOR_REFUSED no runtime context".to_owned())?;
-            run_peer_grade_claim(&cx, &config, &grader_pane).await
+            run_peer_grade_claim(&cx, &config, &observer_pane, request.grader.as_deref()).await
         });
         return match outcome {
             Ok(outcome) => peer_grade_command_exit(outcome),
@@ -9894,6 +9969,241 @@ Stop: now
         assert!(err.contains("reason=placeholder_identity"), "{err}");
         drop(temp);
     }
+    fn grade_idle_pane(pane: &str) -> PaneObservation {
+        PaneObservation {
+            pane_id: pane.to_owned(),
+            state: "IDLE".to_owned(),
+            liveness: "CONFIRMED_IDLE".to_owned(),
+            is_dispatchable: true,
+            is_free_capacity: true,
+            is_working: false,
+            awaits_human: false,
+        }
+    }
+
+    fn grade_working_pane(pane: &str) -> PaneObservation {
+        PaneObservation {
+            pane_id: pane.to_owned(),
+            state: "WORKING".to_owned(),
+            liveness: "WORKING".to_owned(),
+            is_dispatchable: false,
+            is_free_capacity: false,
+            is_working: true,
+            awaits_human: false,
+        }
+    }
+
+    /// Ledger + tracker fixture for grade acquisition legs: bead `grade-bead`
+    /// is in_progress, authored by %1409, and receiver-verified. Shape copied
+    /// from the neighboring gate fixture; the bead id differs so legs cannot
+    /// cross-claim each other's candidates.
+    fn grade_fixture() -> (tempfile::TempDir, Config) {
+        let (temp, config) = isolated_fixture_config();
+        std::fs::create_dir_all(config.repo.join(".beads")).unwrap();
+        std::fs::write(
+            config.repo.join(".beads/issues.jsonl"),
+            r#"{"id":"grade-bead","status":"in_progress","assignee":"pane3-%1409","comments":[{"author":"pane3-%1409","text":"DONE peer work"}]}
+"#,
+        )
+        .unwrap();
+        let now_ms = now_unix().saturating_mul(1_000);
+        let bead = BeadId::new("grade-bead").unwrap();
+        let target = DispatchTarget::new(config.session.clone(), "%1409").unwrap();
+        let identity = LifecycleIdentity::new(
+            bead.clone(),
+            config.repo.display().to_string(),
+            target.clone(),
+            packet_digest(b"grade-packet"),
+            InvokerClass::detect_current(),
+        )
+        .unwrap();
+        let approval = Approved::authorize(classify(Intent {
+            action: TypedAction::DispatchPacket,
+            pane_dispatchable: true,
+            two_captures: true,
+            packet_complete: true,
+            finding_has_bead: true,
+        }))
+        .unwrap();
+        let objective = "dispatch bead grade-bead";
+        let mut ledger = LifecycleLedger::start(
+            config.bead_lifecycle_ledger.clone(),
+            identity,
+            objective,
+            approval,
+            LedgerEvidence::single(
+                EventId::new("grade-selected").unwrap(),
+                now_ms,
+                EvidencePolicy::new(now_ms, 0),
+                "source",
+                "test",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        ledger
+            .dispatch(
+                DispatchReceipt::new(
+                    EventId::new("grade-dispatch").unwrap(),
+                    bead.clone(),
+                    target.clone(),
+                    objective,
+                    now_ms,
+                )
+                .unwrap(),
+                LedgerEvidence::single(
+                    EventId::new("grade-dispatch").unwrap(),
+                    now_ms,
+                    EvidencePolicy::new(now_ms, 0),
+                    "source",
+                    "test",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        ledger
+            .verify_receiver(
+                ReceiverEvidence::new(
+                    EventId::new("grade-receiver").unwrap(),
+                    bead,
+                    target,
+                    objective,
+                    now_ms,
+                )
+                .unwrap(),
+                LedgerEvidence::single(
+                    EventId::new("grade-receiver").unwrap(),
+                    now_ms,
+                    EvidencePolicy::new(now_ms, 0),
+                    "source",
+                    "test",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        (temp, config)
+    }
+
+    fn grade_observation(panes: Vec<PaneObservation>) -> Observation {
+        Observation {
+            panes,
+            queue: QueueState { ready_count: 1, readable: true },
+            gate_census: Some(GateCensus { rows: Vec::new() }),
+        }
+    }
+
+    #[test]
+    fn working_observer_acquires_grade_for_idle_peer() {
+        // The catch-22 fix: a WORKING invoker is a legitimate observer, so the
+        // acquisition must succeed for the idle peer. Under the old pre-check
+        // this errored current_pane_not_dispatchable before reaching selection.
+        let (_temp, config) = grade_fixture();
+        let mut observation = grade_observation(vec![grade_working_pane("%26"), grade_idle_pane("%1414")]);
+        let claim = gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
+            .expect("working observer must acquire")
+            .expect("candidate exists");
+        assert_eq!(claim.bead, "grade-bead");
+        assert_eq!(claim.grader_pane, "%1414");
+        assert_eq!(claim.grader_assignee, "pane1414-%1414");
+        assert_ne!(claim.grader_pane, "%26", "observer never self-picks");
+    }
+
+    #[test]
+    fn observer_never_self_assigns_when_sole_idle() {
+        // Structural self-grade prevention: the observer is excluded from
+        // selection, so a lone idle observer yields no candidate rather than
+        // a self-assignment. Removing the exclusion must redden this leg.
+        let (_temp, config) = grade_fixture();
+        let mut observation = grade_observation(vec![grade_idle_pane("%26")]);
+        let outcome = gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
+            .expect("sole-idle observer must skip, not refuse");
+        assert!(outcome.is_none(), "observer must not self-assign: {outcome:?}");
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
+        assert!(heartbeat.contains("reason=no_idle_pane"), "{heartbeat}");
+    }
+
+    #[test]
+    fn preferred_carrying_peer_keeps_typed_refusal() {
+        // The --grader path preserves the full gauntlet on a non-invoking
+        // target: a carrying preferred pane is refused by name.
+        let (_temp, config) = grade_fixture();
+        let mut observation =
+            grade_observation(vec![grade_idle_pane("%26"), grade_working_pane("%1408")]);
+        let error = gate_peer_grading_for_pane(&config, &mut observation, 77, "%1408")
+            .expect_err("carrying preferred pane must refuse");
+        assert!(error.contains("reason=preferred_grader_not_idle"), "{error}");
+    }
+
+    #[test]
+    fn all_working_fleet_names_why_it_cannot_grade() {
+        // Anti-vacuity: no idle pane anywhere is a typed outcome naming why,
+        // never a silent refusal.
+        let (_temp, config) = grade_fixture();
+        let mut observation =
+            grade_observation(vec![grade_working_pane("%26"), grade_working_pane("%1408")]);
+        let outcome = gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
+            .expect("all-working fleet must skip, not refuse");
+        assert!(outcome.is_none());
+        let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("skip heartbeat");
+        assert!(
+            heartbeat.contains("reason=all_panes_carrying_dispatches"),
+            "{heartbeat}"
+        );
+    }
+
+    #[test]
+    fn grade_recording_writes_assignee_without_status() {
+        // Leg 5: the acquisition is recorded the way a work dispatch records
+        // its claim (assignee set, claim visible) minus the status transition
+        // the stage machine owns.
+        let temp = tempfile::tempdir().expect("record fixture");
+        let bead = "grade-bead";
+        let (config, _state, args, _supervisor) = open_bead_br_fixture(&temp, bead);
+        let claim = PeerGradeClaim {
+            bead: bead.to_owned(),
+            receiver_pane: "%1409".to_owned(),
+            grader_pane: "%1414".to_owned(),
+            grader_assignee: "pane1414-%1414".to_owned(),
+        };
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            record_grader_assignment(&cx, &config, &claim).await.expect("record writes");
+        });
+        let body = std::fs::read_to_string(args).expect("claim command receipt");
+        assert!(body.contains("update"), "{body}");
+        assert!(body.contains(bead), "{body}");
+        assert!(body.contains("--assignee"), "{body}");
+        assert!(body.contains("pane1414-%1414"), "{body}");
+        assert!(!body.contains("--status"), "stage machine owns status: {body}");
+    }
+
+    #[test]
+    fn grade_recording_surfaces_tracker_refusal() {
+        // The assignment write is the authoritative probe: a tracker refusal
+        // arrives with the tracker's own reason, never swallowed.
+        let temp = tempfile::tempdir().expect("refusal fixture");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"".to_owned()
+            + &temp.path().join("refused-args").display().to_string()
+            + "\"\nprintf 'TRACKER_REFUSED reason=bead_blocked\\n'\nexit 1\n";
+        let br = executable_reaper(&temp, &script);
+        let mut config = fixture_config(temp.path().join("heartbeat.jsonl"));
+        config.br = br.display().to_string();
+        let claim = PeerGradeClaim {
+            bead: "grade-bead".to_owned(),
+            receiver_pane: "%1409".to_owned(),
+            grader_pane: "%1414".to_owned(),
+            grader_assignee: "pane1414-%1414".to_owned(),
+        };
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let error = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            record_grader_assignment(&cx, &config, &claim).await.expect_err("refusal must surface")
+        });
+        assert!(error.contains("GRADE_CLAIM_FAILED"), "{error}");
+        assert!(error.contains("TRACKER_REFUSED"), "{error}");
+    }
+
 
     #[test]
     fn grade_claim_parser_requires_the_claim_flag() {
@@ -9905,10 +10215,38 @@ Stop: now
         ])
         .expect("valid grade claim syntax")
         .expect("grade claim request");
-        assert_eq!(request, vec!["--repo".to_owned(), "/repo".to_owned()]);
+        assert_eq!(request.config_args, vec!["--repo".to_owned(), "/repo".to_owned()]);
+        assert_eq!(request.grader, None);
         let error =
             parse_grade_claim_args(&["grade".to_owned()]).expect_err("bare grade must refuse");
         assert!(error.contains("--claim"), "{error}");
+    }
+
+    #[test]
+    fn grade_claim_parser_routes_optional_grader() {
+        let request = parse_grade_claim_args(&[
+            "grade".to_owned(),
+            "--claim".to_owned(),
+            "--grader".to_owned(),
+            "%8".to_owned(),
+            "--repo".to_owned(),
+            "/repo".to_owned(),
+        ])
+        .expect("grader flag parses")
+        .expect("grade claim request");
+        assert_eq!(request.grader, Some("%8".to_owned()));
+        assert_eq!(request.config_args, vec!["--repo".to_owned(), "/repo".to_owned()]);
+        let error = parse_grade_claim_args(&[
+            "grade".to_owned(),
+            "--claim".to_owned(),
+            "--grader".to_owned(),
+            "not-a-pane".to_owned(),
+        ])
+        .expect_err("malformed grader must refuse");
+        assert!(error.contains("CONFIG_REFUSED"), "{error}");
+        let missing = parse_grade_claim_args(&["grade".to_owned(), "--claim".to_owned(), "--grader".to_owned()])
+            .expect_err("missing grader value must refuse");
+        assert!(missing.contains("CONFIG_REFUSED"), "{missing}");
     }
 
     #[test]
