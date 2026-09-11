@@ -118,6 +118,66 @@ fn exact_kernel_shapes_and_token_spoofs_have_distinct_verdicts() {
     }
 }
 
+/// The hole, asserted as BEHAVIOUR rather than as a new substring pin: WHICH
+/// VERDICT for WHICH INPUT.
+///
+/// `lib.rs`'s "kernel must be the sole shell command" check is reachable only
+/// after `kernel_candidate` returns `Some`, so an unrecognised kernel name
+/// skips it and lands on the permissive tail. Before `ompo` was recognised,
+/// two spellings of ONE kernel got opposite verdicts: the crate name was
+/// denied when chained, and the name the launchd row actually invokes was
+/// allowed. Recognition is what makes the guard apply.
+#[test]
+fn the_installed_kernel_name_is_guarded_like_the_crate_name() {
+    for chained in [
+        "echo setup; ompo supervise --once",
+        "echo setup; omp-orchestrator --once",
+    ] {
+        let input: HookInput = parse_input(&claude_event(chained)).unwrap();
+        let decision = classify(&input);
+        assert_eq!(
+            decision.permission,
+            Permission::Deny,
+            "{chained}: {decision:?}"
+        );
+        assert!(
+            decision.reason.contains("sole shell command"),
+            "{chained}: {decision:?}"
+        );
+    }
+
+    // Alone it is accepted AS A KERNEL, not merely allowed as unrecognised text.
+    let input: HookInput =
+        parse_input(&claude_event("$HOME/.local/bin/ompo supervise --once")).unwrap();
+    let decision = classify(&input);
+    assert_eq!(decision.permission, Permission::Allow, "{decision:?}");
+    assert!(
+        decision.reason.contains("kernel invocation accepted"),
+        "{decision:?}"
+    );
+    assert!(
+        !decision.reason.contains("no registered kernel bypass"),
+        "an accepted kernel must not report as unrecognised text: {decision:?}"
+    );
+
+    // ANTI-VACUITY, this crate's recorded failure mode: recognising a new
+    // kernel name must not turn a token spoof into a kernel, and the
+    // permissive tail must still be reachable for unrelated commands.
+    let spoof: HookInput = parse_input(&claude_event("echo ompo")).unwrap();
+    let spoof_decision = classify(&spoof);
+    assert_eq!(
+        spoof_decision.permission,
+        Permission::Allow,
+        "{spoof_decision:?}"
+    );
+    assert!(
+        spoof_decision
+            .reason
+            .contains("no registered kernel bypass"),
+        "a bare mention of a kernel name is not an invocation: {spoof_decision:?}"
+    );
+}
+
 #[test]
 fn raw_dispatch_options_and_separators_are_denied() {
     for (command, kernel) in [

@@ -33,9 +33,17 @@ const NEEDLE_ROBOT_SEND_FLAG_EQ: &str = concat!("--robot", "-send=");
 const NEEDLE_NTM_ROBOT_SEND: &str = concat!("ntm --robot", "-send");
 
 /// Kernel command shapes that are legitimate alternatives to raw operator handrolls.
+///
+/// `ompo` and `omp-orchestrator` are BOTH here because they are two spellings of
+/// one kernel: `omp-orchestrator` is the crate/bin name and `ompo` is the name it
+/// is installed and invoked under (`~/.local/bin/ompo supervise --repo ...`, which
+/// is what the launchd row runs). Recognising only the crate name left the
+/// sole-shell-command rule below applying to a spelling nobody types while the one
+/// everybody types fell through to the permissive tail.
 pub const KERNEL_ALLOWLIST: &[&str] = &[
     "tick-monitor observe",
     "omp-orchestrator",
+    "ompo",
     NEEDLE_NTM_ROBOT_SEND,
     "bv --robot-triage",
 ];
@@ -325,6 +333,11 @@ fn kernel_candidate(segment: &str) -> Option<&'static str> {
     match executable {
         "tick-monitor" if tokens.get(1) == Some(&"observe") => Some("tick-monitor observe"),
         "omp-orchestrator" => Some("omp-orchestrator"),
+        // The INSTALLED name. Without this arm `ompo supervise --once` is not a
+        // kernel candidate at all, so the sole-shell-command check below is
+        // unreachable for it and `echo setup; ompo supervise --once` reaches the
+        // permissive tail. Recognition is what makes the guard apply.
+        "ompo" => Some("ompo"),
         "ntm"
             if tokens.get(1).is_some_and(|token| {
                 *token == NEEDLE_ROBOT_SEND_FLAG || token.starts_with(NEEDLE_ROBOT_SEND_FLAG_EQ)
@@ -829,9 +842,12 @@ mod scratch_home_tests {
     fn no_claim_only_enumerated_shapes() {
         // The doc comment at the top of lib.rs states the NO-CLAIM. This test
         // is a structural check: the allowlist has exactly the declared entries.
-        assert_eq!(KERNEL_ALLOWLIST.len(), 4);
+        assert_eq!(KERNEL_ALLOWLIST.len(), 5);
         assert!(KERNEL_ALLOWLIST.contains(&"tick-monitor observe"));
         assert!(KERNEL_ALLOWLIST.contains(&"omp-orchestrator"));
+        // The INSTALLED spelling. Two entries for one kernel is deliberate: the
+        // guard only applies to names this list recognises.
+        assert!(KERNEL_ALLOWLIST.contains(&"ompo"));
         assert!(KERNEL_ALLOWLIST.contains(&NEEDLE_NTM_ROBOT_SEND));
         assert!(KERNEL_ALLOWLIST.contains(&"bv --robot-triage"));
     }
