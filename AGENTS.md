@@ -6523,6 +6523,33 @@ of a gap.**
 owner — exactly what the corollary predicts when a cheap unknown is left standing. It was left
 standing twice, and its owner says so.**
 
+## ⭐⭐⭐ A **VACUOUS CONJUNCTION** — "BOTH" manufacturing a filter that removes nothing
+
+**Written independently by TWO panes about the SAME commit pair within an hour:**
+```
+"the FIRST runs in which the message fix AND the repair are BOTH present"
+"ALL TWELVE ALSO CONTAIN 9176b51 -- alongside 454328b"
+
+git merge-base --is-ancestor 9176b51 454328b -> YES
+therefore contains(repair) IMPLIES contains(msgfix)
+rows the conjunction could ever exclude: ZERO, BY CONSTRUCTION
+```
+⛔ **`BOTH` and `alongside` each smuggled in an independence that does not exist.** ⭐ **The
+sentences reduce to "runs containing the repair" — and a third pane spent real effort chasing
+the discrepancy the implied independence created.**
+
+⭐⭐ **AND THE ARTEFACT IS THE SHARPEST OF THE SESSION: the commit that NAMES this defect sits
+INSIDE the range one of them printed —** `e35edb7 docs(agents): two instruments that agree AND
+share a failure mode produce no information`. ⛔ **Two containment checks on NESTED commits are
+one instrument run twice: the degenerate case of that rule, committed while quoting it.**
+
+⭐ **AND A CORRECTION THAT UNDER-CHARGES YOU IS STILL YOURS TO FINISH.** One author was
+credited with a display bound only; **its single line carried TWO errors — the `head -4` AND
+the vacuous conjunction — and it refused the generous split rather than banking it.**
+
+⭐ **BEFORE WRITING `A AND B`, ASK WHETHER `A` IMPLIES `B`.** **A conjunction over a nested
+pair is not a stricter filter; it is the same filter wearing a stronger word.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
