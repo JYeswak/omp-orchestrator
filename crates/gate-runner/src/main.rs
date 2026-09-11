@@ -748,6 +748,9 @@ fn run_crate(repo: &Path, crate_name: &str) -> Observed {
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
             );
+            for (test, cause) in failure_causes(&text) {
+                println!("GATE_RUNNER_FAILURE_CAUSE crate={crate_name} test={test} detail={cause}");
+            }
             classify_completed_cargo_output(output.status.code(), &text)
         }
 
@@ -1079,6 +1082,46 @@ fn strip_ansi(line: &str) -> String {
     out
 }
 
+/// Extract the first CAUSE line for each failing test from libtest's `failures:` blocks.
+///
+/// # Why the name was never enough
+///
+/// `failing_test_name` captures `test <name> ... FAILED`, and the parser has NEVER captured the
+/// cause text at all — not a drop at one site, an absence throughout. The consequence is not
+/// inconvenience: it makes cause-classification IMPOSSIBLE FROM THE AUTHORITATIVE LANE, so every
+/// classification gets made on a non-authoritative one while the verdict comes from CI.
+///
+/// Measured 2026-09-11: FOUR panes hit this wall inside one hour, on four different beads, and
+/// each had to read SOURCE to recover what the run already knew — one of them then built a
+/// six-leg bead on names alone and its own acceptance refuted four of the six. A bead exists
+/// whose acceptance item 1 is exactly *"naming the failing test is not naming the cause."*
+///
+/// # What it deliberately does not do
+///
+/// Emits NOTHING for a passing crate. An over-eager capture fails by flooding the log, which is
+/// the direction that gets a diagnostic turned off — so the silent-on-green leg is mandatory,
+/// not decorative.
+///
+/// NOT FIXED BY THIS: the `unattributed_target` label. That limitation is documented above at
+/// `parse_cargo_output` and its remedy is a per-invocation run, not a parser change.
+fn failure_causes(text: &str) -> Vec<(String, String)> {
+    let mut causes = Vec::new();
+    let mut current: Option<String> = None;
+    for line in text.lines() {
+        let plain = strip_ansi(line);
+        let trimmed = plain.trim();
+        if let Some(rest) = trimmed.strip_prefix("---- ") {
+            current = rest.strip_suffix(" stdout ----").map(str::to_owned);
+        } else if let Some(name) = current.clone() {
+            if trimmed.contains("panicked at") || trimmed.starts_with("assertion") {
+                causes.push((name, trimmed.to_owned()));
+                current = None;
+            }
+        }
+    }
+    causes
+}
+
 /// `test real_atomic_install_publishes_complete_binary ... FAILED` -> the test's name.
 ///
 /// Deliberately anchored on both ends: `test result: FAILED. 25 passed; 1 failed` shares the
@@ -1134,6 +1177,58 @@ test result: FAILED. 25 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out;
         assert!(
             !observed.failed.iter().any(|f| f == "unknown"),
             "the retired label must not come back"
+        );
+    }
+
+    /// KNOWN-BAD: a real libtest failures block must yield the test NAME and its CAUSE.
+    #[test]
+    fn a_failure_block_yields_the_cause_and_not_merely_the_name() {
+        let lane = "\
+test the_ratchet_deadline_is_a_real_number ... FAILED
+
+failures:
+
+---- the_ratchet_deadline_is_a_real_number stdout ----
+
+thread 'the_ratchet_deadline' panicked at crates/omp-orchestrator/tests/census_membership.rs:41:5:
+assertion `left == right` failed
+  left: 7
+ right: 6
+";
+        let causes = failure_causes(lane);
+        assert_eq!(causes.len(), 1, "one failing test, one cause: {causes:?}");
+        assert_eq!(causes[0].0, "the_ratchet_deadline_is_a_real_number");
+        assert!(
+            causes[0].1.contains("panicked at")
+                && causes[0].1.contains("census_membership.rs:41:5"),
+            "the cause must carry the panic SITE, not just the word: {}",
+            causes[0].1
+        );
+    }
+
+    /// KNOWN-GOOD, and it is the leg that stops this becoming a log flood: a passing run emits
+    /// NOTHING. An over-eager capture fails in this direction, and a diagnostic that spams every
+    /// KNOWN-GOOD, and it is the leg that stops this becoming a log flood.
+    ///
+    /// The first draft of this leg fed in plain passing output and asserted emptiness — which
+    /// EVERY implementation satisfies, including a naive `text.contains("panicked at")` grep.
+    /// That is a tautology wearing a test's name. This input therefore carries a panic line
+    /// OUTSIDE any `---- <name> stdout ----` block, so the leg reddens for a reader that is not
+    /// block-gated. An over-eager capture fails in exactly this direction, and a diagnostic that
+    /// spams every green run gets switched off — which costs more than it ever bought.
+    #[test]
+    fn a_passing_run_emits_no_cause_lines_even_with_panic_text_outside_a_block() {
+        let lane = "\
+   Compiling gate-runner v0.1.0
+warning: the build script mentions `panicked at` in a diagnostic string
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.70s
+";
+        assert!(
+            failure_causes(lane).is_empty(),
+            "a green run must not emit a cause line, and panic TEXT outside a failures block is \
+             not a failure: {:?}",
+            failure_causes(lane)
         );
     }
 
