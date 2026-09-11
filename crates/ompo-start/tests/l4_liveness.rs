@@ -13,8 +13,17 @@ fn source(name: &str, panes: &[&str], available: bool, fresh: bool) -> SourceVer
     }
 }
 
+/// L4-LIVE (hw99) and L4-TEST-THREE-FRESH (3feu). Both acceptances name this
+/// selector, so the leg carries the name rather than a synonym: a command that
+/// matches no test exits 0 and proves nothing. Renamed from
+/// `three_fresh_sources_with_equal_panes_are_live` — one authority, not two legs
+/// asserting the same law under different names.
+///
+/// LIVE requires all THREE of: every required source present, every one fresh
+/// with an age, and their pane sets equal. Each is dropped in turn below so the
+/// leg cannot pass on the strength of only one of them.
 #[test]
-fn three_fresh_sources_with_equal_panes_are_live() {
+fn live_requires_three_fresh_agreeing() {
     let verdict = classify(vec![
         source("tick-monitor", &["%7", "%8"], true, true),
         source("agent-mail", &["%7", "%8"], true, true),
@@ -23,6 +32,45 @@ fn three_fresh_sources_with_equal_panes_are_live() {
     .expect("complete source set");
     assert!(matches!(verdict, LiveVerdict::Live { .. }));
     assert_eq!(verdict.status(), "LIVE");
+
+    // 1. THREE: two of the three is not live, and the absence is NAMED.
+    let two_only = classify(vec![
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7", "%8"], true, true),
+    ])
+    .expect("a short source set still classifies");
+    assert_eq!(two_only.status(), "NOT_LIVE");
+    assert!(
+        two_only.reason_code().contains("agent-mail"),
+        "the missing source must be named: {}",
+        two_only.reason_code()
+    );
+
+    // 2. FRESH: one source with no age is SILENT, so not live.
+    let mut ageless = source("agent-mail", &["%7", "%8"], true, true);
+    ageless.age_ms = None;
+    let silent = classify(vec![
+        ageless,
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7", "%8"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(silent.status(), "NOT_LIVE", "a source with no age is silent");
+
+    // 3. AGREEING: three fresh sources that disagree on panes are not live.
+    let disagreeing = classify(vec![
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7", "%8"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(disagreeing.status(), "NOT_LIVE");
+    println!(
+        "LIVE requires three+fresh+agreeing; drops: {} / {} / {}",
+        two_only.reason_code(),
+        silent.reason_code(),
+        disagreeing.reason_code()
+    );
 }
 
 #[test]
@@ -488,4 +536,138 @@ fn missing_mail_meta_is_silent() {
     assert!(matches!(verdict, LiveVerdict::NotLive { .. }));
     assert_eq!(verdict.status(), "NOT_LIVE");
     assert!(verdict.reason_code().contains("agent-mail"));
+}
+
+/// L4-NOT-LIVE (8r0r): three fresh sources that disagree on their pane sets are
+/// NOT_LIVE, and the verdict says DISAGREEMENT rather than something vaguer.
+/// The law is adjacent to `disagreeing_pane_sets_are_named_as_disagreement_not_vacuity`,
+/// which asserts the AGREEMENT WRITER's json; this leg asserts the CLASSIFIER's
+/// verdict, which is the different thing 8r0r's acceptance names.
+#[test]
+fn pane_set_disagree_is_not_live() {
+    // KNOWN-GOOD control: identical pane sets, same three sources, LIVE.
+    let agreeing = classify(vec![
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7", "%8"], true, true),
+        source("agent-mail", &["%7", "%8"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(agreeing.status(), "LIVE", "the control must be LIVE");
+
+    // Every source is available, fresh and aged. ONLY the pane sets differ, so a
+    // freshness-only classifier would call this live.
+    let verdict = classify(vec![
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7", "%9"], true, true),
+        source("agent-mail", &["%7", "%8"], true, true),
+    ])
+    .expect("complete source set");
+    println!("DISAGREE verdict={} {}", verdict.status(), verdict.reason_code());
+    assert!(matches!(verdict, LiveVerdict::NotLive { .. }));
+    assert_eq!(verdict.status(), "NOT_LIVE");
+    assert!(
+        verdict.reason_code().contains("DISAGREE"),
+        "the reason must name disagreement, not merely refuse: {}",
+        verdict.reason_code()
+    );
+    // Order must not decide it: the same three in any order disagree identically.
+    let reordered = classify(vec![
+        source("agent-mail", &["%7", "%8"], true, true),
+        source("ntm", &["%7", "%8"], true, true),
+        source("tick-monitor", &["%7", "%9"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(reordered.reason_code(), verdict.reason_code());
+}
+
+/// L4-METRIC-SILENT (vdxb): a nonzero SILENT COUNT makes the swarm NOT_LIVE, and
+/// zero silent sources is the only state that can be LIVE. The count is derived
+/// from `is_silent`, the same predicate the row writer uses, so the metric and the
+/// verdict cannot disagree about what silent means.
+#[test]
+fn silent_count_nonzero_is_not_live() {
+    fn silent_count(sources: &[SourceVerdict]) -> usize {
+        sources
+            .iter()
+            .filter(|source| ompo_start::liveness::is_silent(source))
+            .count()
+    }
+
+    let all_fresh = vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7"], true, true),
+    ];
+    assert_eq!(silent_count(&all_fresh), 0, "known-good: nothing is silent");
+    assert_eq!(
+        classify(all_fresh.clone())
+            .expect("complete source set")
+            .status(),
+        "LIVE",
+        "zero silent is the only state that may be LIVE"
+    );
+
+    // Each of the two silent SHAPES independently drives the count up and the
+    // verdict down: no age at all, and an unavailable probe.
+    for (label, mutate) in [
+        (
+            "no age",
+            (|s: &mut SourceVerdict| s.age_ms = None) as fn(&mut SourceVerdict),
+        ),
+        ("unavailable", |s: &mut SourceVerdict| {
+            s.available = false;
+            s.fresh = false;
+        }),
+    ] {
+        let mut sources = all_fresh.clone();
+        mutate(&mut sources[2]);
+        let count = silent_count(&sources);
+        let verdict = classify(sources).expect("complete source set");
+        println!("SILENT_COUNT {label} count={count} verdict={}", verdict.status());
+        assert_eq!(count, 1, "{label} must count as exactly one silent source");
+        assert_eq!(verdict.status(), "NOT_LIVE", "{label}");
+        assert!(verdict.reason_code().contains("agent-mail"), "{label}");
+    }
+
+    // ANTI-VACUITY: an empty set has a silent count of 0, and that must NOT read
+    // as live — zero silent out of nothing observed is not health.
+    assert_eq!(silent_count(&[]), 0);
+    let empty = classify(Vec::new()).expect_err("an empty source set must refuse");
+    assert!(empty.contains("L4_EMPTY_SOURCE_SET"), "{empty}");
+}
+
+/// L4-TEST-MISSING-GAP (z7dj): a source with no observed_at emits SILENT, never
+/// `gap_secs = 0` or `age_ms = 0`. Zero is the freshest possible reading and is
+/// exactly what an absent observation must not be reported as.
+#[test]
+fn missing_gap_is_silent() {
+    let mut absent = source("tick-monitor", &["%7"], true, true);
+    absent.age_ms = None;
+    let row = ompo_start::liveness::source_json(&absent);
+    println!("MISSING_GAP row={row}");
+
+    // KNOWN-BAD, pinned: the unwrap_or(0) reading an implementation reaches for.
+    assert_eq!(absent.age_ms.unwrap_or(0) / 1_000, 0, "KNOWN-BAD is gap 0s");
+
+    // The writer refuses it: UNMEASURED, and it says why.
+    assert_eq!(row["gap_secs"], serde_json::Value::Null, "SILENT, not 0");
+    assert_eq!(row["age_ms"], serde_json::Value::Null, "SILENT, not 0");
+    assert_ne!(row["gap_secs"], serde_json::json!(0));
+    assert_ne!(row["age_ms"], serde_json::json!(0));
+    assert_eq!(row["silent"], serde_json::json!(true));
+    assert_eq!(
+        row["silent_reason"],
+        serde_json::json!("L4_SILENT_NO_TIMESTAMP"),
+        "absent observed_at is distinguishable from a dead probe"
+    );
+
+    // KNOWN-GOOD, so the leg is not a blanket ban on zero: a genuine zero gap is
+    // reported as a zero gap, because both clocks were read.
+    let mut measured_zero = source("tick-monitor", &["%7"], true, true);
+    measured_zero.age_ms = Some(0);
+    let zero_row = ompo_start::liveness::source_json(&measured_zero);
+    assert_eq!(zero_row["age_ms"], serde_json::json!(0));
+    assert_eq!(zero_row["gap_secs"], serde_json::json!(0));
+    assert_eq!(zero_row["silent"], serde_json::json!(false));
+    assert_eq!(zero_row["silent_reason"], serde_json::Value::Null);
 }
