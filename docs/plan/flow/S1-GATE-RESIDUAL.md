@@ -33,6 +33,39 @@ ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest
     gh run view <id> --log | grep -aoE 'GATE_RUNNER_(FAILING|UNMEASURABLE) count=[0-9]+ names=.*'
   The newest runs ship the NAMES inline, so no per-crate scraping and no `sort -u` is needed.
 
+⛔ THE FOUR UNMEASURABLE ARE ENVIRONMENT, NOT CRATE DEFECTS — DO NOT DISPATCH THEM AS WORK.
+  Measured 2026-09-11 from run 34592771605's own detail strings, which the runner prints and
+  which nobody had read:
+
+    finding            MISSING_EXECUTABLE  executable=br  detail=br is unavailable on PATH
+    loop-queue-filter  MISSING_EXECUTABLE  executable=bv  detail=bv is unavailable on PATH
+    admission-reason   POLICY_UNAVAILABLE  policy=admission-reason-differential
+                       detail=oracle missing at <runner>/../control-plane/bin
+    loop-driver        POLICY_UNAVAILABLE  policy=lockf-shell-oracle
+                       detail=the loop-driver differential oracle requires /usr/bin/lockf
+
+  NOT ONE IS A BUG IN THE CRATE. `br` and `bv` are local operator tools absent from a GitHub
+  runner; `../control-plane` is a SIBLING REPOSITORY that is never checked out there; and
+  `/usr/bin/lockf` is a BSD/macOS utility that does not exist on Linux at all — its Linux
+  counterpart is `flock`, a different tool with a different interface.
+
+  SO TWO OF THE FOUR ARE STRUCTURALLY UNMEASURABLE ON THIS CI, not merely unmeasured.
+  `loop-driver` cannot be measured on a Linux runner while its oracle is named `lockf`, and
+  `admission-reason` cannot be measured without coupling this repo's CI to a second one.
+  `finding` and `loop-queue-filter` are the addressable pair, and only if installing `br`/`bv`
+  into CI is judged worth the coupling — that is a decision, not a chore.
+
+  ⚠️ THE RUNNER'S TYPING IS THE THING THAT WORKS HERE, and it deserves saying: it emits
+  MISSING_EXECUTABLE where the remedy is *reach the tool* and POLICY_UNAVAILABLE where the
+  remedy is *supply the oracle*, and `lib.rs:156-157` states in its own words that neither
+  means *fix the crate*. The gate got the verdict class right; every reader downstream — this
+  file included — flattened four typed non-verdicts into a residual count and implied work
+  that does not exist.
+
+  ⚠️ AND AN UNMEASURABLE IS STILL NOT A PASS. Four crates have NO verdict. At the exit code an
+  absent verdict and a green are the same observation, which is why they stay enumerated here
+  rather than being netted out of the residual. The honest reading is: 5 failing, 4 unknown.
+
 ✅ THE CAUSE-CAPTURE ARC IS CLOSED ON THIS RUN. Four rungs cleared before a row was read:
   GATE_RUNNER ' ' 2 · could-not-compile 0 · GATE_RUNNER_FAILURE_CAUSE 59 lines
   assert_eq OPERANDS: details containing "left:" 10, against a denominator of 10 details
