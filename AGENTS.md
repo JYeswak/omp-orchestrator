@@ -4532,6 +4532,135 @@ exempting resolution WHOLESALE would re-open the `poumg.5` hole — a dirty mani
 missing dep — which is why the manifest and the lock are INSIDE the compile closure and not
 treated as metadata.**
 
+### ⭐ THE CONSTANCY AXIS IS THREE DEEP, AND THE WEAKEST RUNG IS THE ONLY POST-HOC ONE
+
+```
+empty closure        CANNOT move                                     strongest
+hash bracket         DETECTS that it moved between observations
+line-number witness  detects a SUBSET of movements, POST HOC, when   weakest -- and the only
+                     you took no bracket                             one available AFTER THE FACT
+```
+**Each narrows the window; NONE closes it.**
+
+**THE WITNESS:** a panic's reported line number, identical across a red, a second red and the
+restored green, proves the file did not shift under the sequence — **a mid-sequence edit would
+have moved it.** Used to rescue a differential whose author had not bracketed.
+
+⛔ **PRECEDING AND SPANNING BRACKETS LOOK IDENTICAL IN A SUMMARY AND ONLY ONE SURVIVES.**
+```
+PRECEDING  probe BEFORE, run AFTER          the window between them is INVISIBLE
+SPANNING   observe before AND after, runs   the window is DETECTABLE AT THE ENDPOINTS
+           strictly inside the interval
+```
+**One agent's retraction was a PRECEDING bracket; another's surviving top-rung claim was
+SPANNING — observed at four heads with the mutations strictly inside.** ⭐ **And its author
+called that LUCK TWICE OVER: the closure was clean by luck of which crates the dropped stash
+missed, and the bracket spanned by luck of a habit of re-pinning after HEAD moved.** *"Neither
+was the method working; the method as written says hash the closure and does not say WHEN."*
+
+⛔ ***"CHECK THE CLOSURE FIRST" IS EXACTLY THE READING THAT PRODUCES THE GAP.*** The clause text
+must say SPAN.
+
+**FOUR RUNGS, and the fourth is the recovery instrument for having taken none of the first
+three:**
+```
+empty closure        NO WINDOW AT ALL
+spanning bracket     window DETECTABLE at the endpoints -- still permits write-and-revert inside
+preceding probe      window it CANNOT SEE
+line-number witness  POST HOC, needs NO BASELINE -- works where no bracket was taken
+```
+
+⛔ **AND IT MUST CARRY ITS BOUND IN THE SAME SENTENCE OR IT BECOMES THE NEXT INSTANCE. IT PROVES
+ONLY: no NET LINE-COUNT CHANGE ABOVE the failing assertion.** Three movements are invisible to
+it:
+```
+an edit BELOW the assertion                              invisible
+an edit above adding and removing EQUAL counts           invisible
+an edit changing a line's CONTENT without changing count invisible  <- the only one that
+  -- including AT the asserting line itself                            corrupts a differential
+```
+⭐ **The third gap needs a SEPARATE argument, and its author supplied one: the dirty content was
+a DOC COMMENT, so it can shift line numbers and cannot shift behaviour.** **Anyone copying the
+witness alone would not know the second argument was required, and would hold a constancy claim
+resting on nothing.**
+
+### ⛔ THE BRACKET MUST SPAN THE RUNS **AND THE RESTORE**
+
+**Two window defects, both measured, both in the METHOD rather than in anyone's execution:**
+- **PROBE-THEN-RUN GAP (~90 s).** An agent announced a top-rung claim on a probe-1 drift of 0;
+  a peer's edit landed **between its probe and its first run**. Its enumeration was independently
+  verified COMPLETE — **the enumeration was right and the TIMING was wrong.** Those are different
+  failures and **only the second is fixable by discipline.**
+- **RUN-THEN-RESTORE GAP.** Restores verified by `sha256` + `cmp` against the SUBJECT immediately
+  after each arm still leave the CLOSURE free to move during the restore window. ⭐ **A
+  differential is only as good as its LAST observation, so a hold that releases at the final RUN
+  rather than the final RESTORE leaves the same gap one step later.**
+
+### ⛔ A PLANT ANNOUNCE FORBIDS COMMITTING AND SAYS NOTHING ABOUT **MEASURING**
+
+**Measured 2026-09-11 and it produced a false attribution.** An agent re-verifying its own crate
+saw **two consecutive reds at DIFFERENT assertions (`:363` then `:370`) with zero code change of
+its own, then green twice**, and attributed it to *"environmental — suspect stale scratch
+collision on the worker."*
+⭐ **Those are EXACTLY the two assertions a peer's plant arms reddened, one per arm.** The peer
+had announced *"DO NOT PATH-SCOPE A COMMIT on this file"* — **and the third party was not
+**SO THE ANNOUNCE MUST SAY BOTH: do not COMMIT this path, and do not treat a MEASUREMENT of this
+crate as your own result until the restore announce lands.** A live plant in your closure
+attributes a peer's mutation to your work, and *"environmental"* is the hypothesis it invites.
+
+⛔ **QUALIFIER, because this attribution is INFERENCE and not proof:** the two reddened
+assertions match the peer's two arms exactly, **but no timestamp was captured on the third
+party's runs**, and a legitimate commit landing mid-sequence is an equally available explanation
+(see below). **The rule stands on the mechanism — a live plant in your closure IS attributable
+to you — not on this one attribution.**
+
+### ⭐⭐ A CLOSURE CAN BE INVALIDATED BY **CORRECT WORK BY THE RIGHTFUL OWNER**
+
+**The sharpest form of the window defect, and it emerged from an agent diagnosing its own
+retraction better than its first guess.** The file that went dirty in its ~90-second
+probe-then-run gap was **not a peer scribbling** — it was `b0ad54a`'s content **arriving**: the
+doc fix it had itself requested, landing by the file's author, committed four minutes later.
+
+⭐ **THAT MAKES THE GAP WORSE AS AN ARGUMENT FOR BRACKETING, NOT BETTER: *"nobody is editing my
+file"* IS NOT A PRECONDITION ANYONE CAN ESTABLISH BY GOOD BEHAVIOUR.** The thing that moves may
+be someone doing exactly the right thing, at exactly the right time, at your request.
+
+⛔ **SO A HOLD-ACROSS-N-RUNS MODE MUST BE FRAMED AS DETECTING *INVALIDATION*, SOURCE-AGNOSTIC —
+NEVER AS DETECTING INTERFERENCE.** *"Closure moved between observation k and k+1"* is the honest
+reason string. *"A peer edited your closure"* would have been **factually wrong here**, since
+the editor was the author landing a requested fix. **A diagnostic that names a culprit where the
+mechanism names none is the same overclaim class as every retraction tonight.**
+
+### ⭐⭐ NO AMOUNT OF COORDINATION CAN PROTECT A CLOSURE — THE LADDER IS ABOUT OBSERVABILITY, NOT TRUST
+
+**The closing clause, and it rules out the obvious mitigation.** Plant announces, contention
+tables, path holds and the entire queue discipline this fleet built in one night protect against
+a peer **SCRIBBLING** in your file. ⛔ **THEY ARE STRUCTURALLY INCAPABLE OF PROTECTING AGAINST A
+PEER LANDING CORRECT WORK IN YOUR CLOSURE** — because that peer is doing the right thing, owes
+you nothing, and in the measured case **was landing a fix the retracting agent had itself
+requested.**
+
+⭐ **SO THE MITIGATION FOR THE PROBE-THEN-RUN GAP IS NOT TIGHTER COORDINATION. IT IS THE
+SPANNING BRACKET, FULL STOP. A protocol can make interference RARE; only a MEASUREMENT can make
+invalidation DETECTABLE.**
+
+**AND THAT IS WHY THE RUNGS NAME NO CULPRIT:**
+```
+empty closure        nothing can move, so nothing needs observing
+spanning bracket     things may move and YOU WILL SEE IT at the endpoints
+preceding probe      things may move and YOU WILL NOT
+line-number witness  a SUBSET of movement, after the fact, with no baseline
+```
+**None of those mentions who is editing, or why.** ⭐ **The source-agnostic reason string —
+*"closure moved between observation k and k+1"*, never *"a peer edited your closure"* — is not
+politeness. It is THE ONLY PHRASING THAT IS TRUE IN THE CASE THAT ACTUALLY OCCURRED.**
+
+⛔ **AND THE AUTHOR OF THE LADDER RECORDED THAT ITS OWN SURVIVING CLAIM RESTS ON TWO PIECES OF
+LUCK:** the closure was clean because the dropped stash happened to miss those crates, and the
+bracket spanned because of a habit of re-pinning after HEAD moved — **not because the clause
+said to.** *"The clause was incomplete and its author did not notice until someone else paid for
+it."* **It stands, and it stands for weaker reasons than it appeared to.**
+
 ⛔ **AND EVEN A PURE PERMUTATION IS ONLY PRESUMPTIVELY INERT.** `match` arm order, statements
 with side effects, `macro_rules!` definition order, overlapping trait impls, and item order read
 by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
