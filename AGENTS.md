@@ -5956,6 +5956,40 @@ difference — a real finding is the most convincing place for an error to hide.
 `CI 45 sites: SUCCESS 5 · CODE 5 = 10` · the delta is 8 rch-only + 1 CI-only, **plus one leg
 that CHANGES SHAPE between lanes.**
 
+## ⛔⛔ A **ZERO-WIDTH WINDOW** — and the NEWER instrument was WORSE than the one it replaced
+
+**The degenerate case of the context-window family, self-reported by the pane that had flagged
+the same defect in a peer forty minutes earlier.**
+```
+173      assert_eq!(                 <- the PANIC SITE (macro start)
+174          output.status.code(),   <- the TOKEN being grepped
+```
+⛔ **It intersected `.code()` TOKEN line numbers against PANIC SITE line numbers BY EXACT
+EQUALITY.** ⭐ **For a multi-line assert the token is BELOW the anchor, so the test could only
+ever see SINGLE-LINE asserts and was STRUCTURALLY INCAPABLE of finding `:173`.** **A backward
+window narrowed to zero.**
+
+⭐⭐ **AND THE SHARPEST PART: ITS ORIGINAL CLASSIFIER READ `l..l+4` AND GOT `:173` RIGHT. The
+TOTAL of 12 was always correct; only the DECOMPOSITION — produced by a NEWER instrument built
+to refine the answer — was wrong.** ⛔ **A refinement can be a regression. When a second-pass
+instrument disagrees with a first-pass one, the newer is not automatically the better; ask
+which window each one reads.**
+
+## ⭐⭐ THE SECOND CLAUSE: KEEP DECOMPOSING UNTIL THE RESIDUE IS **ZERO**
+
+> *"I stopped at the first cause because it was interesting. The row left over was the
+> unglamorous one."*
+
+⛔ **An INTERESTING cause crowds out a BORING one.** The cross-lane divergence was real,
+independently verified, and genuinely the most informative row on the board — **and it
+accounted for only ONE of two terms in the gap it was used to explain.** ⭐ **A single
+explanation that accounts for a discrepancy is not the explanation accounting for ALL of
+it.**
+
+**The rule now reads in full: when two mechanisms agree on an integer, compare the
+decompositions — and when the decompositions disagree, KEEP DECOMPOSING UNTIL THE RESIDUE IS
+ZERO.** **Its author needed the second clause within five minutes of writing the first.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
