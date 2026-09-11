@@ -1155,12 +1155,28 @@ fn failure_causes(text: &str) -> Vec<(String, String)> {
                     detail.push(' ');
                     detail.push_str(trimmed);
                 }
+                // Both halves collected: stop, so a LATER assertion in the same block
+                // cannot append its operands onto this cause.
+                if let Some((_, detail)) = causes.last() {
+                    if detail.contains("left:") && detail.contains("right:") {
+                        operands = false;
+                    }
+                }
                 continue;
             }
-            // Bounded by SHAPE, not by a line budget: anything that is not an operand line
-            // ends the payload, so a panic with no operands costs nothing and cannot swallow
-            // the next test's output.
-            operands = false;
+            // ⛔ BOUNDED BY THE BLOCK, NOT BY ADJACENCY. The first version stopped at the
+            // first non-operand line, which measured 5 of 10 in CI run 34583101953. Observed
+            // directly in raw output 2026-09-11: an `assert_eq!` MESSAGE can be MULTI-LINE —
+            // one embeds captured gate stderr, so the lines after it read
+            //   plan_citations: GATE_NOT_APPLICABLE …
+            //   census_membership: GATE_NOT_APPLICABLE …
+            // and the real `left:`/`right:` sit well below. Adjacency is not the boundary;
+            // the TEST BLOCK is. Skip continuation text and stop only at a real boundary.
+            if trimmed.starts_with("---- ") || trimmed.contains("panicked at") {
+                operands = false;
+            } else {
+                continue;
+            }
         }
         if let Some((name, header)) = pending.take() {
             if trimmed.is_empty() {
@@ -1299,6 +1315,64 @@ assertion `left == right` failed
             causes[0].1.contains("left: 7") && causes[0].1.contains("right: 6"),
             "an assert_eq payload is THREE lines: the operands must survive too: {}",
             causes[0].1
+        );
+    }
+
+    /// ⛔ THE REGRESSION THIS EXISTS FOR, and it was measured in production before it was
+    /// written: the first operand capture scored **5 of 10** in CI run 34583101953, because
+    /// an `assert_eq!` MESSAGE can be MULTI-LINE. This fixture is the observed shape — a
+    /// message that embeds captured gate stderr, so two continuation lines sit between the
+    /// assertion and its operands. Adjacency is NOT the boundary; the test block is.
+    #[test]
+    fn operands_survive_a_multi_line_assertion_message() {
+        let lane = "\
+---- deletion_only_staged_set_reaches_pre_delete_gate stdout ----
+
+thread 'deletion_only' panicked at crates/no-shell-gate/tests/empty_staged.rs:402:5:
+assertion `left == right` failed: deletion-only work must run the normal gate path:
+plan_citations: GATE_NOT_APPLICABLE reason=no_staged_numbered_plan_markdown
+census_membership: GATE_NOT_APPLICABLE reason=no_staged_crate_manifest
+  left: 1
+ right: 0
+";
+        let causes = failure_causes(lane);
+        assert_eq!(causes.len(), 1, "one failing test, one cause: {causes:?}");
+        assert!(
+            causes[0].1.contains("left: 1") && causes[0].1.contains("right: 0"),
+            "operands must survive continuation lines of a multi-line message: {}",
+            causes[0].1
+        );
+    }
+
+    /// KNOWN-GOOD in the opposite direction: the scan must NOT run past a block boundary and
+    /// steal the next test's operands. Without this, "skip continuation text" becomes
+    /// "consume the rest of the log".
+    #[test]
+    fn the_operand_scan_stops_at_the_next_test_block() {
+        let lane = "\
+---- first stdout ----
+
+thread 'first' panicked at a.rs:1:1:
+assertion `left == right` failed: no operands here
+
+---- second stdout ----
+
+thread 'second' panicked at b.rs:2:2:
+assertion `left == right` failed: mine
+  left: 9
+ right: 8
+";
+        let causes = failure_causes(lane);
+        assert_eq!(causes.len(), 2, "two failing tests: {causes:?}");
+        assert!(
+            !causes[0].1.contains("left: 9"),
+            "the FIRST cause must not steal the SECOND's operands: {}",
+            causes[0].1
+        );
+        assert!(
+            causes[1].1.contains("left: 9") && causes[1].1.contains("right: 8"),
+            "the second cause keeps its own operands: {}",
+            causes[1].1
         );
     }
 
