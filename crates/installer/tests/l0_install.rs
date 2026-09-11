@@ -849,3 +849,125 @@ fn real_cli_check_exits_nonzero_for_a_stale_flagship_and_zero_when_all_agree() {
         "0/0 must never read as OK:\n{text}"
     );
 }
+
+/// The exact token `strings` recovered from the INSTALLED flagship on 2026-09-11.
+/// `nogit-<epoch>` is what `crates/installer/build.rs:39` stamps when the build host
+/// cannot resolve HEAD; the trailing run is neighbouring rodata the marker is packed
+/// against, which is why the token is not clipped at the epoch.
+const MEASURED_UNDERIVED_TOKEN: &str = "nogit-1789100480ts_unixsupervisor_heartbeatdispatch_action";
+
+#[test]
+fn real_underived_build_id_is_unstamped_and_a_wrong_commit_is_still_a_mismatch() {
+    // The classifier, with both controls: a generated id names no commit, a real sha
+    // does, and an instrument that answered the same for both would be broken.
+    assert!(
+        !installer::token_names_a_commit(MEASURED_UNDERIVED_TOKEN),
+        "the underived fallback id must not read as a commit"
+    );
+    assert!(
+        !installer::token_names_a_commit("nogit-1789100480"),
+        "the unpacked fallback id must not read as a commit either"
+    );
+    assert!(
+        installer::token_names_a_commit(&"b".repeat(40)),
+        "a 40-hex sha must read as a commit, or the classifier only says NO"
+    );
+    assert!(
+        !installer::token_names_a_commit("bbbb"),
+        "four hex characters are narrower than the shortest abbreviation accepted"
+    );
+
+    let root = repo_root();
+    let bins = TempDir::new("unstamped-flagship");
+    let head = "a".repeat(40);
+    let flagship: &[(&str, &str)] = &[("ompo-doctor", "ompo")];
+    let flagship_path = bins.path().join("ompo");
+
+    // THE MEASURED STATE. The artifact carries an underived id and no `--version`
+    // leg (the fixture is not executable), so NOTHING was compared.
+    write_stamped_artifact(&flagship_path, MEASURED_UNDERIVED_TOKEN);
+    let report = installer::sweep_installed_identity(&root, bins.path(), &head, flagship);
+    let row = report
+        .row_for("ompo")
+        .expect("the flagship must have a row")
+        .to_string();
+    assert!(
+        row.contains("UNSTAMPED") && row.contains("UNMEASURED rather than drifted"),
+        "an artifact that names no commit must not be rendered as drift: {row}"
+    );
+    assert!(!row.contains("MISMATCH"), "{row}");
+    assert_eq!(report.unstamped, 1, "{report:?}");
+    assert_eq!(
+        report.mismatches, 0,
+        "an unstamped artifact is not a disagreeing one: {report:?}"
+    );
+    assert_eq!(report.probed, 1, "the legs WERE read: {report:?}");
+    assert!(report.drifted(), "UNSTAMPED is still a finding: {report:?}");
+    assert_eq!(
+        report.exit_code(),
+        3,
+        "instrument error, not degraded: {report:?}"
+    );
+
+    // NEGATIVE CONTROL on the report, not just the token: a COMMIT-shaped id that
+    // disagrees with HEAD must still be a MISMATCH exiting 1, or the change has
+    // merely renamed every failure.
+    write_stamped_artifact(&flagship_path, &"b".repeat(40));
+    let drifted = installer::sweep_installed_identity(&root, bins.path(), &head, flagship);
+    assert_eq!(drifted.mismatches, 1, "{drifted:?}");
+    assert_eq!(drifted.unstamped, 0, "{drifted:?}");
+    assert_eq!(drifted.exit_code(), 1, "{drifted:?}");
+
+    // ...and a fresh stamp is still clean, so neither verdict is an instrument that
+    // can only fail.
+    write_stamped_artifact(&flagship_path, &head);
+    let fresh = installer::sweep_installed_identity(&root, bins.path(), &head, flagship);
+    assert_eq!(fresh.unstamped, 0, "{fresh:?}");
+    assert_eq!(fresh.exit_code(), 0, "{fresh:?}");
+}
+
+#[test]
+fn real_cli_check_names_an_unstamped_artifact_without_calling_it_drift() {
+    let fixture = TempDir::new("cli-unstamped");
+    let repo = fixture.path().join("repo");
+    let head = temp_git_repo_with_one_commit(&repo);
+    let bins = fixture.path().join("bin");
+    fs::create_dir_all(&bins).expect("create the fixture install directory");
+    for &(_, bin) in installer::OWNED_BINARIES {
+        write_stamped_artifact(&bins.join(bin), &head);
+    }
+    write_stamped_artifact(&bins.join("ompo"), MEASURED_UNDERIVED_TOKEN);
+
+    let output = Command::new(built_installer())
+        .arg("--check")
+        .arg("--bin-dir")
+        .arg(&bins)
+        .env("GIT_DIR", repo.join(".git"))
+        .env("GIT_WORK_TREE", &repo)
+        .output()
+        .expect("run the real installer binary");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    println!("OBSERVED installer --check exit={:?}\n{text}", output.status.code());
+
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "an unstamped-only report is an instrument error, not degraded:\n{text}"
+    );
+    assert!(
+        text.contains("INSTALLER IDENTITY UNSTAMPED: 1/"),
+        "the unstamped count must be reported:\n{text}"
+    );
+    assert!(
+        !text.contains("INSTALLER IDENTITY DRIFT"),
+        "nothing disagreed with HEAD, so nothing may be called drift:\n{text}"
+    );
+    assert!(
+        !text.contains("INSTALLER IDENTITY OK"),
+        "an unmeasured identity is never an OK:\n{text}"
+    );
+}

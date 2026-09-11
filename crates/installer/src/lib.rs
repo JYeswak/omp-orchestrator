@@ -653,6 +653,81 @@ pub struct IdentityCheck {
     pub version_output: Option<String>,
     pub consistent: bool,
 }
+
+/// What a failed identity comparison is ENTITLED to claim.
+///
+/// THE DEFECT THIS CLOSES. `consistent: bool` has two false values that call for
+/// opposite remedies, and this check rendered both as `MISMATCH` / `IDENTITY DRIFT`:
+///
+///   * a leg recovered a COMMIT and it is not HEAD — the artifact is stale, so
+///     rebuild and reinstall;
+///   * no leg recovered a commit at all — the artifact cannot say what it was built
+///     from, so there is nothing to compare and reinstalling from a source tree that
+///     is equally unable to derive a commit reproduces the same state forever.
+///
+/// MEASURED 2026-09-11 on the installed flagship: `strings ~/.local/bin/ompo` yields
+/// `build_id=nogit-1789100480…` — the UNDERIVED fallback `build.rs` stamps when the
+/// object database cannot resolve HEAD, whose own NO-CLAIM says it "does not name a
+/// commit" (`crates/installer/build.rs:36`) — and `ompo --version` is
+/// `UAD_UNKNOWN_VERB`, so the second leg does not exist. Both legs therefore name no
+/// commit, and `installer --check` reported IDENTITY DRIFT: "the subject is wrong,
+/// reinstall it".
+///
+/// `ompo` itself already refuses this exact input correctly and says so in one
+/// vocabulary: `PROVENANCE_UNSTAMPED`, *"this build cannot state its own origin;
+/// staleness is UNMEASURED"*, mapped to instrument-error `3` rather than degraded `1`
+/// because "degraded asserts the subject is wrong … and sending a reader to reinstall
+/// something we never measured is the wrong remedy"
+/// (`crates/ompo-doctor/src/provenance.rs:84-91,230-232`). Two oracles reading the
+/// same unstamped binary disagreed; this is the installer adopting that vocabulary.
+///
+/// NO-CLAIM: `Unstamped` is still a FINDING. It keeps [`IdentityReport::drifted`]
+/// true and the exit non-zero. It renames the finding; it does not forgive it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentityVerdict {
+    /// Every recovered leg names HEAD.
+    Consistent,
+    /// A leg recovered a commit-shaped identity that disagrees with HEAD.
+    Mismatch,
+    /// No leg recovered a commit at all, so no comparison happened.
+    Unstamped,
+}
+
+impl fmt::Display for IdentityVerdict {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            Self::Consistent => "IDENTITY OK",
+            Self::Mismatch => "MISMATCH",
+            Self::Unstamped => {
+                "UNSTAMPED — this build cannot state its own origin, so identity is \
+                 UNMEASURED rather than drifted and reinstalling from an equally \
+                 underived source reproduces it"
+            }
+        };
+        formatter.write_str(label)
+    }
+}
+
+/// Does `token` name a git commit, as opposed to the underived `nogit-<epoch>`
+/// fallback? Commit-shaped means hexadecimal and at least as wide as the shortest
+/// abbreviation [`parse_build_id`] accepts, which is the same 8 characters.
+#[must_use]
+pub fn token_names_a_commit(token: &str) -> bool {
+    let token = leg_token(token);
+    token.len() >= 8 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// The identity token one leg recovered.
+///
+/// [`verify_identity`] stores the already-parsed token, while a raw `--version` line
+/// carries it after `build_id=`. Both shapes normalise here so the classifier reads
+/// the same token whichever producer filled the field.
+fn leg_token(raw: &str) -> &str {
+    raw.rsplit_once("build_id=")
+        .map_or(raw, |(_, token)| token)
+        .trim()
+}
+
 impl IdentityCheck {
     #[must_use]
     pub fn identity_legs(&self) -> &'static str {
@@ -661,6 +736,24 @@ impl IdentityCheck {
             (Some(_), None) => "build_id",
             (None, Some(_)) => "version",
             (None, None) => "none",
+        }
+    }
+
+    /// Classify the comparison. A disagreement is only a MISMATCH when some leg
+    /// actually named a commit to disagree WITH.
+    #[must_use]
+    pub fn verdict(&self) -> IdentityVerdict {
+        if self.consistent {
+            return IdentityVerdict::Consistent;
+        }
+        let named_a_commit = [&self.build_id_in_binary, &self.version_output]
+            .into_iter()
+            .flatten()
+            .any(|token| token_names_a_commit(token));
+        if named_a_commit {
+            IdentityVerdict::Mismatch
+        } else {
+            IdentityVerdict::Unstamped
         }
     }
 }
@@ -729,11 +822,7 @@ impl fmt::Display for IdentityCheck {
             self.build_id_in_binary.as_deref().unwrap_or("ABSENT"),
             self.version_output.as_deref().unwrap_or("ABSENT"),
             self.identity_legs(),
-            if self.consistent {
-                "IDENTITY OK"
-            } else {
-                "MISMATCH"
-            }
+            self.verdict()
         )
     }
 }
@@ -928,7 +1017,13 @@ pub struct IdentityReport {
     /// from `rows.len()`: a denominator that includes rows it never examined is
     /// unverifiable.
     pub probed: usize,
+    /// Artifacts whose recovered legs DISAGREE with HEAD. Rebuild-and-reinstall is
+    /// the remedy.
     pub mismatches: usize,
+    /// Artifacts that named no commit on any leg, so nothing was compared. Counted
+    /// apart from `mismatches` because the remedy is to stamp the build, not to
+    /// reinstall the same underived bytes.
+    pub unstamped: usize,
     pub foreign: usize,
     pub unavailable: usize,
     pub not_installed: usize,
@@ -936,17 +1031,31 @@ pub struct IdentityReport {
 }
 
 impl IdentityReport {
-    /// Drift is a disagreeing artifact OR a roster entry naming an artifact this
-    /// workspace does not build. The second is the defect that hid `ompo`.
+    /// Drift is a disagreeing artifact, an artifact that cannot name its origin, OR a
+    /// roster entry naming an artifact this workspace does not build. The third is the
+    /// defect that hid `ompo`; the second is the state the flagship is actually in.
     #[must_use]
     pub fn drifted(&self) -> bool {
-        self.mismatches > 0 || self.roster_stale > 0
+        self.mismatches > 0 || self.unstamped > 0 || self.roster_stale > 0
     }
 
     /// The process exit code this report maps to. `main` returns exactly this.
+    ///
+    /// The ladder is `ompo`'s own — `0` success, `1` degraded, `2` usage or safety
+    /// refusal, `3` instrument error — so an UNSTAMPED-only report exits `3` rather
+    /// than `1`: degraded asserts the subject is wrong, and what could not answer
+    /// here is the artifact about its own origin. See
+    /// `crates/ompo-doctor/src/provenance.rs:76-91`. Every non-clean report is still
+    /// NON-ZERO; only the code the reader branches on changes.
     #[must_use]
     pub fn exit_code(&self) -> u8 {
-        u8::from(self.drifted())
+        if self.mismatches > 0 || self.roster_stale > 0 {
+            return 1;
+        }
+        if self.unstamped > 0 {
+            return 3;
+        }
+        0
     }
 
     #[must_use]
@@ -976,6 +1085,7 @@ pub fn sweep_installed_identity(
         rows: Vec::with_capacity(roster.len()),
         probed: 0,
         mismatches: 0,
+        unstamped: 0,
         foreign: 0,
         unavailable: 0,
         not_installed: 0,
@@ -1003,13 +1113,19 @@ pub fn sweep_installed_identity(
             continue;
         }
         let check = verify_identity(&binary, head_sha, &ownership);
-        match (&ownership, check.consistent) {
+        match (&ownership, check.verdict()) {
             (RepoOwnership::Foreign { .. }, _) => report.foreign += 1,
             (RepoOwnership::Unknown, _) => report.unavailable += 1,
-            (RepoOwnership::ThisRepo, true) => report.probed += 1,
-            (RepoOwnership::ThisRepo, false) => {
+            (RepoOwnership::ThisRepo, IdentityVerdict::Consistent) => report.probed += 1,
+            (RepoOwnership::ThisRepo, IdentityVerdict::Mismatch) => {
                 report.probed += 1;
                 report.mismatches += 1;
+            }
+            // PROBED, because legs were read; not a MISMATCH, because none of them
+            // named a commit for HEAD to disagree with.
+            (RepoOwnership::ThisRepo, IdentityVerdict::Unstamped) => {
+                report.probed += 1;
+                report.unstamped += 1;
             }
         }
         report.rows.push(RosterRow::Probed(check));

@@ -163,6 +163,17 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
             report.mismatches, report.probed
         );
     }
+    if report.unstamped > 0 {
+        // NOT folded into the DRIFT line above. The remedy differs: drift says
+        // "reinstall from HEAD", and an unstamped artifact would be reinstalled from a
+        // source tree that cannot derive a commit either, reproducing the same state
+        // while the line claims progress. Same vocabulary `ompo health` already uses
+        // for this input (`PROVENANCE_UNSTAMPED`).
+        eprintln!(
+            "INSTALLER IDENTITY UNSTAMPED: {}/{} owned binaries name no commit on any leg — identity is UNMEASURED, not drifted. Remedy: stamp the build (OMP_BUILD_ID, or a HEAD the build host can resolve), not another reinstall.",
+            report.unstamped, report.probed
+        );
+    }
     if report.foreign > 0 {
         println!(
             "INSTALLER: {} foreign artifact(s) named — excluded from drift denominator",
