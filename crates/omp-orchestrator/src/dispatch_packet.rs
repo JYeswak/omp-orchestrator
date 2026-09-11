@@ -387,7 +387,7 @@ pub fn render_grading_packet(
         None,
     )?;
     Ok(format!(
-        "GRADE ASSIGNMENT (not implementation)\nObserver: {observer_pane} (may be WORKING; observer is not the grader).\nGrader pane: {grader_pane}\nDo not implement. Re-run the bead's acceptance. Close with MUTATION-VERIFIED if it holds; otherwise GAP/UNKNOWN.\nYou are not the author if your pane is distinct from ACK pane-scoped keys.\n\n{work}"
+        "GRADE ASSIGNMENT (not implementation)\nObserver: {observer_pane} (may be WORKING; observer is not the grader).\nGrader pane: {grader_pane}\nDo not implement. Re-run the bead's acceptance. Close with MUTATION-VERIFIED if it holds; otherwise GAP/UNKNOWN.\nYou are not the author if your pane is distinct from ACK pane-scoped keys.\n\nCLOSE-REASON POLICY (emitted here because a packet that omits it owns the\nsilence it gets): if your close reason CITES A CARGO TEST FIGURE it MUST also\nname where that figure was produced -- `worker=<name>` for a remote run, or\n`local`. ack-spine refuses the row otherwise (CLOSE_REASON_WORKER_MISSING).\nMeasured 2026-09-11: 40 closes across six agents were left unlandable because\nno packet said this, so a whole session of grading could not reach the tree --\nand nobody but the closing agent can honestly supply the token afterwards.\n\n{work}"
     ))
 }
 
@@ -614,6 +614,21 @@ mod tests {
         assert!(grade.contains("Do not implement"));
         assert!(grade.contains("Pane: %3"));
         assert!(grade.contains("ACK lwdo.1 on $TMUX_PANE --"));
+        // ⛔ THE REGRESSION THIS EXISTS FOR, measured 2026-09-11 and it is the DISPATCHER's
+        // defect: 40 beads closed across six agents could not be staged, because every close
+        // reason cited a cargo figure and none named where it ran. ack-spine refuses those
+        // rows (CLOSE_REASON_WORKER_MISSING, close_reason.rs:218), so a whole session of
+        // grading sat closed in the DB and invisible to any clone. Nobody but the CLOSING
+        // agent can honestly supply the token afterwards -- a conductor filling it in is
+        // forging provenance -- so the only repair is to say it BEFORE the work happens.
+        //
+        // Same shape as the ACK instruction asserted above: the enforcing half is a tested
+        // crate, the instructing half was a sentence in a hand-written packet, and the
+        // sentence was never written. Both now come from the renderer.
+        assert!(
+            grade.contains("worker=<name>") && grade.contains("CLOSE_REASON_WORKER_MISSING"),
+            "a grading packet must state the close-reason worker policy: {grade}"
+        );
     }
 
     #[test]
