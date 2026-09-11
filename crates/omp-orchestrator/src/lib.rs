@@ -427,6 +427,22 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("named-test-filter-gate", "instrument limitation: source caller scan cannot see its gate-runner manifest check; owner=pane=%19; dies_when=reachability consumes gate metadata or the crate gains an in-tree source caller"),
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
+    ("cargo-lane-budget", "invoked by fast-dispatch admission via Command::new(FD_BUDGET else ~/.local/bin/cargo-lane-budget) --check (fast-dispatch/src/main.rs:855-858); env-resolved spawns from non-gate binaries are outside the probed surfaces; entered census 2026-09-11 by derived membership. Dies when a spawn probe exists or it gains runnable gate checks."),
+    ("contabo-reclaim", "bin-only; sole in-repo trigger is CI workflow_dispatch test step (.github/workflows/contabo-reclaim.yml:21, human-only); consumes external control-plane rch-reclaim-owner, unrunnable in gate-runner. Dies when a scheduled in-repo lane invokes it."),
+    ("dispatcher-deadman", "Rust bin selftest/differential-only; every live reference resolves to bin/dispatcher-deadman.sh, absent from this checkout (loop-tick/src/lib.rs:1002-1006). Dies when the shell oracle lands in-repo or the Rust bin gains a caller."),
+    ("fast-dispatch", "scheduled operation attested by lockfile plus cron-parent classifier (src/lib.rs:261-278) but no schedule surface visible in repo or live crontab (checked 2026-09-11); outbounds spawn four bins, inbound none. Dies when its schedule source is named in-repo."),
+    ("fleet-monitor", "scheduled OBSERVE lane (lock protocol, lane telemetry, standing-verdict ledger); no hook/workflow/launchd/stanza/caller visible; live schedule not observable from repo. Dies when its schedule surface is named."),
+    ("fleet-truth", "manual ground-truth oracle; driven only by own tests; controller-tick caller gone from repo. Dies when a supervisor invokes it."),
+    ("fuzz-build-gate", "standalone dev gate, manual CLI only; no trigger, no callers, no stanza; worker/job args have no CI-runnable default. Dies when gate-runner can invoke it with runnable checks."),
+    ("inbox-monitor", "operator watchdog (--watch ceiling 300s, self-pgrep probe); no wired schedule in repo or live crontab (checked 2026-09-11). Dies when a supervisor or schedule invokes it in-repo."),
+    ("loop-driver", "binary's only live trigger is out-of-repo control-plane cron (src/lib.rs:30-32); tests run via CI roster. Dies when the schedule lives in-repo or the census reads supervisor surfaces."),
+    ("loop-tick", "spawn path exists (loop-driver builds Command::new(config.loop_tick_bin)) but default bin/loop-tick.sh is absent and no in-repo setter exists: spawnable-but-never-spawned. Dies when LOOP_TICK_BIN points at the built bin AND a probe sees config-string spawns."),
+    ("oracle-pane-state-differential", "on-demand tribunal (shells to tmux/ntm itself); operator-fired on suspected drift, never scheduled, by design. Dies when a supervisor schedules it (not desired)."),
+    ("pane-oracle-diff", "on-demand tribunal like oracle-pane-state-differential; fired by hand, never scheduled, by design. Dies when a supervisor schedules it (not desired)."),
+    ("reap-finished-panes", "invoked every tick by resident supervisor via config string (resident.rs:847-848 default, :5380 invoke); source scan cannot see config-string indirection. Dies when a probe reads config spawns."),
+    ("s2-gate", "legitimate never-wire: S2 dropped by Joshua ruling; policy-dead by decision (OMP-SURFACE-MAP omp_surface none), not by missing code."),
+    ("verify-dispatch", "built reporter, zero invocations; binary exits 0 for VERIFIED and NO-EVIDENCE alike, so a gate stanza would be decorative. Dies when it gains a caller needing a real verdict."),
+    ("wired-but-inert-guard", "advisory scanner nothing invokes (06-gates clause 3 exclusion); gate-runner names it only as fixture exemption. Dies when a lane needs the guard."),
 ];
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdvisoryRatchetAnchor {
@@ -447,6 +463,13 @@ impl AdvisoryRatchetAnchor {
         self.ceiling == self.ceiling_at_recording
     }
 }
+
+/// ⛔ THE CEILING IS **29**, RECORDED 2026-09-11 BY ky6yx (supersedes the 24
+/// headline directly below, per this file's own rule). 16 rows written
+/// (11 -> 27) and the ceiling raised 24 -> 29 with UNTRACKED_ADVISORY_TOLERANCE
+/// 2. Raising is not amnesty here: the number EQUALS the live worktree count,
+/// the tolerance EQUALS the untracked contribution, both re-measured in this
+/// unit. History below is preserved as the record of how 24 stood.
 
 /// ⛔ THE CEILING IS **24**. READ THAT FIRST — this comment's previous headline said
 /// "LOWERED 2026-09-11: 24 -> 11" and was RETRACTED eighteen lines below by its own author,
@@ -507,15 +530,26 @@ impl AdvisoryRatchetAnchor {
 /// that makes a `cargo` figure inadmissible as evidence about a commit. Any ceiling written
 /// today is therefore right in exactly one of the two places.
 ///
-/// **So the number is left at 24 and the reason is now the true one.** The remaining work is
-/// 18 allowance rows each carrying a reason that is TRUE and specific — filler would be
-/// amnesty at scale and is refused — plus a decision about the two untracked crates. That is
-/// a worker unit, not a constant edit.
+/// **RESOLVED 2026-09-11 by ky6yx, at this text.** 16 rows written (allowance
+/// 11 -> 27); the two untracked crates carry NO rows (they would break CI's
+/// stale-row leg) and are excused from the naming leg by derived
+/// tracked-check, which expires the excuse the moment they land. Ceiling
+/// 24 -> 29 with UNTRACKED_ADVISORY_TOLERANCE 2: the band
+/// `live <= CEILING <= live+TOL` holds 29<=29<=31 here and 27<=29<=29 in CI.
+/// Equality (`==`) was unsatisfiable across the two trees; the band is the
+/// instrument that fits both. s2-gate is the one never-wire row.
 pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
-    ceiling: 24,
-    ceiling_at_recording: 24,
-    recorded_at_unix: 1_788_576_189,
+    ceiling: 29,
+    ceiling_at_recording: 29,
+    recorded_at_unix: 1_789_135_452,
 };
+
+/// Slack between the ceiling and a converged tree, and nothing else (ky6yx).
+/// EXACTLY 2: the untracked advisory pair kernel-only-gate +
+/// omp-host-tool-guard (present here, absent fresh clone). Dies when both are
+/// tracked (both trees read 29 -- lower this to 0) or removed (lower
+/// alongside the ceiling). Small and named by construction.
+pub const UNTRACKED_ADVISORY_TOLERANCE: usize = 2;
 
 /// Compatibility projection from the single ratchet anchor.
 pub const ADVISORY_CEILING: usize = ADVISORY_RATCHET.ceiling();
