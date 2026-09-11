@@ -7310,3 +7310,44 @@ improvement was unlandable in full, and landing HALF of it was strictly worse th
 fixed** — which only fired on two staged path prefixes, while a non-compiling crate fails
 everything. **When a change cannot land whole, the question is not "which half first" but
 "is the half coherent alone".**
+
+## ⛔⛔ FORTY CLOSES CANNOT REACH THE TREE, AND IT IS A **DISPATCH** DEFECT
+
+**Measured 2026-09-11. Staging `.beads/issues.jsonl` is refused with 40 ×
+`CLOSE_REASON_WORKER_MISSING`, so every bead closed today is invisible to a fresh clone and to
+CI while sitting closed in the DB.** The worktree-vs-tree hazard, at tracker granularity.
+
+**The rule is NARROWER than its name and it is CORRECT** — `close_reason.rs:218`:
+
+```rust
+if has_cargo_test_figure(trimmed) && !has_worker_authority(trimmed) { … }
+//  accepted authority: "local" | "worker=…" | "worker:…"        (:206)
+```
+
+**It fires only on a close reason that CITES A CARGO FIGURE without saying where it ran** —
+this repo's own *a figure must declare its lane* rule, enforced at the tracker. Not a nuisance.
+
+⛔ **AND THE OBVIOUS REMEDY IS DISQUALIFIED BY MEASUREMENT, WHICH IS THE PART WORTH KEEPING.**
+I held universal statements from two grader lanes — *"thirty-seven remote runs, contabo-1..4,
+never pinned, wrote to NO remote worker tree"* — so appending `worker=contabo` to THEIR closes
+would have been attribution rather than invention. Then I counted the closers:
+
+```
+TautologicalGuard 4 · WildStone 2 · bg-grade-reap 2 · omp-muse 1 · bg-jlb 1 · none 6 · …
+at least SIX distinct agents across the 40
+```
+
+**My basis covered two lanes and the population is six-plus.** Supplying a worker token for an
+agent that left no statement about where it ran is **exactly the forgery the policy exists to
+prevent** — and it would be indistinguishable, in the record, from a true one. **A remedy that
+is honest for a SUBSET and fabricated for the remainder is not a partial remedy; it is a
+fabrication wearing a subset's credibility.**
+
+ **THE DEFECT IS THE DISPATCHER'S.** Not one packet this session told a grader that a close
+reason citing `N passed` must carry `worker=<name>`. The same shape as the ACK instruction: the
+sender half is a tested crate, the receiver half is a sentence in a hand-written packet, and the
+sentence was never written. **Every grading packet MUST now state the close-reason policy**, and
+the durable fix is the same unlanded bead — emit it from the dispatch site (`93lo`).
+
+**Until then the 40 stay blocked and VISIBLE as blocked**, which is strictly better than a
+conductor quietly minting provenance to make a commit go through.
