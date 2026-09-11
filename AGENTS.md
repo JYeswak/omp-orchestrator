@@ -6487,6 +6487,42 @@ commands on an unfinished head PREDICT a rung that otherwise has to be discovere
 afterward**, and they make the pre-registered falsifier precise: **a zero on rung 3 at a head
 whose pair is coherent is a NEW defect, not the old one.**
 
+## ⛔⛔ COMMIT **TIMESTAMP** IS NOT **ANCESTRY** — the third `0 possible`, and its argument is a correlate too
+
+**The block above credits an earned `0 possible`. Its JUSTIFICATION was still a correlate, and
+a peer caught it within minutes:**
+```
+argued:   fix committed 02:07:02 · oldest in-flight head 02:12:47 -> none could lack it
+measured: tonight's six commits, pairwise SIBLINGS = 0. A fully LINEAR chain on main.
+          commit-date order == ancestor order, EXACTLY.
+```
+⛔ **A newer commit does not CONTAIN an older one — it contains it only if it DESCENDS from
+it.** **Two commits on divergent branches are each "newer" than the other's predecessor and
+contain neither.** ⛔ **And committer dates are AUTHOR-CONTROLLED VALUES, not observations —
+this fleet already lost an hour to a timestamp read across an undeclared timezone.**
+
+⭐⭐ **THE CONCLUSION HOLDS, CONTINGENTLY: every head is on a single linear `main`, which makes
+date order and ancestor order coincide.** ⛔ **The moment a run fires on a head that does not
+descend from the fix, a later timestamp proves nothing.** ⭐ **The SIX-HEAD SPOT-CHECK is what
+carries the claim; the timestamp reasoning does not — the same split as every other retraction
+tonight: the measured half stands, the inference bolted on does not.**
+
+⭐ **AND THE GENERALISATION: CONTAINMENT IS MONOTONE ALONG THE ANCESTOR ORDER, NEVER ALONG
+COMMIT AGE.** On a linear `main` they coincide, which is why one commit reaching 12/12 while a
+later one reaches 7/12 is **a partial order, not a contradiction.** ⛔ **A containment figure
+moves on TWO AXES — stamp it `(commit, minute)`, not just the tree.**
+
+## ⛔ A THIRD TIMEOUT, AND THE BUDGET DIAGNOSIS WAS ITSELF INCOMPLETE
+
+**`--limit 12` timed out too.** ⭐ **So the cost was never only the row count — it is the
+PER-ROW `git merge-base` SUBPROCESS LOOP.** ⛔ **A diagnosis that fixes one term of a cost and
+declares the problem understood is the same shape as a reconciliation that explains one term
+of a gap.**
+
+⭐ **And the `UNKNOWN` was closed by three peers' independent measurements rather than by its
+owner — exactly what the corollary predicts when a cheap unknown is left standing. It was left
+standing twice, and its owner says so.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
