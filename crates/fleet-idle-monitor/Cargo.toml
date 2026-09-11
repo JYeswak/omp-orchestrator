@@ -1,0 +1,26 @@
+[package]
+license.workspace = true
+name = "fleet-idle-monitor"
+version = "0.1.0"
+edition = "2021"
+description = "Reconciled idle-nudge binding: the tmux SESSION and the bead QUEUE are ONE value, so a nudge cannot carry another repository's work (omp-orchestrator-47g0)"
+
+# The thin CLI over the kernel. argv, stdin, and the exit lattice live here; every
+# decision lives in the lib, because a conductor whose policy is reachable only by
+# spawning it cannot be tested without a fleet.
+[[bin]]
+name = "fleet-idle-monitor"
+path = "src/main.rs"
+
+[lib]
+name = "fleet_idle_monitor"
+path = "src/lib.rs"
+
+[dependencies]
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }
