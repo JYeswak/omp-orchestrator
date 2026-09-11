@@ -192,3 +192,56 @@ pub fn parse_gates_aggregate(
     }
     Ok(values)
 }
+
+/// The observability block a reader polls: ONE object carrying its own schema
+/// id, the per-source ages, the readback verdict, and a content hash taken over
+/// everything EXCEPT itself.
+///
+/// Four S1 readbacks land in this single object rather than four scattered
+/// top-level keys -- `.observability.schema_id`, `.observability.sources`,
+/// `.observability.readback_ok`, `.observability.data_hash` -- so the four
+/// cannot drift apart: they are assembled once, hashed once, and the hash
+/// covers the other three. A reader that trusts `data_hash` is therefore
+/// trusting the schema id, the ages and the readback verdict together.
+///
+/// `L5_OBS_EMPTY_SOURCES_WHILE_LIVE` is what makes `sources` load-bearing: an
+/// EMPTY source set while the verdict claims live is the known-bad, and it is
+/// an ERROR here rather than an empty map reading as "fine". An empty scan set
+/// otherwise reports identically to a complete one that found nothing.
+pub fn observability(
+    sources: &[crate::liveness::SourceVerdict],
+    live: bool,
+    readback_ok: bool,
+) -> Result<serde_json::Value, String> {
+    if sources.is_empty() && live {
+        return Err(
+            "L5_OBS_EMPTY_SOURCES_WHILE_LIVE reason=zero_sources_claimed_live".to_owned()
+        );
+    }
+    // The per-source rows are the CANONICAL emitter's, not a third rendering of
+    // one. `liveness::sources_json` already owns "what a source row looks like"
+    // and carries `age_ms` plus the silent/gap fields; re-deriving those four
+    // keys here would put a third emitter in the tree beside it and
+    // ompo-doctor's local one, and two emitters that can disagree is a shape
+    // this repo has already paid for. This block therefore contributes only the
+    // AGGREGATE a reader cannot compute from one row.
+    let rows = crate::liveness::sources_json(sources);
+    // "min age or silent": the freshest age actually OBSERVED, or null when
+    // every source is silent. Only `Some(age)` participates, so a source with
+    // no reading can never contribute a 0 that would read as perfectly fresh.
+    let min_age_ms = sources.iter().filter_map(|source| source.age_ms).min();
+    // `readback_ok` is 0/1, not a bool: the acceptance reads it as a number
+    // (`expect 0` while inception is absent), and a `false` rendering as the
+    // string "false" would satisfy a truthiness test while failing that read.
+    seal(serde_json::json!({
+        "schema_id": SCHEMA_ID,
+        "sources": rows,
+        // Counted from the SLICE, never from the map: `sources_json` keys each
+        // row by canonical AND short name, so the map length is an alias count
+        // and would over-report the census.
+        "source_count": sources.len(),
+        "min_age_ms": min_age_ms,
+        "live": live,
+        "readback_ok": u8::from(readback_ok),
+    }))
+}

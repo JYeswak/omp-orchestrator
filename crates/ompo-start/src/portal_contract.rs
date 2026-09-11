@@ -149,7 +149,7 @@ pub fn validate_sources(sources: &Value) -> Result<(), SourceDefect> {
         let row = row.as_object().ok_or_else(|| SourceDefect::RowNotAnObject {
             source: name.clone(),
         })?;
-        let mut flag = |field: &'static str| -> Result<bool, SourceDefect> {
+        let flag = |field: &'static str| -> Result<bool, SourceDefect> {
             match row.get(field) {
                 None => Err(SourceDefect::MissingField {
                     source: name.clone(),
@@ -193,6 +193,197 @@ pub fn validate_sources(sources: &Value) -> Result<(), SourceDefect> {
             return Err(SourceDefect::UnavailableButFresh {
                 source: name.clone(),
             });
+        }
+    }
+    Ok(())
+}
+
+/// Ways `.data._alerts` can fail the L5 contract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AlertDefect {
+    /// The field is not a JSON array.
+    NotAnArray,
+    /// An entry is not an object.
+    NotAnObject { index: usize },
+    /// A required key is absent.
+    MissingField { index: usize, field: &'static str },
+    /// A required key is present but not a string.
+    NotAString { index: usize, field: &'static str },
+    /// A required key is a string but carries nothing. THE cqwo defect: an
+    /// alert with an empty `action` announces a problem and withholds the
+    /// remedy, which is the same defect class as a refusal with no remediation.
+    Empty { index: usize, field: &'static str },
+    /// `severity` is outside the emitted vocabulary.
+    UnknownSeverity { index: usize, severity: String },
+    /// A source is degraded and NO alert names it. Without this clause an
+    /// emitter hard-wired to `[]` satisfies every per-entry rule above by
+    /// having no entries to violate them.
+    SilentDegradation { source: String },
+}
+
+/// The severities the portal emitter actually produces: `error` when a source
+/// is unavailable, `warn` when it is available but not fresh.
+pub const ALERT_SEVERITIES: [&str; 2] = ["error", "warn"];
+
+/// The keys every alert must carry. `action` is last because it is the one the
+/// bead is about, and the walk reports the first missing key in this order.
+pub const ALERT_FIELDS: [&str; 3] = ["severity", "summary", "action"];
+
+impl std::fmt::Display for AlertDefect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotAnArray => write!(f, "L5_ALERTS_NOT_AN_ARRAY"),
+            Self::NotAnObject { index } => write!(f, "L5_ALERT_NOT_AN_OBJECT index={index}"),
+            Self::MissingField { index, field } => {
+                write!(f, "L5_ALERT_MISSING_FIELD index={index} field={field}")
+            }
+            Self::NotAString { index, field } => {
+                write!(f, "L5_ALERT_FIELD_NOT_A_STRING index={index} field={field}")
+            }
+            Self::Empty { index, field } => write!(
+                f,
+                "L5_ALERT_EMPTY_FIELD index={index} field={field} — an alert with an empty {field} is incomplete"
+            ),
+            Self::UnknownSeverity { index, severity } => {
+                write!(f, "L5_ALERT_UNKNOWN_SEVERITY index={index} severity={severity}")
+            }
+            Self::SilentDegradation { source } => write!(
+                f,
+                "L5_ALERT_SILENT_DEGRADATION source={source} — a degraded source with no alert is a silent failure"
+            ),
+        }
+    }
+}
+
+/// cqwo: every alert is a complete `severity` + `summary` + `action` triple,
+/// and every degraded source is actually alerted on.
+///
+/// The second half is what makes the first half load-bearing. Checked alone,
+/// the per-entry rules are vacuously satisfied by an emitter that never emits;
+/// checked against `sources`, an unalerted degradation is
+/// [`AlertDefect::SilentDegradation`]. `source_is_healthy` is the SAME
+/// predicate the emitter uses to decide whether to raise an alert, so the
+/// cross-check cannot drift from the emit condition.
+///
+/// A degraded source is matched by NAME APPEARING IN `summary`, which is the
+/// only linkage the emitted triple carries: the shipped summary is
+/// `"{name} source is not fresh and available"`.
+///
+/// # Errors
+/// Returns the first [`AlertDefect`]: shape, then per-entry fields in array
+/// order, then unalerted degradations in sorted source order.
+pub fn alerts_are_complete(alerts: &Value, sources: &Value) -> Result<(), AlertDefect> {
+    let entries = alerts.as_array().ok_or(AlertDefect::NotAnArray)?;
+    for (index, alert) in entries.iter().enumerate() {
+        let row = alert
+            .as_object()
+            .ok_or(AlertDefect::NotAnObject { index })?;
+        for field in ALERT_FIELDS {
+            match row.get(field) {
+                None => return Err(AlertDefect::MissingField { index, field }),
+                Some(Value::String(text)) if text.trim().is_empty() => {
+                    return Err(AlertDefect::Empty { index, field })
+                }
+                Some(Value::String(_)) => {}
+                Some(_) => return Err(AlertDefect::NotAString { index, field }),
+            }
+        }
+        let severity = row["severity"].as_str().unwrap_or_default();
+        if !ALERT_SEVERITIES.contains(&severity) {
+            return Err(AlertDefect::UnknownSeverity {
+                index,
+                severity: severity.to_owned(),
+            });
+        }
+    }
+    for source in degraded_sources(sources) {
+        let alerted = entries.iter().any(|alert| {
+            alert
+                .get("summary")
+                .and_then(Value::as_str)
+                .is_some_and(|summary| summary.contains(&source))
+        });
+        if !alerted {
+            return Err(AlertDefect::SilentDegradation { source });
+        }
+    }
+    Ok(())
+}
+
+/// Ways `.data.one_next_action` can fail the L5 contract.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NextActionDefect {
+    /// ZERO actions: the field is absent or null. A cursor with nowhere to go
+    /// must say HUMAN HALT explicitly, never fall silent.
+    Absent,
+    /// The carrier is a LIST. Reported with its length so the zero-, one- and
+    /// two-element cases are distinguishable in the message, but all three are
+    /// the same refusal: "a list is a protocol bug" is a statement about the
+    /// CARRIER, not only about the count. A predicate that merely counted
+    /// would accept the singleton array.
+    NotAnObject { len: usize },
+    /// The field is neither object, array, nor null — a scalar cursor.
+    NotAnObjectScalar,
+    /// A required key is absent from the action object.
+    MissingField { field: &'static str },
+    /// A required key is present but not a string.
+    NotAString { field: &'static str },
+    /// A required key is an empty string.
+    Empty { field: &'static str },
+}
+
+/// The keys an actionable cursor must carry.
+pub const NEXT_ACTION_FIELDS: [&str; 2] = ["command", "reason_code"];
+
+/// The reason_code that carries a HUMAN HALT instead of a machine command.
+/// A halt is still ONE object with a populated `command`; the command is the
+/// halt itself, so the shape never degrades into an absent cursor.
+pub const HUMAN_HALT: &str = "HUMAN_HALT";
+
+impl std::fmt::Display for NextActionDefect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Absent => write!(
+                f,
+                "L5_ONE_NEXT_ABSENT — zero actions; a cursor with nowhere to go must say HUMAN_HALT"
+            ),
+            Self::NotAnObject { len } => write!(
+                f,
+                "L5_ONE_NEXT_IS_A_LIST len={len} — one_next_action is an object, never an array"
+            ),
+            Self::NotAnObjectScalar => write!(f, "L5_ONE_NEXT_NOT_AN_OBJECT"),
+            Self::MissingField { field } => write!(f, "L5_ONE_NEXT_MISSING_FIELD field={field}"),
+            Self::NotAString { field } => write!(f, "L5_ONE_NEXT_FIELD_NOT_A_STRING field={field}"),
+            Self::Empty { field } => write!(f, "L5_ONE_NEXT_EMPTY_FIELD field={field}"),
+        }
+    }
+}
+
+/// qcev: EXACTLY ONE `{command, reason_code}`, carried as an object.
+///
+/// Cardinality is refused in all three directions — zero
+/// ([`NextActionDefect::Absent`]), two ([`NextActionDefect::NotAnObject`]) and
+/// the singleton array, which is the case a count-only predicate lets through.
+/// One object passes.
+///
+/// # Errors
+/// Returns the [`NextActionDefect`] describing the first failure: carrier
+/// shape first, then the required keys in [`NEXT_ACTION_FIELDS`] order.
+pub fn validate_one_next_action(action: &Value) -> Result<(), NextActionDefect> {
+    let row = match action {
+        Value::Null => return Err(NextActionDefect::Absent),
+        Value::Array(items) => return Err(NextActionDefect::NotAnObject { len: items.len() }),
+        Value::Object(row) => row,
+        _ => return Err(NextActionDefect::NotAnObjectScalar),
+    };
+    for field in NEXT_ACTION_FIELDS {
+        match row.get(field) {
+            None => return Err(NextActionDefect::MissingField { field }),
+            Some(Value::String(text)) if text.trim().is_empty() => {
+                return Err(NextActionDefect::Empty { field })
+            }
+            Some(Value::String(_)) => {}
+            Some(_) => return Err(NextActionDefect::NotAString { field }),
         }
     }
     Ok(())
