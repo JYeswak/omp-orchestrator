@@ -171,6 +171,156 @@ fn hd0009_status_moves_with_the_decision_and_is_not_a_constant() {
     assert_eq!(decided_obs["halt"]["engaged"], false, "{decided_obs}");
 }
 
+/// Write a decisions ledger into a fixture repo at the path the resolver reads.
+fn write_ledger(repo: &std::path::Path, lines: &[&str]) {
+    let docs = repo.join("docs");
+    std::fs::create_dir_all(&docs).expect("fixture docs dir");
+    std::fs::write(docs.join("decisions.jsonl"), format!("{}\n", lines.join("\n")))
+        .expect("fixture ledger");
+}
+
+const HD0009_ASKED: &str =
+    r#"{"id":"HD-0009","question":"which substrate?","decision":""}"#;
+const HD0009_ANSWERED: &str =
+    r#"{"answers":"HD-0009","decider":"Joshua","decision":"frankentui rust yes"}"#;
+
+/// 812ax, THE WHOLE BEAD (item 3): with an ANSWERED HD-0009 row present and NO
+/// flag, the status must NOT read Blocked. This leg fails against the previous
+/// resolver by construction -- it never read the ledger, so no ledger content
+/// could move the field.
+#[test]
+fn a_recorded_hd0009_decision_unblocks_the_step_without_any_flag() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    write_ledger(repo.path(), &[HD0009_ASKED, HD0009_ANSWERED]);
+    let report = ompo_start_json(repo.path(), "812ax-recorded");
+    let obs = observability(&report);
+    println!(
+        "READBACK status={} authority={} refusal={}",
+        obs["hd0009_status"], obs["hd0009_authority"], obs["hd0009_refusal"]
+    );
+    assert_ne!(
+        obs["hd0009_status"], "Blocked",
+        "a recorded decision must not read Blocked: {obs}"
+    );
+    assert_eq!(obs["hd0009_status"], "Ready", "{obs}");
+    assert_eq!(obs["hd0009_authority"], "ledger_decided", "{obs}");
+    assert_eq!(obs["hd0009_decided"], true, "{obs}");
+    assert!(obs["hd0009_refusal"].is_null(), "a reading is not a refusal: {obs}");
+    // The halt must follow the ledger too, not just the status string.
+    assert_eq!(obs["halt"]["engaged"], false, "{obs}");
+}
+
+/// ⛔ THE TRAP the resolver must not fall into: an ASKED-but-unanswered HD-0009
+/// row makes `grep -c HD-0009` read 2 while nothing has been decided. A
+/// presence predicate reports Ready here and is wrong.
+#[test]
+fn an_asked_but_unanswered_hd0009_row_does_not_unblock_the_step() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    write_ledger(repo.path(), &[HD0009_ASKED]);
+    let obs_owner = ompo_start_json(repo.path(), "812ax-asked");
+    let obs = observability(&obs_owner);
+    println!("READBACK asked-only authority={}", obs["hd0009_authority"]);
+    assert_eq!(obs["hd0009_status"], "Blocked", "{obs}");
+    assert_eq!(obs["hd0009_authority"], "ledger_undecided", "{obs}");
+    assert_eq!(obs["hd0009_decided"], false, "{obs}");
+    assert!(obs["hd0009_refusal"].is_null(), "{obs}");
+}
+
+/// ANTI-VACUITY (item 6): an ABSENT ledger and a RECORDED non-decision agree on
+/// the status string and MUST NOT share a representation. They differ in the
+/// authority pair, which is the whole point of emitting it.
+#[test]
+fn an_absent_ledger_does_not_share_a_representation_with_a_recorded_non_decision() {
+    let absent = tempfile::tempdir().expect("fixture repo");
+    let recorded = tempfile::tempdir().expect("fixture repo");
+    write_ledger(recorded.path(), &[HD0009_ASKED]);
+
+    let absent_report = ompo_start_json(absent.path(), "812ax-absent");
+    let recorded_report = ompo_start_json(recorded.path(), "812ax-recorded-none");
+    let absent_obs = observability(&absent_report);
+    let recorded_obs = observability(&recorded_report);
+    println!(
+        "READBACK absent={} recorded={}",
+        absent_obs["hd0009_authority"], recorded_obs["hd0009_authority"]
+    );
+
+    // Both read Blocked, which is exactly why the status alone is insufficient.
+    assert_eq!(absent_obs["hd0009_status"], "Blocked", "{absent_obs}");
+    assert_eq!(recorded_obs["hd0009_status"], "Blocked", "{recorded_obs}");
+    assert_ne!(
+        absent_obs["hd0009_authority"], recorded_obs["hd0009_authority"],
+        "a missing ledger and a recorded non-decision must be distinguishable"
+    );
+    assert_eq!(absent_obs["hd0009_authority"], "ledger_absent", "{absent_obs}");
+    assert!(
+        absent_obs["hd0009_refusal"]
+            .as_str()
+            .is_some_and(|d| d.contains("HD0009_LEDGER_ABSENT")),
+        "an absent ledger names its refusal: {absent_obs}"
+    );
+}
+
+/// PRECEDENCE (item 1) at the binary: the flag still decides, and it reports
+/// ITSELF rather than borrowing the ledger's authority. Without this, an
+/// operator assertion would be indistinguishable from a recorded decision --
+/// the original defect, in the opposite direction.
+#[test]
+fn the_flag_reports_itself_as_an_override_and_not_as_ledger_provenance() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    write_ledger(repo.path(), &[HD0009_ASKED]);
+    let report = ompo_start_json_with(repo.path(), "812ax-override", &["--hd-0010-decided"]);
+    let obs = observability(&report);
+    println!("READBACK override authority={}", obs["hd0009_authority"]);
+    assert_eq!(obs["hd0009_status"], "Ready", "{obs}");
+    assert_eq!(obs["hd0009_decided"], true, "{obs}");
+    assert_eq!(obs["hd0009_authority"], "flag_override", "{obs}");
+    assert_ne!(
+        obs["hd0009_authority"], "ledger_decided",
+        "an operator assertion must never be reported as provenance: {obs}"
+    );
+}
+
+/// THE PIN: `hd0009_refusal` is non-null EXACTLY when the authority is one of
+/// the refusal tokens, observed through the binary across a matrix carrying
+/// BOTH polarities. Two encodings of one fact drift unless something holds them
+/// together; a single-polarity matrix would satisfy this vacuously, so the
+/// polarity anchors below are part of the assertion.
+#[test]
+fn hd0009_refusal_is_non_null_exactly_for_the_refusal_authorities() {
+    let absent = tempfile::tempdir().expect("fixture repo");
+    let asked = tempfile::tempdir().expect("fixture repo");
+    write_ledger(asked.path(), &[HD0009_ASKED]);
+    let answered = tempfile::tempdir().expect("fixture repo");
+    write_ledger(answered.path(), &[HD0009_ASKED, HD0009_ANSWERED]);
+
+    let reports = [
+        ompo_start_json(absent.path(), "812ax-pin-absent"),
+        ompo_start_json(asked.path(), "812ax-pin-asked"),
+        ompo_start_json(answered.path(), "812ax-pin-answered"),
+        ompo_start_json_with(asked.path(), "812ax-pin-override", &["--hd-0010-decided"]),
+    ];
+    let refusal_tokens = ["ledger_absent", "ledger_unreadable"];
+    let mut saw_refusal = false;
+    let mut saw_reading = false;
+    for report in &reports {
+        let obs = observability(report);
+        let authority = obs["hd0009_authority"].as_str().expect("authority is a string");
+        let is_refusal = refusal_tokens.contains(&authority);
+        if is_refusal {
+            saw_refusal = true;
+        } else {
+            saw_reading = true;
+        }
+        assert_eq!(
+            !obs["hd0009_refusal"].is_null(),
+            is_refusal,
+            "refusal detail and authority must not disagree: {obs}"
+        );
+    }
+    assert!(saw_refusal, "matrix must contain a refusal, else the pin is vacuous");
+    assert!(saw_reading, "matrix must contain a reading, else the pin is vacuous");
+}
+
 /// Known-bad legs for the parity gate itself (yto0): the typed contract is
 /// asserted directly, without running the binary. Misorder, absence, and
 /// vacuity each refuse with their own variant.

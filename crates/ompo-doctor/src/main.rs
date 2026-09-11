@@ -121,7 +121,10 @@ fn liveness_json(observation: &Observation) -> Value {
 /// computed from the same post-predicate steps the report renders. No second
 /// schema: plain JSON values assembled beside the existing report fields. The
 /// halt is engaged exactly when the L3-HD0009 row sits Blocked.
-fn observability_json(steps: &[ompo_start::Step]) -> Value {
+fn observability_json(
+    steps: &[ompo_start::Step],
+    hd0009_resolution: &ompo_start::hd0009::Resolution,
+) -> Value {
     let tui_ids: Vec<_> = ompo_start::tui_ordered_ids(steps);
     let json_ids: Vec<_> = ompo_start::json_ordered_ids(steps);
     // The boolean is the gate verdict, not a reimplementation: the typed
@@ -148,6 +151,20 @@ fn observability_json(steps: &[ompo_start::Step]) -> Value {
         // field cannot disagree without `next_step` itself changing.
         "next_step_id": ompo_start::next_step(steps).map(|step| step.id),
         "hd0009_status": hd0009_status,
+        // 812ax: the field above states WHAT the step reads; these state WHO
+        // said so. A value with two possible sources and no reported
+        // precedence was the defect -- the flag without a record reported
+        // Ready, and a record without the flag reported Blocked forever.
+        //
+        // The ledger is authoritative and the flag is a DECLARED override, so
+        // an operator assertion can never be read as provenance. `_refusal` is
+        // non-null EXACTLY when the authority is a refusal, which keeps an
+        // ABSENT ledger from sharing a representation with a recorded
+        // non-decision: the two differ in this pair of fields, not in the
+        // contents of one string.
+        "hd0009_authority": hd0009_resolution.authority.token(),
+        "hd0009_decided": hd0009_resolution.decided,
+        "hd0009_refusal": hd0009_resolution.authority.detail(),
         "tui_ids": tui_ids,
         "json_ids": json_ids,
         "halt": halt,
@@ -318,7 +335,16 @@ fn run_start(rest: &[String]) -> ExitCode {
     let observation = liveness::observe(&session);
     let live = observation.verdict.is_live();
     let mut steps = ompo_start::fixture_steps();
-    ompo_start::apply_predicates(&mut steps, live, persona_a, hd0010_decided);
+    // 812ax: the LEDGER decides HD-0009; `--hd-0010-decided` is a declared
+    // override layered on top and reports itself as one. Before this, the flag
+    // was the only input, so a recorded decision could not unblock the step and
+    // an unrecorded one could.
+    //
+    // NOT IN SCOPE, deliberately: the same flag also gates spawn below. That
+    // conflation is tracked separately and is not touched here -- only the
+    // HD-0009 predicate is re-sourced.
+    let hd0009_resolution = ompo_start::hd0009::resolve(&repo, hd0010_decided);
+    ompo_start::apply_predicates(&mut steps, live, persona_a, hd0009_resolution.decided);
 
     let spawn = if !spawn_requested {
         json!({"status": "NOT_REQUESTED"})
@@ -358,7 +384,7 @@ fn run_start(rest: &[String]) -> ExitCode {
         "steps": steps.iter().map(step_json).collect::<Vec<_>>(),
         "liveness": liveness_json(&observation),
         "spawn": spawn,
-        "observability": observability_json(&steps),
+        "observability": observability_json(&steps, &hd0009_resolution),
     });
     if json_output {
         match serde_json::to_string(&umbrella::envelope("start", "OK", data)) {

@@ -17,6 +17,7 @@ pub mod liveness;
 pub mod mail;
 pub mod portal;
 pub mod portal_contract;
+pub mod hd0009;
 pub use foundation::{append_s1_foundation, s1_row, s1_rows_citing_inception, INCEPTION_REF, SOURCE};
 pub use pack::{retain_pack_receipt, PackError, PackReceipt, SendAttempt, TICK_ZERO_TARGET};
 pub use spawn::{

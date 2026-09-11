@@ -16,6 +16,11 @@ path = "src/lib.rs"
 [dependencies]
 lifecycle-event = { path = "../lifecycle-event", default-features = false }
 lifecycle-monitor = { path = "../lifecycle-monitor" }
+# The HD ledger is the AUTHORITY for hd0009_status (812ax). Reusing its reader
+# rather than re-parsing decisions.jsonl here: a second parser would be a
+# second authority on the row shape, and the request-vs-answer distinction is
+# exactly what a hand-rolled presence check gets wrong.
+decision-ledger = { path = "../decision-ledger" }
 subprocess-contract = { path = "../subprocess-contract" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
