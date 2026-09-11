@@ -569,6 +569,24 @@ missing and never `CONVERGING`. `decision` is `CONVERGING` exactly when closure 
 `NON_CONVERGING` when growth is greater than or equal to closure; no absolute count is a target.
 Wired executor: `.github/workflows/gate.yml`, step "S1 coverage provenance".
 
+### When the CHECKOUT cannot answer — exit 4, and it is not a coverage defect
+
+A revision the checkout cannot resolve refuses as `S1_COVERAGE_CHECKOUT_UNUSABLE revision=<rev>
+cause=CHECKOUT_CANNOT_RESOLVE_REVISION`, **exit 4**, and the denominator is `UNKNOWN` — never zero
+and never `CONVERGING`. Exit 4 means the checkout is unusable for that revision; exit 2 and 3 mean
+this crate refused. A grader must not score them the same.
+
+This is live under `rch exec`: the remote snapshot carries no resolvable history, so any two-tree
+command (`--compare`, `git ls-tree <old>`) is unexecutable there **by construction** and the honest
+verdict is UNRUN, not FAIL. Run those in a full-history checkout (CI with `fetch-depth: 0`).
+
+A worktree fallback stands in only for `HEAD`, the one revision a dirty worktree can honestly
+approximate. For any other revision the fallback is refused rather than silently substituted —
+substituting it is the exact defect this document exists to retire.
+
+`git show HEAD:<path>` reads the TREE; bare `git grep` reads the WORKTREE. Label which one any
+number came from.
+
 ## NO-CLAIM
 
 COVERED means a bead title or acceptance carries the id as a whole token. It does not mean the crate is wired. MISSING=0 would still not mean S1 is done.

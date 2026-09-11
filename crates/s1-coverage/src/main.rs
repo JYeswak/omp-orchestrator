@@ -4,8 +4,9 @@ use asupersync::process::Command;
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use s1_coverage::{
-    compare_reports, compute_with_manifest, parse_beads_jsonl, render_markdown, BeadRecord,
-    CoverageComparison, CoverageInput, CoverageReport, InputManifest, SourceText, CONTRACT_PATHS,
+    checkout_cannot_resolve, checkout_unusable, compare_reports, compute_with_manifest,
+    parse_beads_jsonl, refusal_exit_code, render_markdown, BeadRecord, CoverageComparison,
+    CoverageInput, CoverageReport, InputManifest, SourceText, CONTRACT_PATHS,
 };
 use std::env;
 use std::fs;
@@ -179,20 +180,21 @@ fn manifest_args(kind: &str, revision: &str) -> Vec<String> {
     args
 }
 
+/// Kept as a thin alias so the predicate has ONE definition, in the library, where it is tested.
 fn git_unavailable(error: &str) -> bool {
-    let lower = error.to_ascii_lowercase();
-    ["not a git repository", "invalid object name", "not a valid object name"]
-        .into_iter()
-        .any(|needle| lower.contains(needle))
+    checkout_cannot_resolve(error)
 }
 
 async fn build_manifest(cx: &Cx, repo: &Path, revision: &str) -> Result<InputManifest, String> {
     let tree = match git_capture(cx, repo, &manifest_args("tree", revision)).await {
         Ok(output) => lines(output),
+        // HEAD is the ONLY revision a worktree fallback can honestly stand in for.
         Err(error) if revision == "HEAD" && git_unavailable(&error) => {
             let paths = PROVENANCE_PATHS.iter().map(ToString::to_string).collect::<Vec<_>>();
             return Ok(InputManifest::new(revision, paths.clone(), paths, Vec::new(), Vec::new()));
         }
+        // Any other revision: the CHECKOUT cannot resolve it. Say so instead of naming this crate.
+        Err(error) if git_unavailable(&error) => return Err(checkout_unusable(revision, &error)),
         Err(error) => return Err(error),
     };
     let index = lines(git_capture(cx, repo, &manifest_args("index", revision)).await?);
@@ -209,6 +211,7 @@ async fn read_tree_file(cx: &Cx, repo: &Path, revision: &str, path: &str) -> Res
             read_worktree_file(repo, path)
                 .map_err(|fallback| format!("S1_COVERAGE_TREE_READ path={path} error={fallback}"))
         }
+        Err(error) if git_unavailable(&error) => Err(checkout_unusable(revision, &error)),
         Err(error) => Err(format!("S1_COVERAGE_TREE_READ path={path} error={error}")),
     }
 }
@@ -365,8 +368,10 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
+            // 4 = the checkout cannot resolve the revision; 2 = this crate refused. Never one code
+            // for both: a grader has to tell "unexecutable here" from "coverage defect".
             eprintln!("S1_COVERAGE_ERROR {error}");
-            ExitCode::from(2)
+            ExitCode::from(refusal_exit_code(&error))
         }
     }
 }

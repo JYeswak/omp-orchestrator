@@ -1,6 +1,7 @@
 use s1_coverage::{
-    compare_reports, compute, compute_with_manifest, parse_beads_jsonl, render_markdown,
-    validate_doc_only_reason, validate_manifest, BeadRecord, ConvergenceDecision, CoverageError, CoverageInput, CoverageState,
+    checkout_cannot_resolve, checkout_unusable, compare_reports, compute, compute_with_manifest,
+    parse_beads_jsonl, refusal_exit_code, render_markdown, validate_doc_only_reason,
+    validate_manifest, BeadRecord, ConvergenceDecision, CoverageError, CoverageInput, CoverageState,
     InputManifest, InputState, ManifestVerdict, SourceText,
 };
 
@@ -295,4 +296,46 @@ fn malformed_jsonl_is_a_distinct_named_error() {
     let error = parse_beads_jsonl("{not-json").expect_err("malformed JSONL must refuse");
     assert_eq!(error, CoverageError::MalformedBead { line: 1 });
     assert_eq!(error.to_string(), "BEAD_JSON_INVALID: line=1");
+}
+
+#[test]
+fn unresolvable_revision_is_attributed_to_the_checkout_not_the_crate() {
+    // git's own wording for a rev the checkout cannot resolve. Observed remotely 2026-09-10.
+    let detail = "fatal: invalid object name 'HEAD~1'.";
+    assert!(checkout_cannot_resolve(detail));
+    let message = checkout_unusable("HEAD~1", detail);
+    assert_eq!(refusal_exit_code(&message), 4);
+    assert_eq!(
+        message,
+        "S1_COVERAGE_CHECKOUT_UNUSABLE revision=HEAD~1 cause=CHECKOUT_CANNOT_RESOLVE_REVISION \
+detail=fatal: invalid object name 'HEAD~1'. note=the checkout under test cannot resolve this \
+revision; the denominator is UNKNOWN, not zero"
+    );
+    // The harm being fixed: the refusal must not read as a defect in this crate.
+    assert!(!message.contains("S1_COVERAGE_TREE_READ"));
+    assert!(message.contains("CHECKOUT"));
+}
+
+#[test]
+fn crate_refusals_keep_exit_two_so_the_codes_stay_distinguishable() {
+    assert_eq!(refusal_exit_code("S1_COVERAGE_TREE_READ path=x error=y"), 2);
+    assert_eq!(
+        refusal_exit_code(&CoverageError::ScanEmpty.to_string()),
+        2,
+        "an empty scan set is this crate's refusal, not the checkout's"
+    );
+}
+
+#[test]
+fn on_disk_hint_is_not_read_as_a_resolvability_oracle() {
+    // This message varies with ON-DISK PRESENCE and says nothing about whether the rev resolved.
+    // Three readers drew three different conclusions from it on 2026-09-10; keying on it is
+    // forbidden. Negative control: an unrelated git failure must also not match.
+    assert!(!checkout_cannot_resolve(
+        "fatal: path 'docs/contracts/s1_l0_install.md' exists on disk, but not in 'c6d8cfe'"
+    ));
+    assert!(!checkout_cannot_resolve("fatal: does not exist in 'c6d8cfe'"));
+    assert!(!checkout_cannot_resolve("error: permission denied"));
+    // Positive control drawn from the same class, so the zeros above are interpretable.
+    assert!(checkout_cannot_resolve("fatal: not a git repository"));
 }

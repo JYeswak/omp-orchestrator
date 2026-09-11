@@ -348,6 +348,47 @@ pub fn manifest_for_input(revision: impl Into<String>, input: &CoverageInput) ->
     InputManifest::new(revision, tree.clone(), tree, Vec::new(), Vec::new())
 }
 
+/// True when git refused because the CHECKOUT cannot resolve the revision, as opposed to any
+/// failure of this crate. Keyed on git's own wording for an unresolvable rev or a missing repo.
+///
+/// Deliberately does NOT key on `exists on disk, but not in`: that message varies with on-disk
+/// presence and carries no information about resolvability, so three readers read three different
+/// conclusions out of it on 2026-09-10. It is not a resolvability oracle and is never used as one.
+#[must_use]
+pub fn checkout_cannot_resolve(git_error: &str) -> bool {
+    let lower = git_error.to_ascii_lowercase();
+    ["not a git repository", "invalid object name", "not a valid object name"]
+        .into_iter()
+        .any(|needle| lower.contains(needle))
+}
+
+/// The refusal emitted when the checkout cannot resolve a revision this crate was asked to read.
+///
+/// Attribution is the whole point: the previous message named this crate's own tree-read error and
+/// a contract path, never the checkout, so a remote runner that carries no resolvable history read
+/// as a coverage defect. The denominator is UNKNOWN here, never zero and never CONVERGING.
+#[must_use]
+pub fn checkout_unusable(revision: &str, detail: &str) -> String {
+    format!(
+        "S1_COVERAGE_CHECKOUT_UNUSABLE revision={revision} \
+cause=CHECKOUT_CANNOT_RESOLVE_REVISION detail={detail} \
+note=the checkout under test cannot resolve this revision; the denominator is UNKNOWN, not zero"
+    )
+}
+
+/// Exit code for a rendered refusal: 4 when the CHECKOUT is at fault, 2 when this crate is.
+///
+/// A caller grading an acceptance leg has to tell those apart without parsing prose, and the
+/// message alone was not enough: code and message are both pinned so neither can drift alone.
+#[must_use]
+pub fn refusal_exit_code(message: &str) -> u8 {
+    if message.starts_with("S1_COVERAGE_CHECKOUT_UNUSABLE") {
+        4
+    } else {
+        2
+    }
+}
+
 
 #[must_use]
 pub fn validate_doc_only_reason(
