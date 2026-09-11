@@ -1,0 +1,62 @@
+# Builder for the macOS pre-commit hook artifact (omp-orchestrator-129ny).
+#
+# WHY A SEPARATE FILE, NOT A SECOND JOB IN gate.yml: gate.yml carries a
+# machine-checked ONE-JOB invariant (gate-runner/tests/workflow_shape.rs:
+# the_workflow_declares_exactly_one_job) because a duplicate-key collapse
+# starts zero jobs and reports nothing. This file has one job and is validated
+# by the same text-shape technique; unifying the two files would reintroduce
+# the collapse class the invariant exists to prevent.
+#
+# WHY THIS EXISTS BESIDE gate.yml'S INLINE HOOK BUILD: that step
+# ("Install the pre-commit hook the gates document") builds the hook on UBUNTU
+# so CI's own hook_freshness leg has a hook file to compare -- it is never
+# executed there, so its platform does not matter. THIS job builds NATIVELY on
+# macOS for DEVELOPER machines: download the artifact, install to
+# .git/hooks/pre-commit, and hook_freshness passes with NO local build and NO
+# cross-compilation (no zigcc shim, no --target fleet collapse, no RCH-E327).
+# Different consumers, not duplication: do not "deduplicate" them.
+#
+# INSTALL (on a Mac, after this run is green):
+#   gh run download <run-id> -n pre-commit-gate-macos-arm64
+#   cp pre-commit-gate .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+#
+# COST: public repo, so macOS runners are free; macOS minutes bill at 10x the
+# Linux rate. Pushes are paths-filtered to the hook's owning crate so unrelated
+# commits do not spend them; anything else uses workflow_dispatch.
+name: build-hook-macos
+
+on:
+  push:
+    paths:
+      - "crates/no-shell-gate/**"
+  workflow_dispatch:
+
+concurrency:
+  group: build-hook-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-hook:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup show active-toolchain
+          cargo --version
+          rustc --version
+      - name: Build the hook natively (no target flags, no cross toolchain)
+        run: cargo build --release --bin pre-commit-gate
+      - name: Prove the artifact is native arm64 (fails loudly on arch drift)
+        run: |
+          file target/release/pre-commit-gate
+          file target/release/pre-commit-gate | grep -q "Mach-O 64-bit executable arm64"
+      - name: Record the artifact digest
+        run: shasum -a 256 target/release/pre-commit-gate | tee pre-commit-gate.sha256
+      - name: Upload the hook artifact (runs only on success -- a RED job ships nothing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pre-commit-gate-macos-arm64
+          path: |
+            target/release/pre-commit-gate
+            pre-commit-gate.sha256
