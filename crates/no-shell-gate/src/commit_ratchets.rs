@@ -208,15 +208,19 @@ fn hook_freshness(repo_root: &Path, staged: &[String], report: &mut CommitRatche
             hook_digest::manifest_rows(&current).len()
         )),
         // The committer is CHANGING the gate, so the rebuild is its own cost and is satisfiable
-        // by the party paying it. The refusal NAMES the files: a bare "content mismatch" is a red
-        // nobody can diagnose, and an undiagnosable expensive red is the shape that gets routed
-        // around.
+        // by the party paying it. The refusal NAMES THE FILES AND THE CHEAP REMEDY: a bare
+        // "content mismatch" is a red nobody can diagnose, and an undiagnosable red whose implied
+        // remedy is a ten-minute cross-build is the shape that gets routed around. CI already
+        // builds this binary natively on arm64, proves its arch, and uploads it with a sha256
+        // sidecar (`build-hook-macos`), so the remedy is a 5-second DOWNLOAD rather than a build.
         FreshnessVerdict::Refuse => report.refusals.push(format!(
             "hook_freshness: REFUSED reason=HOOK_CONTENT_MISMATCH hook={} {} \
-             detail=this commit stages a source the hook is built from; rebuild and install it \
-             so the stamp describes the tree you are landing",
+             detail=this commit stages a source the hook is built from; install the hook CI built \
+             for this commit -- `gh run download <run> -n pre-commit-gate-macos-arm64` then verify \
+             with the .sha256 sidecar and copy over {} -- or restore the sources it was built from",
             hook.display(),
-            diff.summary()
+            diff.summary(),
+            hook.display()
         )),
         // SCOPED 2026-09-11 (`omp-orchestrator-zzg2x`). Refusing HERE was the fleet-blocking
         // defect, and it was UNSATISFIABLE BY THE COMMITTER: a peer's uncommitted edit to any of
