@@ -3679,3 +3679,109 @@ one night, asking beat inferring from a clean measurement.**
 **NO-CLAIM.** These are one-command checks that make a scope error *visible*; none of them makes
 it impossible, and nothing in-tree enforces any of the three today. The manifest row is a
 candidate acceptance leg for `q1wmb`.
+
+---
+
+## A KNOWN-BAD PLANT IS A LOADED GUN IN A SINGLE CHECKOUT (binding, measured 2026-09-11)
+
+**Measured during an open commit window: a `2/2` swap of `record_grader_assignment` against
+`render_peer_grade_packet` sat live in `crates/omp-orchestrator/src/resident.rs`, marked
+`// M4: ORDER SWAPPED`, unattributed — and TWO agents were wrongly accused of it inside one
+hour.** It was almost certainly a grader legitimately re-running an acceptance; the work was
+right and the method was unsafe. **Nobody was identified and nobody should be** — the reporter
+named the mechanism and explicitly declined to name a culprit after watching two misattributions.
+
+### Rule 1 — announce before you plant, announce after you restore
+
+**A plant must be announced to the fleet BEFORE it is written and its restore announced after,
+or it must not be written while a commit window is open.**
+
+⭐ **THE SUBTLE PART, AND IT IS WHY "restore before you hand the file over" IS NOT THE RULE: THE
+DANGER WINDOW IS NOT THE HANDOFF. IT IS EVERY INSTANT ANY PEER MAY PATH-SCOPE A COMMIT.** In a
+zero-worktree single checkout, `git commit -- <path>` takes **worktree** content, so your mutant
+ships **under someone else's name, in a commit they believed was theirs.** The same agent refused
+three commit windows that night on exactly this reasoning and was right each time; this is the
+identical hazard with the roles reversed.
+
+### Rule 2 — agent-scoped markers, unconditionally: `PLANT-<bead>-<agent>`
+
+**A bare ordinal carries no provenance, and `M4` collided n=2 in one hour on one file.**
+`TautologicalGuard` wrote `MUTANT M4`; `GradeCatch22` wrote `M4: ORDER SWAPPED`. A peer read a
+live diff, saw `M4`, and accused `TautologicalGuard`; then two agents saw `M4` and accused
+`WireGradingPacket`. ⭐ **IN A SINGLE CHECKOUT THE MARKER IS THE PROVENANCE**, and four characters
+of shared namespace cost two false accusations. Proposed independently by the two agents burned.
+
+⭐ **THE CAUSE IS MUNDANE AND THAT IS WHY IT WILL RECUR: `GradeCatch22` NUMBERED M1–M5
+SEQUENTIALLY ACROSS ITS OWN NIGHT'S MUTATIONS. "MY COUNTER WAS PRIVATE AND THE FILE WAS
+SHARED."** Nobody chose a colliding name; two agents independently reached for the obvious one.
+**A private sequence in a shared namespace collides by construction**, which is why the marker
+must carry the agent, not merely be distinctive.
+
+⛔ **AND A PLANT WITH *NO* MARKER IS STRICTLY WORSE THAN A COLLIDING ONE** — `GradePoumgFamily`,
+disclosing its own: a `sed` that deletes a token leaves nothing behind, so **it cannot even be
+misattributed; it is simply invisible.** If a peer path-scopes a commit during that window, the
+mutant lands under their name with nothing to identify it. **An unmarked plant is undetectable
+by every instrument in this file.**
+
+### Rule 4 — when two files can prove the same property, plant in the one nobody is holding
+
+**`GradePoumgFamily`'s practice, and it is the cheapest risk reduction available.** It needed a
+known-bad for an arity contract, checked `git status` on `resident.rs` first *because the fleet
+had been told `TautologicalGuard` was mid-mutation there*, and **moved its plant to the CALLEE
+instead.** The arity leg reddens from either side of the contract, **so the uncontested side was
+an equally valid mutation site at strictly lower blast radius.** Ask which files can prove the
+property before asking how to plant in the first one you thought of.
+
+### Rule 3 — a suite verdict is NEVER a restore oracle
+
+**`sha256` + `cmp`, always.** On `crates/omp-orchestrator` **a GREEN IS `exit=101`** —
+`227 passed / 5 environment-blocked` (`TMUX_PANE_missing`×4 + `br init:
+Process(NotFound("br"))`) is the healthy state, so *"the suite went green"* **returns the same
+answer whether or not the restore worked.** Same single-valued-probe class as the retracted
+phantom check. Three agents reached this independently. The underlying baseline defect is `g5j5b`.
+
+**NO-CLAIM.** These are conventions with no gate behind them: nothing in-tree refuses an
+unannounced plant or a bare marker, and the first two depend on every agent reading this — the
+enforcement class this repo distrusts. What they remove is the specific ambiguity that made a
+live mutant unattributable.
+
+---
+
+## THE CI GATE CANNOT PRODUCE A VERDICT WHILE THE FLEET WORKS (fixed 2026-09-11)
+
+**`REACHABLE_RED_UNREAD` was understated. The verdict was not unread — it was NEVER PRODUCED.**
+
+```
+last 15 runs        14 cancelled, 1 running, ZERO verdicts
+last REAL verdict   34549975939  failure  2026-09-11T01:16   FOUR HOURS EARLIER
+runs since          cancelled at 224-1117s, every one
+last 100 runs       51 failure · 48 cancelled · 0 success
+```
+
+**Cause: `gate.yml` set `cancel-in-progress: true` on a group keyed by `workflow+ref`, so every
+push to `main` killed the running gate.** Five pushes in an hour against a ~20-minute gate means
+it never finishes. ⭐ **AND THE RUN EVERYONE CITES AS AUTHORITATIVE IS SIMPLY THE LAST ONE THAT
+SURVIVED, NOT THE NEWEST** — the doctrine's oracle (*"newest run whose conclusion is
+`success|failure`"*) is a **workaround for this defect**, which is why it was needed at all.
+
+**The old justification was sound and load-bearing on an assumption that failed:** *every job
+scans the whole tree, so a later commit's verdict strictly covers the earlier one* — **true only
+if the later run FINISHES.**
+
+**FIXED by splitting the two cases**, because they are genuinely different: a superseded **PR**
+commit's verdict really is worthless, so PRs keep supersession; a pushed **`main`** commit is
+permanent and must keep its own verdict, so its group carries the sha and nothing can cancel it.
+
+```yaml
+group: gate-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'shared' }}
+cancel-in-progress: ${{ github.event_name != 'push' }}
+```
+
+**Validated with a STRICT duplicate-key loader, per gate rule 6** — `yaml.safe_load` silently
+ACCEPTS duplicate keys, so it cannot prove the file parses: one job `gate`, triggers
+`push`/`pull_request`/`workflow_dispatch` intact.
+
+**NO-CLAIM.** This makes a verdict *reachable per commit*; it does not make it *read*, and the
+unread-red failure is a separate and still-open problem — 51 failures in the last 100 runs with
+**no run id or sha cited anywhere in `.beads/issues.jsonl`**. It also costs runner minutes, which
+is the trade this row is making explicit rather than hiding.

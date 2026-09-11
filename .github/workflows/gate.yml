@@ -51,25 +51,40 @@ on:
   pull_request:
   workflow_dispatch:
 
-# ONE RUN PER PUSH, AND ONLY THE LATEST ONE.
+# ONE RUN PER PUSH -- AND ON `main`, EVERY PUSH KEEPS ITS VERDICT.
 #
-# MEASURED: runs 33580661749 (2026-09-02T01:45:50Z) and 33580723669 (01:46:51Z) started
-# **61 seconds apart**, and both ran all ten jobs to completion at ~20 minutes each. The
-# older verdict was worthless the moment the newer sha existed, and it cost ~200 job-
-# minutes to produce.
-#
-# `cancel-in-progress` is safe HERE for a specific reason, not as a default: every job in
-# this workflow scans the WHOLE CHECKED-OUT TREE, so a later commit's verdict strictly
-# covers the earlier commit's tree. It would NOT be safe for a per-commit test matrix,
-# where cancelling loses a verdict nothing else reproduces.
+# MEASURED 2026-09-02: runs 33580661749 (01:45:50Z) and 33580723669 (01:46:51Z) started
+# **61 seconds apart**, both ran all ten jobs to completion at ~20 minutes each. The older
+# verdict was worthless the moment the newer sha existed, and cost ~200 job-minutes.
 #
 # Also measured, because it is the question this file gets asked: pushing N commits fires
 # ONE run, not N. `on.push` keys on the push EVENT, which carries every commit in the
 # delivery. Run 33583861505 covered 11 commits (`git rev-list --count 8e8050e88..deec6e865`
 # -> 11) and run 33585450134 covered 5. So the 300-commit backlog is one run.
+#
+# ⛔ CORRECTED 2026-09-11. THIS BLOCK USED TO SET `cancel-in-progress: true` FOR EVERY EVENT,
+# AND THE JUSTIFICATION -- "every job scans the WHOLE CHECKED-OUT TREE, so a later commit's
+# verdict strictly covers the earlier commit's tree" -- IS SOUND AND ASSUMES THE LATER RUN
+# FINISHES. Under an active wave it does not: each run is cancelled by the next push.
+#
+#   last 15 runs      14 cancelled, 1 running, ZERO verdicts
+#   last REAL verdict 34549975939 failure 2026-09-11T01:16 -- 4 hours earlier
+#   runs since        cancelled at 224-1117s, every one
+#   last 100 runs     51 failure, 48 cancelled, 0 success
+#
+# So the gate could not produce a verdict while the fleet was working, and the doctrine's
+# oracle ("newest run whose conclusion is success|failure") is a WORKAROUND for this defect:
+# the run everyone cites as AUTHORITATIVE is simply the last one that survived, not the
+# newest. An unproduced verdict is worse than an unread one -- from outside, "the gate fired
+# RED" and "the gate never ran" are the same observation.
+#
+# THE SPLIT: a superseded PR commit's verdict really is worthless, so PRs keep supersession.
+# A pushed `main` commit is permanent and must keep its own verdict, so its group carries the
+# sha and nothing can cancel it. Cost is runner minutes; the thing bought is a verdict per
+# commit, which is the only form in which this gate is evidence about anything.
 concurrency:
-  group: gate-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: gate-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || 'shared' }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   # ONE JOB, ONE ENTRY POINT -- omp-orchestrator-fsu7.
