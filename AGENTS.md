@@ -307,17 +307,40 @@ RCH_REQUIRE_REMOTE=1 rch exec -- cargo <verb> -j 2 -p <crate>
 
 **That is the whole form.** `check`, `test`, `build`, `clippy` — same shape every time.
 
-**For a macOS binary, the target goes in `--config`, NEVER in `--target`:**
+## ⛔ JOSHUA'S RULING 2026-09-11, verbatim: ***"we shouldn't build darwin"***
+
+**DO NOT CROSS-BUILD TO `aarch64-apple-darwin`. The routine lane is Linux-native on Contabo, and
+that is the whole form:** `RCH_REQUIRE_REMOTE=1 rch exec -- cargo <verb> -j 2 -p <crate>`.
+
+**This SUPERSEDES the `--config build.target="aarch64-apple-darwin"` recipe that stood here.**
+The recipe is deliberately not reproduced — a section retiring a command must not contain it, or
+the next reader greps and finds it live. Recover it from history if a ruling ever reverses this.
+
+**WHY, measured the night it was retired:**
 
 ```
-RCH_REQUIRE_REMOTE=1 rch exec -- cargo build --release -j 2 \
-  --config 'build.target="aarch64-apple-darwin"' \
-  --config 'target.aarch64-apple-darwin.linker="/usr/local/bin/zigcc-aarch64-darwin"' \
-  -p <crate> --bin <bin>
+rch workers list                  4 workers, ALL linux/x86_64 -- there is NO Darwin worker
+7 crates CANNOT cross-build       chrono `clock` -> iana_time_zone -> CoreFoundation;
+                                  zigcc-aarch64-darwin resolves no _CF* symbols   (8jlpp)
+cost per failed attempt           311571 ms and 267885 ms, two builds, both dying at LINK
+                                  with `cc: error: unrecognized command-line option '-framework'`
+and it FAILS AT LINK AFTER A CLEAN COMPILE, so `cargo check` and every `-p` test run are BLIND
 ```
 
-**SINGLE quotes outside, DOUBLE inside.** Drop them and cargo refuses with *"string values must be
-quoted."* **COPY IT, do not type it from memory** — Joshua did and it cost a build.
+**The cross-build was never load-bearing for CI or for tests** — those run Linux, where the
+whole workspace builds. It existed only to produce the handful of operator binaries that run on
+Joshua's Mac, and it bought a fragile linker path that silently excludes any crate touching an
+Apple framework.
+
+⚠️ **THE ONE CONSEQUENCE, stated rather than buried: the Mach-O operator binaries stop being
+refreshable through the lane.** Currently installed and arm64: `ompo`, `tick-monitor`,
+`pane-truth`, `bead-availability`, `fleet-composite`. They keep working; they simply do not get
+rebuilt by this process. **Do not reintroduce a darwin build to refresh one** — if an install is
+needed, that is a decision to raise, not a target triple to add back.
+
+**AND `8jlpp` IS RETIRED BY THIS RULING, NOT FIXED.** Close it `WONTFIX` citing this section: the
+seven crates do not need to cross-build, so the CoreFoundation link failure is no longer a
+defect. **Do not spend a window making `chrono/clock` link under zig.**
 
 **`--target` sets `required_os=darwin` and collapses the admissible fleet 4 → 1. That is ONE
 `rc=103` cause.** `--config build.target=` produces the **identical binary** with the whole fleet
