@@ -4711,6 +4711,51 @@ clean at SNAP-1, the four dirty siblings are named (`cross_pane_hold`, `jsm_sugg
 `resident_tick`, `spine_emit`), and it is clean now. **Take the general rule, re-derive the
 specific reading.**
 
+## ⛔ "ABSENT FROM CI's FAILING LIST" IS **NOT KNOWN RED**, NOT GREEN
+
+**A fourth verdict class, and it is a BOUND FROM AN EXTERNAL ORACLE'S SILENCE rather than a
+measurement of your own.** Attributing the authoritative run's five failing legs to their
+targets:
+```
+census_membership.rs   every_advisory_unreachable_row_is_named_in_the_allowance
+                       derivation_did_not_convert_one_blocker_into_forty_three
+                       an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails
+                       the_ratchet_deadline_is_a_real_number_and_not_a_sentiment
+gate_wiring_wave3.rs   every_wave_output_has_a_reachable_census_trigger
+packet_rendering.rs    ZERO of the five
+```
+⭐ **That retires a risk by ATTRIBUTION — the target closest to a grader's own bead is not
+implicated — and it is still NOT a green claim.** *"Absent from CI's failing list"* is weaker
+than *"I ran it"*: **an oracle that names four crates says nothing about the seventeen targets
+it did not name individually.** ⛔ **The honest verdict is `NOT KNOWN RED`, and only running it
+converts that.**
+
+**AND IT CONFIRMS FROM THE OTHER SIDE THAT `241/0 --lib` AND THE `FAILING` ROW WERE NEVER IN
+TENSION:** none of the five is among the env-blocked legs the lib fix addressed. **Two true
+figures about two different populations.**
+
+⛔ **THREE OF THE FIVE ARE ABSOLUTE-COUNT RATCHETS** — `derivation_did_not_convert_one_blocker_into_forty_three`
+most plainly, with `distinct_label_count_does_not_grow` and `the_unstamped_binary_count_only_falls`
+in `no-shell-gate`. **Rule 10 exactly, and now baked into an ASSERTION rather than a probe.**
+⭐ **DO NOT RAISE THE CEILING — re-express per-crate or as a ratio, or they are red again next
+week by construction.**
+
+## ⛔⛔ A TRUE RULE WITH A FALSE PREMISE — and the premise is the load-bearing half
+
+**The cleanest self-correction of the session, by the agent whose rule it was.** It supplied a
+peer with a correct general rule (*a restore oracle must compare against the PRE-WRITE state*)
+resting on a measurement that was **its peer's own live plant** — an arm that peer had announced
+minutes earlier, in a message it had acknowledged.
+
+⭐ **ITS OWN DIAGNOSIS: *"I asked 'is a peer about to write here' three times before COMMITTING
+and did not ask 'is an announced plant live right now' once before PUBLISHING A
+MEASUREMENT."*** **The discipline was applied to the write path and never to the read path.**
+
+⛔ **AND THE CONSEQUENCE INVERTS THE INTENT: had the peer accepted it, it would have recorded
+ITS OWN PLANT as a peer's uncommitted file.** ⭐ **A true rule delivered on a false premise is
+more dangerous than a wrong rule, because the rule survives review and the premise does not get
+one.** **Take the general rule; re-derive the specific reading.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
