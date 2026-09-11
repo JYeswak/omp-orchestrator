@@ -1130,6 +1130,21 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
         let mut busy = 0u64;
         let mut wedged = 0u64;
         let mut unproven = 0u64;
+        // ⛔ ae4x8: A RATE-LIMITED AGENT STILL PAINTS ITS PROMPT FOOTER, so `pane_liveness`
+        // -- which reads PAINT -- returns LIVE for a pane blocked for days. Measured
+        // 2026-09-11: two panes carried `is_rate_limited: true` with "Try again in ~5211 min"
+        // (~3.6 DAYS) in their own capture while the scraper called both LIVE, and this is the
+        // only scheduled writer of the standing admission verdict.
+        //
+        // The scraper is NOT WRONG about what it looked at: a footer proves an agent is PRESENT.
+        // Presence is not dispatchability, and no fifth `LivenessState` is added here -- that
+        // would close this instance and leave the class, since the next unrepresentable state
+        // repeats it. The verdict instead consumes a TYPED source that can express it.
+        //
+        // ONE call per session, keyed by pane index, through `ntm-kernel` so the parse has one
+        // implementation rather than one per consumer.
+        let rate_limits =
+            ntm_kernel::rate_limited_panes(repo, std::time::Duration::from_secs(30));
         for pane in &panes {
             let text = run_capture(
                 Command::new(&cfg.tmux_bin)
@@ -1143,7 +1158,32 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
             );
             let l = pane_liveness(&text);
             match l.state {
-                LivenessState::Live => idle += 1,
+                // Three-valued on purpose. `Some(true)` is a MEASURED block. `None` is
+                // UNMEASURED -- the verb refused or never named this pane -- and is counted as
+                // idle so a dead `ntm` cannot zero the fleet's capacity, which is the
+                // fleet-blocking shape this repo has already paid for once today. The bound is
+                // disclosed rather than hidden, so a reader knows which coverage produced the
+                // number.
+                LivenessState::Live => match rate_limits.is_rate_limited(pane) {
+                    Some(true) => {
+                        liveness_blocked += 1;
+                        say(&format!(
+                            "  RATE-LIMITED {repo} pane {pane}: present at a prompt and cannot \
+                             continue; NOT capacity ({})",
+                            rate_limits.bound()
+                        ));
+                        cfg.log(
+                            "pane_rate_limited",
+                            &format!(
+                                r#""repo":"{}","pane":"{}","bound":"{}""#,
+                                json_escape(repo),
+                                json_escape(pane),
+                                json_escape(&rate_limits.bound())
+                            ),
+                        );
+                    }
+                    _ => idle += 1,
+                },
                 LivenessState::Busy => {
                     busy += 1;
                     liveness_blocked += 1;

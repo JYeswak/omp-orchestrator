@@ -23,6 +23,7 @@ regex = "1"
 serde_json = "1"
 ntm-fleet-monitor = { path = "../ntm-fleet-monitor" }
 tick-monitor = { path = "../tick-monitor" }
+ntm-kernel = { path = "../ntm-kernel" }
 
 [lints.rust]
 unsafe_code = "forbid"

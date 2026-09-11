@@ -290,14 +290,27 @@ mod tests {
 
     #[test]
     fn rule_unusable_lock_fails_closed() {
-        // A path that cannot be opened must refuse, never run unserialized.
-        let p = Path::new("/nonexistent-root-xyz/deeper/fleet-monitor.run.lock");
+        // ⛔ THE PREVIOUS PATH WAS `/nonexistent-root-xyz/deeper/...`, WHICH IS A PRIVILEGE
+        // ASSUMPTION DRESSED AS A FILESYSTEM FACT. Measured 2026-09-11 on the sanctioned remote
+        // lane, which runs privileged: the leg FAILED with
+        //   got Acquired(RunLock { fd: 3, path: "/nonexistent-root-xyz/deeper/..." })
+        // -- the lane CREATED the tree and took the lock. So the fail-closed property was
+        // FALSE-RED there, and worse, UNTESTED: the only place this repo is allowed to build is
+        // the one place this leg could not measure its own subject.
+        //
+        // A child path under a REGULAR FILE is ENOTDIR for every uid, so the premise now holds
+        // regardless of privilege. `/` was never the invariant; "unopenable" was.
+        let blocker = tmp("not-a-directory");
+        std::fs::write(&blocker, b"regular file").expect("fixture write");
+        let p = blocker.join("deeper").join("fleet-monitor.run.lock");
         let look = FakeLookup {
             pids: vec![],
             elapsed: None,
             calls: RefCell::new(0),
         };
-        match acquire(p, &look) {
+        let outcome = acquire(&p, &look);
+        let _ = std::fs::remove_file(&blocker);
+        match outcome {
             LockOutcome::Unusable { .. } => {}
             other => panic!(
                 "RULE lock_fail_closed: an unusable lock must refuse to run unserialized, got {other:?}"

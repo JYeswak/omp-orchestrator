@@ -338,3 +338,53 @@ fn the_selector_is_declared_for_every_verb() {
         assert!(flag.starts_with("--"), "{verb:?} selector must be a flag: {flag}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// RateLimitCensus: absence of evidence is not evidence of absence
+// ---------------------------------------------------------------------------
+
+/// KNOWN-GOOD: a real payload yields per-pane facts, both polarities.
+#[test]
+fn a_real_agent_health_payload_yields_per_pane_rate_limit_facts() {
+    let doc = serde_json::json!({"panes": {
+        "3": {"local_state": {"is_rate_limited": true}},
+        "5": {"local_state": {"is_rate_limited": false}}
+    }});
+    let census = ntm_kernel::rate_limited_from_payload(&doc);
+    assert_eq!(census.is_rate_limited("3"), Some(true));
+    assert_eq!(census.is_rate_limited("5"), Some(false));
+    assert_eq!(census.is_rate_limited("9"), None, "a pane the verb never named is UNMEASURED");
+    assert_eq!(census.bound(), "KNOWN panes=2");
+}
+
+/// KNOWN-BAD, AND THE DEFECT THIS TYPE EXISTS TO KILL: a payload with no `panes` object must be
+/// UNKNOWN, never an empty map.
+///
+/// The shape this replaces returned `BTreeMap::new()` here, so `is_rate_limited` answered `false`
+/// for every pane and a consumer dispatched to an agent blocked for days. `None` forces the
+/// consumer to decide explicitly.
+#[test]
+fn a_payload_without_panes_is_unknown_and_never_an_empty_answer() {
+    for doc in [
+        serde_json::json!({}),
+        serde_json::json!({"panes": []}),
+        serde_json::json!({"fleet_health": {"total_panes": 0}}),
+    ] {
+        let census = ntm_kernel::rate_limited_from_payload(&doc);
+        assert_eq!(
+            census.is_rate_limited("3"),
+            None,
+            "an unpopulated census must not answer false: {doc}"
+        );
+        assert!(census.bound().starts_with("UNKNOWN"), "{}", census.bound());
+    }
+}
+
+/// ANTI-VACUITY: an ANSWERED payload whose `panes` object is empty is KNOWN-with-zero-rows, which
+/// is a different fact from UNKNOWN and must not collapse into it.
+#[test]
+fn an_answered_empty_pane_set_is_known_not_unknown() {
+    let census = ntm_kernel::rate_limited_from_payload(&serde_json::json!({"panes": {}}));
+    assert_eq!(census.bound(), "KNOWN panes=0");
+    assert_eq!(census.is_rate_limited("3"), None, "still unmeasured FOR THAT PANE");
+}

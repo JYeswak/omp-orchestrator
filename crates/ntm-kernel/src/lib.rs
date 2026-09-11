@@ -470,3 +470,81 @@ pub fn presence(payload: &Value, pane: &str) -> Presence {
         Presence::Healthy
     }
 }
+
+/// Per-pane rate-limit facts, with ABSENCE OF EVIDENCE kept distinct from EVIDENCE OF ABSENCE.
+///
+/// The shape this replaces returned an empty map for BOTH "the verb answered and nobody is
+/// limited" and "the verb refused, so I know nothing" -- and the second read as the first at every
+/// call site. That conflation is the whole reason a rate-limited pane can be offered as capacity:
+/// a consumer asks "is this pane limited", gets `false` from a map that was never populated, and
+/// dispatches.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RateLimitCensus {
+    /// The verb answered. The map is authoritative for exactly the panes it names.
+    Known(std::collections::BTreeMap<String, bool>),
+    /// The verb refused, timed out, or shipped no `panes` object. **NOT** "nobody is limited".
+    /// Carries the outcome word so a consumer can disclose which bound it is reporting under.
+    Unknown(String),
+}
+
+impl RateLimitCensus {
+    /// `Some(true|false)` when measured for this pane; `None` when UNMEASURED.
+    ///
+    /// Three-valued on purpose: a consumer that wants to fail open must say so by matching `None`
+    /// explicitly, rather than receiving a `false` it cannot distinguish from a measurement.
+    #[must_use]
+    pub fn is_rate_limited(&self, pane: &str) -> Option<bool> {
+        match self {
+            Self::Known(map) => map.get(pane).copied(),
+            Self::Unknown(_) => None,
+        }
+    }
+
+    /// The bound this census is reporting under, for a consumer's own disclosure.
+    #[must_use]
+    pub fn bound(&self) -> String {
+        match self {
+            Self::Known(map) => format!("KNOWN panes={}", map.len()),
+            Self::Unknown(reason) => format!("UNKNOWN {reason}"),
+        }
+    }
+}
+
+/// Parse the `--robot-agent-health` payload's per-pane rate-limit flags.
+///
+/// PURE, so the parse is testable without a live fleet -- the reason the previous copy had no leg.
+#[must_use]
+pub fn rate_limited_from_payload(document: &Value) -> RateLimitCensus {
+    let Some(panes) = document.get("panes").and_then(Value::as_object) else {
+        return RateLimitCensus::Unknown("payload carried no `panes` object".to_owned());
+    };
+    RateLimitCensus::Known(
+        panes
+            .iter()
+            .filter_map(|(index, pane)| {
+                pane.get("local_state")?
+                    .get("is_rate_limited")?
+                    .as_bool()
+                    .map(|limited| (index.clone(), limited))
+            })
+            .collect(),
+    )
+}
+
+/// ONE agent-health call per session, keyed by pane index.
+///
+/// One implementation, two consumers (`fleet-monitor`, `pane-dispatch-ready`): two copies of this
+/// parse is two policies, and they drift where a monitor cannot see it.
+#[must_use]
+pub fn rate_limited_panes(session: &str, deadline: Duration) -> RateLimitCensus {
+    let outcome = invoke_bounded(
+        &NtmCall::on_session(NtmVerb::AgentHealth, session).arg("--no-caut"),
+        deadline,
+    );
+    // A non-`Answered` outcome has NO payload to read, so "branch on success first" is enforced by
+    // the type rather than by a comment.
+    match outcome.payload() {
+        Some(document) => rate_limited_from_payload(document),
+        None => RateLimitCensus::Unknown(format!("agent-health {}", outcome.state())),
+    }
+}
