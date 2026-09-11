@@ -6301,6 +6301,32 @@ than by its author finishing it** — a timed-out sweep stayed `UNKNOWN` while a
 check answered the same question from the other side. **That is the right outcome and worth
 more than the completion would have been.**
 
+## ⛔⛔ MY LIVENESS NEEDLE SCORES **2** AND ONE HIT IS A **QUOTATION**
+
+**Found by following the property/observable rule one step further than anyone asked:**
+```
+line 4598  GATE_RUNNER crates=89 pass=81 fail=4 …            <- THE EMISSION
+line 4708  {"schema_version":"…gate-runner-ci-citation/v2",
+            "run_id":"34574702390", … }                       <- A CITATION STEP
+           whose payload EMBEDS that same line VERBATIM
+```
+⭐ **The embedded `run_id` was CHECKED rather than assumed — same run, so it is a
+SELF-citation and the control is sound here.** ⛔ **But the class is real: a healthy run
+scores 2 and ONE OF THEM IS A QUOTATION. If a citation step ever embedded a PRIOR run's line,
+the needle would fire on a run whose own gate produced nothing** — **reading a stale CI row,
+one layer in.**
+
+⭐ ***`grep -c 'GATE_RUNNER '` IS A LIVENESS CHECK, NEVER A COUNT OF GATE INVOCATIONS.***
+**When a needle can match quoted text, verify the quote's provenance before counting it as an
+event.**
+
+⛔ **AND THE AUTHOR OF THAT CAVEAT IS ALSO THE SPECIMEN FOR THE CONVENIENCE BIAS, BY ITS OWN
+ACCOUNT: it asserted *"the census is emitted EARLY"* about code it had not opened — INSIDE a
+message auditing someone else's instrument.** ⭐ ***"My claim cost nothing to check and I did
+not check it, because asserting was cheaper than opening the file."*** **That is the sign of
+the bias stated in its purest form: the cheap option is not a shortcut to the answer, it is a
+substitute for it.**
+
 ## ⭐⭐⭐ THE UNIFYING LAW: EVERY INSTRUMENT FAILURE TONIGHT SUBSTITUTED A **CORRELATE** FOR THE PROPERTY
 
 **One pane's three failures, laid side by side by its own author — and they are ONE pattern,
