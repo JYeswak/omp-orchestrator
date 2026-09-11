@@ -1,9 +1,11 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
-    git_rev_parse_short, install_binary, merge_hooks, publish_atomic, refuse_path_collisions,
-    resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
-    probe_build_id_string, verify_identity, verify_minisign_policy, AgentOutcome, HookWrite, IdentityCheck, InstallError,
-    RepoOwnership, RestartPostcondition,
+    git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks,
+    publish_atomic, publish_atomic_durable, refuse_path_collisions, resolve_platform_triple,
+    resolve_repo_ownership, seal_install_report, stage_artifact_stream,
+    probe_build_id_string, verify_identity, verify_minisign_policy, AgentOutcome,
+    DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite, IdentityCheck,
+    InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -970,4 +972,355 @@ fn real_cli_check_names_an_unstamped_artifact_without_calling_it_drift() {
         !text.contains("INSTALLER IDENTITY OK"),
         "an unmeasured identity is never an OK:\n{text}"
     );
+}
+
+// ── B07 / T09 / T10 / T22: L0 DURABILITY ──────────────────────────────────────
+//
+// MEASURED 2026-09-11 at HEAD 2774c6a: `publish_atomic` was a bare
+// `std::fs::rename` and the strings fsync, sync_all, sync_data and F_FULLFSYNC
+// did not appear ANYWHERE under crates/installer. A rename whose parent
+// directory is never synchronized can be lost on power failure with the OLD
+// name still resolving, which is precisely the `install(1)` escape the L0
+// contract's retained cross-attack names: it syncs the destination descriptor,
+// never its parent. Every leg below is nonzero and the injected-failure legs
+// are deterministic on any platform.
+
+/// Stage a complete artifact the publication seam will accept.
+fn staged_payload(dir: &Path, payload: &[u8]) -> PathBuf {
+    stage_artifact_stream(dir, "installer", payload, payload.len() as u64).expect("stage payload")
+}
+
+#[test]
+fn durability_publication_requires_every_platform_applicable_step() {
+    let dir = TempDir::new("durability-known-good");
+    let payload = b"durable-publication-bytes";
+    let dest = dir.path().join("installer");
+    let staged = staged_payload(dir.path(), payload);
+    let mut metric = DurabilityMetric::default();
+
+    let record = publish_atomic_durable(&staged, &dest, payload.len() as u64, &mut metric, None)
+        .expect("a complete staged artifact must publish durably");
+
+    assert!(record.file_synced, "file sync was not performed: {record:?}");
+    assert!(record.renamed, "rename was not performed: {record:?}");
+    assert!(
+        record.parent_synced,
+        "parent directory sync was not performed: {record:?}"
+    );
+    // Darwin is the only platform with F_FULLFSYNC. A Linux lane must say
+    // UNMEASURED with its platform, never invent a pass or a failure.
+    match record.fullfsync {
+        FullFsyncObservation::Applied => {
+            assert!(
+                cfg!(target_vendor = "apple"),
+                "only a Darwin host may report F_FULLFSYNC APPLIED: {record:?}"
+            );
+        }
+        FullFsyncObservation::Unmeasured { platform, reason } => {
+            assert!(
+                !cfg!(target_vendor = "apple"),
+                "a Darwin host must APPLY F_FULLFSYNC, not report it UNMEASURED: {record:?}"
+            );
+            assert_eq!(platform, std::env::consts::OS);
+            assert!(!reason.is_empty(), "UNMEASURED must carry its reason");
+            let text = FullFsyncObservation::Unmeasured { platform, reason }.to_string();
+            assert!(text.starts_with("UNMEASURED platform="), "{text}");
+        }
+    }
+
+    assert_eq!(fs::read(&dest).expect("published destination"), payload);
+    assert!(!staged.exists(), "staged temp must be consumed by the rename");
+    assert_eq!(metric.atomic_rename_attempts, 1, "{metric:?}");
+    assert_eq!(metric.parent_fsync_successes, 1, "{metric:?}");
+    assert_eq!(metric.coverage(), Some(1.0), "{metric:?}");
+    assert_eq!(metric.verdict(), MetricVerdict::Green, "{metric:?}");
+    assert!(metric.invariant_holds(), "{metric:?}");
+}
+
+#[test]
+fn parent_directory_fsync_is_required() {
+    let dir = TempDir::new("durability-parent-fsync");
+    let payload = b"parent-fsync-required-bytes";
+    let dest = dir.path().join("installer");
+    let staged = staged_payload(dir.path(), payload);
+    let mut metric = DurabilityMetric::default();
+
+    let error = publish_atomic_durable(
+        &staged,
+        &dest,
+        payload.len() as u64,
+        &mut metric,
+        Some(DurabilityStage::ParentSync),
+    )
+    .expect_err("a publication whose parent sync fails is not durable and must refuse");
+
+    match error {
+        InstallError::DurabilityRefused { stage, ref detail } => {
+            assert_eq!(stage, DurabilityStage::ParentSync, "wrong stage: {error}");
+            assert!(
+                detail.contains(&dir.path().display().to_string()),
+                "the refusal must name the parent directory: {detail}"
+            );
+        }
+        other => panic!("expected DurabilityRefused at parent_sync, got {other:?}"),
+    }
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_DURABILITY_REFUSED stage=parent_sync"),
+        "the reason code must be typed and name its stage: {text}"
+    );
+
+    // FAIL-CLOSED, and the metric is what proves it: the rename was attempted
+    // (the file is published) but no success may be claimed for it.
+    assert_eq!(metric.atomic_rename_attempts, 1, "{metric:?}");
+    assert_eq!(metric.parent_fsync_successes, 0, "{metric:?}");
+    assert_eq!(metric.verdict(), MetricVerdict::Red, "{metric:?}");
+
+    // A missing parent sync is not a licence to skip the earlier steps: the
+    // same call with no injection is the known-good control.
+    let clean = TempDir::new("durability-parent-fsync-control");
+    let clean_dest = clean.path().join("installer");
+    let clean_staged = staged_payload(clean.path(), payload);
+    let mut clean_metric = DurabilityMetric::default();
+    publish_atomic_durable(
+        &clean_staged,
+        &clean_dest,
+        payload.len() as u64,
+        &mut clean_metric,
+        None,
+    )
+    .expect("the same publication with no injected failure must pass");
+    assert_eq!(clean_metric.verdict(), MetricVerdict::Green, "{clean_metric:?}");
+}
+
+#[test]
+fn fullfsync_failure_is_restrictive() {
+    let dir = TempDir::new("durability-fullfsync");
+    let payload = b"fullfsync-restrictive-bytes";
+    let dest = dir.path().join("installer");
+    let staged = staged_payload(dir.path(), payload);
+    let mut metric = DurabilityMetric::default();
+
+    let error = publish_atomic_durable(
+        &staged,
+        &dest,
+        payload.len() as u64,
+        &mut metric,
+        Some(DurabilityStage::FullFsync),
+    )
+    .expect_err("a failed full synchronization must refuse, never downgrade to a pass");
+
+    match error {
+        InstallError::DurabilityRefused { stage, ref detail } => {
+            assert_eq!(stage, DurabilityStage::FullFsync, "wrong stage: {error}");
+            assert!(
+                detail.contains(&format!("platform={}", std::env::consts::OS)),
+                "the refusal must name the platform it was observed on: {detail}"
+            );
+        }
+        other => panic!("expected DurabilityRefused at fullfsync, got {other:?}"),
+    }
+    assert!(
+        error.to_string().starts_with("L0_DURABILITY_REFUSED stage=fullfsync"),
+        "{error}"
+    );
+
+    // RESTRICTIVE means nothing was published and nothing was counted: the
+    // full-sync stage runs BEFORE the rename, so no destination may exist.
+    assert!(
+        !dest.exists(),
+        "a refused full synchronization published the destination anyway"
+    );
+    assert_eq!(metric.atomic_rename_attempts, 0, "{metric:?}");
+    assert_eq!(metric.parent_fsync_successes, 0, "{metric:?}");
+    assert_eq!(
+        metric.verdict(),
+        MetricVerdict::Unmeasured,
+        "no attempt means UNMEASURED, never a passing zero: {metric:?}"
+    );
+
+    // The file-sync stage is a DISTINCT stage with its own name, so a caller
+    // can tell which of the two synchronization steps refused.
+    let file_sync_dir = TempDir::new("durability-file-sync");
+    let file_sync_dest = file_sync_dir.path().join("installer");
+    let file_sync_staged = staged_payload(file_sync_dir.path(), payload);
+    let mut file_sync_metric = DurabilityMetric::default();
+    let file_sync_error = publish_atomic_durable(
+        &file_sync_staged,
+        &file_sync_dest,
+        payload.len() as u64,
+        &mut file_sync_metric,
+        Some(DurabilityStage::FileSync),
+    )
+    .expect_err("a failed file sync must refuse");
+    assert!(
+        file_sync_error
+            .to_string()
+            .starts_with("L0_DURABILITY_REFUSED stage=file_sync"),
+        "{file_sync_error}"
+    );
+    assert!(!file_sync_dest.exists(), "a refused file sync published anyway");
+
+    // And the rename stage too, which is the third distinct name.
+    let rename_dir = TempDir::new("durability-rename");
+    let rename_dest = rename_dir.path().join("installer");
+    let rename_staged = staged_payload(rename_dir.path(), payload);
+    let mut rename_metric = DurabilityMetric::default();
+    let rename_error = publish_atomic_durable(
+        &rename_staged,
+        &rename_dest,
+        payload.len() as u64,
+        &mut rename_metric,
+        Some(DurabilityStage::Rename),
+    )
+    .expect_err("a failed rename must refuse");
+    assert!(
+        rename_error
+            .to_string()
+            .starts_with("L0_DURABILITY_REFUSED stage=rename"),
+        "{rename_error}"
+    );
+    assert!(!rename_dest.exists(), "a refused rename published anyway");
+    assert_eq!(
+        rename_metric.atomic_rename_attempts, 1,
+        "a refused rename is still an ATTEMPT: {rename_metric:?}"
+    );
+    assert_eq!(rename_metric.verdict(), MetricVerdict::Red, "{rename_metric:?}");
+}
+
+#[test]
+fn durability_metric_counts_missing_parent_sync() {
+    // ANTI-VACUITY FIRST: an empty metric is UNMEASURED, never a passing 1.0
+    // and never a RED zero. A zero denominator that renders as GREEN is how a
+    // durability metric reports success for installs that never happened.
+    let empty = DurabilityMetric::default();
+    assert_eq!(empty.coverage(), None, "{empty:?}");
+    assert_eq!(empty.verdict(), MetricVerdict::Unmeasured, "{empty:?}");
+    assert_eq!(MetricVerdict::Unmeasured.to_string(), "UNMEASURED");
+
+    // One rename attempt recorded with NO parent sync: coverage is below 1.0
+    // and the verdict is RED. This is the exact known-bad the row names.
+    let dir = TempDir::new("durability-metric-missing-parent");
+    let payload = b"metric-missing-parent-bytes";
+    let dest = dir.path().join("installer");
+    let staged = staged_payload(dir.path(), payload);
+    let mut metric = DurabilityMetric::default();
+    publish_atomic_durable(
+        &staged,
+        &dest,
+        payload.len() as u64,
+        &mut metric,
+        Some(DurabilityStage::ParentSync),
+    )
+    .expect_err("parent sync failure must refuse");
+
+    let coverage = metric.coverage().expect("an attempted rename is measured");
+    assert!(
+        coverage < 1.0,
+        "a rename without parent sync must not report full coverage: {coverage}"
+    );
+    assert_eq!(coverage, 0.0, "{metric:?}");
+    assert_eq!(metric.verdict(), MetricVerdict::Red, "{metric:?}");
+    assert_eq!(MetricVerdict::Red.to_string(), "RED");
+    assert!(metric.invariant_holds(), "{metric:?}");
+
+    // KNOWN-GOOD CONTROL so the metric is not RED for everything: a second
+    // publication that DOES sync its parent lifts coverage off the floor
+    // without reaching 1.0, and a third leaves it at 1.0 only when every
+    // attempt synced.
+    let good = TempDir::new("durability-metric-good");
+    let good_dest = good.path().join("installer");
+    let good_staged = staged_payload(good.path(), payload);
+    publish_atomic_durable(
+        &good_staged,
+        &good_dest,
+        payload.len() as u64,
+        &mut metric,
+        None,
+    )
+    .expect("clean publication");
+    assert_eq!(metric.atomic_rename_attempts, 2, "{metric:?}");
+    assert_eq!(metric.parent_fsync_successes, 1, "{metric:?}");
+    assert_eq!(metric.coverage(), Some(0.5), "{metric:?}");
+    assert_eq!(
+        metric.verdict(),
+        MetricVerdict::Red,
+        "one missing parent sync in two attempts is still RED: {metric:?}"
+    );
+
+    let all_good = DurabilityMetric {
+        atomic_rename_attempts: 2,
+        parent_fsync_successes: 2,
+    };
+    assert_eq!(all_good.coverage(), Some(1.0), "{all_good:?}");
+    assert_eq!(all_good.verdict(), MetricVerdict::Green, "{all_good:?}");
+    assert_eq!(MetricVerdict::Green.to_string(), "GREEN");
+
+    // The invariant that makes the ratio attributable at all.
+    let impossible = DurabilityMetric {
+        atomic_rename_attempts: 1,
+        parent_fsync_successes: 2,
+    };
+    assert!(
+        !impossible.invariant_holds(),
+        "more parent syncs than rename attempts must violate the invariant"
+    );
+}
+
+#[test]
+fn production_install_path_routes_through_the_durability_seam() {
+    // WIRING PROOF. `installer main` -> `run_install` -> `install_binary` ->
+    // `replace_atomic` -> the durability seam. A unit test on the helper cannot
+    // see whether production calls it, so this drives the real install entry
+    // point and reads the metric it accumulated. Deleting the production
+    // parent-sync call turns this RED while the helper tests stay green.
+    let target = TempDir::new("durability-wiring");
+    let mut metric = DurabilityMetric::default();
+    let check = install_binary_with_durability(
+        &built_installer(),
+        target.path(),
+        &identity_head(),
+        &RepoOwnership::ThisRepo,
+        &mut metric,
+        None,
+    )
+    .expect("the real installer must publish its own verified binary durably");
+    assert!(check.consistent, "published identity did not read back: {check:?}");
+    assert!(
+        target.path().join("installer").is_file(),
+        "production install did not publish the artifact"
+    );
+    assert_eq!(
+        metric.atomic_rename_attempts, 1,
+        "production publish did not reach the rename counter: {metric:?}"
+    );
+    assert_eq!(
+        metric.parent_fsync_successes, 1,
+        "production publish renamed without syncing the parent directory: {metric:?}"
+    );
+    assert_eq!(metric.verdict(), MetricVerdict::Green, "{metric:?}");
+
+    // And the production path refuses, restrictively and typed, when a
+    // durability stage fails — no success-shaped return for a publication that
+    // is not durable.
+    let refused = TempDir::new("durability-wiring-refused");
+    let mut refused_metric = DurabilityMetric::default();
+    let error = install_binary_with_durability(
+        &built_installer(),
+        refused.path(),
+        &identity_head(),
+        &RepoOwnership::ThisRepo,
+        &mut refused_metric,
+        Some(DurabilityStage::ParentSync),
+    )
+    .expect_err("production install must refuse a non-durable publication");
+    assert!(
+        error
+            .to_string()
+            .starts_with("L0_DURABILITY_REFUSED stage=parent_sync"),
+        "{error}"
+    );
+    assert_eq!(refused_metric.atomic_rename_attempts, 1, "{refused_metric:?}");
+    assert_eq!(refused_metric.parent_fsync_successes, 0, "{refused_metric:?}");
+    assert_eq!(refused_metric.verdict(), MetricVerdict::Red, "{refused_metric:?}");
 }

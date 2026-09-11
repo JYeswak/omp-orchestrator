@@ -104,6 +104,13 @@ pub enum InstallError {
         path: String,
         detail: String,
     },
+    /// L0-DURABILITY. A platform-applicable synchronization step did not
+    /// complete, so the publication is not durable. The stage is carried
+    /// explicitly: "it failed somewhere in publish" is not attributable.
+    DurabilityRefused {
+        stage: DurabilityStage,
+        detail: String,
+    },
 }
 
 
@@ -190,8 +197,146 @@ impl fmt::Display for InstallError {
                 formatter,
                 "L0_DESTINATION_NOT_OURS: refusing to replace {path}: {detail}"
             ),
+            Self::DurabilityRefused { stage, detail } => write!(
+                formatter,
+                "L0_DURABILITY_REFUSED stage={stage}: {detail}"
+            ),
         }
     }
+}
+
+/// L0-DURABILITY. Which synchronization step of a publication is being spoken
+/// about. A refusal names its stage because "publish failed" is not evidence:
+/// the four stages have different remedies and different blast radii.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DurabilityStage {
+    /// The staged artifact's own bytes reach stable storage.
+    FileSync,
+    /// Darwin `F_FULLFSYNC`: the drive is told to flush its write cache.
+    FullFsync,
+    /// The same-directory rename that publishes the destination name.
+    Rename,
+    /// The parent directory entry itself reaches stable storage. A renamed
+    /// file whose parent was never synced can vanish on power loss WITH the
+    /// old name still resolving, which is the exact hazard `install(1)` leaves
+    /// open (it syncs the destination fd, never its parent).
+    ParentSync,
+}
+
+impl fmt::Display for DurabilityStage {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::FileSync => "file_sync",
+            Self::FullFsync => "fullfsync",
+            Self::Rename => "rename",
+            Self::ParentSync => "parent_sync",
+        };
+        formatter.write_str(name)
+    }
+}
+
+/// L0-DURABILITY-FULLFSYNC. What this host can honestly say about
+/// `F_FULLFSYNC`, which exists only on Darwin.
+///
+/// A non-Darwin host has no `F_FULLFSYNC` to execute, so it reports
+/// `Unmeasured` with its platform and the reason. It NEVER reports a pass it
+/// did not perform and never reports a failure it did not observe — a Linux
+/// lane claiming either about Darwin durability is fabricating.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FullFsyncObservation {
+    /// Darwin: the full-flush path ran and returned success.
+    Applied,
+    /// Not Darwin: the step is inapplicable here and stays UNMEASURED.
+    Unmeasured {
+        platform: &'static str,
+        reason: &'static str,
+    },
+}
+
+impl fmt::Display for FullFsyncObservation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Applied => formatter.write_str("APPLIED"),
+            Self::Unmeasured { platform, reason } => write!(
+                formatter,
+                "UNMEASURED platform={platform} reason={reason}"
+            ),
+        }
+    }
+}
+
+/// L0-METRIC verdict. `Unmeasured` is a third state on purpose: a metric with
+/// no observations is an ERROR to report as passing, and a zero denominator
+/// must not render as either `0.0` RED or a vacuous `1.0` GREEN.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricVerdict {
+    Green,
+    Red,
+    Unmeasured,
+}
+
+impl fmt::Display for MetricVerdict {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::Green => "GREEN",
+            Self::Red => "RED",
+            Self::Unmeasured => "UNMEASURED",
+        };
+        formatter.write_str(name)
+    }
+}
+
+/// L0-METRIC. `L0_DURABILITY_COVERAGE = parent_fsync_successes /
+/// atomic_rename_attempts`. A successful install requires `1.0`.
+///
+/// Both counters are incremented ONLY on their real paths: the attempt counter
+/// immediately before the rename syscall (so a refused rename still counts as
+/// an attempt, which is what makes a missing parent sync visible), and the
+/// success counter only after the parent directory sync actually returns Ok.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DurabilityMetric {
+    pub atomic_rename_attempts: u64,
+    pub parent_fsync_successes: u64,
+}
+
+impl DurabilityMetric {
+    /// `None` when nothing has been attempted: absent observations are
+    /// UNMEASURED, never a passing zero.
+    #[must_use]
+    pub fn coverage(&self) -> Option<f64> {
+        if self.atomic_rename_attempts == 0 {
+            return None;
+        }
+        #[allow(clippy::cast_precision_loss)]
+        Some(self.parent_fsync_successes as f64 / self.atomic_rename_attempts as f64)
+    }
+
+    #[must_use]
+    pub fn verdict(&self) -> MetricVerdict {
+        match self.coverage() {
+            None => MetricVerdict::Unmeasured,
+            Some(coverage) if coverage >= 1.0 => MetricVerdict::Green,
+            Some(_) => MetricVerdict::Red,
+        }
+    }
+
+    /// A parent sync cannot succeed for a rename that was never attempted.
+    /// A violated invariant means the counters were incremented off their real
+    /// paths and the coverage figure is not attributable.
+    #[must_use]
+    pub fn invariant_holds(&self) -> bool {
+        self.parent_fsync_successes <= self.atomic_rename_attempts
+    }
+}
+
+/// What a durable publication actually did, so a caller can assert the steps
+/// rather than infer them from the absence of an error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DurabilityRecord {
+    pub file_synced: bool,
+    pub fullfsync: FullFsyncObservation,
+    pub renamed: bool,
+    pub parent_synced: bool,
 }
 
 
@@ -1622,11 +1767,38 @@ pub fn stage_artifact_stream<R: Read>(
 
 /// L0-ATOMIC-RENAME. Only a complete same-directory staged temp is renamed.
 /// A staged file mutated after verification (length ≠ expected_len) is refused.
+///
+/// This is the no-injection, metric-discarding form kept for callers that only
+/// care about the rename guards. It delegates to [`publish_atomic_durable`] so
+/// there is exactly ONE publication path: a caller cannot reach a rename that
+/// skipped the synchronization steps by picking the shorter function.
 pub fn publish_atomic(
     staged: &Path,
     dest: &Path,
     expected_len: u64,
 ) -> Result<(), InstallError> {
+    let mut metric = DurabilityMetric::default();
+    publish_atomic_durable(staged, dest, expected_len, &mut metric, None).map(|_| ())
+}
+
+/// L0-ATOMIC-RENAME + L0-DURABILITY-PARENT + L0-DURABILITY-FULLFSYNC.
+///
+/// The publication ORDER is the property: complete staging, then file sync
+/// (which on Darwin is `F_FULLFSYNC`), then rename, then parent-directory
+/// sync. No `Ok` is returned before every platform-applicable step finishes,
+/// so a caller cannot observe success for a publication that is not durable.
+///
+/// `injected_failure` is the deterministic fault seam: it makes each of the
+/// four stages fail on any platform without needing a full filesystem or a
+/// privileged mount. Production passes `None` and there is no production input
+/// that can set it.
+pub fn publish_atomic_durable(
+    staged: &Path,
+    dest: &Path,
+    expected_len: u64,
+    metric: &mut DurabilityMetric,
+    injected_failure: Option<DurabilityStage>,
+) -> Result<DurabilityRecord, InstallError> {
     if staged.parent() != dest.parent() {
         return Err(InstallError::IoError {
             path: dest.display().to_string(),
@@ -1662,11 +1834,151 @@ pub fn publish_atomic(
             detail: "ATOMIC_REFUSED: destination already exists".to_owned(),
         });
     }
+    // Every field below is a RETURN VALUE, never a literal: a record that
+    // asserts `parent_synced: true` beside a call that may have been deleted
+    // is decoration, and a test reading it would pass over the missing step.
+    let (file_synced, fullfsync) = sync_staged_artifact(staged, injected_failure)?;
+    let renamed = rename_for_publication(staged, dest, metric, injected_failure)?;
+    let parent_synced = sync_parent_directory(dest, metric, injected_failure)?;
+    Ok(DurabilityRecord {
+        file_synced,
+        fullfsync,
+        renamed,
+        parent_synced,
+    })
+}
+
+/// L0-DURABILITY-FULLFSYNC. Force the staged artifact's own bytes to stable
+/// storage BEFORE the rename that publishes its name.
+///
+/// `File::sync_all` is the safe platform adapter this step needs and the
+/// reason no `unsafe` and no `libc` dependency appears in this crate: the
+/// standard library implements it as `fcntl(fd, F_FULLFSYNC)` for
+/// `target_vendor = "apple"` and `fsync(fd)` elsewhere — see
+/// `library/std/src/sys/fs/unix.rs` `FileDesc::fsync`, lines 1266-1278 of the
+/// toolchain source read on 2026-09-11. So on Darwin this call IS the
+/// `F_FULLFSYNC` the contract names, and on Linux it is a plain `fsync`, which
+/// is why the Darwin claim is reported UNMEASURED from a Linux lane rather
+/// than asserted.
+fn sync_staged_artifact(
+    staged: &Path,
+    injected_failure: Option<DurabilityStage>,
+) -> Result<(bool, FullFsyncObservation), InstallError> {
+    if injected_failure == Some(DurabilityStage::FileSync) {
+        return Err(InstallError::DurabilityRefused {
+            stage: DurabilityStage::FileSync,
+            detail: format!("injected file sync failure path={}", staged.display()),
+        });
+    }
+    let file = std::fs::File::open(staged).map_err(|error| InstallError::DurabilityRefused {
+        stage: DurabilityStage::FileSync,
+        detail: format!(
+            "open staged artifact for sync failed path={}: {error}",
+            staged.display()
+        ),
+    })?;
+    file.sync_all()
+        .map_err(|error| InstallError::DurabilityRefused {
+            stage: DurabilityStage::FileSync,
+            detail: format!("file sync failed path={}: {error}", staged.display()),
+        })?;
+    if injected_failure == Some(DurabilityStage::FullFsync) {
+        return Err(InstallError::DurabilityRefused {
+            stage: DurabilityStage::FullFsync,
+            detail: format!(
+                "injected F_FULLFSYNC failure path={} platform={}",
+                staged.display(),
+                std::env::consts::OS
+            ),
+        });
+    }
+    Ok((true, fullfsync_observation()))
+}
+
+#[cfg(target_vendor = "apple")]
+fn fullfsync_observation() -> FullFsyncObservation {
+    FullFsyncObservation::Applied
+}
+
+#[cfg(not(target_vendor = "apple"))]
+fn fullfsync_observation() -> FullFsyncObservation {
+    FullFsyncObservation::Unmeasured {
+        platform: std::env::consts::OS,
+        reason: "F_FULLFSYNC is a Darwin fcntl; this platform has none to execute",
+    }
+}
+
+/// The rename itself. The attempt counter is incremented immediately BEFORE
+/// the syscall, which is what makes a publication that renamed but never
+/// synced its parent visible in the metric instead of invisible.
+fn rename_for_publication(
+    staged: &Path,
+    dest: &Path,
+    metric: &mut DurabilityMetric,
+    injected_failure: Option<DurabilityStage>,
+) -> Result<bool, InstallError> {
+    metric.atomic_rename_attempts += 1;
+    if injected_failure == Some(DurabilityStage::Rename) {
+        return Err(InstallError::DurabilityRefused {
+            stage: DurabilityStage::Rename,
+            detail: format!("injected rename failure path={}", dest.display()),
+        });
+    }
     std::fs::rename(staged, dest).map_err(|error| InstallError::IoError {
         path: dest.display().to_string(),
         detail: format!("atomic publish failed: {error}"),
     })?;
-    Ok(())
+    Ok(true)
+}
+
+/// L0-DURABILITY-PARENT. Sync the directory ENTRY, not the file.
+///
+/// A rename is only durable once the directory holding the new name is itself
+/// synchronized; `install(1)` syncs the destination descriptor and never its
+/// parent, which is the escape this step closes. The success counter moves
+/// only after the sync actually returns Ok.
+fn sync_parent_directory(
+    dest: &Path,
+    metric: &mut DurabilityMetric,
+    injected_failure: Option<DurabilityStage>,
+) -> Result<bool, InstallError> {
+    let parent = dest
+        .parent()
+        .ok_or_else(|| InstallError::DurabilityRefused {
+            stage: DurabilityStage::ParentSync,
+            detail: format!(
+                "destination has no parent directory to sync path={}",
+                dest.display()
+            ),
+        })?;
+    if injected_failure == Some(DurabilityStage::ParentSync) {
+        return Err(InstallError::DurabilityRefused {
+            stage: DurabilityStage::ParentSync,
+            detail: format!(
+                "injected parent directory sync failure path={}",
+                parent.display()
+            ),
+        });
+    }
+    let directory =
+        std::fs::File::open(parent).map_err(|error| InstallError::DurabilityRefused {
+            stage: DurabilityStage::ParentSync,
+            detail: format!(
+                "open parent directory for sync failed path={}: {error}",
+                parent.display()
+            ),
+        })?;
+    directory
+        .sync_all()
+        .map_err(|error| InstallError::DurabilityRefused {
+            stage: DurabilityStage::ParentSync,
+            detail: format!(
+                "parent directory sync failed path={}: {error}",
+                parent.display()
+            ),
+        })?;
+    metric.parent_fsync_successes += 1;
+    Ok(true)
 }
 fn replacement_backup_path(dest: &Path) -> PathBuf {
     let name = dest
@@ -1683,10 +1995,18 @@ fn replacement_backup_path(dest: &Path) -> PathBuf {
 /// Publish a verified artifact over an existing destination without exposing a
 /// partially-written file. The old bytes are copied to a same-directory rollback
 /// file before the atomic rename and retained until the final identity check.
+///
+/// This is the PRODUCTION publication path — `installer main` -> `run_install`
+/// -> `install_binary` -> here — and it runs the same file sync, `F_FULLFSYNC`,
+/// rename, parent-directory sync sequence as [`publish_atomic_durable`], with
+/// the rollback snapshot taken before the first synchronization so a failure at
+/// any stage leaves the prior owner recoverable.
 fn replace_atomic(
     staged: &Path,
     dest: &Path,
     expected_len: u64,
+    metric: &mut DurabilityMetric,
+    injected_failure: Option<DurabilityStage>,
 ) -> Result<Option<PathBuf>, InstallError> {
     if staged.parent() != dest.parent() {
         return Err(InstallError::IoError {
@@ -1728,14 +2048,27 @@ fn replace_atomic(
     } else {
         None
     };
-    if let Err(error) = std::fs::rename(staged, dest) {
-        if let Some(rollback) = &rollback {
+    let discard_rollback = |rollback: &Option<PathBuf>| {
+        if let Some(rollback) = rollback {
             let _ = std::fs::remove_file(rollback);
         }
-        return Err(InstallError::IoError {
-            path: dest.display().to_string(),
-            detail: format!("atomic publish failed: {error}"),
-        });
+    };
+    if let Err(error) = sync_staged_artifact(staged, injected_failure) {
+        discard_rollback(&rollback);
+        return Err(error);
+    }
+    if let Err(error) = rename_for_publication(staged, dest, metric, injected_failure) {
+        discard_rollback(&rollback);
+        return Err(error);
+    }
+    if let Err(error) = sync_parent_directory(dest, metric, injected_failure) {
+        // The rename already happened, so the destination now holds the new
+        // bytes but is not durable. Put the prior owner back rather than
+        // leaving a non-durable publication behind under a success-shaped path.
+        if let Some(rollback) = &rollback {
+            restore_atomic(rollback, dest)?;
+        }
+        return Err(error);
     }
     Ok(rollback)
 }
@@ -1809,11 +2142,38 @@ fn destination_is_runnable(metadata: &std::fs::Metadata) -> bool {
     !metadata.is_dir()
 }
 
+/// Install one verified artifact. Durability observations are discarded; use
+/// [`install_binary_with_durability`] when the caller must READ what the
+/// publication actually synchronized.
 pub fn install_binary(
     source: &Path,
     install_dir: &Path,
     head_sha: &str,
     repo_ownership: &RepoOwnership,
+) -> Result<IdentityCheck, InstallError> {
+    let mut metric = DurabilityMetric::default();
+    install_binary_with_durability(
+        source,
+        install_dir,
+        head_sha,
+        repo_ownership,
+        &mut metric,
+        None,
+    )
+}
+
+/// The production install path with its durability seam exposed.
+///
+/// `metric` accumulates L0-METRIC across calls, and `injected_failure` is the
+/// deterministic fault seam for the four durability stages. Production supplies
+/// `None`; nothing reachable from the CLI can set it.
+pub fn install_binary_with_durability(
+    source: &Path,
+    install_dir: &Path,
+    head_sha: &str,
+    repo_ownership: &RepoOwnership,
+    metric: &mut DurabilityMetric,
+    injected_failure: Option<DurabilityStage>,
 ) -> Result<IdentityCheck, InstallError> {
     let binary_name = source
         .file_name()
@@ -1861,7 +2221,13 @@ pub fn install_binary(
         });
     }
 
-    let rollback = replace_atomic(&staged_path, &install_path, expected_len)?;
+    let rollback = replace_atomic(
+        &staged_path,
+        &install_path,
+        expected_len,
+        metric,
+        injected_failure,
+    )?;
     let final_check = verify_identity(&install_path, head_sha, repo_ownership);
     if !final_check.consistent {
         if let Some(rollback) = rollback {
