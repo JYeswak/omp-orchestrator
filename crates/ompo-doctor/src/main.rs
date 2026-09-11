@@ -101,27 +101,19 @@ fn main() -> ExitCode {
     }
 }
 
-fn source_json(source: &ompo_start::liveness::SourceVerdict) -> Value {
-    json!({
-        "available": source.available,
-        "fresh": source.fresh,
-        "reason_code": source.reason_code,
-        "age_ms": source.age_ms,
-        "panes": source.panes,
-    })
-}
-
 fn liveness_json(observation: &Observation) -> Value {
     let sources = observation
         .verdict
         .sources()
         .iter()
-        .map(|source| (source.name.clone(), source_json(source)))
+        .map(|source| (source.name.clone(), ompo_start::liveness::source_json(source)))
         .collect::<serde_json::Map<String, Value>>();
     json!({
         "status": observation.verdict.status(),
         "reason_code": observation.verdict.reason_code(),
         "sources": sources,
+        "all_fresh": ompo_start::liveness::all_fresh(observation.verdict.sources()),
+        "pane_set_agreement": ompo_start::liveness::pane_set_agreement(observation.verdict.sources()),
     })
 }
 
@@ -444,7 +436,7 @@ fn run_portal(rest: &[String]) -> ExitCode {
         .verdict
         .sources()
         .iter()
-        .map(|source| (source.name.clone(), source_json(source)))
+        .map(|source| (source.name.clone(), ompo_start::liveness::source_json(source)))
         .collect::<serde_json::Map<String, Value>>();
     let mut alerts = Vec::new();
     for source in observation.verdict.sources() {
