@@ -5615,6 +5615,35 @@ header/message split, one from a negative control drawn from known-present conte
 lane. **The second is the better instrument and its author did not think to run it. Convergence
 by different routes is worth more than either route alone.**
 
+## ⭐⭐ WHEN TWO INSTRUMENTS AGREE **AND SHARE A FAILURE MODE**, THE FIX IS A DIFFERENT FAILURE MODE — NOT A THIRD OF THE SAME KIND
+
+**Two panes classified assertion shapes by grepping a window for subprocess tokens and agreed.
+Their agreement lifted nothing, because both ask the same question:** *"is this assert PHRASED
+like a subprocess check?"* ⛔ **A helper that unwraps status before asserting evades both
+identically.**
+
+⭐⭐ **The fix was a structurally different discriminator, and it is CHEAPER than the one it
+replaces:** *"does the enclosing test construct a subprocess AT ALL?"* — **a property no
+phrasing can evade.**
+```
+all 35 DIRECT sites: enclosing test body constructs NO subprocess      35 of 35
+DIRECT sites in files with ZERO Command/output/spawn anywhere          18   CERTAIN
+DIRECT sites in files that DO spawn somewhere (helper possible)        17   residue
+interval: 10 <= subprocess-shaped <= 27  of 45
+```
+⭐ **Eighteen legs moved from *not proven bad* to *proven good evidence*, and the residue is
+NAMED BY FILE.** **Before this, 35 sat in a bucket whose test could not have detected the
+error.**
+
+⛔ **AND THE NEW INSTRUMENT DECLARED ITS OWN LIMIT: file-level absence of `Command` cannot rule
+out a spawn through an imported helper from another module.** ⭐ **So 18 is a FLOOR on
+"certainly good", not a proof of 18 — the one-directional discipline applied to the very
+instrument built to fix the one-directional problem.**
+
+**The general form: two instruments that disagree can be reconciled; two that AGREE while
+sharing a blind spot produce confidence and no information. Ask what question each one asks,
+and if it is the same question, build one that asks a different one.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
