@@ -1931,7 +1931,16 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
 
    **HOUSE FORM:** `cp` the file aside **BEFORE** mutating, restore from the copy, prove with
    `sha256`. `git show HEAD:<path>` keeps exactly one job — **READBACK**, proving what landed in
-   the tree — and is never a restore unless you have separately established the file was clean.
+   the tree.
+
+   **THE RULE IS A PRECONDITION, NOT A PROHIBITION** — amended the same day after two agents
+   showed their tree-restores were provably safe and a blanket ban would have outlawed a legal
+   readback. `git show HEAD:<path>` restores the **TREE**, so it is a valid restore **only when
+   the worktree already equalled the tree**. Establish that FIRST with
+   `git status --porcelain -- <path>` returning empty, or `cp` aside. One case where both are
+   equivalent, and it is common: a file **added by your own commit minutes earlier** — HEAD and
+   worktree are the same bytes, so there is nothing any peer could lose. With 87 dirty tracked
+   files the `cp` form is the right DEFAULT precisely because that precondition usually fails.
 
    **AND `git diff --numstat` IS NOT AN ORACLE ON AN UNTRACKED FILE** — it is vacuously empty
    there, so a restore "proven" that way proves nothing. Run it only against a tracked path, and
