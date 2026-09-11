@@ -677,22 +677,97 @@ fn configured_upstream_crate(repo_root: &Path, gate: &str) -> String {
         format!("{} (unavailable)", source.display())
     }
 }
-/// The supervisor's coverage step: an output crate is wired when its declared
-/// workspace target exists and therefore has a row the decision loop can see.
-/// Missing output is restrictive; it must reach `GateUnwired`, not disappear
-/// from the census.
-fn coverage_output_reachability(repo_root: &Path, crate_name: &str) -> GateReachability {
-    if repo_root
-        .join("crates")
-        .join(crate_name)
-        .join("Cargo.toml")
-        .is_file()
-    {
+// `coverage_output_reachability` USED TO SIT HERE — deleted by omp-orchestrator-uldvu.
+//
+// Its doc read: "an output crate is wired when its declared workspace target exists and
+// therefore has a row the decision loop can see." That sentence is the defect stated plainly:
+// it defines WIRED as HAVING A ROW, and a row exists for anything on disk. Replaced by
+// `crate_reachability` below, which asks what fires it.
+/// Does this crate DECLARE a gate check that `gate-runner` will execute?
+///
+/// `omp-orchestrator-fsu7` moved every gate's invocation out of `gate.yml` and into the owning
+/// crate's own `[package.metadata.gate]`, so `workflow_invokes` — which greps the workflow for
+/// `-p <crate>` — can no longer see gates wired the current way. Without this arm the repaired
+/// predicate would report a crate UNREACHABLE precisely because it was wired correctly, which is
+/// the same error as the one being fixed, with the sign flipped.
+///
+/// The chain this arm asserts is a real one and it terminates in a trigger:
+/// `.github/workflows/gate.yml` -> `cargo run -p gate-runner -- --run` -> `gate_runner`
+/// `Command::new("cargo") run -p <crate> --bin <bin>`, derived from this stanza.
+fn declares_gate_check(repo_root: &Path, crate_name: &str) -> bool {
+    let manifest = repo_root.join("crates").join(crate_name).join("Cargo.toml");
+    std::fs::read_to_string(manifest)
+        .map(|text| text.contains("[package.metadata.gate]"))
+        .unwrap_or(false)
+}
+
+/// Reachability for ONE crate, by trigger, for every row in the census.
+///
+/// # Why this function exists — `omp-orchestrator-uldvu`
+///
+/// The eleven `COVERAGE_WAVE_OUTPUT_CRATES` rows used to be computed by a separate
+/// `coverage_output_reachability`, which returned `Reachable` when
+/// `crates/<name>/Cargo.toml` **is a file**. **That is EXISTENCE, not reachability**: measured,
+/// all 11 of 11 satisfied it trivially, and so does every other directory in `crates/` — the
+/// predicate could not return anything else for a crate that exists at all.
+///
+/// The damage was not confined to those rows. [`GateCensus::derived_positive_control`] picks the
+/// FIRST reachable row as the census's ANTI-VACUITY control, so the check proving *"this census
+/// verified SOMETHING"* was satisfied by any directory on disk with a manifest in it. A positive
+/// control drawn from the population it validates cannot evidence a subset of that population —
+/// the same shape as a roster containing all 88 crates "matching" all 12 failing ones.
+///
+/// The remedy is not a new oracle: the DERIVED rows in [`census_gates`] already had a real
+/// trigger probe sitting in the same function. The coverage rows were special-cased past it.
+/// This extracts that probe so both paths answer the same question the same way, and adds the
+/// one trigger class it was missing.
+pub fn crate_reachability(
+    repo_root: &Path,
+    crate_name: &str,
+    hook_path: &Path,
+    has_remote: bool,
+) -> GateReachability {
+    let manifest = repo_root.join("crates").join(crate_name).join("Cargo.toml");
+    // Checked FIRST, because every arm below reads this file: an unreadable manifest makes
+    // `callers` and `has_bin` both zero, which would render as "library with no manifest
+    // dependency" — a measurement we did not take.
+    if !manifest.is_file() {
+        return GateReachability::Unprobed {
+            reason: format!("no readable manifest at crates/{crate_name}/Cargo.toml"),
+        };
+    }
+    let callers = manifest_callers(repo_root, crate_name);
+    // A LIB and a BIN have different trigger classes. `ack-spine` ships a bin and has 0 manifest
+    // callers; measuring it by "does a manifest depend on it" sends the operator to add a
+    // dependency nobody should add. A binary's trigger is an INVOCATION SITE, not an edge.
+    let has_bin = crate_ships_a_bin(repo_root, crate_name);
+    if callers > 0 {
         GateReachability::Reachable {
-            trigger: format!("supervisor:coverage-output-census -> crates/{crate_name}"),
+            trigger: format!("manifest dependency ({callers} caller(s))"),
+        }
+    } else if has_bin && hook_invokes(hook_path, crate_name) {
+        GateReachability::Reachable {
+            trigger: ".git/hooks/pre-commit".into(),
+        }
+    } else if has_bin && declares_gate_check(repo_root, crate_name) {
+        GateReachability::Reachable {
+            trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                .into(),
+        }
+    } else if has_bin && workflow_invokes(repo_root, crate_name) && has_remote {
+        GateReachability::Reachable {
+            trigger: ".github/workflows/gate.yml".into(),
+        }
+    } else if has_bin {
+        GateReachability::Unreachable {
+            reason: "binary with no invocation site: no manifest caller, not invoked by the \
+                     installed hook, no [package.metadata.gate] stanza, not declared in gate.yml"
+                .into(),
         }
     } else {
-        GateReachability::NotInstalled
+        GateReachability::Unreachable {
+            reason: "library with no manifest dependency referencing it".into(),
+        }
     }
 }
 
@@ -891,7 +966,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         }
         rows.push(GateCensusRow {
             gate: (*crate_name).into(),
-            reachability: coverage_output_reachability(repo_root, crate_name),
+            // uldvu: the SAME probe the derived rows use. These eleven were special-cased past
+            // it and got an existence check instead, which no crate on disk could fail.
+            reachability: crate_reachability(repo_root, crate_name, &hook_path, has_remote),
             // CURATED, therefore BLOCKING: this row was triaged before `leht`.
             disposition: CensusDisposition::Blocking,
         });
@@ -942,51 +1019,13 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
         //
         // The dependency graph is already on disk in the manifests. Reading it is
         // exact, needs no subprocess, and cannot time out.
-        let callers = manifest_callers(repo_root, crate_name);
-        // A LIB and a BIN have different trigger classes, and measuring both by
-        // "does a manifest depend on it" sends the operator to add a dependency
-        // nobody should add.
-        //
-        // MEASURED 2026-09-02: `ack-spine` ships `bin:ack-spine` and has 0 manifest
-        // callers. The old probe reported `no manifest dependency references this
-        // crate` and `next_action=repair-gate-trigger`. Both are true and the remedy
-        // is wrong for the same reason `NotExtracted` had to become its own variant:
-        // **a binary's trigger is an INVOCATION SITE, not a dependency edge.** This
-        // file's own comment already said "bins without manifest callers are
-        // expected"; the code did not act on it.
-        let has_bin = crate_ships_a_bin(repo_root, crate_name);
-        // The one case where we genuinely could not look. Checked BEFORE the
-        // trigger arms, because every one of them reads this file: an unreadable
-        // manifest makes `callers` and `has_bin` both zero, which would render as
-        // "library with no manifest dependency" — a measurement we did not take.
-        let manifest = repo_root.join("crates").join(crate_name).join("Cargo.toml");
-        let reachability = if !manifest.is_file() {
-            GateReachability::Unprobed {
-                reason: format!("no readable manifest at crates/{crate_name}/Cargo.toml"),
-            }
-        } else if callers > 0 {
-            GateReachability::Reachable {
-                trigger: format!("manifest dependency ({callers} caller(s))"),
-            }
-        } else if has_bin && hook_invokes(&hook_path, crate_name) {
-            GateReachability::Reachable {
-                trigger: ".git/hooks/pre-commit".into(),
-            }
-        } else if has_bin && workflow_invokes(repo_root, crate_name) && has_remote {
-            GateReachability::Reachable {
-                trigger: ".github/workflows/gate.yml".into(),
-            }
-        } else if has_bin {
-            GateReachability::Unreachable {
-                reason: "binary with no invocation site: no manifest caller, not \
-                         invoked by the installed hook, not declared in gate.yml"
-                    .into(),
-            }
-        } else {
-            GateReachability::Unreachable {
-                reason: "library with no manifest dependency referencing it".into(),
-            }
-        };
+        // uldvu: this arm ladder was INLINE here and the coverage rows above were special-cased
+        // past it, which is how one census grew two answers to one question. It now lives in
+        // `crate_reachability` and both paths call it. The reasoning it carried is preserved
+        // there: manifest reads are exact and cannot time out (the old grep's verdict moved
+        // with machine load), and a binary's trigger is an INVOCATION SITE, not a dependency
+        // edge (`ack-spine` ships a bin with zero manifest callers).
+        let reachability = crate_reachability(repo_root, crate_name, &hook_path, has_remote);
         rows.push(GateCensusRow {
             gate: crate_name.into(),
             reachability,
