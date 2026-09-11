@@ -438,9 +438,16 @@ fn run_portal(rest: &[String]) -> ExitCode {
         .iter()
         .map(|source| (source.name.clone(), ompo_start::liveness::source_json(source)))
         .collect::<serde_json::Map<String, Value>>();
+    // ONE AUTHORITY (j4ert, site 4). This loop re-implemented
+    // `ompo_start::liveness::is_silent`'s condition inline, which made the
+    // alert emitter and `portal_contract::alerts_are_complete` two INDEPENDENT
+    // copies of the silence law -- and cqwo's whole value is the cross-check
+    // between them. Two copies that agree today and are pinned by nothing is
+    // the shape that lets a cross-check pass a wrongly-alerted system while
+    // every hand-built fixture stays green.
     let mut alerts = Vec::new();
     for source in observation.verdict.sources() {
-        if !source.available || !source.fresh || source.age_ms.is_none() {
+        if ompo_start::liveness::is_silent(source) {
             alerts.push(json!({
                 "severity": if source.available { "warn" } else { "error" },
                 "summary": format!("{} source is not fresh and available", source.name),
@@ -460,11 +467,13 @@ fn run_portal(rest: &[String]) -> ExitCode {
             json!({"path": inception_path.display().to_string(), "status": "INVALID", "readback": "REFUSE", "reason": error.to_string()})
         }
     };
-    let all_sources_fresh = observation
-        .verdict
-        .sources()
-        .iter()
-        .all(|source| source.available && source.fresh && source.age_ms.is_some());
+    // ONE AUTHORITY (j4ert, site 5). The NEGATED spelling of the same law, and
+    // the spelling a grep for the positive condition cannot see -- which is
+    // why the first census of this law counted three copies and the real
+    // figure was six. `all_fresh` is `liveness`'s own published negation and
+    // it additionally refuses an EMPTY source set, which this inline copy read
+    // as "everything is fresh".
+    let all_sources_fresh = ompo_start::liveness::all_fresh(observation.verdict.sources());
     let available_sources = observation
         .verdict
         .sources()

@@ -575,3 +575,97 @@ fn the_alert_cross_check_uses_the_emitters_own_health_condition() {
         "available and fresh with NO age is not health -- a claim with no reading behind it"
     );
 }
+
+// ===========================================================================
+// j4ert, site 6 -- THE PIN THAT A COLLAPSE CANNOT GIVE.
+//
+// `source_is_healthy` is the silence law over an EMITTED JSON ROW;
+// `liveness::is_silent` is the same law over a `SourceVerdict`. Two
+// representations of one law, which is legitimate -- the contract validates
+// the WIRE shape and cannot take a typed verdict -- but only if something
+// holds them together. Nothing did.
+//
+// ⛔ WHY THIS MATTERS TO cqwo SPECIFICALLY, and it is a finding against my own
+// graded work: `alerts_are_complete` refuses a degraded source that no alert
+// names. The EMITTER decided degradation with its own inline copy and this
+// PREDICATE decides it with `source_is_healthy`. The cross-check compared two
+// independent copies of the law, and every leg above stays green if they
+// drift, because they all feed BOTH sides fixtures built by hand. The emitter
+// side is now collapsed onto `is_silent`; this pins the remaining pair.
+// ===========================================================================
+
+/// Every combination of the three inputs the law reads. Exhaustive rather than
+/// sampled: eight rows is the whole domain, so a drift cannot hide in the
+/// combination nobody thought to write down.
+#[test]
+fn the_wire_predicate_and_the_typed_predicate_agree_on_every_input() {
+    let mut checked = 0;
+    for available in [true, false] {
+        for fresh in [true, false] {
+            for age_ms in [Some(7_u64), None] {
+                let verdict = ompo_start::liveness::SourceVerdict {
+                    name: "ntm".to_owned(),
+                    available,
+                    fresh,
+                    reason_code: "L4_PIN".to_owned(),
+                    age_ms,
+                    panes: Vec::new(),
+                };
+                let row = ompo_start::liveness::source_json(&verdict);
+                let typed_silent = ompo_start::liveness::is_silent(&verdict);
+
+                assert_eq!(
+                    source_is_healthy(&row),
+                    !typed_silent,
+                    "the wire predicate and the typed predicate disagree on \
+                     available={available} fresh={fresh} age_ms={age_ms:?}: row={row}"
+                );
+                // And the row's OWN `silent` flag is the third encoding a
+                // reader might trust. Pinned to the same answer, so a consumer
+                // reading the flag and a consumer running the predicate cannot
+                // reach different conclusions about one row.
+                assert_eq!(
+                    row["silent"], typed_silent,
+                    "the emitted silent flag must equal the predicate that produced it"
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 8, "the domain is three booleans-worth of input");
+}
+
+/// KNOWN-GOOD anchor for the pin above: the two predicates are not agreeing
+/// vacuously by both being constant. Exactly ONE of the eight rows is healthy,
+/// and it is the all-true one.
+#[test]
+fn the_pin_is_not_vacuous_exactly_one_input_is_healthy() {
+    let healthy = ompo_start::liveness::SourceVerdict {
+        name: "ntm".to_owned(),
+        available: true,
+        fresh: true,
+        reason_code: "L4_OK".to_owned(),
+        age_ms: Some(7),
+        panes: Vec::new(),
+    };
+    assert!(source_is_healthy(&ompo_start::liveness::source_json(&healthy)));
+    assert!(!ompo_start::liveness::is_silent(&healthy));
+
+    for (available, fresh, age_ms) in [
+        (false, true, Some(7_u64)),
+        (true, false, Some(7)),
+        (true, true, None),
+    ] {
+        let degraded = ompo_start::liveness::SourceVerdict {
+            available,
+            fresh,
+            age_ms,
+            ..healthy.clone()
+        };
+        assert!(
+            !source_is_healthy(&ompo_start::liveness::source_json(&degraded)),
+            "each of the three clauses alone must make a row unhealthy"
+        );
+        assert!(ompo_start::liveness::is_silent(&degraded));
+    }
+}
