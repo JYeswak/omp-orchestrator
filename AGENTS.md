@@ -2015,6 +2015,22 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    file, `chmod 755` then `chmod 644` leaves numstat **identical at `86 7` both ways.** For the mode
    question use **`git diff --summary`**, which `--numstat` cannot show on a content-dirty file.
 
+   ⛔ **AND `NONZERO INSERTIONS` IS A FLOOR, NOT A VERDICT — CORRECTED 2026-09-11 AFTER IT COST
+   A REAL COMMIT.** I excluded `worker-oracle-gate` from a 68-crate change because numstat read
+   `3/1` against my `3/0` stanza, which this rule says means a peer is editing. Reading the
+   HUNK instead of the counts:
+
+   ```
+   -tempfile = "3"
+   +tempfile = "3"
+   ```
+
+   **A byte-identical line, rewritten because the file had no trailing newline and an appending
+   `printf` merged into it.** The whole diff was mine. **numstat scores a rewritten-identical
+   line as `1` deletion plus `1` insertion, so a trailing-newline fix is indistinguishable from
+   a peer edit by count alone.** One legitimate crate sat out a commit for an hour on that
+   misread. **`0 0` still proves absence; anything else demands the hunk.**
+
 8i. **RUN A NEGATIVE CONTROL ON YOUR INSTRUMENT BEFORE YOU BELIEVE ITS ANSWER.** Joshua,
    2026-09-07, fleet-wide. **This is the parent rule: it subsumes `8b`–`8h` and is the lens for
    `8j`–`8p`.** It is only actionable with the two-probe form, so the recipe stays here:
