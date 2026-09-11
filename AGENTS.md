@@ -319,8 +319,22 @@ RCH_REQUIRE_REMOTE=1 rch exec -- cargo build --release -j 2 \
 **SINGLE quotes outside, DOUBLE inside.** Drop them and cargo refuses with *"string values must be
 quoted."* **COPY IT, do not type it from memory** — Joshua did and it cost a build.
 
-**`--target` sets `required_os=darwin` and collapses the admissible fleet 4 → 1. That is the `rc=103`
-cause.** `--config build.target=` produces the **identical binary** with the whole fleet admissible.
+**`--target` sets `required_os=darwin` and collapses the admissible fleet 4 → 1. That is ONE
+`rc=103` cause.** `--config build.target=` produces the **identical binary** with the whole fleet
+admissible.
+
+⛔ **CORRECTED 2026-09-11 — `rc=103` HAS AT LEAST TWO CAUSES AND THIS LINE NAMED ONE.** The
+sentence above used to read *"That is the `rc=103` cause"*, definite article, which licenses
+reading any `103` as a `--target` mistake. Measured: a remote build died `rc=103` / **`RCH-E412`**
+— dependency preflight blocked on a **peer's brand-new UNTRACKED file mid-sync**
+(`crates/worker-tag-gate/tests/snapshot_depth_probe.rs`). Marked *retryable*; an immediate retry
+succeeded.
+
+**So a peer merely CREATING a file can `rc=103` every other agent's remote build for one sync
+window**, and that is a transient with a one-command remedy — **retry** — not a fleet outage and
+not a `--target` error. **Read the `RCH-E<nnn>` code, never the 103 alone**; the code is the
+discriminator and `rch error explain <code>` resolves it (positive control: `RCH-E999` refuses).
+Same shape as `exit 75`, where one number covers seven sites and six markers.
 
 **DO NOT PIN A WORKER.** No `RCH_WORKER=`. All four boxes are the same class running the same
 toolchain for the same asupersync builds, so pinning buys nothing and refuses often: measured

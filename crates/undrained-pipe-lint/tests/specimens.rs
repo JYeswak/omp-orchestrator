@@ -276,6 +276,17 @@ fn mutation_removing_stderr_pipe_retires_violation() {
 // believing this crate unwired is precisely the false conclusion the deleted test produced. The
 // wiring lives in this crate's own `[package.metadata.gate]`, is executed by `gate-runner --run`,
 // and is observable as a `CHECK_PASS crate=undrained-pipe-lint` row in any completed gate run.
+//
+// AND NO REPLACEMENT PROBE WAS ADDED HERE, DELIBERATELY: the invariant ALREADY HAS AN OWNER.
+// `crates/gate-runner/tests/subsumption_real.rs:52` lists this crate with `ran_binary = true`,
+// and `gate_runner::subsumption` (lib.rs:990) refuses any such crate that declares no
+// `[package.metadata.gate]` checks — "its test half is covered, its run half is NOT". Measured:
+// deleting the stanza from this crate's Cargo.toml turns
+// `every_former_gate_job_crate_is_still_reached_through_the_entry_point` RED (exit 101), and
+// restoring it byte-identically returns 4 passed / 0 failed.
+//
+// So a probe here would be a SECOND COPY of a gate owned elsewhere, which is how two gates drift
+// into disagreeing about one fact — the boundary rule `workflow_shape.rs` states for itself.
 
 /// ANTI-VACUITY positive control (clause 6): an empty scan set must be a TYPED
 /// error (exit 3), never a phantom violation (exit 1).
