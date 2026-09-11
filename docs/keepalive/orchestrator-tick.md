@@ -157,22 +157,38 @@ indistinguishable from a pass.** Also: `agreement.status = "draft"` not `converg
 and the cited `CONTRACT.md:82-113` predicates have MOVED (approval is at `:337`). **Do NOT flip
 `draft` → `converged` to make a gate pass — that is gate self-weakening.**
 
-**THE RESIDUAL R10 REVEALED, which is NOT S1 debt — AND THE FIGURE IS DISPUTED, READ `pd5ua`
-BEFORE ACTING ON IT.** The banked local run says **17 FAIL / 12 UNMEASURABLE**; CI's latest
-`GATE_RUNNER` line over the **same 88-crate roster** says something else:
+**THE RESIDUAL R10 REVEALED, which is NOT S1 debt. ✅ THE DISPUTE IS SETTLED — `pd5ua` IS CLOSED
+AND THIS BLOCK WAS CITING A SUPERSEDED RUN.** The authoritative reading, from `pd5ua`'s close:
 
 ```
-CI run 34171417882   crates=88  pass=70  fail=16  unmeasurable=2      sum 88
-fsu7's banked rows   crates=88  PASS 59  FAIL 17  UNMEASURABLE 12     sum 88
-delta                pass +11 · fail -1 · UNMEASURABLE -10
+AUTHORITATIVE  CI run 34289493517  head=475c702  crates=88  pass=72 fail=12 unmeasurable=4
+SUPERSEDED     CI run 34171417882                crates=88  pass=70 fail=16 unmeasurable=2
+fsu7's bank    sha=c5fcf898…                     crates=88  PASS 59 FAIL 17 UNMEASURABLE 12
+                 -- an eleven-row ALL_TESTS_SKIPPED window plus isolated subprocess-contract
 ```
 
-**`UNMEASURABLE` maps to a typed `MISSING_EXECUTABLE`, so CI measured TEN crates the local run
-could not — CI is the strictly MORE COMPLETE reading, and both this block and `S1-READY.md` were
-citing the less complete one as the work list.** Both are kept on purpose: the local numbers are
-what R10 was closed against, so deleting them would make R10's close unverifiable. `pd5ua` owns
-picking the authoritative reading and enumerating the ten. **This does NOT retract R10** — R10
-asked whether the layer RAN, and it ran both times.
+**CI is the strictly MORE COMPLETE reading** — `UNMEASURABLE` maps to a typed
+`MISSING_EXECUTABLE`, so CI measured crates the local run could not. Negative run control
+`999999999999999` → HTTP 404 rc=1. **The local bank is kept on purpose**: R10 was closed against
+it, so deleting it would make R10's close unverifiable. **This does NOT retract R10** — R10 asked
+whether the layer RAN, and it ran both times.
+
+⚠️ **`pd5ua` DELIVERED THE READING AND NOT THE ENUMERATION — do not inherit the second half.**
+This block used to say it owned *"picking the authoritative reading AND enumerating the ten."*
+Measured post-close: **0 of 11 failing crate names in its comments, 2 of 11 in its body** — and
+those two only as prose examples, not a classified list.
+
+**THE NEAR-MISS IS THE REUSABLE PART.** Grepping its two cited artifacts for the failing crates
+returned **11 of 11**, which reads as *"the enumeration is in the artifacts."* It is not:
+`docs/gate-roster.txt` is the **FULL 88-crate roster** and also contains `tick-monitor`,
+`pane-truth`, `bead-availability` and `subprocess-contract` — **all of which PASSED**. Every
+failing crate matched for the same reason every passing one did. ⛔ **NAMING ALL 88 IS NOT
+ENUMERATING THE 17**, and that is a structurally guaranteed match — the same class as
+`grep -c ompo` → 62 counting substrings.
+
+**AND THE INSTRUMENT EVERYONE WAS TOLD TO USE CANNOT REACH THE DATA:** `grep -c 'GATE_RUNNER'`
+returns **9 against ~250 real rows**, shipped in every run since `568f2dfe`. Re-scoped onto
+`86zjl`, whose author made that exact error and retracted it.
 
 **AND THE SHARPER FACT, from `%20`'s `6nhj` census:** `gh run list --limit 100` returns **83
 completed runs — 71 failure, 12 cancelled, ZERO success** — with **no run id or SHA cited anywhere
