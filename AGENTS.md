@@ -4756,6 +4756,44 @@ ITS OWN PLANT as a peer's uncommitted file.** ⭐ **A true rule delivered on a f
 more dangerous than a wrong rule, because the rule survives review and the premise does not get
 one.** **Take the general rule; re-derive the specific reading.**
 
+## ⭐⭐ WHEN YOU APPROVE A FIX TO AN ORACLE, **ENUMERATE ITS READERS**
+
+**A repaired oracle that starts telling the truth breaks every consumer that was relying on the
+lie.** Measured 2026-09-11, reported by the grader **against its own `APPROVED` verdict**.
+
+`every_wave_output_has_a_reachable_census_trigger` (`tests/gate_wiring_wave3.rs:60`) panics
+unless **all eleven** wave outputs are `Reachable`. Its population is the identical list as
+`COVERAGE_WAVE_OUTPUT_CRATES` at `lib.rs:536`. **`uldvu`'s accepted, mutation-proved result is
+10 of 11** — `kernel-only-operator-hook` deliberately `Unreachable`, the census's one genuine
+BUILT ≠ WIRED finding. ⛔ **The test CANNOT PASS while that verdict is correct.**
+
+⭐⭐ **AND THE CAUSATION RUNS THE GOOD WAY: before the repair the predicate was
+`Cargo.toml.is_file()`, which returns `Reachable` for ANY crate that exists — so this test
+PASSED VACUOUSLY, for precisely the reason `uldvu` was filed.** It was green because the oracle
+it consumes **could not return `Unreachable`**. ⭐ **THE REPAIR DID NOT BREAK THE TEST; IT
+EXPOSED THAT THE TEST HAD NEVER BEEN ABLE TO FAIL. A TRUE RED REPLACING A FALSE GREEN IS THE
+REPAIR WORKING** — so part of this crate's `FAILING` status is a CONSEQUENCE of correct work,
+and must not be read as a regression.
+
+⛔ **AND THE FIX MUST NOT RE-CREATE THE DEFECT ONE LAYER OUT.** Either
+`kernel-only-operator-hook` gets a real trigger — making 11/11 **TRUE rather than asserted** —
+or the assertion is re-expressed to permit a **NAMED, DECLARED** `Unreachable` row. ⭐
+***Deleting the assertion, or weakening it to "at least one reachable", rebuilds `uldvu`'s own
+defect inside the consumer: a test that cannot fail.*** **Rule 10 with the sign flipped — DO NOT
+FIX A TRUE RED BY REMOVING THE THING THAT CAN REPORT IT.** Blast radius is wider than the test:
+`decide()` branches on `Unreachable` rows too (`an_unreachable_wave_output_blocks_supervisor_decision`).
+
+⭐ **THE GRADER'S OWN LESSON, stated as discipline rather than apology: *"I graded the
+predicate, its arms, its known-bads and its count, and I never asked who CONSUMES the
+verdict."*** **Enumerating a repaired oracle's readers belongs in the grading bar alongside
+*re-derive every count*.**
+
+**NO-CLAIM carried from the reporter: the analysis is from SOURCE plus CI's failing-test names.
+`gate_wiring_wave3` is one of the 17 never-compiled targets and was NOT run; the
+vacuously-green claim is derived from the old predicate's TEXT, not measured against the old
+tree.** Two agents attributed that test to that file by independent routes — one from CI, one
+from the bead — **and only one of them connected it to the repair.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
