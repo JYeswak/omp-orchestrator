@@ -1,8 +1,8 @@
 use s1_coverage::{
-    checkout_cannot_resolve, checkout_unusable, compare_reports, compute, compute_with_manifest,
-    parse_beads_jsonl, refusal_exit_code, render_markdown, validate_doc_only_reason,
-    validate_manifest, BeadRecord, ConvergenceDecision, CoverageError, CoverageInput, CoverageState,
-    InputManifest, InputState, ManifestVerdict, SourceText,
+    checkout_cannot_resolve, checkout_unusable, classify_convergence, compare_reports, compute,
+    compute_with_manifest, parse_beads_jsonl, refusal_exit_code, render_markdown,
+    validate_doc_only_reason, validate_manifest, BeadRecord, ConvergenceDecision, CoverageError,
+    CoverageInput, CoverageState, InputManifest, InputState, ManifestVerdict, SourceText,
 };
 
 fn input(contract: &str, beads: Vec<BeadRecord>) -> CoverageInput {
@@ -289,6 +289,33 @@ fn growth_and_closure_use_relation_not_absolute_size() {
     assert_eq!(growth.growth, 1);
     assert_eq!(growth.closure, 0);
     assert_eq!(growth.decision, ConvergenceDecision::NonConverging);
+}
+
+#[test]
+fn equal_growth_and_closure_is_not_converging() {
+    // THE RESTING STATE OF A WAVE, and the case production emits today: run 34554312190 on
+    // 947e3e2 reported growth 0, closure 0, NON_CONVERGING. The two rows above survive both
+    // `>` and `>=` (1>0 true and 0>=1 false under either), so the equality case is the ONLY
+    // one that makes a `closure >= growth` mutation red. A stalled wave must never read as
+    // converging.
+    assert_eq!(classify_convergence(0, 0), ConvergenceDecision::NonConverging);
+    assert_eq!(classify_convergence(3, 3), ConvergenceDecision::NonConverging);
+    // The strict neighbours of the boundary, so the relation is pinned on both sides of equality.
+    assert_eq!(classify_convergence(3, 4), ConvergenceDecision::Converging);
+    assert_eq!(classify_convergence(4, 3), ConvergenceDecision::NonConverging);
+}
+
+#[test]
+fn depth_zero_checkout_wording_is_attributed_to_the_checkout() {
+    // MEASURED on an rch worker 2026-09-10 by StaleHD13: the remote repo is an initialised .git
+    // with NO commits and NO objects, and `rev-parse HEAD` there fails with `ambiguous argument`,
+    // NOT `invalid object name`. A needle set guessed from the shallow hypothesis misses it.
+    let detail = "fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.";
+    assert!(checkout_cannot_resolve(detail));
+    assert_eq!(refusal_exit_code(&checkout_unusable("HEAD", detail)), 4);
+    assert!(checkout_cannot_resolve(
+        "fatal: your current branch 'main' does not have any commits yet"
+    ));
 }
 
 #[test]

@@ -349,7 +349,12 @@ pub fn manifest_for_input(revision: impl Into<String>, input: &CoverageInput) ->
 }
 
 /// True when git refused because the CHECKOUT cannot resolve the revision, as opposed to any
-/// failure of this crate. Keyed on git's own wording for an unresolvable rev or a missing repo.
+/// failure of this crate. Keyed on git's own wording for an unresolvable rev or an unusable repo.
+///
+/// `ambiguous argument` is the one a DEPTH-ZERO checkout actually emits — an initialised `.git`
+/// with no commits and no objects, which is what `rch`'s remote snapshot was measured to be on
+/// 2026-09-10 (`is-shallow-repository` false, no `.git/shallow`, no grafts). A set guessed from
+/// the shallow hypothesis would miss it, so these needles are OBSERVED text, not predicted text.
 ///
 /// Deliberately does NOT key on `exists on disk, but not in`: that message varies with on-disk
 /// presence and carries no information about resolvability, so three readers read three different
@@ -357,9 +362,15 @@ pub fn manifest_for_input(revision: impl Into<String>, input: &CoverageInput) ->
 #[must_use]
 pub fn checkout_cannot_resolve(git_error: &str) -> bool {
     let lower = git_error.to_ascii_lowercase();
-    ["not a git repository", "invalid object name", "not a valid object name"]
-        .into_iter()
-        .any(|needle| lower.contains(needle))
+    [
+        "not a git repository",
+        "invalid object name",
+        "not a valid object name",
+        "ambiguous argument",
+        "does not have any commits yet",
+    ]
+    .into_iter()
+    .any(|needle| lower.contains(needle))
 }
 
 /// The refusal emitted when the checkout cannot resolve a revision this crate was asked to read.
