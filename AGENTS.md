@@ -1642,11 +1642,34 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
        -> .find(|r| r.reachability.is_reachable())          <- the FIRST such row
    ```
 
-   **Measured: ALL 11 `COVERAGE_WAVE_OUTPUT_CRATES` rows satisfy it trivially**, and so does
-   `crate-atom-gate` — **the crate rule 10 below records as having never been invoked by
-   anything.** So the row that proves *"this census verified SOMETHING"* is satisfied by **any
-   directory on disk with a manifest in it**, and the supervisor believed `dispatch-silence-watch`
-   reachable for a reason unrelated to whether anything calls it.
+   **Measured: ALL 11 `COVERAGE_WAVE_OUTPUT_CRATES` rows satisfy it trivially**, so the row that
+   proves *"this census verified SOMETHING"* is satisfied by **any directory on disk with a
+   manifest in it**, and the supervisor believed `dispatch-silence-watch` reachable for a reason
+   unrelated to whether anything calls it.
+
+   ⛔ **AND THE SPECIMEN THIS RULE FIRST NAMED WAS WRONG — CORRECTED WITHIN THE HOUR BY THE AGENT
+   IMPLEMENTING IT, WHO WOULD OTHERWISE HAVE PINNED A FALSE VERDICT INTO THE REPAIRED ORACLE.**
+   The original text called `crate-atom-gate` *"the crate rule 10 records as having never been
+   invoked by anything."* **That misreads rule 10 by one axis.** Measured:
+
+   ```
+   manifest callers  3   no-shell-gate · omp-inventory-map · orchestration-tick-gate
+   source uses       3   kernel-bypass-gate · no-shell-gate/src/bin/pre-commit-gate.rs
+                         orchestration-tick-gate/src/main.rs
+   ```
+
+   **Rule 10 says its GATE has never FIRED** — the pre-commit call site sits behind a disarmed
+   `OMP_CRATE_ATOM_GATE=1` flag. **Its LIBRARY is used by three crates.** A correct reachability
+   predicate MUST call it Reachable, so it is the **known-GOOD**, not the known-bad. The
+   known-bad has to be a **synthetic** crate — manifest and nothing else — which is both the
+   shape the old predicate provably cannot fail **and** one that cannot drift when a peer adds a
+   dependency.
+
+   **THE REUSABLE PART IS THE MISREAD, NOT THE CRATE.** *"The gate never fires"* and *"nothing
+   uses the crate"* are **different axes**, and a doctrine sentence compressing them licenses the
+   next reader to assert the stronger one. That is the borrowed-claim rule (*a borrowed claim
+   inherits its author's burden*) firing on a claim borrowed **from this file, by its own
+   author,** one rule later.
 
    **THE TWO SHAPES, and they compose into a gate that cannot fail:**
 
