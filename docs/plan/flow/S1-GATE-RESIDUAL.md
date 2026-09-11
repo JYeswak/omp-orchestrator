@@ -1,18 +1,38 @@
 # S1 gate residual — the non-PASS crates, ENUMERATED
 
 ```
-⛔ THE TITLE SAID "the 20 non-PASS crates" AND THE RESIDUAL IS NOW 9. Superseded 2026-09-11
-   by pane %33. The old figure is kept below as SUPERSEDED rather than deleted, because a
-   deleted number cannot be checked against the run that produced it.
+⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 7. Superseded twice on
+   2026-09-11 by pane %33, both times against a NEWER verdict-bearing run. Old figures are
+   kept as SUPERSEDED rather than deleted, because a deleted number cannot be checked against
+   the run that produced it.
 
-AUTHORITATIVE  run 34592771605   headSha 39b52fee   conclusion=failure   2026-09-11
-  GATE_RUNNER_FAILING      count=5  no-shell-gate, omp-inventory-map, omp-orchestrator,
-                                    ompo-doctor, s1-coverage
+AUTHORITATIVE  run 34601341490   headSha 4911489   conclusion=failure   2026-09-11 12:54Z
+  GATE_RUNNER_FAILING      count=3  no-shell-gate, omp-inventory-map, omp-orchestrator
   GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
                                     finding:MISSING_EXECUTABLE,
                                     loop-driver:POLICY_UNAVAILABLE,
                                     loop-queue-filter:MISSING_EXECUTABLE
-  non-PASS = 9.  SUM CONTROL against GATE_RUNNER_PLAN crates=90:  81 + 5 + 4 = 90.
+  non-PASS = 7.
+  GATE_RUNNER_LEDGER_DRIFT — ZERO lines. `build-stamp`'s drift cleared by ac8b4eb.
+
+  ⭐ TWO CRATES LEFT THE FAILING SET. ONE DEPARTURE IS ATTRIBUTABLE, ONE IS NOT:
+    ompo-doctor   fixed by d0c50f2 (repo-backed fixtures for the inception repair legs).
+                  ⚠️ The grade for that work explicitly said it proved `cargo test` green and
+                  did NOT prove the crate passes the GATE RUNNER, "a separate oracle". THIS
+                  RUN DISCHARGES THAT NO-CLAIM — the separate oracle has now spoken. A
+                  NO-CLAIM is a debt to be paid by later evidence, not a permanent hedge.
+    s1-coverage   left the set without a targeted fix; its `cargo test` was already green when
+                  measured, so its FAIL was upstream of the crate. NOT attributed to any
+                  commit here, because nobody has shown the mechanism.
+
+SUPERSEDED     run 34592771605   headSha 39b52fee   2026-09-11 11:11Z   non-PASS 9
+                 FAILING 5: the three above plus ompo-doctor, s1-coverage
+SUPERSEDED     run 34587961695   headSha df49750a   2026-09-11          non-PASS 20
+
+  ⚠️ THE SUM CONTROL IS NOT AVAILABLE ON THIS RUN and its absence is stated rather than
+  papered over: the earlier entry reconciled 81 + 5 + 4 = 90 against GATE_RUNNER_PLAN
+  crates=90. No PLAN line was captured for 34601341490, so the pass count here is DERIVED by
+  subtraction rather than measured, and is deliberately not written down.
 
   ⚠️ THE SUM CONTROL VALIDATES THE TALLY, NEVER THE ORACLE. This file has twice published a
   correct tally of the WRONG run, so the control above is necessary and not sufficient: it
