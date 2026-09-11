@@ -25,6 +25,10 @@ sha2 = "0.11"
 name = "ompo-start-foundation-append"
 path = "src/bin/foundation_append.rs"
 
+[[bin]]
+name = "ompo-start-mail-freshness"
+path = "src/bin/mail_freshness.rs"
+
 [dev-dependencies]
 tempfile = "3"
 
