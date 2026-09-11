@@ -707,6 +707,10 @@ pub fn merge_hooks(
     Ok(backups)
 }
 
+// b09-x282: ratified roster + detection live in agent_families.rs (own file,
+// own tests) to stay clear of the active b07 lane in this file.
+pub mod agent_families;
+
 /// Detected agent families. Empty is unrepresentable as success.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentScan {
