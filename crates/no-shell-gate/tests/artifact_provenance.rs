@@ -177,6 +177,23 @@ fn verify_preserved_inventory(
             dir.display()
         ));
     }
+    // CANNOT-OBSERVE is not ABSENT (fh C69). A transfer lane that excludes
+    // dot-dirs presents a tree where the whole input is gone: zero declared
+    // members observable. That is a boundary of the instrument, not a defect
+    // in the artifacts, and it must read as a distinct typed error -- never a
+    // pass, never MISSING. A partial input (some members present) is evaluated
+    // per member below.
+    let observable = members
+        .iter()
+        .filter(|(file, _, _)| dir.join(file).is_file())
+        .count();
+    if observable == 0 {
+        return Err(format!(
+            "ARTIFACT_PROVENANCE_UNOBSERVABLE dir={} members={} reason=no declared member observable on this tree (a lane may exclude the directory; ABSENT and CANNOT-OBSERVE differ)",
+            dir.display(),
+            members.len()
+        ));
+    }
     let mut problems = Vec::new();
     let mut checked = 0usize;
     for (file, want, cited_by) in members {
@@ -231,7 +248,9 @@ fn a_corrupted_copy_is_rejected_by_the_provenance_gate() {
     ));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let mutant = dir.join("agent-end-raw-frame.json.gz");
-    let mut bytes = std::fs::read(&source).expect("preserved artifact exists");
+    let mut bytes = std::fs::read(&source).expect(
+        "ARTIFACT_PROVENANCE_UNOBSERVABLE member=agent-end-raw-frame.json.gz reason=source not observable on this tree",
+    );
     let offset = bytes.len() / 2;
     bytes[offset] ^= 0x01;
     std::fs::write(&mutant, bytes).expect("write corrupted artifact copy");
@@ -252,6 +271,57 @@ fn a_corrupted_copy_is_rejected_by_the_provenance_gate() {
         error.contains("ARTIFACT_PROVENANCE_HASH_MISMATCH")
             || error.contains("ARTIFACT_PROVENANCE_UNREADABLE"),
         "{error}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// KNOWN-BAD for the CANNOT-OBSERVE arm (e5vil): a dir with zero observable
+/// members is UNOBSERVABLE, never MISSING and never a pass. Fails on any lane
+/// whose transfer excludes the artifact directory.
+#[test]
+fn unobservable_input_is_typed_not_missing() {
+    let dir = std::env::temp_dir().join(format!(
+        "omp-artifact-unobservable-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let error =
+        verify_preserved_inventory(&dir, PRESERVED).expect_err("empty input must not pass");
+    assert!(
+        error.contains("ARTIFACT_PROVENANCE_UNOBSERVABLE"),
+        "{error}"
+    );
+    assert!(!error.contains("MISSING"), "must not read as absent: {error}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// KNOWN-GOOD direction: a partial input is evaluated per member -- one present
+/// (wrong bytes) plus one absent reads MISMATCH plus MISSING, never UNOBSERVABLE.
+#[test]
+fn partial_input_still_reports_per_member() {
+    let dir = std::env::temp_dir().join(format!(
+        "omp-artifact-partial-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let raw = dir.join("plain.txt");
+    std::fs::write(&raw, b"not the artifact\n").expect("write plain");
+    let gz_status = std::process::Command::new("gzip")
+        .args(["-k", raw.to_str().expect("utf8 path")])
+        .status()
+        .expect("gzip must exist where gunzip is required");
+    assert!(gz_status.success(), "gzip the partial member");
+    std::fs::rename(dir.join("plain.txt.gz"), dir.join("inv.txt.gz")).expect("rename");
+    let error = verify_preserved_inventory(&dir, &PRESERVED[0..2])
+        .expect_err("partial input must be RED");
+    assert!(
+        error.contains("ARTIFACT_PROVENANCE_HASH_MISMATCH"),
+        "{error}"
+    );
+    assert!(error.contains("MISSING"), "{error}");
+    assert!(
+        !error.contains("UNOBSERVABLE"),
+        "partial input is observable: {error}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
