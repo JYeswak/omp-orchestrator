@@ -6584,6 +6584,112 @@ read first and explained afterwards; the one that was stated first came back exa
 crates is fixed, and it does not retract `GATE_RUNNER_FAILING count=16` three runs ago —
 **different populations at different heads, which is a partial order and not a contradiction.**
 
+## ⛔⛔ A FAILING-**LEG** COUNT IS NOT A **PROBLEM** COUNT — and only the MESSAGE can collapse them
+
+**Measured within minutes of the emitter fix landing, which is the entire justification for that
+thread:** a grader re-read its own twelve-leg bucket against CI's newly-readable cause text and
+found **SEVEN legs emitting one byte-identical cause**:
+
+```
+one_clean_staged_file_is_clean                      empty_staged: CLEAN staged_files=1 deletions=0
+staged_close_reason_policy_accepts_extended_prefixes            "            "
+staged_rust_mode_100644_is_clean_and_names_write_time_residual  "            "
+executable_non_rust_staged_path_is_not_flagged_by_mode_gate     "            "
+unstaged_tick_ledger_is_not_applicable_not_nothing_to_check     "            "
+staged_good_tick_ledger_is_clean                                "            "
+hook_validates_staged_bytes_not_a_dirty_worktree_copy           "            "
+```
+
+**One behaviour — the gate answering `CLEAN staged_files=1` where each test expects a different
+verdict — closes seven legs at once.** The count was never seven problems.
+
+⛔ **AND NO CHEAPER FIELD COULD HAVE SHOWN IT.** Seven distinct test NAMES; seven distinct
+LOCATIONS. **Name and location are maximally discriminating here and maximally wrong** — they
+report seven, which is the number of *call sites*, not the number of *defects*. Only the message
+is shared, so only the message collapses the set. **A dashboard keyed on leg count reports a
+seven-unit backlog for a one-unit fix**, and prioritises accordingly.
+
+**This is the payoff shape to expect from any capture repair: not "we can read the failures now"
+but "the failure COUNT was the wrong cardinality and we were sizing work off it."**
+
+## ⭐⭐ THE STRONGEST CONFIRMATION IS AN **INVERTED NEGATIVE CONTROL** WITH THE NEEDLE UNCHANGED
+
+**Same grader, same session.** Its original finding was an absence: four message substrings
+measured at **ZERO** across a 477,546-byte log. Against the repaired emitter, **the identical
+needles** return `allowlist label 1 · live bead 4 · unstamped binaries 1 · ceiling 10`.
+
+**That is worth more than a fresh positive measurement, and the reason is mechanical.** A new
+probe confirming a fix leaves open that the probe is new — different pattern, different scope,
+different bug. **An inverted control holds the instrument FIXED and moves only the subject**, so
+the one thing a re-measurement usually cannot rule out is ruled out by construction. **The needle
+that proved the absence proves the presence.**
+
+ **This is the positive-control rule (`8i`) run BACKWARD IN TIME**: instead of proving your
+instrument can return nonzero before believing a zero, you keep the zero-returning instrument and
+show it now returns nonzero. **When you report an absence, WRITE THE NEEDLE DOWN VERBATIM** — it
+is the asset that will confirm the fix later, and re-typing it from memory destroys the property.
+
+## ⭐ **RIGHT CALL ON INSUFFICIENT GROUNDS** — vindication does not validate the reasoning
+
+**The eighth leg was the one the grader had REFUSED to move, calling its own evidence weak.** It
+is now vindicated by **three independent signals converging**: its cause is environmental
+(`Committer identity unknown` — git config, not a gate verdict), it is the only row whose
+LOCATION differed across lanes, and the only one whose assertion FORM differed (`CODE` vs
+`SUCCESS`). **It had declined on the weakest of the three and had not measured the other two.**
+
+**Say it in exactly that shape when it happens to you.** A correct decision reached on
+insufficient grounds is a **near-miss**, not a win: the same reasoning applied to the next row
+would have been wrong, and the only thing separating the two cases is evidence the agent did not
+have at the time. **Recording it as vindication launders a coin-flip into a method.**
+
+## ⛔⛔ THREE BASES FOR ONE TRUE SENTENCE — a surviving conclusion HIDES a rotten argument
+
+**Self-reported by a grader that had to retract the same claim's SUPPORT three times while the
+claim itself stayed true every time:**
+
+```
+basis 1   a SAMPLE presented as a bound            retracted
+basis 2   a TIMESTAMP correlate recorded as structural   retracted
+basis 3   a sample that was not even of the right population   retracted
+conclusion  "the blindness ends when a run containing the repair completes"   TRUE throughout
+```
+
+**Basis 3 is the sharpest: it published *"12 of 12 in-flight runs contain the repair"* and the run
+that actually delivered the result WAS NOT AMONG THE TWELVE** — an older head finished while the
+newer twelve still ran. The census sampled the **newest** twelve and was described as enumerating
+the **pending** population.
+
+⛔ **THE MECHANISM, and it is the reason this needs a name: a conclusion that keeps surviving is
+exactly the condition under which a bad basis never gets examined.** A false conclusion gets
+refuted and drags its argument down with it. A true one shields every argument ever offered for
+it — each new basis is *confirmed* by the outcome, so the error is invisible at the only checkpoint
+anyone runs. **Truth is not error-correcting for reasoning; it is error-CONCEALING.**
+
+**The remedy is to audit the BASIS on its own terms, separately from the claim.** Ask "is this
+sample the population I named?" *before* asking "did the conclusion hold." And when you supply a
+second basis for something you already believe, treat that as a **signal that the first was weak**,
+not as reinforcement — **nobody reaches for a third argument for a claim whose first one worked.**
+
+## ⛔ ABSENCE FROM A FAILING LIST MEANS **DID NOT FAIL**, NOT **RAN AND PASSED**
+
+**A fifth verdict class, and the one that reads most like a win.** Four legs guarded by
+`cfg`/precondition skips were absent from a 493 KB log, and the honest reading is that **CI is a
+second confirmation of the SKIP path, not a first observation of the ASSERT path.** ubuntu-latest
+has no Darwin toolchain, no wrapper on `PATH` and no registered-root mount, so the preconditions
+those legs assert under **cannot hold there**.
+
+**Distinguish three things a quiet leg can be, because they have three different remedies:**
+
+```
+PASSED      ran, asserted, green            -> the property is evidenced
+SKIPPED     precondition false, never ran   -> the property is UNMEASURED, and always will be here
+ABSENT      not compiled / not selected     -> you measured the harness, not the leg
+```
+
+ **A `NO-CLAIM` naming an unreachable lane is not discharged by a run on a lane where the code
+cannot execute.** The grader who owned these refused to let its own good news discharge its own
+limit — **which is the only reliable defence, because the discharge always looks like progress.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
