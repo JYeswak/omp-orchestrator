@@ -135,13 +135,18 @@ fn observability_json(steps: &[ompo_start::Step]) -> Value {
     // The boolean is the gate verdict, not a reimplementation: the typed
     // TuiOnly/Empty refusal lives in `check_id_parity`, asserted by its own legs.
     let parity_ok = ompo_start::check_id_parity(&tui_ids, &json_ids).is_ok();
-    let halt = steps.iter().find(|step| step.id == "L3-HD0009").map(|step| {
+    let hd0009 = steps.iter().find(|step| step.id == "L3-HD0009");
+    let halt = hd0009.map(|step| {
         json!({
             "engaged": step.status == ompo_start::StepStatus::Blocked,
             "step": step.id,
             "reason_code": step.reason_code,
         })
     });
+    // L3-OBS-HD0009 (n5tt): the variant name verbatim (`Blocked`), the token
+    // the contract names. `step_json` uppercases for the row render; this field
+    // is read against that contract, so it must not inherit that casing.
+    let hd0009_status = hd0009.map(|step| format!("{:?}", step.status));
     json!({
         "parity_ok": parity_ok,
         // L3-OBS-COUNT (st8w): the array length, so a renderer that filters
@@ -150,6 +155,7 @@ fn observability_json(steps: &[ompo_start::Step]) -> Value {
         // L3-OBS-CURSOR (jb5m): `next_step`'s row, so the TUI cursor and this
         // field cannot disagree without `next_step` itself changing.
         "next_step_id": ompo_start::next_step(steps).map(|step| step.id),
+        "hd0009_status": hd0009_status,
         "tui_ids": tui_ids,
         "json_ids": json_ids,
         "halt": halt,

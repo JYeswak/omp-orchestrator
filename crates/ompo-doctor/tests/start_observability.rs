@@ -113,6 +113,26 @@ fn observability_next_step_id_equals_tui_cursor() {
     assert_eq!(emitted, tui_cursor, "JSON next_step_id vs TUI cursor: {obs}");
 }
 
+/// L3-OBS-HD0009 (n5tt): `hd0009_status` lives inside the observability block
+/// and reads `Blocked` while HD-0009 is undecided on this run. Tied to the
+/// existing halt signal so the two cannot drift apart silently.
+#[test]
+fn observability_reports_hd0009_status() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    let report = ompo_start_json(repo.path(), "n5tt-leg");
+    let obs = observability(&report);
+    println!("READBACK .data.observability.hd0009_status = {}", obs["hd0009_status"]);
+    assert_eq!(
+        obs["hd0009_status"], "Blocked",
+        "HD-0009 undecided on this run, so the step sits Blocked: {obs}"
+    );
+    assert_eq!(
+        obs["hd0009_status"] == "Blocked",
+        obs["halt"]["engaged"] == true,
+        "hd0009_status and halt.engaged must not drift: {obs}"
+    );
+}
+
 /// Known-bad legs for the parity gate itself (yto0): the typed contract is
 /// asserted directly, without running the binary. Misorder, absence, and
 /// vacuity each refuse with their own variant.
