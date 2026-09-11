@@ -535,6 +535,20 @@ fn main() -> ExitCode {
         crate_atom_gate_on_commit_path(&repo_root, &staged, &mut refusals);
     }
 
+    // ── GATE 9: doctrine-retirement-gate (cq4fb) ──────────────────────────
+    //
+    // A retraction must QUOTE the sentence it retires to be intelligible, so every substring
+    // match for the retired sentence also hits the correction and the reader concludes the
+    // false claim is still live. Measured 2026-09-10: that channel misled TWO agents in one
+    // evening, one of them while verifying its own commit. Care is not the missing ingredient.
+    //
+    // SCOPED TO A STAGED AGENTS.md, for the reason oej2 established when path-literal-guard's
+    // repo-wide scan refused a commit over an UNTRACKED file the author never staged: a
+    // repo-wide read here would block the whole fleet on one peer's in-flight edit. The
+    // repo-wide sweep survives as `doctrine-retirement-gate --repo .` in CI, declared in that
+    // crate's own [package.metadata.gate] and executed by gate-runner --run.
+    doctrine_retirement_on_commit_path(&repo_root, &staged, &mut refusals);
+
     if refusals.is_empty() {
         // ── nh5: THE TOCTOU RECHECK ─────────────────────────────────────
         //
@@ -1282,6 +1296,90 @@ fn crate_atom_gate_on_commit_path(repo_root: &Path, staged: &[String], refusals:
         subprocess_contract::BoundedOutcome::Unspawned(error) => refusals.push(format!(
             "crate-atom-gate: INSTRUMENT_ERROR reason=UNSPAWNED detail={error}"
         )),
+    }
+}
+
+/// GATE 9 — retracted doctrine must be machine-distinguishable from live doctrine (`cq4fb`).
+///
+/// In-process rather than a subprocess, because the kernel is a pure string function with no
+/// I/O: spawning a binary to answer it would buy a deadline, a spawn failure mode and a second
+/// verdict channel for nothing. `path-literal-guard` and `state-wildcard-lint` are called the
+/// same way in this file and for the same reason; `crate-atom-gate` is a subprocess only
+/// because it shells out to `cargo metadata`.
+///
+/// EVERY OUTCOME IS REPORTED, including the ones that are not refusals. An UNRUN that prints
+/// nothing is indistinguishable from a PASS, which is this gate's own subject defect wearing a
+/// different hat.
+fn doctrine_retirement_on_commit_path(
+    repo_root: &Path,
+    staged: &[String],
+    refusals: &mut Vec<String>,
+) {
+    let in_scope: Vec<&String> = staged
+        .iter()
+        .filter(|path| {
+            doctrine_retirement_gate::SCANNED_DOCUMENTS
+                .iter()
+                .any(|document| path.as_str() == *document)
+        })
+        .collect();
+    if in_scope.is_empty() {
+        let _ = writeln!(
+            io::stderr(),
+            "doctrine-retirement-gate: GATE_NOT_APPLICABLE -- none of {:?} is staged. The \
+             repo-wide sweep runs as `doctrine-retirement-gate --repo .` under gate-runner.",
+            doctrine_retirement_gate::SCANNED_DOCUMENTS
+        );
+        return;
+    }
+
+    let mut documents = Vec::new();
+    for relative in in_scope {
+        let path = repo_root.join(relative);
+        match std::fs::read_to_string(&path) {
+            Ok(raw) => documents.push(doctrine_retirement_gate::Document {
+                path: relative.clone(),
+                raw,
+            }),
+            Err(error) => {
+                refusals.push(format!(
+                    "doctrine-retirement-gate: INSTRUMENT_ERROR \
+                     RETIREMENT_FILE_UNREADABLE path={} detail={error} -- an unreadable \
+                     document is an ERROR, never a pass",
+                    path.display()
+                ));
+                return;
+            }
+        }
+    }
+
+    let verdict = doctrine_retirement_gate::scan(&documents);
+    match &verdict {
+        doctrine_retirement_gate::Verdict::Pass { spans } => {
+            let _ = writeln!(
+                io::stderr(),
+                "doctrine-retirement-gate: CLEAN spans={spans} exit={}",
+                verdict.exit_code()
+            );
+        }
+        doctrine_retirement_gate::Verdict::Refused { findings } => {
+            for finding in findings {
+                refusals.push(format!(
+                    "doctrine-retirement-gate: {finding} exit={}",
+                    verdict.exit_code()
+                ));
+            }
+        }
+        doctrine_retirement_gate::Verdict::Unrun { reason }
+        | doctrine_retirement_gate::Verdict::InstrumentError { reason } => {
+            // NEITHER IS A PASS. An empty scan and a broken instrument both leave the
+            // question unanswered, and answering "clean" is the vacuous green.
+            refusals.push(format!(
+                "doctrine-retirement-gate: {} {reason} exit={}",
+                verdict.status(),
+                verdict.exit_code()
+            ));
+        }
     }
 }
 

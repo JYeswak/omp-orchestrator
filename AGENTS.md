@@ -192,7 +192,7 @@ let **160 scripts and 60,467 lines** accrete in the repo this substrate is extra
 ## ⛔ `cargo test` refuses to run? YOU DO NOT BUILD HERE. (gate live 2026-09-07)
 
 **THE POLICY IS ABSOLUTE: build on Contabo, never locally.** ⛔ **BUT THE SENTENCE THAT USED TO SIT
-HERE — "LOCAL BUILDS ARE HARD-REFUSED, `exit=75`" — IS FALSE AS A STATEMENT OF MECHANISM, AND YOU
+HERE — <!--RETIRED-->"LOCAL BUILDS ARE HARD-REFUSED, `exit=75`"<!--/RETIRED--> — IS FALSE AS A STATEMENT OF MECHANISM, AND YOU
 MUST READ THE CORRECTION BELOW BEFORE RELYING ON IT.** The shim refuses the BYPASS, not the verb;
 a bare `cargo build` runs through to `exec "$real_cargo"`. What keeps agents off this Mac is rch's
 tool-call hook, which is not in that file and does not exist at a human terminal.
@@ -201,7 +201,7 @@ tool-call hook, which is not in that file and does not exist at a human terminal
 RCH_CARGO_WRAPPER_BYPASS=1 cargo build   ->   exit=75   LOCAL BUILD REFUSED
 ```
 
-### ⛔ CORRECTED 2026-09-10 — "LOCAL BUILDS ARE HARD-REFUSED" IS FALSE. THE SHIM DOES NOT STOP A BARE VERB.
+### ⛔ CORRECTED 2026-09-10 — <!--RETIRED-->"LOCAL BUILDS ARE HARD-REFUSED"<!--/RETIRED--> IS FALSE. THE SHIM DOES NOT STOP A BARE VERB.
 
 **The RULING above stands and is not in question. What is false is the sentence describing the
 mechanism that enforces it**, and that matters because agents trust it and act on it.
@@ -247,9 +247,9 @@ the rest route through `fail <MARKER> 75` → `exit "$status"` at `:23-29`:
 :728 / :730 CARGO_LANE_IDENTITY_UNSTABLE
 ```
 
-⛔ **CORRECTED 2026-09-10 BY `GradeParity` GRADING `eux9p`. THE SENTENCE THAT SAT HERE — "the
+⛔ **CORRECTED 2026-09-10 BY `GradeParity` GRADING `eux9p`. THE SENTENCE THAT SAT HERE — <!--RETIRED-->"the
 MESSAGE channel is already split, every site emits a distinct marker, and only the exit code is
-overloaded" — WAS FALSE ON BOTH HALVES, AND IT WAS WRITTEN BY THE CORRECTION THAT DISCOVERED THE
+overloaded"<!--/RETIRED--> — WAS FALSE ON BOTH HALVES, AND IT WAS WRITTEN BY THE CORRECTION THAT DISCOVERED THE
 DEFECT.** Re-measured with a positive control:
 
 ```
@@ -1884,7 +1884,7 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    suffix, which makes the lines-vs-files conflation **unconstructible** instead of merely warned
    against. Three agents reported `13 paths` for output containing **3 files** (`lib.rs` 11 hunks
    + 1 + 1) because a `sed`/`sort -u` over the un-deduplicated form dedupes HUNKS, and then built
-   a false "the output is non-stationary between reads" rule on the disagreement. Three reads were
+   a false <!--RETIRED-->"the output is non-stationary between reads"<!--/RETIRED--> rule on the disagreement. Three reads were
    **byte-identical** (one `sha256` across all three).
 
    **DENOMINATORS, since four different true counts circulated for one crate:** `ompo-doctor` =

@@ -1,0 +1,28 @@
+[package]
+license.workspace = true
+name = "doctrine-retirement-gate"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Build gate: retracted doctrine must be machine-distinguishable from live doctrine"
+
+[lib]
+name = "doctrine_retirement_gate"
+path = "src/lib.rs"
+
+[[bin]]
+name = "doctrine-retirement-gate"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[package.metadata.gate]
+# omp-orchestrator-fsu7: this crate's OWN check invocation, so `gate-runner` needs no edit when
+# a gate is added. `{repo}` is substituted by the runner and never hardcoded -- a path literal in
+# a manifest is what path-literal-guard exists to refuse.
+checks = [
+  { bin = "doctrine-retirement-gate", args = ["--repo", "{repo}"] },
+]
