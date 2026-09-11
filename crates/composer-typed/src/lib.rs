@@ -17,20 +17,17 @@ pub const STRIP: &str = " \t\r\n │╰╮╯╭─\u{00a0}";
 pub enum Rule {
     DimSuggestionIsNotTyped,
     BrightBodyIsTyped,
-    FailClosedOnEmpty,
 }
 
 impl Rule {
     pub const ALL: &'static [Rule] = &[
         Rule::DimSuggestionIsNotTyped,
         Rule::BrightBodyIsTyped,
-        Rule::FailClosedOnEmpty,
     ];
     pub fn as_str(self) -> &'static str {
         match self {
             Rule::DimSuggestionIsNotTyped => "dim_suggestion_is_not_typed",
             Rule::BrightBodyIsTyped => "bright_body_is_typed",
-            Rule::FailClosedOnEmpty => "fail_closed_on_empty",
         }
     }
     pub fn parse(name: &str) -> Option<Self> {
@@ -42,7 +39,6 @@ impl Rule {
 pub struct Rules {
     pub dim_suggestion_is_not_typed: bool,
     pub bright_body_is_typed: bool,
-    pub fail_closed_on_empty: bool,
 }
 
 impl Default for Rules {
@@ -50,7 +46,6 @@ impl Default for Rules {
         Self {
             dim_suggestion_is_not_typed: true,
             bright_body_is_typed: true,
-            fail_closed_on_empty: true,
         }
     }
 }
@@ -63,7 +58,6 @@ impl Rules {
         match rule {
             Rule::DimSuggestionIsNotTyped => self.dim_suggestion_is_not_typed = false,
             Rule::BrightBodyIsTyped => self.bright_body_is_typed = false,
-            Rule::FailClosedOnEmpty => self.fail_closed_on_empty = false,
         }
         true
     }
@@ -185,6 +179,38 @@ fn typed_plain(line: &str, rules: &Rules) -> bool {
 }
 
 /// True iff any line holds typed operator text.
+///
+/// # THE PERMISSIVE DIRECTION IS DIFFERENT FOR EACH CONSUMER CLASS. READ THIS BEFORE TRUSTING A
+/// NAME.
+///
+/// This function answers ONE question \u2014 *does the composer hold typed text?* \u2014 and `false` is its
+/// negative answer. Whether `false` is the SAFE answer depends entirely on what the caller is
+/// asking, and the two classes want opposite things from the same value:
+///
+/// | consumer class | the question | `false` means | permissive direction |
+/// |---|---|---|---|
+/// | OCCUPANCY (this crate, `main.rs`) | is there typed text? | no text found | `false` is simply NEGATIVE, and correct |
+/// | DISPATCH (a gate deciding "may I send here?") | is this pane safe to send to? | pane looks free | `false` is ADMITTING, and unsafe when the input was unreadable |
+///
+/// So `is_typed("") == false` is RIGHT for occupancy and DANGEROUS for dispatch, and the binary's
+/// exit mapping (`main.rs:3`, `0=TYPED, 1=FREE`) turns it into rc=1 = FREE = ADMIT.
+///
+/// ⛔ THE EMPTY CASE IS THE CALLER'S TO GUARD, AND THIS CRATE WILL NOT GUARD IT FOR YOU. An empty
+/// or all-whitespace capture is not evidence the composer is free \u2014 it is the absence of evidence,
+/// and a dispatch gate must treat it as OCCUPIED. `fast-dispatch` does exactly that at the caller
+/// (`composer_occupied` refuses on an all-whitespace capture BEFORE calling this function), which
+/// is the correct shape: the occupancy kernel stays honest about what it saw, and the dispatch
+/// consumer supplies its own fail-closed direction.
+///
+/// # Why there is no flag for this
+///
+/// There was one. `Rules::fail_closed_on_empty` was declared, defaulted `true`, disableable by
+/// name, and named by a test \u2014 and READ BY NOTHING, while the empty case below was hard-coded. It
+/// was deleted rather than wired, because wiring it would have flipped this function's answer on
+/// empty input and changed what `omp-orchestrator`'s in-process consumer observes
+/// (`resident.rs:3837`), which is a different subject with its own grade. A flag that cannot
+/// change an answer while a test carries its name is a check that cannot fire reading as
+/// protection \u2014 and the name was inverted for dispatch callers on top of that.
 pub fn is_typed(data: &str, rules: &Rules) -> bool {
     if data.is_empty() {
         return false;

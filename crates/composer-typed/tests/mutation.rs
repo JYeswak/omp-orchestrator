@@ -63,9 +63,26 @@ fn mutation_bright_body_is_typed() {
     println!("MUTATION RED bright_body_is_typed: rc=0 (typed operator text is TYPED)");
 }
 
+/// The empty capture's verdict, asserted against the HARD-CODED behaviour it actually comes from.
+///
+/// RENAMED from `mutation_fail_closed_on_empty` and no longer claiming to mutate anything. The
+/// `fail_closed_on_empty` RULE was deleted in this commit: it was declared, defaulted true,
+/// disableable by name, and READ BY NOTHING, while `is_typed` hard-codes the empty case at
+/// lib.rs:189-191. Its two siblings ARE read (:163, :171, :177, :184), which is what made the
+/// dead one look alive.
+///
+/// PROVEN BEFORE DELETING, the way Main asked: flipping the default from `true` to `false` left
+/// THIS TEST PASSING (`test mutation_fail_closed_on_empty ... ok`, 1 passed). A test carrying a
+/// flag's name asserted the hard-code instead, so the name was not an assertion -- and the name
+/// is precisely what made the flag look verified.
+///
+/// ⛔ AND THE NAME WAS BACKWARDS ANYWAY. `main.rs:3` maps 0=TYPED, 1=FREE, so "fail closed on
+/// empty" yields rc=1 = FREE = ADMIT. Correct for an OCCUPANCY question (an empty capture holds
+/// no typed text) and inverted for a DISPATCH question, which is the polarity now documented on
+/// `is_typed` itself.
 #[test]
-fn mutation_fail_closed_on_empty() {
+fn an_empty_capture_is_not_typed_and_therefore_reads_free() {
     let on = rc("", &[]);
-    assert_eq!(on, 1, "empty capture is not typed");
-    println!("MUTATION RED fail_closed_on_empty: rc=1 on empty stdin");
+    assert_eq!(on, 1, "empty capture is not typed, so the binary reports FREE (rc=1)");
+    println!("empty stdin -> rc=1 (FREE); the caller, not this crate, decides if that is safe");
 }
