@@ -664,13 +664,50 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     /// Best-effort temp directory with cleanup on drop; keeps the crate dependency-free.
+    ///
+    /// ⛔ THE BASE IS CHOSEN, NOT ASSUMED, AND THAT IS THE WHOLE POINT OF THIS HELPER.
+    /// `std::env::temp_dir()` honours `TMPDIR`, and the remote build lane sets `TMPDIR` to a
+    /// **project-local** scratch directory. A fixture created there sits INSIDE the repository,
+    /// so `discover_repo_root` walks up from it and finds this repo's own `.git` —
+    /// and `known_bad_no_repo_above_cwd_fails_loudly_naming_the_markers`, whose entire premise
+    /// is a directory with no marker above it, FAILED on the lane while passing locally:
+    ///
+    /// ```text
+    /// a marker-free directory must not resolve; found <repo-root>
+    /// ```
+    ///
+    /// The test was right and its fixture was not hermetic. **A known-bad leg whose fixture the
+    /// environment can invalidate is worse than no leg**: it reddens for a reason unrelated to
+    /// the property, which is how a real regression gets attributed to "the lane again".
+    fn marker_free_base() -> PathBuf {
+        let has_marker_ancestor = |base: &Path| {
+            std::iter::successors(Some(base), |p| p.parent())
+                .any(|p| p.join(".git").exists() || p.join(".beads").exists())
+        };
+        let preferred = std::env::temp_dir();
+        if !has_marker_ancestor(&preferred) {
+            return preferred;
+        }
+        let fallback = PathBuf::from("/tmp");
+        assert!(
+            !has_marker_ancestor(&fallback),
+            "UNOBSERVABLE: no marker-free temp base exists on this host — {} is inside a \
+             repository and {} is too, so a no-repo-above-cwd fixture cannot be built here. \
+             This is a refusal, NOT a pass: an environment that cannot host the known-bad must \
+             say so rather than let the leg go green.",
+            preferred.display(),
+            fallback.display()
+        );
+        fallback
+    }
+
     struct TempDir(PathBuf);
 
     impl TempDir {
         fn create(label: &str) -> Self {
             static COUNTER: AtomicU64 = AtomicU64::new(0);
             let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
+            let path = marker_free_base().join(format!(
                 "fleet-composite-test-{}-{}-{}",
                 label,
                 std::process::id(),
