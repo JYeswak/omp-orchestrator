@@ -1,15 +1,15 @@
 # S1 Coverage Matrix
 
-Generated 2026-09-03T19:06Z by the Validation command below. **Never hand-edit the table.**
+Generated 2026-09-06T03:44Z by the Validation command below. **Never hand-edit the table.**
 
-`S1_REQUIREMENTS=452 COVERED=50 MISSING=402 DOC_ONLY=0`
+`S1_REQUIREMENTS=476 COVERED=111 MISSING=365 DOC_ONLY=0`
 
-TREE (git show HEAD of six contracts): stable-id occurrences summed=207 named-tests summed=32. Pane 1's census was 63 ids / 15 tests against TREE; this run's TREE tests=32. WORKTREE ids/tests are larger because L0/L1/L2 contracts are dirty in this worktree.
+TREE (git show HEAD of six contracts): stable-id occurrences summed=212 named-tests summed=59. Pane 1's census was 63 ids / 15 tests against TREE; this run's TREE tests=59. WORKTREE ids/tests are larger because L0/L1/L2 contracts are dirty in this worktree.
 A sha names a TREE. This command reads the worktree. Re-run after checkout of a clean tree to get TREE counts.
 
 ## Headline (WORKTREE)
 
-`S1_REQUIREMENTS=452 COVERED=50 MISSING=402 DOC_ONLY=0`
+`S1_REQUIREMENTS=476 COVERED=111 MISSING=365 DOC_ONLY=0`
 
 PX-P0 exit predicate is `MISSING = 0`. DOC-ONLY is not a way to zero MISSING; every DOC-ONLY row carries a reason.
 
@@ -17,15 +17,15 @@ PX-P0 exit predicate is `MISSING = 0`. DOC-ONLY is not a way to zero MISSING; ev
 
 | source | n | COVERED | MISSING | DOC_ONLY |
 |---|---:|---:|---:|---:|
-| `contract.stable_id` | 207 | 39 | 168 | 0 |
-| `contract.named_test` | 32 | 11 | 21 | 0 |
+| `contract.stable_id` | 212 | 69 | 143 | 0 |
+| `contract.named_test` | 59 | 37 | 22 | 0 |
 | `box.gap` | 10 | 0 | 10 | 0 |
-| `box.observability` | 36 | 0 | 36 | 0 |
-| `box.hook` | 108 | 0 | 108 | 0 |
+| `box.observability` | 36 | 1 | 35 | 0 |
+| `box.hook` | 96 | 0 | 96 | 0 |
 | `box.branch.diagram` | 20 | 0 | 20 | 0 |
 | `layer.exists` | 6 | 0 | 6 | 0 |
 | `box.branch.test` | 20 | 0 | 20 | 0 |
-| `decisions.HD` | 4 | 0 | 4 | 0 |
+| `decisions.HD` | 8 | 4 | 4 | 0 |
 | `crate-atom.L0` | 9 | 0 | 9 | 0 |
 
 ## Seventh source (the six-source denominator is incomplete)
@@ -41,12 +41,13 @@ Not counted (cannot be gated): whether a branch string is a mermaid edge; whethe
 
 ## Join delta (substring → token in title/acceptance)
 
-COVERED_before (loose substring on this same worktree pass) = 134
-COVERED_after (token in title or acceptance) = 50
-FALSE_COVERED = 84
+COVERED_before (loose substring on this same worktree pass) = 201
+COVERED_after (token in title or acceptance) = 111
+FALSE_COVERED = 90
 
 Examples of false COVERED (loose hit, tight miss):
 
+- `contract.stable_id` `L2-TEST-REMOTE-A` was joined to `omp-orchestrator-l2-test-remote-a-996z` by substring
 - `contract.stable_id` `L1-BUILD-DOCTOR` was joined to `omp-orchestrator-l1-build-doctor-25u5` by substring
 - `contract.stable_id` `L1-BUILD-SCOPE` was joined to `omp-orchestrator-l1-build-scope-myw3` by substring
 - `contract.stable_id` `L1-BUILD-PROBE-TMUX` was joined to `omp-orchestrator-l1-build-probe-tmux-pdpb` by substring
@@ -54,38 +55,38 @@ Examples of false COVERED (loose hit, tight miss):
 - `contract.stable_id` `L1-BUILD-PROBE-BR` was joined to `omp-orchestrator-l1-build-probe-br-g4pg` by substring
 - `contract.stable_id` `L1-BUILD-PROBE-BV` was joined to `omp-orchestrator-l1-build-probe-bv-lebe` by substring
 - `contract.stable_id` `L1-BUILD-PROBE-AGENT-MAIL` was joined to `omp-orchestrator-l1-build-probe-agent-mail-pev8` by substring
-- `contract.stable_id` `L1-BUILD-PROBE-SOCRATICODE` was joined to `omp-orchestrator-l1-build-probe-socraticode-52ig` by substring
 
 ## Matrix
 
 | source | stable_id | requirement | bead_id | state |
 |---|---|---|---|---|
-| `contract.stable_id` | `L0-PLATFORM-TRIPLE` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-VERIFY-SHA256` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-VERIFY-MINISIGN` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-VERIFY-SIGSTORE` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-ATOMIC-RENAME` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-DURABILITY-PARENT` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-DURABILITY-FULLFSYNC` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-PATH-COLLISION` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-HOOK-MERGE` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-SKILLS` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-UNINSTALL` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-EVENT` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-REPORT` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-MONITOR` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-GATE` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `L0-METRIC` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `LAW-L0-FAIL-CLOSED` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `LAW-L0-ATOMIC-DURABLE` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `LAW-L0-RESTORE` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `LAW-L0-REPORT-BEFORE-SUCCESS` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `LAW-L0-OBSERVABLE-REFUSAL` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `LAW-L0-IDENTITY-READBACK` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `OBS-L0-EVENT` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `OBS-L0-REPORT` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `OBS-L0-MONITOR` | stable id in s1_l0_install.md | `—` | MISSING |
-| `contract.stable_id` | `OBS-L0-GATE` | stable id in s1_l0_install.md | `—` | MISSING |
+| `contract.stable_id` | `L0-PLATFORM-TRIPLE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b01-3vro` | COVERED |
+| `contract.stable_id` | `L0-VERIFY-SHA256` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b03-pp2o` | COVERED |
+| `contract.stable_id` | `L0-VERIFY-MINISIGN` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b04-a6nx` | COVERED |
+| `contract.stable_id` | `L0-VERIFY-SIGSTORE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b05-qsyg` | COVERED |
+| `contract.stable_id` | `L0-ATOMIC-RENAME` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b06-vz1p` | COVERED |
+| `contract.stable_id` | `L0-DURABILITY-PARENT` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b07-h6pu` | COVERED |
+| `contract.stable_id` | `L0-DURABILITY-FULLFSYNC` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b07-h6pu` | COVERED |
+| `contract.stable_id` | `L0-PATH-COLLISION` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b08-u7tm` | COVERED |
+| `contract.stable_id` | `L0-HOOK-MERGE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b10-3r1g` | COVERED |
+| `contract.stable_id` | `L0-SKILLS` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b11-uegf` | COVERED |
+| `contract.stable_id` | `L0-UNINSTALL` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b14-f2jh` | COVERED |
+| `contract.stable_id` | `L0-EVENT` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b09-x282` | COVERED |
+| `contract.stable_id` | `L0-REPORT` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b12-rmr2` | COVERED |
+| `contract.stable_id` | `L0-MONITOR` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b09-x282` | COVERED |
+| `contract.stable_id` | `L0-GATE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b15-ucvv` | COVERED |
+| `contract.stable_id` | `L0-METRIC` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b07-h6pu` | COVERED |
+| `contract.stable_id` | `LAW-L0-FAIL-CLOSED` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-law-fail-closed-d8v5` | COVERED |
+| `contract.stable_id` | `LAW-L0-ATOMIC-DURABLE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-law-atomic-durable-rfs8` | COVERED |
+| `contract.stable_id` | `LAW-L0-RESTORE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-law-restore-ylsu` | COVERED |
+| `contract.stable_id` | `LAW-L0-REPORT-BEFORE-SUCCESS` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-law-report-before-success-lxdb` | COVERED |
+| `contract.stable_id` | `LAW-L0-OBSERVABLE-REFUSAL` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-t21-f6si` | COVERED |
+| `contract.stable_id` | `LAW-L0-IDENTITY-READBACK` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-t18-sk8h` | COVERED |
+| `contract.stable_id` | `OBS-L0-EVENT` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b15-ucvv` | COVERED |
+| `contract.stable_id` | `OBS-L0-REPORT` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b15-ucvv` | COVERED |
+| `contract.stable_id` | `OBS-L0-MONITOR` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b15-ucvv` | COVERED |
+| `contract.stable_id` | `OBS-L0-GATE` | stable id in s1_l0_install.md | `omp-orchestrator-s1-l0-b15-ucvv` | COVERED |
+| `contract.stable_id` | `L2-TEST-REMOTE-A` | stable id in s1_l0_install.md | `—` | MISSING |
 | `contract.stable_id` | `L1-INPUT` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `L1-VERDICT` | stable id in s1_l1_doctor.md | `—` | MISSING |
 | `contract.stable_id` | `L1-REPAIR` | stable id in s1_l1_doctor.md | `—` | MISSING |
@@ -248,12 +249,16 @@ Examples of false COVERED (loose hit, tight miss):
 | `contract.stable_id` | `L4-NOT-LIVE` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-not-live-8r0r` | COVERED |
 | `contract.stable_id` | `L4-SPAWN` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-spawn-mail-reg-b8z3` | COVERED |
 | `contract.stable_id` | `L4-CX` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-cx-i0mv` | COVERED |
+| `contract.stable_id` | `LAW-L4-THREE-FRESH` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-test-three-fresh-3feu` | COVERED |
+| `contract.stable_id` | `LAW-L4-SILENT-NOT-LIVE` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-test-silent-third-8qd7` | COVERED |
+| `contract.stable_id` | `LAW-L4-NO-TMUX-RAW` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-test-no-tmux-raw-d9d7` | COVERED |
+| `contract.stable_id` | `LAW-L4-MAP-TICK` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-test-missing-gap-z7dj` | COVERED |
+| `contract.stable_id` | `LAW-L4-SPAWN-CX` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-test-cancelled-qoac` | COVERED |
 | `contract.stable_id` | `L4-OBS-NTM` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-obs-ntm-xl56` | COVERED |
 | `contract.stable_id` | `L4-OBS-TICK` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-obs-tick-17nw` | COVERED |
 | `contract.stable_id` | `L4-OBS-MAIL` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-obs-mail-l2de` | COVERED |
 | `contract.stable_id` | `L4-OBS-AGREE` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-obs-agree-l7ve` | COVERED |
 | `contract.stable_id` | `L4-METRIC-SILENT-COUNT` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-metric-silent-vdxb` | COVERED |
-| `contract.stable_id` | `LAW-L4-NO-TMUX-RAW` | stable id in s1_l4_liveness.md | `omp-orchestrator-s1-l4-test-no-tmux-raw-d9d7` | COVERED |
 | `contract.stable_id` | `L5-SCHEMA` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-schema-ciay` | COVERED |
 | `contract.stable_id` | `L5-HASH` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-hash-jbmy` | COVERED |
 | `contract.stable_id` | `L5-SOURCE` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-source-van0` | COVERED |
@@ -267,6 +272,33 @@ Examples of false COVERED (loose hit, tight miss):
 | `contract.stable_id` | `L5-OBS-SOURCES` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-obs-sources-1o28` | COVERED |
 | `contract.stable_id` | `L5-OBS-READBACK` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-obs-readback-zi3x` | COVERED |
 | `contract.stable_id` | `L5-METRIC-READBACK-OK` | stable id in s1_l5_portal.md | `omp-orchestrator-s1-l5-metric-readback-fqgi` | COVERED |
+| `contract.named_test` | `l0_install.rs::platform_triple_matrix` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t01-o34w` | COVERED |
+| `contract.named_test` | `l0_install.rs::tampered_sha256_refuses` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t03-26ou` | COVERED |
+| `contract.named_test` | `l0_install.rs::required_minisign_missing_refuses` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t04-kqne` | COVERED |
+| `contract.named_test` | `l0_install.rs::cosign_below_cve_floor_refuses` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t05-xe16` | COVERED |
+| `contract.named_test` | `l0_install.rs::sigstore_identity_mismatch_refuses` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t06-3ga8` | COVERED |
+| `contract.named_test` | `l0_install.rs::bare_installer_path_collision_refuses` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t11-andf` | COVERED |
+| `contract.named_test` | `l0_install.rs::staging_failure_leaves_no_destination` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t07-ab3a` | COVERED |
+| `contract.named_test` | `l0_install.rs::atomic_publish_renames_complete_artifact` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t08-aqao` | COVERED |
+| `contract.named_test` | `l0_install.rs::parent_directory_fsync_is_required` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t09-jx83` | COVERED |
+| `contract.named_test` | `l0_install.rs::fullfsync_failure_is_restrictive` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t10-6idp` | COVERED |
+| `contract.named_test` | `l0_install.rs::durability_metric_counts_missing_parent_sync` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t22-bsfy` | COVERED |
+| `contract.named_test` | `l0_install.rs::hook_merge_failure_restores_before_hash` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t15-tzul` | COVERED |
+| `contract.named_test` | `l0_install.rs::installed_identity_must_match_readback` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t18-sk8h` | COVERED |
+| `contract.named_test` | `l0_install.rs::event_and_report_precede_success` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t20-i6ki` | COVERED |
+| `contract.named_test` | `l0_install.rs::known_bad_legs_name_reason` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t21-f6si` | COVERED |
+| `contract.named_test` | `l0_install.rs::per_agent_summary_is_complete` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t17-sado` | COVERED |
+| `contract.named_test` | `l0_install.rs::failed_precondition_is_restrictive` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-law-fail-closed-d8v5` | COVERED |
+| `contract.named_test` | `l0_install.rs::publication_requires_both_sync_boundaries` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-law-atomic-durable-rfs8` | COVERED |
+| `contract.named_test` | `l0_install.rs::merge_failure_restores_before_hash` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-law-restore-ylsu` | COVERED |
+| `contract.named_test` | `l0_install.rs::success_requires_event_and_report` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-law-report-before-success-lxdb` | COVERED |
+| `contract.named_test` | `l0_install.rs::musl_fallback_requires_gnu_artifact` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t02-mauc` | COVERED |
+| `contract.named_test` | `l0_install.rs::ten_agent_detection_is_complete` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t12-6t0k` | COVERED |
+| `contract.named_test` | `l0_install.rs::zero_agents_is_error_not_clean` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t13-kvw6` | COVERED |
+| `contract.named_test` | `l0_install.rs::hook_backup_matches_mutations` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t14-pccb` | COVERED |
+| `contract.named_test` | `l0_install.rs::skill_install_covers_detected_agents` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t16-m61c` | COVERED |
+| `contract.named_test` | `l0_install.rs::uninstall_leaves_no_owned_paths` | named test in s1_l0_install.md | `omp-orchestrator-s1-l0-t19-shc0` | COVERED |
+| `contract.named_test` | `file.rs::function` | named test in s1_l0_install.md | `—` | MISSING |
 | `contract.named_test` | `l1_doctor.rs::unknown_arm_is_instrument_error` | named test in s1_l1_doctor.md | `—` | MISSING |
 | `contract.named_test` | `l1_doctor.rs::timeout_is_unrun` | named test in s1_l1_doctor.md | `—` | MISSING |
 | `contract.named_test` | `l1_doctor.rs::wrong_version_is_stale` | named test in s1_l1_doctor.md | `omp-orchestrator-l1-test-two-signal-wrbx` | COVERED |
@@ -307,14 +339,14 @@ Examples of false COVERED (loose hit, tight miss):
 | `box.gap` | `GAP-6` | L1 doctor SOTA is br doctor mutate()+undo by before_hash; ompo doctor is none | `—` | MISSING |
 | `box.gap` | `GAP-7` | SessionStart hook is 0; launchd paused; slash start does not exist | `—` | MISSING |
 | `box.gap` | `GAP-8` | crate field was unparseable composite; umbrella still MISSING | `—` | MISSING |
-| `box.gap` | `GAP-9` | the eight [[box.hook]] rows carry surface/hook/status, not the twelve certified fields (id, event, matcher, class, fail_ | `—` | MISSING |
+| `box.gap` | `GAP-9` | the eight box-hook rows carry surface/hook/status, not the twelve certified fields (id, event, matcher, class, fail_mode | `—` | MISSING |
 | `box.gap` | `GAP-10` | S1 has no registered refusal type: Code::Refused has 0 call sites and no enum Code exists in crates/*/src, while 31 file | `—` | MISSING |
 | `box.observability` | `L0.event_row` | L0 observability event_row | `—` | MISSING |
 | `box.observability` | `L0.artifact` | L0 observability artifact | `—` | MISSING |
 | `box.observability` | `L0.monitor` | L0 observability monitor | `—` | MISSING |
 | `box.observability` | `L0.gate` | L0 observability gate | `—` | MISSING |
 | `box.observability` | `L0.known_bad` | L0 observability known-bad | `—` | MISSING |
-| `box.observability` | `L0.metric` | L0 observability metric | `—` | MISSING |
+| `box.observability` | `L0.metric` | L0 observability metric | `omp-orchestrator-s1-l0-b07-h6pu` | COVERED |
 | `box.observability` | `L1.event_row` | L1 observability event_row | `—` | MISSING |
 | `box.observability` | `L1.artifact` | L1 observability artifact | `—` | MISSING |
 | `box.observability` | `L1.monitor` | L1 observability monitor | `—` | MISSING |
@@ -345,114 +377,102 @@ Examples of false COVERED (loose hit, tight miss):
 | `box.observability` | `L5.gate` | L5 observability gate | `—` | MISSING |
 | `box.observability` | `L5.known_bad` | L5 observability known-bad | `—` | MISSING |
 | `box.observability` | `L5.metric` | L5 observability metric | `—` | MISSING |
-| `box.hook` | `HOOK-1-id` | git pre-commit certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-1-event` | git pre-commit certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-1-matcher` | git pre-commit certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-1-class` | git pre-commit certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-1-fail_mode` | git pre-commit certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-1-binary` | git pre-commit certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-1-policy_file` | git pre-commit certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-1-source_commit` | git pre-commit certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-1-language` | git pre-commit certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-1-stage` | git pre-commit certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-1-certified` | git pre-commit certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-1-harm_class` | git pre-commit certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-2-id` | claude SessionStart certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-2-event` | claude SessionStart certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-2-matcher` | claude SessionStart certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-2-class` | claude SessionStart certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-2-fail_mode` | claude SessionStart certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-2-binary` | claude SessionStart certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-2-policy_file` | claude SessionStart certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-2-source_commit` | claude SessionStart certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-2-language` | claude SessionStart certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-2-stage` | claude SessionStart certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-2-certified` | claude SessionStart certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-2-harm_class` | claude SessionStart certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-3-id` | claude PreToolUse(Bash) certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-3-event` | claude PreToolUse(Bash) certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-3-matcher` | claude PreToolUse(Bash) certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-3-class` | claude PreToolUse(Bash) certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-3-fail_mode` | claude PreToolUse(Bash) certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-3-binary` | claude PreToolUse(Bash) certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-3-policy_file` | claude PreToolUse(Bash) certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-3-source_commit` | claude PreToolUse(Bash) certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-3-language` | claude PreToolUse(Bash) certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-3-stage` | claude PreToolUse(Bash) certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-3-certified` | claude PreToolUse(Bash) certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-3-harm_class` | claude PreToolUse(Bash) certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-4-id` | claude PostToolUse certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-4-event` | claude PostToolUse certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-4-matcher` | claude PostToolUse certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-4-class` | claude PostToolUse certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-4-fail_mode` | claude PostToolUse certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-4-binary` | claude PostToolUse certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-4-policy_file` | claude PostToolUse certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-4-source_commit` | claude PostToolUse certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-4-language` | claude PostToolUse certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-4-stage` | claude PostToolUse certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-4-certified` | claude PostToolUse certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-4-harm_class` | claude PostToolUse certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-5-id` | claude Stop certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-5-event` | claude Stop certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-5-matcher` | claude Stop certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-5-class` | claude Stop certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-5-fail_mode` | claude Stop certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-5-binary` | claude Stop certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-5-policy_file` | claude Stop certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-5-source_commit` | claude Stop certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-5-language` | claude Stop certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-5-stage` | claude Stop certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-5-certified` | claude Stop certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-5-harm_class` | claude Stop certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-6-id` | codex ~/.codex/hooks.json certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-6-event` | codex ~/.codex/hooks.json certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-6-matcher` | codex ~/.codex/hooks.json certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-6-class` | codex ~/.codex/hooks.json certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-6-fail_mode` | codex ~/.codex/hooks.json certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-6-binary` | codex ~/.codex/hooks.json certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-6-policy_file` | codex ~/.codex/hooks.json certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-6-source_commit` | codex ~/.codex/hooks.json certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-6-language` | codex ~/.codex/hooks.json certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-6-stage` | codex ~/.codex/hooks.json certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-6-certified` | codex ~/.codex/hooks.json certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-6-harm_class` | codex ~/.codex/hooks.json certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-7-id` | omp (pi) panes certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-7-event` | omp (pi) panes certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-7-matcher` | omp (pi) panes certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-7-class` | omp (pi) panes certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-7-fail_mode` | omp (pi) panes certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-7-binary` | omp (pi) panes certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-7-policy_file` | omp (pi) panes certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-7-source_commit` | omp (pi) panes certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-7-language` | omp (pi) panes certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-7-stage` | omp (pi) panes certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-7-certified` | omp (pi) panes certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-7-harm_class` | omp (pi) panes certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-8-id` | launchd certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-8-event` | launchd certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-8-matcher` | launchd certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-8-class` | launchd certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-8-fail_mode` | launchd certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-8-binary` | launchd certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-8-policy_file` | launchd certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-8-source_commit` | launchd certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-8-language` | launchd certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-8-stage` | launchd certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-8-certified` | launchd certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-8-harm_class` | launchd certified field harm_class | `—` | MISSING |
-| `box.hook` | `HOOK-9-id` | hook-9 certified field id | `—` | MISSING |
-| `box.hook` | `HOOK-9-event` | hook-9 certified field event | `—` | MISSING |
-| `box.hook` | `HOOK-9-matcher` | hook-9 certified field matcher | `—` | MISSING |
-| `box.hook` | `HOOK-9-class` | hook-9 certified field class | `—` | MISSING |
-| `box.hook` | `HOOK-9-fail_mode` | hook-9 certified field fail_mode | `—` | MISSING |
-| `box.hook` | `HOOK-9-binary` | hook-9 certified field binary | `—` | MISSING |
-| `box.hook` | `HOOK-9-policy_file` | hook-9 certified field policy_file | `—` | MISSING |
-| `box.hook` | `HOOK-9-source_commit` | hook-9 certified field source_commit | `—` | MISSING |
-| `box.hook` | `HOOK-9-language` | hook-9 certified field language | `—` | MISSING |
-| `box.hook` | `HOOK-9-stage` | hook-9 certified field stage | `—` | MISSING |
-| `box.hook` | `HOOK-9-certified` | hook-9 certified field certified | `—` | MISSING |
-| `box.hook` | `HOOK-9-harm_class` | hook-9 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-1-id` | hook-1 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-1-event` | hook-1 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-1-matcher` | hook-1 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-1-class` | hook-1 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-1-fail_mode` | hook-1 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-1-binary` | hook-1 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-1-policy_file` | hook-1 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-1-source_commit` | hook-1 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-1-language` | hook-1 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-1-stage` | hook-1 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-1-certified` | hook-1 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-1-harm_class` | hook-1 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-2-id` | hook-2 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-2-event` | hook-2 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-2-matcher` | hook-2 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-2-class` | hook-2 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-2-fail_mode` | hook-2 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-2-binary` | hook-2 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-2-policy_file` | hook-2 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-2-source_commit` | hook-2 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-2-language` | hook-2 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-2-stage` | hook-2 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-2-certified` | hook-2 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-2-harm_class` | hook-2 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-3-id` | hook-3 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-3-event` | hook-3 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-3-matcher` | hook-3 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-3-class` | hook-3 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-3-fail_mode` | hook-3 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-3-binary` | hook-3 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-3-policy_file` | hook-3 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-3-source_commit` | hook-3 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-3-language` | hook-3 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-3-stage` | hook-3 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-3-certified` | hook-3 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-3-harm_class` | hook-3 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-4-id` | hook-4 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-4-event` | hook-4 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-4-matcher` | hook-4 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-4-class` | hook-4 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-4-fail_mode` | hook-4 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-4-binary` | hook-4 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-4-policy_file` | hook-4 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-4-source_commit` | hook-4 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-4-language` | hook-4 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-4-stage` | hook-4 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-4-certified` | hook-4 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-4-harm_class` | hook-4 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-5-id` | hook-5 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-5-event` | hook-5 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-5-matcher` | hook-5 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-5-class` | hook-5 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-5-fail_mode` | hook-5 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-5-binary` | hook-5 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-5-policy_file` | hook-5 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-5-source_commit` | hook-5 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-5-language` | hook-5 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-5-stage` | hook-5 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-5-certified` | hook-5 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-5-harm_class` | hook-5 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-6-id` | hook-6 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-6-event` | hook-6 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-6-matcher` | hook-6 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-6-class` | hook-6 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-6-fail_mode` | hook-6 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-6-binary` | hook-6 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-6-policy_file` | hook-6 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-6-source_commit` | hook-6 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-6-language` | hook-6 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-6-stage` | hook-6 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-6-certified` | hook-6 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-6-harm_class` | hook-6 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-7-id` | hook-7 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-7-event` | hook-7 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-7-matcher` | hook-7 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-7-class` | hook-7 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-7-fail_mode` | hook-7 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-7-binary` | hook-7 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-7-policy_file` | hook-7 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-7-source_commit` | hook-7 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-7-language` | hook-7 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-7-stage` | hook-7 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-7-certified` | hook-7 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-7-harm_class` | hook-7 certified field harm_class | `—` | MISSING |
+| `box.hook` | `HOOK-8-id` | hook-8 certified field id | `—` | MISSING |
+| `box.hook` | `HOOK-8-event` | hook-8 certified field event | `—` | MISSING |
+| `box.hook` | `HOOK-8-matcher` | hook-8 certified field matcher | `—` | MISSING |
+| `box.hook` | `HOOK-8-class` | hook-8 certified field class | `—` | MISSING |
+| `box.hook` | `HOOK-8-fail_mode` | hook-8 certified field fail_mode | `—` | MISSING |
+| `box.hook` | `HOOK-8-binary` | hook-8 certified field binary | `—` | MISSING |
+| `box.hook` | `HOOK-8-policy_file` | hook-8 certified field policy_file | `—` | MISSING |
+| `box.hook` | `HOOK-8-source_commit` | hook-8 certified field source_commit | `—` | MISSING |
+| `box.hook` | `HOOK-8-language` | hook-8 certified field language | `—` | MISSING |
+| `box.hook` | `HOOK-8-stage` | hook-8 certified field stage | `—` | MISSING |
+| `box.hook` | `HOOK-8-certified` | hook-8 certified field certified | `—` | MISSING |
+| `box.hook` | `HOOK-8-harm_class` | hook-8 certified field harm_class | `—` | MISSING |
 | `box.branch.diagram` | `BR-1-diagram` | L0 checksum/cosign FAIL or missing checksum -> refuse supply chain | `—` | MISSING |
 | `box.branch.diagram` | `BR-2-diagram` | L0 command -v ompo first hit != dest -> refuse name collision with PATH hits listed | `—` | MISSING |
 | `box.branch.diagram` | `BR-3-diagram` | L0 agent merge created/merged/already/skipped -> L1 | `—` | MISSING |
@@ -503,6 +523,10 @@ Examples of false COVERED (loose hit, tight miss):
 | `decisions.HD` | `HD-0010` | HD decision recorded; decided=False | `—` | MISSING |
 | `decisions.HD` | `HD-0011` | HD decision recorded; decided=False | `—` | MISSING |
 | `decisions.HD` | `HD-0012` | HD decision recorded; decided=False | `—` | MISSING |
+| `decisions.HD` | `HD-0009` | HD decision recorded; decided=True | `omp-orchestrator-cbp4` | COVERED |
+| `decisions.HD` | `HD-0010` | HD decision recorded; decided=True | `omp-orchestrator-s1-l4-spawn-ol44` | COVERED |
+| `decisions.HD` | `HD-0011` | HD decision recorded; decided=True | `omp-orchestrator-cbp4` | COVERED |
+| `decisions.HD` | `HD-0012` | HD decision recorded; decided=True | `omp-orchestrator-hook-surface-probe-ex7e` | COVERED |
 | `crate-atom.L0` | `ATOM-L0-ALL` | crate-atom-gate part ALL for crates/installer | `—` | MISSING |
 | `crate-atom.L0` | `ATOM-L0-Lib` | crate-atom-gate part Lib for crates/installer | `—` | MISSING |
 | `crate-atom.L0` | `ATOM-L0-Bin` | crate-atom-gate part Bin for crates/installer | `—` | MISSING |
@@ -515,45 +539,37 @@ Examples of false COVERED (loose hit, tight miss):
 
 ## Validation
 
-**REFUSED: embedding this generator in a fenced `python3 -` block.** A fenced program a human pastes into `python3 -` is the same program as a committed `.py` file. The no-shell gate keys on `git ls-files` extensions; hiding Python in Markdown is `PX-E14` with a different geography (a fence instead of `.git/`). Cosmetic compliance is refused. The honest owner is a Rust crate, name **`s1-coverage-gate`**, blocked by BUILD FREEZE. Until that crate exists, `PX-DONE-1` (clone-reproducible matrix) is **blocked**, not satisfied.
+The generator is a tracked Rust crate, `crates/s1-coverage` (bin target `s1-coverage`). The
+previously documented worktree-local Python runner is **retired**: a program a human pastes into an
+interpreter is the same program as a committed `.py` file, and the no-shell gate keys on
+`git ls-files` extensions. Regenerate with the sanctioned remote form:
 
-WORKTREE-LOCAL runner only (not tracked, not clone-portable):
-
-```bash
-python3 .git/s1_cov.py
 ```
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo run -j 2 -p s1-coverage -- --repo . --head HEAD --json
+```
+
+Compare two commits for the relation-based convergence decision:
+
+```
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo run -j 2 -p s1-coverage -- --repo . --compare HEAD~1 HEAD --json
+```
+
+### Provenance states — the four the crate distinguishes
+
+|state|instrument|what a count from it means|
+|---|---|---|
+|`TREE`|`git ls-tree -r HEAD`|a commit. The only clone-reproducible denominator.|
+|`INDEX`|`git ls-files --cached`|what is staged. Agrees with TREE only on a clean index.|
+|`WORKTREE`|`git diff --name-only HEAD`|local modification. Invisible to any clone.|
+|`WORKTREE_ONLY`|`git ls-files --others --exclude-standard`|untracked input. Evidence of state divergence, **never** evidence about a commit.|
+
+A non-empty `WORKTREE_ONLY` set is a refusal (`DENOMINATOR_WORKTREE_ONLY`, exit 2), not a smaller
+denominator. An empty scan set is an error (`DENOMINATOR_EMPTY_SCAN_SET`, exit 3), never zero
+missing and never `CONVERGING`. `decision` is `CONVERGING` exactly when closure exceeds growth and
+`NON_CONVERGING` when growth is greater than or equal to closure; no absolute count is a target.
+Wired executor: `.github/workflows/gate.yml`, step "S1 coverage provenance".
 
 ## NO-CLAIM
 
 COVERED means a bead title or acceptance carries the id as a whole token. It does not mean the crate is wired. MISSING=0 would still not mean S1 is done.
-
-## Denominator tree-state (bead 7t33, 2026-09-03T19:15Z)
-
-Extractor: backticked `L[0-5]-*` / `LAW-L*` / `OBS-L*` / `L*P-*`, excluding Cross-References and Work breakdown. WORKTREE and `git show HEAD:<path>` on the six `s1_l*.md` files.
-
-| tree | declared unique IDs |
-|---|---:|
-| HEAD `e6dac73` | 211 |
-| this worktree | 211 |
-| invisible delta | 0 |
-
-The earlier `160→211` was **not** currently-uncommitted growth. Those IDs are in HEAD. Trajectory of unique declared IDs at the commits that touched the six contracts:
-
-| sha | declared | delta |
-|---|---:|---:|
-| `6238c0f` L3/L4/L5 land | 38 | — |
-| `8de39a5` L0 contract | 62 | +24 |
-| `933432d` L1/L2 inventory | 204 | +142 |
-| `2dd7a59` | 206 | +2 |
-| `fe30a57` L4 law backticks | 211 | +5 |
-| `e6dac73` HEAD | 211 | 0 |
-
-GROWTH_PER_COMMIT = (211-38)/9 = 19.22. COVERED_AT_HEAD (title-or-acceptance token join against current `.beads/issues.jsonl`) = 43. Closure is not keeping up with declaration.
-
-`git status --porcelain` = 138 lines (17 untracked). `origin..HEAD` = 333 unpushed. Heaviest dirty prefixes: `crates/no-shell-gate` 23, `docs` 13, `crates/agent-mail-native` 10, `crates/ack-spine` 6. **Not committed from this pane.**
-
-MATRIX_FROM_HEAD = no: `S1-COVERAGE.md` exists at HEAD as a **snapshot**; regenerating it requires untracked `.git/s1_cov.py`. Freeze blocks `s1-coverage-gate`.
-
-GROWTH_VERDICT = mixed: the +142 at `933432d` is L1/L2 audit filling previously empty contracts (findings). The +24 is L0 landing. The +5 is extractor-visible law names, not new product scope. Calling all of it creep would punish the audit. Calling HEAD the only real denominator would hide uncommitted obligations if they return; today they are committed, so the clone can see 211.
-
 
