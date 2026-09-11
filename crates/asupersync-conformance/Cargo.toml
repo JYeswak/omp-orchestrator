@@ -28,3 +28,6 @@ unsafe_code = "forbid"
 # --write followed by `git diff --exit-code`, which mutated the tree mid-gate AND compared against
 # the WORKTREE -- giving a false verdict either way in a shared checkout.
 checks = [["--repo", "{repo}", "--check", "{repo}/ASUPERSYNC-CONFORMANCE.md"]]
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

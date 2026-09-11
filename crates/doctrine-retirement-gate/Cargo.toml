@@ -26,3 +26,6 @@ unsafe_code = "forbid"
 checks = [
   { bin = "doctrine-retirement-gate", args = ["--repo", "{repo}"] },
 ]
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

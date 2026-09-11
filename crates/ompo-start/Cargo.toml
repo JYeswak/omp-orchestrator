@@ -27,3 +27,6 @@ path = "src/bin/foundation_append.rs"
 
 [dev-dependencies]
 tempfile = "3"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

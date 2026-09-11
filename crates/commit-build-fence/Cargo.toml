@@ -37,3 +37,6 @@ checks = [
     { bin = "commit-build-fence", args = ["init", "--repo", "{repo}"], setup = true },
     { bin = "commit-build-fence", args = ["check", "--repo", "{repo}"] },
 ]
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

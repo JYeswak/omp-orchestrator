@@ -34,3 +34,6 @@ text-structure = { path = "../text-structure" }
 pane-truth = { path = "../pane-truth" }
 proptest = "1"
 text-structure = { path = "../text-structure" }
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

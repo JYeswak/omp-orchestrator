@@ -37,3 +37,6 @@ path = "tests/workflow_shape.rs"
 # omp-orchestrator-fsu7: gate-runner self-checks its derived roster without recursively invoking --run.
 [package.metadata.gate]
 checks = [["--plan"]]
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

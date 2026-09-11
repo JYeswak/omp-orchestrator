@@ -21,3 +21,6 @@ unsafe_code = "forbid"
 
 [dependencies]
 subprocess-contract = { path = "../subprocess-contract" }
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

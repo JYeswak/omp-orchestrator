@@ -28,3 +28,6 @@ tick-monitor = { path = "../tick-monitor" }
 text-structure = { path = "../text-structure" }
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

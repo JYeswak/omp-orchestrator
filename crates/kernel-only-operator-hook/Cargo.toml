@@ -23,3 +23,6 @@ lifecycle-event = { path = "../lifecycle-event" }
 lifecycle-monitor = { path = "../lifecycle-monitor" }
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

@@ -17,3 +17,6 @@ serde_json = "1"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

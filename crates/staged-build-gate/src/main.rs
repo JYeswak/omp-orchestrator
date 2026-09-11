@@ -159,6 +159,13 @@ fn evaluate_crate(repo: &Path, name: &str) -> CrateVerdict {
             let stderr = String::from_utf8_lossy(&output.stderr);
             match classify_cargo_invocation(true, output.status.code(), &stderr) {
                 staged_build_gate::CargoBuildOutcome::Pass => CrateVerdict::Pass,
+                // A successful remote compile whose artifact did not return is a PASS on the
+                // question this gate asks -- does the crate build. The exhaustiveness error
+                // that forced this arm is the point of a variant over a boolean: a SECOND
+                // consumer existed and had to decide, rather than silently inheriting.
+                staged_build_gate::CargoBuildOutcome::RemoteCompileOnly { .. } => {
+                    CrateVerdict::Pass
+                }
                 staged_build_gate::CargoBuildOutcome::BuildFailed { code, first_error } => {
                     CrateVerdict::BuildFailed { code, first_error }
                 }

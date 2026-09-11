@@ -94,10 +94,29 @@ fn bin_crates(root: &std::path::Path) -> Option<BTreeSet<String>> {
     Some(names)
 }
 
+/// Does this crate's `build.rs` stamp the build identity?
+///
+/// TWO admissible forms, because as of 2026-09-11 the stamp has ONE implementation
+/// (`crates/build-stamp`) instead of ~28 duplicated lines in each of ~78 crates:
+///   - the literal emission, for a crate that still inlines it, and
+///   - a call to `build_stamp::emit()`, which emits exactly that line.
+///
+/// ⛔ MEASURED, AND IT IS WHY THIS FUNCTION CHANGED: with only the literal accepted, converting
+/// `tick-monitor` to the shared helper moved the count 73 -> 74. A CORRECT stamp read as a
+/// REGRESSION, so the gate actively penalised removing the duplication it exists to motivate.
+/// A text-keyed oracle cannot see a delegated implementation.
+///
+/// ⛔ AND THE COMMENTS ARE STRIPPED FIRST, via `text_structure::code_only`, because this very
+/// doc comment names both needles — a checker whose input contains prose about the thing it
+/// checks is the self-referential class this repo has now hit eight times. Without stripping,
+/// a crate could "stamp" itself with a comment.
 fn stamps_identity(root: &std::path::Path, krate: &str) -> bool {
     let build_rs = root.join("crates").join(krate).join("build.rs");
     std::fs::read_to_string(build_rs)
-        .map(|t| t.contains("cargo:rustc-env=OMP_BUILD_ID"))
+        .map(|t| {
+            let code = text_structure::code_only(&t);
+            code.contains("cargo:rustc-env=OMP_BUILD_ID") || code.contains("build_stamp::emit()")
+        })
         .unwrap_or(false)
 }
 

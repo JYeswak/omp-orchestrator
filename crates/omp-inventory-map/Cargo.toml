@@ -47,3 +47,6 @@ checks = [{ bin = "omp-surface-align", args = ["--repo", "{repo}"] }]
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

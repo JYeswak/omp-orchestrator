@@ -25,3 +25,6 @@ checks = [{ bin = "omp-rpc-session", args = ["quick", "--state"] }]
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

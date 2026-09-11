@@ -27,3 +27,6 @@ subprocess-contract = { path = "../subprocess-contract" }
 # unifies rather than resolving a second copy.
 asupersync = { workspace = true }
 futures-lite = "2"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

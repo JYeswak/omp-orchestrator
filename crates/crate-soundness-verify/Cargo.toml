@@ -17,3 +17,6 @@ subprocess-contract = { path = "../subprocess-contract" }
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

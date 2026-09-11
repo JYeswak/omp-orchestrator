@@ -21,3 +21,6 @@ subprocess-contract = { path = "../subprocess-contract" }
 
 [dev-dependencies]
 tempfile = "3"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

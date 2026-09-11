@@ -21,3 +21,6 @@ unsafe_code = "forbid"
 
 [dependencies]
 serde_json = "1"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }

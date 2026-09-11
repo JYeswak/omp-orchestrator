@@ -20,3 +20,6 @@ dispatch-saga = { path = "../dispatch-saga" }
 
 [lints]
 workspace = true
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }
