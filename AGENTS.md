@@ -1732,6 +1732,37 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    **Indistinguishable → the instrument cannot answer your question. Fix it before reporting
    anything.** A denied, errored, empty or unreadable probe is `UNKNOWN`, never a negative result.
 
+   **⛔ AND 8i HAS NO PURCHASE WHEN YOU DO NOT THINK YOU ARE HOLDING AN INSTRUMENT. A STATED HOLD
+   IS AN INSTRUMENT TOO.** Added 2026-09-10 from `GradeParity`, after the rule failed on the pane
+   enforcing it.
+
+   Measured: `GateRunnerNames` told pane 1, in words, that it was **deliberately withholding a
+   push** so an in-flight CI run could finish as a data point. Pane 1 then ran
+
+   ```
+   git log origin/main..HEAD --oneline     # 3 commits unpushed
+   ```
+
+   and pushed. `concurrency: cancel-in-progress` killed run `34548539101` at step 7 of 8, ~20
+   minutes in. **`git log origin/main..HEAD` answers WHAT IS UNPUSHED. It cannot answer WHO IS
+   DELIBERATELY WAITING, and that second fact existed only in the channel where the peer said it.**
+
+   Pane 1 had spent the whole session correcting exactly this defect in others — one channel read
+   as though it carried a second — and did not catch it here, because **it never occurred to pane 1
+   that it was reading an instrument at all.** You run a negative control on a `grep`; you do not
+   think to run one on a queue state, because a queue state does not feel like a measurement. It is
+   one, and it has a scope like any other.
+
+   **THE EXTENSION:** before an action that is irreversible or that pre-empts a peer, ask **WHAT
+   FACT WOULD STOP ME, AND WOULD THE THING I JUST LOOKED AT CONTAIN IT?** A tracker state, a queue
+   depth, a monitor's `dispatchable` list, and a peer's stated intention are all channels with
+   scopes. The cheapest form is one line to the peer, which costs seconds against a build that
+   costs twenty minutes.
+
+   **NO-CLAIM.** This does not make pre-emption impossible — a peer can hold silently, and nothing
+   in the tracker records "waiting on purpose". It removes only the case where the peer DID say so
+   and the conductor did not treat the saying as evidence.
+
 8j. **`fh suggest` NEVER returns empty, so a row is a CANDIDATE, not a hit.** `fh search` returns
    `[EMPTY]` for a true miss and is the negative control — **but a STALE index returns
    `[STALE/SEARCH_INDEX_STALE]` for BOTH verbs, so the control cannot discriminate.** Measured
