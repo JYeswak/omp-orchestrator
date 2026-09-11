@@ -488,9 +488,63 @@ fn run_portal(rest: &[String]) -> ExitCode {
     } else {
         json!({"command": format!("ompo start --repo {} --session {} --json", repo.display(), session), "reason_code": "L3_REVIEW"})
     };
+    // L5-OBS (bbc8/1o28/zi3x/ub2l): the observability block is assembled and
+    // hashed by `ompo_start::portal::observability`, not here -- the four
+    // readbacks a reader polls live in one object with one content hash. The
+    // refusal is propagated rather than swallowed: zero sources while the
+    // verdict claims live is an ERROR, so it must not render as a row.
+    let readback_ok = inception["readback"] == "PASS";
+    let observability = match ompo_start::portal::observability(
+        observation.verdict.sources(),
+        observation.verdict.is_live(),
+        readback_ok,
+    ) {
+        Ok(observability) => observability,
+        Err(error) => {
+            eprintln!("ompo portal: {error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    // L5 CONTRACT GATE (van0, cqwo, qcev). The three fields below were already
+    // WRITTEN; nothing REFUSED a malformed one, and a field that is merely
+    // present is a decoration. The predicates live in `ompo_start` beside the
+    // types they describe, so this is the only place they are enforced and
+    // there is no second copy to drift:
+    //   validate_sources          an ABSENT source must not read as available
+    //   alerts_are_complete       every alert carries a non-empty action, AND
+    //                             every degraded source is actually alerted on
+    //   validate_one_next_action  exactly one action, carried as an object
+    // The refusal is EXIT_INSTRUMENT rather than a warning: a row that fails
+    // its own contract must not ship, because a reader cannot tell a malformed
+    // row from a degraded system.
+    //
+    // ⚠️ A SILENT SOURCE IS WELL-FORMED. On a host with no ntm/tick/am all
+    // three rows read available:false fresh:false age_ms:null with a populated
+    // reason_code, which is the CI lane's normal state and passes every clause
+    // here. The gate refuses malformed data, never degraded data.
+    let sources = Value::Object(sources);
+    let alerts = Value::Array(alerts);
+    for defect in [
+        ompo_start::portal_contract::validate_sources(&sources)
+            .err()
+            .map(|defect| defect.to_string()),
+        ompo_start::portal_contract::alerts_are_complete(&alerts, &sources)
+            .err()
+            .map(|defect| defect.to_string()),
+        ompo_start::portal_contract::validate_one_next_action(&one_next_action)
+            .err()
+            .map(|defect| defect.to_string()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        eprintln!("ompo portal: {defect}");
+        return ExitCode::from(EXIT_INSTRUMENT);
+    }
     let row = json!({
         "schema_id": ompo_start::portal::SCHEMA_ID,
         "schema_version": ompo_start::portal::SCHEMA_VERSION,
+        "observability": observability,
         "generated_at": now_millis(),
         "sources": sources,
         "_alerts": alerts,
