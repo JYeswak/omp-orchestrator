@@ -41,6 +41,7 @@ pub mod resident_tick;
 pub mod resident;
 pub mod resident_liveness;
 pub mod packet_admission;
+pub mod host_precondition;
 
 
 // ── IDLE_AUTHORIZATION ─────────────────────────────────────────────────────────
