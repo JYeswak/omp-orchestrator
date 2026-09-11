@@ -4945,6 +4945,50 @@ instance of that shape in one session.
 **WHEN AUDITING A "FIXED" HONESTY DEFECT, DIFF THE WHOLE LINE, NOT THE FIELD THE BEAD NAMES.**
 A token census keyed on the old spelling cannot see a token that changed position.
 
+## ⭐⭐ A CONTROL MUST NOT SHARE THE DISQUALIFYING PROPERTY WITH THE LANE UNDER TEST
+
+**The sharpest control rule of the session, produced by an agent correcting its own
+correction.** It tested *"are these failures `rch`/target-dir artifacts?"* by checking whether
+they also fail in CI — **and used `ubuntu-latest` as the "clean host" control.**
+```
+lane under test   Contabo worker   LINUX
+the control       ubuntu-latest    LINUX          <- shares the disqualifying property
+the tests         hardcode          DARWIN paths  -- $HOME/.local/bin/cargo,
+                  nightly-aarch64-apple-darwin, /Volumes/ZestData, /usr/bin/shasum
+```
+⛔ **The probe was VALID for the narrow question it was written for and VACUOUS for the
+question it then answered.** *"Fails on a clean host too"* is **not** *"fails for a
+non-environmental reason"* when **both hosts are Linux and the test hardcodes Darwin.** ⭐
+**A control blind to the distinction you are drawing cannot draw it** — and its own summary is
+the keeper: *"I wrote 'reading a name is not measuring it', then measured with an instrument
+blind to the very distinction I was drawing."*
+
+⭐ **AND THE IMPRESSION "HOST-SHAPED" HID THREE DISTINCT CAUSES:** platform paths
+(`target_ownership`), a relocated target dir (`target_directory`), and a repo-relative
+`.flywheel/` artifact (`sota_preflight`). **One predicate over three causes is wrong for at
+least two of them.**
+
+## ⛔⛔ A CRATE-GRANULAR PRECONDITION CANNOT GATE A TARGET — and building one hides everything else
+
+**Measured refusal, `u3f6q` item 1, discharged under its own item 8** (*"report rather than
+widening the gate"*):
+```
+environment_precondition   production call sites = 1   main.rs:720, inside run_crate()
+run_crate()                returns EARLY for the WHOLE CRATE
+cargo spawns using --test  ZERO
+Invocation::Test(name)     lib.rs:563 -> printed at main.rs:184 as `PLAN invocations=18`
+                           ADVISORY OUTPUT ONLY. Nothing executes it.
+```
+⛔ **So gating two legs gates all eighteen invocations and converts NINE real failures into
+silent skips** — `target_ownership` 4 + `census_membership` 4 + `gate_wiring_wave3` 1, the last
+being the true-red-replacing-a-false-green. ⭐ **Items 1 and 2 are MUTUALLY UNSATISFIABLE at
+this granularity, and that is a property of the runner, not of the hypothesis.**
+
+⭐ **THE CORRECTED DESIGN IS NOT IN THE RUNNER AT ALL: a per-test typed skip, because the test
+is the only place with target granularity.** **Before building a gate, measure what granularity
+its host can express** — a `PLAN` line listing 18 invocations reads like per-target execution
+and is a print statement.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
