@@ -7272,6 +7272,7 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::host_precondition::{measurable_here, HostRequirement};
     use std::os::unix::fs::PermissionsExt;
 
     fn fixture_config(heartbeat_ledger: PathBuf) -> Config {
@@ -8863,6 +8864,15 @@ exit 2
 
     #[test]
     fn supervisor_claims_open_bead_before_authorized_dispatch() {
+        // HOST-ONLY: reaches prepare_bead_dispatch -> render_packet_with_sender
+        // -> mail_sender_pane_identity, which resolves TMUX_PANE immediately
+        // before sending. UNMEASURABLE on a worker, never FAILED.
+        if !measurable_here(
+            "supervisor_claims_open_bead_before_authorized_dispatch",
+            &[HostRequirement::TmuxPane],
+        ) {
+            return;
+        }
         let temp = tempfile::tempdir().expect("claim fixture tempdir");
         let bead = "omp-orchestrator-mj8w";
         let (config, state, args, _supervisor) = open_bead_br_fixture(&temp, bead);
@@ -8900,6 +8910,12 @@ exit 2
 
     #[test]
     fn preflight_refusal_leaves_tracker_unclaimed() {
+        if !measurable_here(
+            "preflight_refusal_leaves_tracker_unclaimed",
+            &[HostRequirement::TmuxPane],
+        ) {
+            return;
+        }
         let temp = tempfile::tempdir().expect("preflight claim-order fixture");
         let bead = "omp-orchestrator-t7us-single-capture";
         let (config, state, args, _supervisor) = open_bead_br_fixture(&temp, bead);
@@ -8928,6 +8944,12 @@ exit 2
     }
     #[test]
     fn disabling_supervisor_claim_preserves_known_bad_refusal() {
+        if !measurable_here(
+            "disabling_supervisor_claim_preserves_known_bad_refusal",
+            &[HostRequirement::TmuxPane],
+        ) {
+            return;
+        }
         let temp = tempfile::tempdir().expect("claim mutation fixture tempdir");
         let bead = "omp-orchestrator-mj8w";
         let (config, state, _args, _supervisor) = open_bead_br_fixture(&temp, bead);
@@ -8950,6 +8972,31 @@ exit 2
         assert!(
             state.exists(),
             "restored claim transition must perform the claim"
+        );
+    }
+
+    /// LEG 3 OF g5j5b, AND THE ONE THAT KEEPS THE GUARD HONEST: a guard that
+    /// skips an unmeasurable leg must not also swallow a measurable failure.
+    ///
+    /// The requirement list is EMPTY, so the guard is always open here and the
+    /// assertion below always runs — which is the point. Breaking the property
+    /// it asserts (the empty-set wire string) must redden this leg WITH the
+    /// guard in place; if it does not, the guard is eating failures and is
+    /// strictly worse than the false red it replaced.
+    ///
+    /// Unlike the five host-only legs this is measurable on a worker, so the
+    /// non-swallowing property is proven where the suite actually runs rather
+    /// than argued from the shape of an early `return`.
+    #[test]
+    fn a_guarded_leg_still_fails_when_the_host_can_answer() {
+        assert!(
+            measurable_here("a_guarded_leg_still_fails_when_the_host_can_answer", &[]),
+            "a leg requiring nothing of the host is always measurable"
+        );
+        assert_eq!(
+            peer_grade_outcome_wire(&PeerGradeCommandOutcome::NoCandidate),
+            "PEER_GRADE_EMPTY",
+            "the assertion after a guard must still bite"
         );
     }
 
@@ -9695,6 +9742,14 @@ exit 2
 
     #[test]
     fn supervisor_files_recurring_decision_through_finding_kernel() {
+        // HOST-ONLY: shells the real tracker (`finding::BR init`). A worker
+        // without br on PATH reports Process(NotFound("br")).
+        if !measurable_here(
+            "supervisor_files_recurring_decision_through_finding_kernel",
+            &[HostRequirement::TrackerBinary],
+        ) {
+            return;
+        }
         let temp = tempfile::tempdir().expect("supervisor finding fixture");
         let heartbeat = temp.path().join("heartbeat.jsonl");
         let config = fixture_config(heartbeat.clone());
@@ -9886,6 +9941,12 @@ Stop: now
     }
     #[test]
     fn stale_docs_admits_grading_and_writes_degraded_row() {
+        if !measurable_here(
+            "stale_docs_admits_grading_and_writes_degraded_row",
+            &[HostRequirement::TmuxPane],
+        ) {
+            return;
+        }
         let temp = tempfile::tempdir().expect("degraded dispatch fixture");
         let bead = "omp-orchestrator-n7yp-fixture";
         let (config, _state, _args, _supervisor) = open_bead_br_fixture(&temp, bead);
@@ -10531,31 +10592,31 @@ Stop: now
         assert!(error.contains("TRACKER_REFUSED"), "{error}");
     }
 
-    /// 9x13.1 leg 1 (KNOWN-BAD by construction): the caller is WORKING.
+    /// 9x13.1 leg 1 + 2: a WORKING caller still obtains a rendered packet, and
+    /// the production path renders THROUGH the renderer rather than around it.
     ///
-    /// The observer's state is READ from the observation and asserted NOT
-    /// CONFIRMED_IDLE before the path runs, because a green obtained with an
-    /// idle caller proves nothing about the catch-22 that motivated 9x13: the
-    /// old pre-check refused the invoker for being busy, which invoking made
-    /// it.
+    /// ⛔ THE CALLER-STATE CLAIM IS NOT PROVEN HERE. This test calls
+    /// `record_grader_assignment` and `render_peer_grade_packet` directly, so
+    /// the observer pane is a local fixture struct that no code under test
+    /// branches on — three asserts about it used to sit below and could not
+    /// fail for any production change. GradeCatch22 flagged them as decoration
+    /// and was right; they are gone. The caller-state leg with a PRODUCTION
+    /// subject (real `parse_observation` over the real monitor bytes, then the
+    /// real `run_peer_grade_claim`) is
+    /// `grade_assign_records_the_claim_before_it_renders_the_packet`.
+    ///
+    /// What THIS test still earns on its own: the byte-for-byte equality
+    /// against a direct `render_grading_packet` call, which reddens the moment
+    /// the production path hand-builds a packet instead of calling the
+    /// renderer. That is the positive control for the whole region.
     #[test]
     fn grade_assign_renders_a_packet_for_a_working_observer() {
         let temp = tempfile::tempdir().expect("packet fixture");
         let bead = "grade-packet-bead";
         let (config, _state, args, _supervisor) = open_bead_br_fixture(&temp, bead);
         let observer = grade_working_pane("%26");
-        assert_ne!(
-            observer.liveness, "CONFIRMED_IDLE",
-            "observed caller pane {} liveness={} is_working={}: an idle caller cannot \
-             exercise the catch-22 this path exists to break",
-            observer.pane_id, observer.liveness, observer.is_working
-        );
-        assert!(observer.is_working, "caller must be carrying work: {observer:?}");
-        assert!(
-            !observer.is_dispatchable,
-            "a WORKING caller is not dispatchable, which is exactly what the old \
-             pre-check refused on: {observer:?}"
-        );
+        // No asserts about `observer` here: see the doc comment. It supplies the
+        // observer pane id and nothing more.
         let claim = PeerGradeClaim {
             bead: bead.to_owned(),
             receiver_pane: "%1409".to_owned(),
@@ -10678,6 +10739,155 @@ Stop: now
         assert!(
             !render.contains("GRADE ASSIGNMENT"),
             "the refusal must not carry a packet: {render}"
+        );
+    }
+
+    /// Write an executable fixture at a CHOSEN name. `executable_reaper` always
+    /// writes `reaper`, so a test needing two fixture binaries (a tracker AND a
+    /// tick-monitor) cannot use it twice in one tempdir.
+    fn executable_named(temp: &tempfile::TempDir, name: &str, body: &str) -> PathBuf {
+        let path = temp.path().join(name);
+        std::fs::write(&path, body).expect("write fixture executable");
+        let mut permissions = std::fs::metadata(&path)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&path, permissions).expect("fixture permissions");
+        path
+    }
+
+    /// 9x13.1 CHANGES_REQUESTED round 2, GradeCatch22's finding: acceptance 6
+    /// demands an ORDERED COMMAND LOG, and my first four legs could not supply
+    /// one because none of them executes `run_peer_grade_claim`. They call
+    /// `record_grader_assignment` and `render_peer_grade_packet` directly, in an
+    /// order the TEST writes — so they pin the data dependency (real, kept) and
+    /// are blind to the sequence the shipping arm uses. Swapping the two calls
+    /// in production left all four GREEN at exit=0.
+    ///
+    /// That is `su6tu`'s defect one level up: a property pinned through a direct
+    /// helper call, unobservable through the path that ships.
+    ///
+    /// This leg drives the real command. The ordered log is the TRACKER's own
+    /// invocation record: `record_grader_assignment` spends a `br update` and
+    /// `render_peer_grade_packet` spends a `br show` (through
+    /// `load_bead_snapshot`), so the fixture appends each verb as it arrives and
+    /// the ORDER of that file is the order of production effects. Under the swap
+    /// the render runs first, reads an unwritten assignee, refuses
+    /// BEAD_NOT_CLAIMED and `?` returns — so `update` never appears at all, and
+    /// the command stops doing BOTH of its jobs.
+    #[test]
+    fn grade_assign_records_the_claim_before_it_renders_the_packet() {
+        let (temp, mut config) = grade_fixture();
+        let bead = "grade-bead";
+        let events = temp.path().join("tracker-events");
+        let state = temp.path().join("tracker-state");
+        let events_path = events.display().to_string();
+        let state_path = state.display().to_string();
+        // Every invocation appends its verb FIRST, so the log records arrival
+        // order even for a call that then fails.
+        let tracker = format!(
+            r#"#!/bin/sh
+printf '%s\n' "$1" >> "{events_path}"
+if [ "$1" = "show" ]; then
+  if [ -e "{state_path}" ]; then
+    printf '%s\n' '[{{"id":"{bead}","title":"title","description":"Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now","status":"in_progress","assignee":"'$(cat "{state_path}")'"}}]'
+  else
+    printf '%s\n' '[{{"id":"{bead}","title":"title","description":"Objective: x\nTarget: y\nScope:\nreal\nAcceptance:\nrun\nDone: exit 0\nStop: now","status":"open","assignee":null}}]'
+  fi
+  exit 0
+fi
+if [ "$1" = "update" ]; then
+  shift
+  shift
+  assignee=""
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--actor" ] || [ "$1" = "--assignee" ]; then
+      assignee="$2"
+      shift
+    fi
+    shift
+  done
+  printf '%s\n' "$assignee" > "{state_path}"
+  printf 'updated\n'
+  exit 0
+fi
+exit 2
+"#
+        );
+        // The caller pane %26 is WORKING and NOT dispatchable; %1414 is the only
+        // CONFIRMED_IDLE peer. This JSON is the acceptance-1 subject with teeth:
+        // production `parse_observation` derives the caller's state from it, and
+        // the selector branches on what it derives.
+        let observation_json = r#"{"omp_lifecycle":{"panes":[{"pane":"%26","state":"WORKING","liveness":"WORKING"},{"pane":"%1414","state":"IDLE","liveness":"CONFIRMED_IDLE"}]},"idle_panes":{"dispatchable":["%1414"],"free_capacity":["%1414"]}}"#;
+        let monitor = format!("#!/bin/sh\ncat <<'JSON'\n{observation_json}\nJSON\n");
+        config.br = executable_named(&temp, "tracker", &tracker)
+            .display()
+            .to_string();
+        config.tick_monitor = executable_named(&temp, "monitor", &monitor)
+            .display()
+            .to_string();
+
+        // ACCEPTANCE 1 WITH A PRODUCTION SUBJECT. The earlier leg's caller-state
+        // asserts are about a local fixture struct and cannot fail for any
+        // production change; these run the real parser over the real fixture
+        // bytes the command consumes.
+        let parsed = parse_observation(observation_json.as_bytes(), None)
+            .expect("the fixture observation must parse through production code");
+        let caller = parsed
+            .panes
+            .iter()
+            .find(|pane| pane.pane_id == "%26")
+            .expect("caller row");
+        assert_ne!(
+            caller.liveness, "CONFIRMED_IDLE",
+            "caller pane %26 reads {caller:?}; an idle caller cannot exercise the catch-22"
+        );
+        assert!(caller.is_working, "caller must be carrying work: {caller:?}");
+        assert!(
+            !caller.is_dispatchable,
+            "a WORKING caller is not dispatchable -- exactly what the old pre-check refused on: {caller:?}"
+        );
+
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        let outcome = runtime.block_on(async {
+            let cx = Cx::current().expect("runtime context");
+            run_peer_grade_claim(&cx, &config, "%26", None).await
+        });
+        let log = std::fs::read_to_string(&events).unwrap_or_default();
+        let (claim, packet) = match outcome {
+            Ok(PeerGradeCommandOutcome::Claimed { claim, packet }) => (claim, packet),
+            other => panic!(
+                "a WORKING observer must claim and render through the shipping command; \
+                 got {other:?}; tracker log={log:?}"
+            ),
+        };
+        assert_eq!(claim.grader_pane, "%1414", "{claim:?}");
+        assert_eq!(claim.grader_assignee, "pane1414-%1414", "{claim:?}");
+        assert_ne!(
+            claim.grader_pane, "%26",
+            "the WORKING observer must never be its own grader: {claim:?}"
+        );
+
+        let verbs: Vec<&str> = log.lines().collect();
+        assert_eq!(
+            verbs.first().copied(),
+            Some("update"),
+            "br update --assignee must be the FIRST tracker effect, before the packet is \
+             rendered; observed order={verbs:?}"
+        );
+        assert!(
+            verbs.iter().skip(1).any(|verb| *verb == "show"),
+            "the packet render must read the tracker AFTER the claim write; observed \
+             order={verbs:?}"
+        );
+        assert!(
+            packet.starts_with("GRADE ASSIGNMENT (not implementation)"),
+            "{packet}"
+        );
+        assert!(packet.contains("Grader pane: %1414"), "{packet}");
+        assert!(
+            packet.contains("Observer: %26 (may be WORKING; observer is not the grader)."),
+            "{packet}"
         );
     }
 
