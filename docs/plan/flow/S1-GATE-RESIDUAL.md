@@ -30,26 +30,44 @@ classifies it `GATE_RUNNER_LEDGER_DRIFT reason=in_ledger_absent_from_workspace`.
 that crate PROVES the run predates the exclusion.** `reap-finished-panes` is the second,
 independent tell, repaired by `924e3c7`.
 
-## FAIL — 16
+## FAIL — 16 at `cb9d3941`. **THREE ARE NOW VERIFIED GREEN AT HEAD; FOUR ARE OWNED.**
 
-| crate |
-|---|
-| `agent-mail-native` |
-| `dispatch-silence-watch` |
-| `finding-dispatch` |
-| `installer` |
-| `kernel-bypass-gate` |
-| `kernel-only-operator-hook` |
-| `no-shell-gate` |
-| `omp-inventory-map` |
-| `omp-orchestrator` |
-| `ompo-doctor` |
-| `ompo-start` |
-| `pane-dispatch-ready` |
-| `receiver-receipt` |
-| `silent-success-census` |
-| `undrained-pipe-lint` |
-| `verify-dispatch` |
+**Re-derive before dispatching any row.** Verified-green rows were each re-run on Contabo with
+both proof lines; they are NOT predictions.
+
+| crate | state at HEAD | evidence / owner |
+|---|---|---|
+| `agent-mail-native` | FAIL | unowned |
+| `dispatch-silence-watch` | repaired | `poumg.1` `f686ed3` — grading |
+| `finding-dispatch` | ✅ **VERIFIED GREEN** | `25b8af4` · `2 passed` · `exit=0` |
+| `installer` | FAIL | owned — background job `InstallerClobber` |
+| `kernel-bypass-gate` | FAIL | owned — muse `%26` via `9ub39` |
+| `kernel-only-operator-hook` | FAIL | unowned |
+| `no-shell-gate` | FAIL | unowned — 2 named causes, neither from `nar5l` |
+| `omp-inventory-map` | FAIL | unowned — see `poumg.3`, **PARKED on purpose** |
+| `omp-orchestrator` | FAIL | unowned — 5 pre-existing `resident::tests` failures |
+| `ompo-doctor` | FAIL | owned — muse `%26` via `t0ixj`; `8vflj` blocked behind it |
+| `ompo-start` | ✅ **VERIFIED GREEN** | `063e67f` · `13 passed` · `exit=0` |
+| `pane-dispatch-ready` | FAIL | unowned |
+| `receiver-receipt` | ✅ **VERIFIED GREEN** | `6f3953b` · `7 passed` · `exit=0` |
+| `silent-success-census` | repaired | `poumg.5` `7b3f78d` — grading |
+| `undrained-pipe-lint` | FAIL | unowned |
+| `verify-dispatch` | FAIL | unowned — 8 tests, one root cause |
+
+⚠️ **A PREMISE I GOT WRONG, corrected by measurement.** I briefed an agent that `25b8af4` and
+`c5519dc` repaired **both** `finding-dispatch` and `receiver-receipt`. Measured: `25b8af4` fixed
+**only** `finding-dispatch`; its `receiver-receipt` hunk touched **comments only**
+(`src/lib.rs:616,965`). **`receiver-receipt`'s actual CI failure lived in contract MARKDOWN, not
+in Rust** — `docs/contracts/receiver_receipt_contract.md:155` — and was fixed by the separate,
+later `6f3953b`. **Two crates on the same list, repaired by different commits in different
+languages, and one confident sentence merged them.**
+
+**AND BOTH GREENS WERE CHECKED FOR THE DELETED-PROPERTY FAILURE, not just for passing.**
+`receipt_contract.rs:280-292` still hard-asserts `root.join(candidate).is_file()` for every
+`crates/`|`docs/` token **and** still carries the anti-vacuity floor `assert!(checked >= 8)`, so
+a relaxed extractor could not satisfy it. `finding-dispatch` still asserts both original needles
+and its companion positive control passed in the same run. Anchored control on each:
+`git show <sha> -- <paths> | grep -c '^-.*assert'` → **0 removed assertion lines**.
 
 ## UNMEASURABLE — 4, and the two reasons are DIFFERENT DEFECTS
 
