@@ -43,6 +43,26 @@ pub fn is_silent(source: &SourceVerdict) -> bool {
     !source.available || !source.fresh || source.age_ms.is_none()
 }
 
+/// WHY a source is silent, or `None` when it is not.
+///
+/// A bare `silent: true` says the mail row had no `_meta.timestamp` and a row
+/// whose probe never answered are the same fact; they are not. The reason is the
+/// field a reader routes on, so it is emitted beside the boolean and is `null`
+/// exactly when `silent` is false.
+#[must_use]
+pub fn silent_reason(source: &SourceVerdict) -> Option<String> {
+    if !source.available {
+        return Some("L4_SILENT_UNAVAILABLE".to_owned());
+    }
+    if !source.fresh {
+        return Some("L4_SILENT_STALE".to_owned());
+    }
+    if source.age_ms.is_none() {
+        return Some("L4_SILENT_NO_TIMESTAMP".to_owned());
+    }
+    None
+}
+
 /// One source's census row.
 ///
 /// `names` is the pane census: WHICH panes the source saw, not how many. An
@@ -66,6 +86,7 @@ pub fn source_json(source: &SourceVerdict) -> serde_json::Value {
         "age_ms": source.age_ms,
         "gap_secs": source.age_ms.map(|age| age / 1000),
         "silent": is_silent(source),
+        "silent_reason": silent_reason(source),
         "names": source.panes,
         "panes": source.panes,
         "pane_count": source.panes.len(),

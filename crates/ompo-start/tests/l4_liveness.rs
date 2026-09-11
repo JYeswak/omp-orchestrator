@@ -176,3 +176,68 @@ fn every_source_row_carries_an_age_or_silent_true() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// L4-OBS-MAIL (l2de): the mail row emits a derived age or silent=true WITH a
+// reason. Known-bad: _meta absent is SILENT, and a bare boolean cannot tell
+// "no _meta.timestamp" from "the probe never answered".
+// ---------------------------------------------------------------------------
+
+#[test]
+fn mail_row_with_meta_timestamp_emits_derived_age() {
+    let mut mail = source("agent-mail", &["%7"], true, true);
+    mail.age_ms = Some(4_200);
+    let map = ompo_start::liveness::sources_json(std::slice::from_ref(&mail));
+    let row = &map["mail"];
+    assert_eq!(row["age_ms"], serde_json::json!(4_200), "derived from _meta");
+    assert_eq!(row["silent"], serde_json::json!(false));
+    assert_eq!(
+        row["silent_reason"],
+        serde_json::Value::Null,
+        "a non-silent row carries no reason"
+    );
+}
+
+#[test]
+fn mail_row_without_meta_is_silent_with_a_distinguishing_reason() {
+    let mut no_meta = source("agent-mail", &["%7"], true, true);
+    no_meta.age_ms = None;
+    let mut unavailable = source("agent-mail", &["%7"], false, false);
+    unavailable.age_ms = None;
+    // KNOWN-BAD, pinned: the bare boolean collapses two different defects.
+    assert_eq!(
+        ompo_start::liveness::is_silent(&no_meta),
+        ompo_start::liveness::is_silent(&unavailable),
+        "KNOWN-BAD: silent=true alone cannot tell absent _meta from a dead probe"
+    );
+    // The writer under test separates them.
+    assert_eq!(
+        ompo_start::liveness::silent_reason(&no_meta).as_deref(),
+        Some("L4_SILENT_NO_TIMESTAMP")
+    );
+    assert_eq!(
+        ompo_start::liveness::silent_reason(&unavailable).as_deref(),
+        Some("L4_SILENT_UNAVAILABLE")
+    );
+    let row = ompo_start::liveness::source_json(&no_meta);
+    assert_eq!(row["silent"], serde_json::json!(true));
+    assert_eq!(
+        row["silent_reason"],
+        serde_json::json!("L4_SILENT_NO_TIMESTAMP")
+    );
+}
+
+#[test]
+fn silent_reason_is_null_exactly_when_not_silent() {
+    for age in [None, Some(7u64)] {
+        for (available, fresh) in [(true, true), (true, false), (false, false)] {
+            let mut probe = source("agent-mail", &["%7"], available, fresh);
+            probe.age_ms = age;
+            assert_eq!(
+                ompo_start::liveness::silent_reason(&probe).is_some(),
+                ompo_start::liveness::is_silent(&probe),
+                "reason and boolean must agree for available={available} fresh={fresh} age={age:?}"
+            );
+        }
+    }
+}
