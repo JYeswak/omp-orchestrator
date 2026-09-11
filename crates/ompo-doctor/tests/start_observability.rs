@@ -60,6 +60,32 @@ fn start_json_reports_parity_and_halt() {
     );
 }
 
+/// L3-OBS-COUNT (st8w): `step_count` lives INSIDE the observability block.
+/// Known-bad is the bead's own: count 0 (or absent) while `ompo start` is
+/// claimed wired. Cross-checked against the rendered arrays so a hardcoded
+/// constant cannot satisfy it.
+#[test]
+fn observability_reports_step_count() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    let report = ompo_start_json(repo.path(), "st8w-leg");
+    let obs = observability(&report);
+    println!("READBACK .data.observability.step_count = {}", obs["step_count"]);
+    let count = obs["step_count"]
+        .as_u64()
+        .expect("L3_STEP_COUNT_MISSING: observability carries no numeric step_count");
+    assert!(count >= 1, "STEPS is non-empty, so count must be >=1: {obs}");
+    assert_eq!(
+        Some(count as usize),
+        report["data"]["steps"].as_array().map(Vec::len),
+        "step_count must equal the rendered steps array, not a constant"
+    );
+    assert_eq!(
+        Some(count as usize),
+        obs["tui_ids"].as_array().map(Vec::len),
+        "step_count must equal the TUI id list length"
+    );
+}
+
 /// Known-bad legs for the parity gate itself (yto0): the typed contract is
 /// asserted directly, without running the binary. Misorder, absence, and
 /// vacuity each refuse with their own variant.

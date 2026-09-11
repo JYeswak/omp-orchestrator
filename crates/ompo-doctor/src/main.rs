@@ -144,6 +144,9 @@ fn observability_json(steps: &[ompo_start::Step]) -> Value {
     });
     json!({
         "parity_ok": parity_ok,
+        // L3-OBS-COUNT (st8w): the array length, so a renderer that filters
+        // rows shows up here as a count mismatch instead of a silent drop.
+        "step_count": steps.len(),
         "tui_ids": tui_ids,
         "json_ids": json_ids,
         "halt": halt,
