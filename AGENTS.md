@@ -4000,12 +4000,47 @@ enumeration that cannot see the contaminated input returns "clean".
 identically.** Both files are part of the six-file unit recorded in `jwlty`, which is why that
 bead insists they move together.
 
-**THREE FURTHER INPUT CLASSES THE ENUMERATION IS SILENT ABOUT** — offered as completeness, and
-**UNMEASURED here**: `build.rs` and anything it reads; `include_str!` / `include_bytes!` /
-`#[path = …]` targets, which are compilation inputs living outside the module tree; and
-`.cargo/config.toml`, which can inject rustflags and change resolution **without appearing in
-any manifest**. ⭐ **An omitted input class fails silently in the PASSING direction**, which is
-the only reason to enumerate them before anyone needs them.
+⛔ **AND STEP 1 IS A COMPLETENESS OBLIGATION ON THE READER THAT THE COMPILER DOES NOT CHECK.**
+`GradePoumgFamily`, about its own clause: **an input you forget to enumerate is invisible in
+exactly the way the untracked callee is — your hashes all match and the answer is confidently
+wrong.** ⭐ **This is the `HostRequirement` finding one level out: exhaustive matching over the
+set you thought of is not completeness over the set that exists.**
+
+**So the honest form of step 1 is NOT *"the inputs are committed"* but *"THE INPUTS I ENUMERATED
+are committed"* — a NO-CLAIM, not a proof.** Name the enumeration in the report or the claim is
+unbounded.
+
+**THE ENUMERATION, MEASURED IN THIS REPO (not a hypothetical list):**
+```
+crate sources · ITS OWN Cargo.toml · its build.rs if present
+ALL transitive path deps AND their manifests AND their build.rs
+the workspace manifest (incl. [workspace.lints] and [profile.*.package.*], which members
+                        INHERIT -- a member's own clean manifest says nothing about them)
+.cargo/config.toml      -- injects rustflags, changes resolution, lives in NO crate directory
+the crate's Cargo.lock ENTRY
+any include_str! / include_bytes! / #[path = …] target
+
+measured 2026-09-11:  build.rs x7  (bead-availability, installer, no-shell-gate,
+                                    omp-orchestrator, ompo-doctor, pane-truth, tick-monitor)
+                      .cargo/config.toml PRESENT
+                      include_str!/include_bytes! sites in 18 files
+```
+⭐ **An omitted input class fails silently in the PASSING direction**, which is the only reason
+to enumerate before anyone needs it.
+
+⭐⭐ **THE METHOD DEMOTED A REAL VERDICT ON ITS FIRST USE, WHICH IS THE STRONGEST ENDORSEMENT IT
+COULD HAVE.** `WireGradingPacket` ran step 1 on `-p agent-mail-native` and **it FAILED**: six
+uncommitted source files (`client.rs` 9/11, `endpoint.rs` 8/2, `error.rs` 1/1, `journey.rs`
+6/24, `oracle.rs` 5/7, `tests/packet.rs` 7/4), and **`-w` proved they are not formatting.** It
+recorded its own `exit=0` as **a WORKTREE green, not a HEAD verdict**, and asked for its
+acceptance leg to be graded as the weaker true claim.
+
+⭐ **AND IT STILL BOUNDED WHAT SURVIVED, which is the part to copy:** every symbol its test
+references is present in HEAD at an identical count (`discovery_sources` 2/2,
+`ENV_PRIMARY_TOKEN` 8/8, `resume_from` 1/1, `restored` 1/1, `ORIGIN` 4/4), so the dirty files
+neither add nor remove anything its leg depends on. **The classification fix is HEAD-correct;
+whether the CRATE compiles at HEAD is unknown.** ⛔ **A crate with uncommitted sources is
+UNMEASURABLE AT HEAD BY ANYONE — including whoever tries to attribute its CI `FAIL` row.**
 
 ⭐ **STEP 1 ALONE IS WHAT A FRESH CLONE GIVES YOU — RESOLUTION, NOT PROOF. STEP 2 ALONE IS WHAT A
 MUTATION GIVES YOU — DEPENDENCY, NOT PROVENANCE. TOGETHER THEY ARE STRICTLY STRONGER THAN
