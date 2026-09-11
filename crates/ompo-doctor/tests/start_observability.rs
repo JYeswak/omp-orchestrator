@@ -86,6 +86,33 @@ fn observability_reports_step_count() {
     );
 }
 
+/// L3-OBS-CURSOR (jb5m): `next_step_id` lives inside the observability block
+/// and equals the TUI cursor. The TUI cursor is re-derived here from the
+/// rendered rows -- first non-PASSED, non-SKIPPED in array order -- so the
+/// writer cannot agree with itself by construction.
+#[test]
+fn observability_next_step_id_equals_tui_cursor() {
+    let repo = tempfile::tempdir().expect("fixture repo");
+    let report = ompo_start_json(repo.path(), "jb5m-leg");
+    let obs = observability(&report);
+    println!("READBACK .data.observability.next_step_id = {}", obs["next_step_id"]);
+    let emitted = obs["next_step_id"]
+        .as_str()
+        .expect("L3_NEXT_STEP_ID_MISSING: observability carries no next_step_id");
+    let rendered = report["data"]["steps"]
+        .as_array()
+        .expect("start renders a steps array");
+    let tui_cursor = rendered
+        .iter()
+        .find(|step| {
+            let status = step["status"].as_str().unwrap_or_default();
+            status != "PASSED" && status != "SKIPPED"
+        })
+        .and_then(|step| step["id"].as_str())
+        .expect("fixture leaves at least one non-elapsed step");
+    assert_eq!(emitted, tui_cursor, "JSON next_step_id vs TUI cursor: {obs}");
+}
+
 /// Known-bad legs for the parity gate itself (yto0): the typed contract is
 /// asserted directly, without running the binary. Misorder, absence, and
 /// vacuity each refuse with their own variant.

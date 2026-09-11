@@ -147,6 +147,9 @@ fn observability_json(steps: &[ompo_start::Step]) -> Value {
         // L3-OBS-COUNT (st8w): the array length, so a renderer that filters
         // rows shows up here as a count mismatch instead of a silent drop.
         "step_count": steps.len(),
+        // L3-OBS-CURSOR (jb5m): `next_step`'s row, so the TUI cursor and this
+        // field cannot disagree without `next_step` itself changing.
+        "next_step_id": ompo_start::next_step(steps).map(|step| step.id),
         "tui_ids": tui_ids,
         "json_ids": json_ids,
         "halt": halt,
