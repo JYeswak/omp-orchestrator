@@ -117,6 +117,62 @@ reading the field: `br update omp-orchestrator-s1-l0-b01-3vro --status in_progre
 `blocked → in_progress` with no refusal. **`blocked` with an empty graph is `TrackerBlocked`, never
 `DependencyBlocked`.**
 
+### ⛔ CORRECTED 2026-09-10 — THE "92 FALSE BLOCKS" PROOF USED A TRANSITION THAT CANNOT REFUSE
+
+**Retracted:** *"marked `blocked` with ZERO dependency edges — 92 — stale string, not a graph fact"*
+and the proof sentence above it. The instruction that survives is the last line of this section —
+**attempt the transition** — but it does not say WHICH transition, and the one used here is the one
+that never checks dependencies.
+
+**`--status` AND `--assignee` ARE DIFFERENT AUTHORITIES. ONLY THE CLAIM PATH ENFORCES THE GRAPH.**
+Measured on `omp-orchestrator-t00`:
+
+```
+br update t00 --status open        ->  status: blocked -> open      SUCCEEDS, no refusal
+br update t00 --assignee 'pane=%26;...'
+      Error: Validation failed: claim: cannot claim blocked issue:
+        8ax8 (open P0) · diq0 (blocked P0) · igwd (open P0)
+        ipg.18 (blocked P0) · ipg.19 (blocked P0) · ywd5 (open P0)
+br show t00 --json | jq '.blocked_by'   ->  []          <- while SIX edges are enforced
+```
+
+**AND `blocked_by` IS NOT MERELY UNRELIABLE, IT IS NEVER POPULATED.** Census over the whole blocked
+population, 2026-09-10:
+
+```
+blocked beads                                84
+  carrying a non-empty blocked_by             0     <- the field is uniformly empty
+  with REAL dep-graph edges (br dep tree)    74     <- genuinely DependencyBlocked
+  with no edges (TrackerBlocked)             10
+```
+
+**So the discriminator the 92-figure was built on returns the same answer for every row in the
+population, and the true TrackerBlocked count is 10 — the original figure is wrong by ~9x and wrong
+in the direction that invites forcing real blockers.** This is the `grep -c ompo` → 62 substring
+artifact in a different surface: an instrument that cannot return the other answer is not a
+measurement.
+
+**THE CORRECTED PROBES, in order of authority:**
+
+```
+br update <id> --assignee '<pane>'   ENFORCING. Refuses and NAMES the blockers. This is the oracle.
+br dep tree <id> --max-depth 1 --json  READ-ONLY and honest: >1 unique node = real edges.
+br update <id> --status <s>          NOT an oracle. Silently accepts a dependency-blocked bead.
+br show <id> --json | jq .blocked_by  NEVER USE. Empty for 84/84, including 74 with live edges.
+```
+
+**The cost of getting this wrong, measured the same day.** Acting on `blocked_by == []`, pane 1
+flipped `t00` from `blocked` to `open` and announced it as a falsely-blocked P0. For about an hour it
+sat `open` at P0 where `br ready` could serve it, and any pane claiming it would have burned a
+dispatch discovering the six real blockers. **A wrong `open` wastes a worker; a wrong `blocked` only
+hides one.** Restored, with the correction recorded on the bead.
+
+**NO-CLAIM.** The 74/10 split is measured from `br dep tree` node counts, which prove an edge EXISTS
+— not that every edge is live or correctly directed. Ten rows having no edges does not make them
+TrackerBlocked either: an epic-strangulation edge is real and still wrong. The claim path remains the
+only authority on whether a specific bead can be worked right now.
+
+
 **Standing authorization, adopted from `frankensqlite/AGENTS.md:50` via `fh`:** swarm lanes work
 autonomously inside the authorized scope. Claim the next ready bead and proceed; never end a turn
 waiting for permission that this table already grants. **If you believe you are blocked from
