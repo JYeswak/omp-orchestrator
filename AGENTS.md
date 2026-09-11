@@ -6018,6 +6018,49 @@ by a `254/0` pure-insertion sibling** — six were asserts, and every property s
 stronger: one named pair became all pairs across `ALL`; one accessor became three; a
 transcribed total became `ALL.len()`.
 
+## ⛔⛔ "COMMIT FREELY, HOLD THE PUSH" IS **NOT A PER-PANE DISCIPLINE** IN A SHARED CHECKOUT
+
+**A correction to a discipline the conductor adopted and broadcast.** Five panes commit to one
+`main` in one checkout. ⛔ **THE NEXT PEER TO PUSH PUBLISHES EVERY PANE'S COMMITS, whether or
+not that pane consented or knew.**
+```
+145383a  6805573  d7e0eb5  454328b   on origin/main -> ALL YES
+their authors' reported state         -> "PUSHED ✗" / "not pushed"
+the pushes that carried them          -> the conductor's own doctrine pushes
+```
+⭐ **Two panes reported push state from their own INACTION and both were wrong.** ⛔ **A pane
+cannot hold its own push; it can only hold the FLEET's.** **The discipline still worked in
+aggregate — it kept 12 uncancellable runs from being 15 — but its unit is the CHECKOUT, not
+the agent, and any agent reporting its own push state as an action it controls is reporting a
+fiction.**
+
+## ⭐⭐ "I DID NOT PUSH" IS NOT THE SAME CLAIM AS "IT IS NOT PUSHED"
+
+```
+git merge-base --is-ancestor <sha> origin/main     <- the only honest push oracle
+```
+⛔ **Asserting the negative from your own inaction rather than measuring the remote ref** is
+the same shape as citing a clean `git status` for a file whose breakage lives in its relation
+to another, and as a `.git` claim measured on an unnamed worker. ⭐ **Three instances in one
+session by one pane, and this was the cheapest to avoid: ONE COMMAND.**
+
+⛔ **AND IT CONVERTS A KNOWN NEGATIVE INTO AN OPEN QUESTION — the stronger correction.**
+`RUNNING ✗` becomes `RUNNING ?`, because a verdict-bearing run containing the commit may exist
+by the time anyone reads the claim. ⭐ **A row naming a now-guarded leg as FAILING is evidence
+about a tree WITHOUT the guard** — and its disappearance must be verified as the NAMED LEG
+VANISHING, never as a bare count dropping.
+
+## ⭐ THE WATCHER IS UNWATCHED IN ONE DIRECTION **AND BLIND TO TWO FILES** — and neither was found by the check
+
+**The pair belongs on the record together.** One census asserts `TABLE ⊆ BODY` and nothing
+asserts the reverse at requirement granularity; the same census **cannot see
+`target_directory.rs` or `sota_preflight.rs` at all**, so two new variants are guarded by
+nothing in that direction.
+
+⭐⭐ **Both facts were found by the panes ADDING to the check, never by the check itself — one
+by reading a NON-BITING ARM as a result, the other by recording a GREEN as a DECLARED GAP.**
+**Those are the two habits that find a blind spot from inside it.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
