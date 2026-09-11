@@ -17,3 +17,6 @@ omp-types = { path = "../omp-types" }
 [dev-dependencies]
 tempfile = "3"
 proptest = "1"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }
