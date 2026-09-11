@@ -766,6 +766,14 @@ mod tests {
     /// went green over a pane dead ~87 hours. A fixture that is DESCRIBED rather than PASTED is
     /// how a suite stays green, and it is worse inside a fixture than in a predicate because a
     /// fixture is what everyone downstream trusts instead of re-measuring.
+    ///
+    /// ⚠️ PROVENANCE IS NOT UNIFORM, AND THE DIFFERENCE IS NAMED RATHER THAN AVERAGED. `%8` and
+    /// `%7` were byte-compared against an independent grader's preserved copies (`cmp -s`
+    /// identical, sha256 117bf2e7… and ee3ffd8f…), so the substituted-row defect CANNOT be
+    /// present in them. `pane19-dead.txt` HAS NO SECOND COPY TO DIFF AGAINST -- it is my own
+    /// 49-row scrollback capture of that pane and nobody else preserved one. Two of the three
+    /// are oracle-verified; the third is ASSERTED. It is also the strongest of the three for
+    /// last-occurrence anchoring, because 38 rows of prior content sit ABOVE its limit lines.
     const DEAD_AFTER_LIMIT: &str = include_str!("../tests/fixtures/pane19-dead.txt");
     const RECOVERED_AFTER_LIMIT: &str = include_str!("../tests/fixtures/pane8-alive.txt");
     const DEAD_BUT_PHRASE_SPLIT: &str = include_str!("../tests/fixtures/pane7-dead-narrow.txt");
