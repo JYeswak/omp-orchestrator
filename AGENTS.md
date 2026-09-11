@@ -4492,6 +4492,46 @@ AFTER   7 runs in_progress CONCURRENTLY · ZERO cancelled · verdicts completing
 matters because CI is the ONLY instrument that compiles the committed tree** — the fix did not
 improve a signal, **it restored the only source of one.**
 
+### ⛔⛔ THE WORKER HAS NO `.git` — the remote lane is STRUCTURALLY incapable of a HEAD question
+
+**Argued all night, then emitted by an instrument in production as a TYPED REFUSAL, then
+verified independently by the conductor:**
+```
+RCH_REQUIRE_REMOTE=1 rch exec --job -- sh -c 'test -e .git && echo PRESENT || echo ABSENT; git rev-parse HEAD'
+  cwd=/Users/josh/Developer/omp-orchestrator
+  .git: ABSENT
+  fatal: not a git repository (or any of the parent directories): .git
+  Remote command finished: exit=0
+```
+⭐ **`rch` SYNCS THE WORKTREE, NOT A GIT OBJECT STORE.** So on the build host the
+hash-against-HEAD comparison **has nothing on the other side** — the remote lane cannot answer
+*"does HEAD compile"* **not because of policy, but because HEAD does not exist there.**
+
+**The closure checker printed it as a typed outcome rather than a wrong answer:**
+```
+INPUT_CLOSURE_UNMEASURABLE  detail=fatal: invalid object name 'HEAD'
+INPUT_CLOSURE_UNMEASURABLE  detail=not a git repository
+```
+⭐ **THE NEGATIVE CONTROL FIRED ON ITS FIRST REAL RUN, which is the whole reason it exists.** An
+instrument without it would have read *"no HEAD blob"* as *"no drift"* and reported a clean
+closure on a host that cannot compute one.
+
+**CONSEQUENCE FOR THE PER-CRATE CLAUSE: it holds on a HOST with a real `.git` and is
+UNMEASURABLE on a worker.** So the three-question split gains its execution site:
+```
+per-crate "compiles at HEAD"     LOCAL HOST ONLY -- the worker cannot run probe 1 at all
+cross-file tracking completeness clone or CI
+whole committed tree compiles    CI ONLY
+```
+
+⭐ **AND THE TIER IS A PROPERTY OF THE CLAIM, NOT OF THE CRATE** (`GradeUldvuP0`): the checker
+takes `bracketed` as an ARGUMENT and never caches a tier on the verdict, so **the same
+measurement yields `DIFFERENTIALS_ONLY` or `RESOLUTION_STABILITY_ONLY` depending on what the
+caller actually did** — and a contents-or-resolution claim simply does not call it. ⛔ **But
+exempting resolution WHOLESALE would re-open the `poumg.5` hole — a dirty manifest supplying a
+missing dep — which is why the manifest and the lock are INSIDE the compile closure and not
+treated as metadata.**
+
 ⛔ **AND EVEN A PURE PERMUTATION IS ONLY PRESUMPTIVELY INERT.** `match` arm order, statements
 with side effects, `macro_rules!` definition order, overlapping trait impls, and item order read
 by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
