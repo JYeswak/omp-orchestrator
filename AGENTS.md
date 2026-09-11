@@ -6416,6 +6416,77 @@ is simultaneously the first verdict for four separate beads. **The pre-registere
 discriminator stands: if a run containing the repair STILL scores zero on rung 3, that is a
 NEW defect and not the old one.**
 
+## ⭐⭐⭐ THE `0 possible` LABEL, **EARNED** — take the extremum on the CORRECT SIDE of the population
+
+**The retracted inference and the licensed one, side by side, because the difference is the
+whole lesson:**
+```
+RETRACTED  "the newest VERDICT-BEARING head is an ancestor of my commit,
+            so no in-flight run can contain it"
+            -> substitutes a fact about COMPLETED runs for a claim about PENDING ones
+
+EARNED     454328b committed            02:07:02
+           OLDEST in-flight head        02:12:47   <- FIVE MINUTES LATER
+            -> every pending run STARTED AFTER the repair, so none COULD lack it
+```
+⭐⭐ **Same claim SHAPE, and this one is licensed: the bound comes from a commit timestamp
+against the OLDEST PENDING head — the extremum on the correct side of the population — not
+from a fact about a different population entirely.** ⛔ **And it was spot-checked on the six
+oldest heads rather than trusted from the loop.**
+
+**`0 possible` is not forbidden. It requires quantifying over the set you actually mean, and
+bounding it at the extremum that can falsify you.**
+
+## ⛔⛔ MY OWN PIPELINE READ AN **ERROR** AS A NEGATIVE RESULT — this turn, while committing the rule
+
+```
+gh run list --limit 12 | jq '[…verdict-bearing…][0]'   -> Error: cannot use null as iterable
+my script then ran:  merge-base --is-ancestor 454328b ""   -> nonzero
+my script then printed:  "predates the repair"             <- FROM AN EMPTY SHA
+```
+⛔ **All twelve rows were `in_progress`, so the selector matched nothing — and my `&&`/`||`
+chain converted a JQ ERROR into a confident negative about CI.** ⭐ **The denied-probe rule,
+in my own pipeline, in the same turn I committed a block about display bounds.**
+
+**A shell `||` branch cannot distinguish FALSE from FAILED.** ⛔ **Guard the sha for
+emptiness before comparing, or the error path prints a verdict.** **Eighth member of the
+family and the first where the instrument did not clip data — it manufactured an answer out of
+an empty string.**
+
+## ⭐⭐⭐ THE FEATURE'S OWN COMMIT PREVENTED THE BUILD THAT WOULD HAVE MEASURED IT
+
+**Two predicates that looked independent collapsed into one, measured at source rather than
+assumed:**
+```
+git log -S'let mut pending' -- crates/gate-runner/src/main.rs   ->  9176b51
+```
+⛔ **`9176b51` IS the message fix AND the commit whose unpaired consumer took the gate down.**
+⭐ **So "contains the message fix" and "contains the repair" are NOT two conditions —
+`454328b` DESCENDS FROM `9176b51`, so the repair STRICTLY IMPLIES the fix.** **One nested
+predicate, not two intersecting ones, and every pending run satisfies both because satisfying
+one is satisfying both.**
+
+⭐⭐ **AND THE CONSEQUENCE IS THE TRAP'S TRUE SHAPE: the message fix has never run in CI NOT
+because it landed late, but BECAUSE SHIPPING IT BROKE THE GATE THAT WOULD HAVE MEASURED IT.**
+⛔ ***"`34577201755` contains the fix for the very defect whose absence its silence appears to
+demonstrate."*** **`59 cause lines → 0` reads as a regression; the truth is that the feature's
+own commit prevented the build.**
+
+⭐ **AND TWO ERRORS SAT IN ONE LINE — a sample bound (`head -4`) AND an implied independence
+between the two predicates.** **Only the first belonged to its author; the second was found by
+a reader chasing the discrepancy the first had created.**
+
+## ⭐⭐ VERIFY A RUNG'S **PRECONDITION AT AN IN-FLIGHT HEAD** — do not wait to learn it from the log
+
+```
+at an unfinished head:  LedgerRead  main.rs=2  lib.rs=2   ·  EXIT_LEDGER_UNREADABLE 1/1
+```
+⭐ **The outward pair check works on a head that has not finished building, so the pair is
+provably COHERENT at the head under test — which is exactly what rung 3 depends on.** ⛔ **Two
+commands on an unfinished head PREDICT a rung that otherwise has to be discovered from the log
+afterward**, and they make the pre-registered falsifier precise: **a zero on rung 3 at a head
+whose pair is coherent is a NEW defect, not the old one.**
+
 ## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
 **A second pane checked its OWN four failures against the unifying law rather than admiring
