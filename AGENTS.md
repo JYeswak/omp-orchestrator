@@ -6190,27 +6190,116 @@ but `PUSHED ✓ · CONTAINED ✓ · MEASURED ✗`**, and *"`RUNNING ✗` publish
 an unmeasured guess that happened to be wrong in BOTH directions — the commit ran, and nothing
 measured it."*
 
-## ⛔ MY POSITIVE CONTROL WAS FRAGILE EXACTLY ON THE **HEALTHY** CASE — use the plan marker
+## ⭐⭐ MY POSITIVE CONTROL IS A **FINISHED** MARKER — and the "robust" substitute would have broken it
+
+**RETRACTED, at source, by the pane that proposed the substitute.** I accepted two objections
+to `grep -c 'GATE_RUNNER '` and BOTH WERE WRONG FOR THE SAME REASON — nobody had asked WHERE
+each token is printed:
+```
+:264  let observed = run_crate(...)                 <- THE RUN LOOP
+:372  let report = build_report_scoped(...)         <- AFTER the sweep
+:375  print!("{rendered}");                         <- the ONLY source of "GATE_RUNNER crates="
+:208  println!("GATE_RUNNER_PLAN crates=…")         <- EARLY, plan branch
+:219  println!("GATE_RUNNER_PLAN_TOTAL …")          <- EARLY, plan branch
+```
+⛔ **Objection 1 — *"the census is emitted EARLY, so it proves the gate STARTED not
+FINISHED"* — IS FALSE. It is printed at `:375` from a report built at `:372`, downstream of
+the run loop at `:264`.** ⭐ **The needle proves the sweep RAN TO COMPLETION**, and the
+author's own comment at `:383` says so: *"Written AFTER the measurement and removed BEFORE it,
+so absence means 'no verdict was produced' rather than 'an older verdict is still lying
+around'."*
+
+⛔⛔ **Objection 2 — replace it with `GATE_RUNNER_PLAN_TOTAL` because that is
+*"unconditional"* — WOULD HAVE INTRODUCED THE VERY WEAKNESS OBJECTION 1 FEARED.** That token
+is emitted at `:219`, **inside the early plan branch, BEFORE the run loop.** ⭐ ***"My 'robust'
+substitute is a started-not-finished marker; the original is a finished marker."***
+**"Unconditional" was never the property that matters — "DOWNSTREAM OF THE MEASUREMENT" is.**
+
+⭐⭐ **AND THE TRAILING SPACE DOES TWO JOBS AT ONCE, which is why both objections died on it:
+it excludes `GATE_RUNNER_FAILURE_CAUSE` (non-circular — never use the feature under test to
+prove the gate ran) AND it excludes the plan-phase lines (post-sweep).** ⛔ **Do not widen it
+and do not substitute it.**
+
+**THE PAIR STANDS, for a different reason than first given:**
+```
+grep -c 'GATE_RUNNER ' <log>   nonzero -> compiled, ran, AND COMPLETED THE SWEEP
+grep -c 'could not compile'    zero    -> distinguishes a dead BUILD from a dead RUN
+```
+⭐ **Two needles, two failure modes — not "started vs finished" but "BUILT vs PRODUCED A
+VERDICT."** **And rung 4 of the ladder gets stronger with it: if the sweep completed, your
+crate's row being ABSENT is a real negative rather than an ambiguity.**
+
+⛔ **THE LESSON UNDER ALL THREE OF US: we argued about a control from a TOKEN CENSUS and none
+of us read WHERE THE TOKENS ARE PRINTED.** ⭐ **A control's strength is a property of its
+EMISSION SITE, not of its spelling** — which is the correlate law again, with *token frequency*
+standing in for *position in the program*.
+
+## ⛔⛔ MY PROSE CONTRADICTED MY OWN OUTPUT IN THE SAME TURN — and a peer inherited the prose
+
+**The conductor's error, and the data refuting it was on screen when the claim was written.**
+```
+my own command printed:   contains 9176b51  YES
+                          contains 6805573  no      <- RIGHT THERE
+my prose then told that commit's author:  "the answer turns out to be
+                                           'ran, and measured nothing'"
+```
+⛔ **That tier belongs to a DIFFERENT commit — one genuinely an ancestor of the blinded run.
+`6805573` has never been in a verdict-bearing run AT ALL.** ⭐ **Two different tiers, and I
+handed over the dramatic one.**
+
+⛔⛔ **AND THE PEER THEN RESTATED IT AS ITS OWN READING — the sixth instance of a transcribed
+value, and the first with NO INSTRUMENT IN IT.** Every other tonight was a tool clipping bytes
+or a window looking the wrong way. ⭐ ***"The value was transcribed from PROSE, which is the
+cheapest possible place to lose provenance"*** — and its own diagnosis names why: *"I found
+its shape more interesting than my own situation, and adopted its conclusion without
+re-deriving the ancestry for my commit."*
+
+⭐⭐ **AN INTERESTING TIER IS ADOPTED FASTER THAN A BORING ONE**, exactly as an interesting
+cause crowds out a boring one. **Two commits adjacent in a message is not evidence that they
+share a state.**
+
+## ⭐⭐ A **STRUCTURAL** NEGATIVE BEATS A SEARCH THAT CAME UP EMPTY
 
 ```
-grep -c 'GATE_RUNNER '  (trailing space)  ->  2     <- the whole control rests on two emissions
-grep -c 'GATE_RUNNER'   (no space)        -> 68     <- 59 of those are the FEATURE UNDER TEST
+35 verdict-bearing runs examined, COMPLETED:  0 contain the commit
+and the newest verdict-bearing head is an ANCESTOR of that commit
+   -> no run in flight COULD contain it yet
 ```
-⭐ **The trailing space is doing all the work, and doing it RIGHT: a needle matching
-`GATE_RUNNER_FAILURE_CAUSE` would be CIRCULAR — using the feature under test to prove the gate
-ran.** ⛔ **Do NOT widen it to bare `GATE_RUNNER`.**
+⭐ **The second line is the real proof: it is a statement about the ORDER of the graph, not
+about a search terminating.** ⛔ **"I could not find one" and "none can exist yet" are
+different claims, and only the second survives a sweep that timed out or looked at the wrong
+window.** **Report which one you have — and note that the structural negative FLIPS the moment
+a run picks up a containing head, which a search result never tells you.**
 
-⛔ **But two bare emissions is thin, and the FRAGILE CASE IS THE GREEN ONE: a fully-passing run
-has zero cause lines, so if those two ever become conditional the control reports a PERFECT RUN
-as absent-by-build** — the same shape as an anti-prefix check declaring a complete run a
-prefix. ⭐ **THE ROBUST FORM IS AN UNCONDITIONAL PLAN-PHASE MARKER: `GATE_RUNNER_PLAN_TOTAL`,
-emitted once BEFORE any test outcome exists — nonzero on green, nonzero on red, zero exactly
-when the crate did not build.**
+## ⭐⭐⭐ THE CORRELATE IS ALWAYS **CHEAPER** — the bias has a SIGN
 
-⛔ **AND IT PROVES THE GATE *STARTED*, NEVER THAT IT FINISHED.** A gate that printed its census
-and died mid-sweep passes it. ⭐ **Pair it with `grep -c 'could not compile'` and `error\[E0` at
-zero: two needles, two different failure modes — one says the binary existed, the other says
-the build did.**
+**A second pane checked its OWN four failures against the unifying law rather than admiring
+it, and it is four for four:**
+```
+                         I TESTED                      THE PROPERTY WAS
+phantom-holder           absent from the roster        not claimed by a live agent
+location => cause        same file:line:col            same failure CAUSE
+.code() decomposition    token line == panic line      token INSIDE the assert
+the control it proposed  unconditional emission        DOWNSTREAM of the measurement
+```
+⛔ **The fourth was committed AFTER the pattern was visible and WHILE ARGUING ABOUT
+CONTROLS** — *unconditional* is a property that correlates with liveness and is not liveness.
+
+⭐⭐ **AND THE ECONOMIC OBSERVATION IS THE OPERATIONAL HALF: the correlate is ALWAYS the
+cheaper computation.** `wc -l` beats reading a window · a roster lookup beats a claim check ·
+a token grep beats parsing an assert · `--is-ancestor` beats fetching a log. ⛔ ***"Tonight's
+instruments failed in the direction of CONVENIENCE every single time, and none failed in the
+direction of CAUTION."*** **That is a bias with a SIGN, not random error — so a correlate-based
+instrument is not merely weaker, it is BLIND PRECISELY WHERE IT IS NEEDED, which is why every
+one of them came back clean.**
+
+⭐ **THE CHECK THAT PAYS, written independently by three panes from three different beads:
+NAME THE PROPERTY · ASK WHAT YOUR COMMAND ACTUALLY MEASURES · ASK WHERE THEY DIVERGE.**
+
+⭐ **And one probe that could not be completed was closed by someone else's measurement rather
+than by its author finishing it** — a timed-out sweep stayed `UNKNOWN` while a peer's ancestry
+check answered the same question from the other side. **That is the right outcome and worth
+more than the completion would have been.**
 
 ## ⭐⭐⭐ THE UNIFYING LAW: EVERY INSTRUMENT FAILURE TONIGHT SUBSTITUTED A **CORRELATE** FOR THE PROPERTY
 
