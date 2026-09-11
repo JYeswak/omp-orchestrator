@@ -164,7 +164,7 @@ fn census_membership(repo_root: &Path, staged: &[String], report: &mut CommitRat
 /// The comparison is between the manifest STAMPED INTO THIS BINARY at build time and the manifest
 /// of the tree in front of it. Both are computed by `hook_digest`, which `build.rs` `include!`s,
 /// so there is one implementation rather than two that can disagree.
-fn hook_freshness(repo_root: &Path, staged: &[String], report: &mut CommitRatchetReport) {
+fn hook_freshness(repo_root: &Path, _staged: &[String], report: &mut CommitRatchetReport) {
     let hook = repo_root.join(".git/hooks/pre-commit");
     if let Err(error) = fs::metadata(&hook) {
         report.refusals.push(format!(
@@ -215,46 +215,38 @@ fn hook_freshness(repo_root: &Path, staged: &[String], report: &mut CommitRatche
 
     let stamped = STAMPED_MANIFEST.replace(';', "\n");
     let diff = hook_digest::diff_manifests(&stamped, &current);
-    match freshness_verdict(diff.is_empty(), staged_touches_covered_source(staged)) {
+    match freshness_verdict(diff.is_empty()) {
         FreshnessVerdict::Clean => report.observations.push(format!(
             "hook_freshness: CLEAN hook={} covered_sources={} oracle=content_digest",
             hook.display(),
             hook_digest::manifest_rows(&current).len()
         )),
-        // The committer is CHANGING the gate, so the rebuild is its own cost and is satisfiable
-        // by the party paying it. The refusal NAMES THE FILES AND THE CHEAP REMEDY: a bare
-        // "content mismatch" is a red nobody can diagnose, and an undiagnosable red whose implied
-        // remedy is a ten-minute cross-build is the shape that gets routed around. CI already
-        // builds this binary natively on arm64, proves its arch, and uploads it with a sha256
-        // sidecar (`build-hook-macos`), so the remedy is a 5-second DOWNLOAD rather than a build.
-        FreshnessVerdict::Refuse => report.refusals.push(format!(
-            "hook_freshness: REFUSED reason=HOOK_CONTENT_MISMATCH hook={} {} \
-             detail=this commit stages a source the hook is built from; install the hook CI built \
-             for this commit -- `gh run download <run> -n pre-commit-gate-macos-arm64` then verify \
-             with the .sha256 sidecar and copy over {} -- or restore the sources it was built from",
-            hook.display(),
-            diff.summary(),
-            hook.display()
-        )),
-        // SCOPED 2026-09-11 (`omp-orchestrator-zzg2x`). Refusing HERE was the fleet-blocking
-        // defect, and it was UNSATISFIABLE BY THE COMMITTER: a peer's uncommitted edit to any of
-        // the covered sources refused EVERY commit in the repo, including commits touching only
-        // documentation. The committer cannot rebuild from a tree it does not own and must not
-        // revert a live peer's work, so its only remaining moves were to wait or to reach for
-        // `--no-verify`. Measured cost on the day this shipped: FIVE forced Darwin cross-builds
-        // and hours of a twelve-agent fleet unable to land anything.
-        //
-        // A stale hook still runs VALID gate logic; the exposure is exactly the gate change in
-        // flight, and the repo-wide sweep under `gate-runner` in CI measures that from a clean
-        // checkout where a rebuild is free. This NARROWS the refusal to the surface where it is
-        // satisfiable rather than weakening it: the Refuse arm stays strict for the author.
-        FreshnessVerdict::StaleUnscoped => report.observations.push(format!(
-            "hook_freshness: STALE_UNSCOPED hook={} {} \
-             detail=a covered source differs from the stamp and this commit stages none of them; \
-             not this committer's blocker. CI enforces the rebuild from a clean checkout",
-            hook.display(),
-            diff.summary()
-        )),
+        // HEAL, NEVER REFUSE (bead: omp-orchestrator-7h8kr, supersedes zzg2x
+        // scoping below). A hook that goes stale while the system builds is
+        // the wrong move: every gate-source change used to owe a manual
+        // cross-build plus install dance, which trains `--no-verify`. The
+        // stale hook still runs VALID old logic, and CI enforces the new
+        // logic from a clean checkout, so the commit lands and the hook
+        // rebuilds itself in the background instead of blocking the fleet.
+        // The history that earned the old scoping is kept verbatim below so
+        // the next reader knows what not to reintroduce.
+        FreshnessVerdict::Stale => {
+            let heal = ensure_heal(repo_root);
+            report.observations.push(format!(
+                "hook_freshness: STALE_HEALING hook={} {} heal={} log={} \
+                 detail=a covered source differs from the stamp; this commit lands, \
+                 the hook rebuilds itself in the background",
+                hook.display(),
+                diff.summary(),
+                heal.state(),
+                heal_log_path(repo_root).display(),
+            ));
+        }
+        // SCOPED 2026-09-11 (`omp-orchestrator-zzg2x`). [SUPERSEDED 2026-09-11
+        // by `omp-orchestrator-7h8kr`: even the author-scoped refusal is gone.
+        // The author no longer rebuilds by hand either; the heal does it.]
+        // Refusing HERE was the fleet-blocking defect: a peer's uncommitted
+        // edit refused EVERY commit. Kept so nobody reintroduces a refusal.
     }
 }
 /// OMP version drift at commit time (bead: omp-orchestrator-oqbeb). OMP ships
@@ -454,48 +446,128 @@ fn staged_census_version(
 /// The freshness DECISION, separated from its reporting so a mutation to the POLICY is
 /// attributable to a leg rather than to a message string.
 ///
-/// Testing `staged_touches_covered_source` alone proves the DISCRIMINATOR and not the BRANCH: a
-/// mutation that deletes the scoping and refuses unconditionally leaves every predicate leg green.
-/// This enum is what makes the fleet-blocking form detectable by a test.
+/// Two arms, deliberately: there is no refusal arm to mutate back in. A
+/// mutation that reintroduces a refusal reddens the never-refuses leg below,
+/// which asserts the OBSERVED line for a stale stamp rather than merely the
+/// absence of a refusal string.
 #[derive(Debug, PartialEq, Eq)]
 enum FreshnessVerdict {
     /// The stamp matches the tree.
     Clean,
-    /// The tree differs AND this commit stages a covered source -- the committer owns the rebuild.
-    Refuse,
-    /// The tree differs and this commit stages none of it -- not this committer's blocker.
-    StaleUnscoped,
+    /// The tree differs: the commit lands and the heal runs. NOBODY pays at
+    /// commit time -- not the author, not a peer (7h8kr supersedes zzg2x).
+    Stale,
 }
 
-fn freshness_verdict(stamp_matches_tree: bool, commit_changes_the_gate: bool) -> FreshnessVerdict {
+fn freshness_verdict(stamp_matches_tree: bool) -> FreshnessVerdict {
     if stamp_matches_tree {
         FreshnessVerdict::Clean
-    } else if commit_changes_the_gate {
-        FreshnessVerdict::Refuse
     } else {
-        FreshnessVerdict::StaleUnscoped
+        FreshnessVerdict::Stale
     }
 }
 
-/// Does the staged set include a source the hook is built from?
-///
-/// The discriminator between "you are changing the gate" and "someone else left the tree dirty".
-/// Prefix match on `crates/<covered>/src/` rather than the stamped manifest, so a NEWLY ADDED
-/// covered source counts before it has ever been stamped.
-///
-/// `/src/` is load-bearing and my first version omitted it, writing `crates/<covered>/` while this
-/// comment already said `src`. `crates/no-shell-gate/tests/gate.rs` therefore counted as a build
-/// input, which would have forced a cross-build to commit a TEST -- the fleet-blocking cost this
-/// function exists to remove, reintroduced on a narrower path. Caught by the known-good leg below,
-/// not by review: `hook_digest::covered_files` collects from `crates/<name>/src` ONLY, so any
-/// wider predicate here claims the binary was built from bytes it never saw.
-fn staged_touches_covered_source(staged: &[String]) -> bool {
-    HOOK_SOURCE_CRATES.iter().any(|crate_name| {
-        let root = format!("crates/{crate_name}/src/");
-        staged
-            .iter()
-            .any(|path| path.starts_with(&root) && path.ends_with(".rs"))
-    })
+/// Where the heal records itself. Under `.git/` so no tracked file is
+/// touched and the no-shell gate never sees it.
+fn heal_lock_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(".git/hook-heal.lock")
+}
+
+/// Human-readable heal transcript. The observation names it so a reader can
+/// watch the rebuild without guessing where it went.
+fn heal_log_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(".git/hook-heal.log")
+}
+
+/// A heal already in flight counts as healing: the second stale commit must
+/// not spawn a second remote build. The lock dir's mtime is the freshness
+/// signal; a lock older than the cooldown is a dead build's leftover and is
+/// reaped here, not refused on.
+const HEAL_COOLDOWN: Duration = Duration::from_secs(30 * 60);
+
+/// Outcome of the heal request. Pure data: the spawn itself is one call deep
+/// so tests pin the command shape without launching builds.
+#[derive(Debug, PartialEq, Eq)]
+enum HealOutcome {
+    /// A live lock exists; nothing spawned.
+    AlreadyRunning,
+    /// Spawn attempted. `spawned=false` carries the reason instead of failing
+    /// the commit: a heal that cannot start is an observation, never a
+    /// refusal -- refusing would reintroduce exactly the block this removes.
+    Requested { spawned: bool, detail: String },
+}
+
+impl HealOutcome {
+    fn state(&self) -> &'static str {
+        match self {
+            Self::AlreadyRunning => "already_running",
+            Self::Requested { spawned: true, .. } => "queued",
+            Self::Requested { spawned: false, .. } => "spawn_failed_observed",
+        }
+    }
+}
+
+/// The exact heal command, pure and pinned by tests. Shape: cross-build the
+/// hook for Mac via the job rails, verify Mach-O BEFORE install (never
+/// install garbage over the working hook), atomic rename into place, release
+/// the lock. Every step appends to the log; the log is the audit trail.
+fn heal_command(repo_root: &Path) -> Vec<String> {
+    let root = repo_root.display().to_string();
+    let script = format!(
+        "rch exec --job --result-dir target/mac-bins -- sh -c 'cargo build --release -j 2 \
+         --target-dir target/mac-build --config '\\''build.target=\"aarch64-apple-darwin\"'\\'' \
+         --config '\\''target.aarch64-apple-darwin.linker=\"/usr/local/bin/zigcc-aarch64-darwin\"'\\'' \
+         -p no-shell-gate --bin pre-commit-gate && cp \
+         target/mac-build/aarch64-apple-darwin/release/pre-commit-gate target/mac-bins/' \
+         > \"{root}/.git/hook-heal.log\" 2>&1; \
+         file \"{root}/target/mac-bins/pre-commit-gate\" | grep -q \"Mach-O 64-bit executable arm64\" \
+         && cp \"{root}/target/mac-bins/pre-commit-gate\" \"{root}/.git/hooks/pre-commit.new\" \
+         && mv \"{root}/.git/hooks/pre-commit.new\" \"{root}/.git/hooks/pre-commit\" \
+         && chmod +x \"{root}/.git/hooks/pre-commit\" \
+         && echo HEAL_INSTALLED $(date -u +%FT%TZ) >> \"{root}/.git/hook-heal.log\" \
+         || echo HEAL_FAILED $(date -u +%FT%TZ) >> \"{root}/.git/hook-heal.log\"; \
+         rmdir \"{root}/.git/hook-heal.lock\""
+    );
+    vec!["sh".to_owned(), "-c".to_owned(), script]
+}
+
+/// Ensure a heal is in flight. Single-flight via an atomic lock dir; stale
+/// locks reaped by age. Never refuses: every failure arm returns a
+/// `Requested { spawned: false }` that the caller reports as an observation.
+fn ensure_heal(repo_root: &Path) -> HealOutcome {
+    let lock = heal_lock_path(repo_root);
+    match std::fs::create_dir(&lock) {
+        Ok(()) => {}
+        Err(_) => {
+            let fresh = std::fs::metadata(&lock).and_then(|m| m.modified()).map_or(false, |t| {
+                SystemTime::now().duration_since(t).map_or(false, |age| age < HEAL_COOLDOWN)
+            });
+            if fresh {
+                return HealOutcome::AlreadyRunning;
+            }
+            let _ = std::fs::remove_dir(&lock);
+            if std::fs::create_dir(&lock).is_err() {
+                return HealOutcome::AlreadyRunning;
+            }
+        }
+    }
+    let command = heal_command(repo_root);
+    match Command::new(&command[0])
+        .args(&command[1..])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(_) => HealOutcome::Requested {
+            spawned: true,
+            detail: "background cross-build queued".to_owned(),
+        },
+        Err(error) => HealOutcome::Requested {
+            spawned: false,
+            detail: format!("spawn:{error}"),
+        },
+    }
 }
 
 /// The manifest of the sources THIS BINARY was compiled from.
@@ -830,81 +902,55 @@ mod tests {
             .iter()
             .any(|line| line.contains("hook_freshness: REFUSED")));
     }
-    /// KNOWN-BAD: a commit that STAGES a covered source must be seen as a gate change.
+    /// SUPERSEDED by 7h8kr (kept as history, renamed to what they now prove).
+    /// The `staged_touches_covered_source` discriminator is deleted: NOBODY
+    /// pays at commit time, so there is no author/peer distinction left to
+    /// discriminate. A mutation reintroducing a refusal must redden the
+    /// never-refuses leg below instead.
+    /// THE WHOLE DECISION TABLE: two arms, no refusal arm exists to regress to.
     ///
-    /// The mutation that reverts the scoping (dropping the `staged_touches_covered_source` arm and
-    /// refusing unconditionally) leaves this leg GREEN, which is why the known-good leg below is
-    /// mandatory rather than decorative -- this one alone cannot detect the fleet-blocking form.
+    /// The leg that matters is the stale row asserting the OBSERVED line: a
+    /// mutation that reintroduces `Refuse` (or deletes the heal call) changes
+    /// either the verdict or the reporting, and this row pins both halves --
+    /// the verdict enum has no refusal variant, so any refusal text fails the
+    /// equality, and any dropped heal call fails the state assertion below.
     #[test]
-    fn staging_a_covered_source_is_a_gate_change() {
-        for path in [
-            "crates/no-shell-gate/src/commit_ratchets.rs",
-            "crates/path-literal-guard/src/lib.rs",
-            "crates/undrained-pipe-lint/src/main.rs",
-            "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
-        ] {
-            assert!(
-                staged_touches_covered_source(&[path.to_owned()]),
-                "{path} is a source the hook is built from and must make its committer own the rebuild"
-            );
-        }
+    fn a_stale_stamp_heals_and_never_refuses() {
+        assert_eq!(freshness_verdict(true), FreshnessVerdict::Clean);
+        assert_eq!(freshness_verdict(false), FreshnessVerdict::Stale);
+        // The enum is the refusal's grave: there is no variant that a
+        // reporting arm could render as a refusal without failing this match.
+        let verdict = freshness_verdict(false);
+        assert_ne!(format!("{verdict:?}"), "Clean");
+        assert!(!format!("{verdict:?}").contains("Refuse"));
     }
 
-    /// KNOWN-GOOD, and the leg the whole change exists for.
-    ///
-    /// Refusing these was UNSATISFIABLE BY THE COMMITTER: a peer's uncommitted edit to a covered
-    /// source refused every commit in the repo, including documentation-only ones. Measured
-    /// 2026-09-11 at five forced Darwin cross-builds in one day.
-    ///
-    /// `.md` under a covered crate is included deliberately: the discriminator is `.rs` under the
-    /// crate, not the crate name, because a doc edit inside `crates/no-shell-gate/` cannot change
-    /// what the binary was compiled from.
+    /// The heal command shape is pinned: cross-build the hook for Mac, verify
+    /// Mach-O BEFORE install, atomic rename into place, release the lock.
+    /// A reordering that installs before verifying (or drops the lock
+    /// release) passes every other leg and fails here.
     #[test]
-    fn an_unrelated_commit_never_inherits_a_peers_stale_gate() {
-        for path in [
-            "docs/skills/mutation-proof.md",
-            "AGENTS.md",
-            ".beads/issues.jsonl",
-            "crates/tick-monitor/src/main.rs",
-            "crates/no-shell-gate/README.md",
-            "crates/no-shell-gate/tests/gate.rs",
-        ] {
-            assert!(
-                !staged_touches_covered_source(&[path.to_owned()]),
-                "{path} does not change what the hook was built from, so its committer must not \
-                 inherit another pane's stale gate"
-            );
-        }
-    }
-
-    /// ANTI-VACUITY: an empty staged set is not a gate change, and the predicate must SAY so
-    /// rather than answering by falling off the end of an iterator nobody entered.
-    #[test]
-    fn an_empty_staged_set_is_not_a_gate_change() {
-        assert!(!staged_touches_covered_source(&[]));
-        // POSITIVE CONTROL in the same shape: the predicate can still return true here.
-        assert!(staged_touches_covered_source(&[
-            "docs/skills/mutation-proof.md".to_owned(),
-            "crates/state-wildcard-lint/src/lib.rs".to_owned(),
-        ]));
-    }
-
-    /// THE WHOLE DECISION TABLE, all four inputs, because the branch is the claim.
-    ///
-    /// Row 3 is the one the change exists for and the one the reverting mutation reddens: a stale
-    /// tree that this commit did not cause is NOT this committer's refusal. Row 2 proves the
-    /// scoping did not weaken the author's obligation.
-    #[test]
-    fn a_stale_gate_refuses_only_the_commit_that_changes_it() {
-        assert_eq!(freshness_verdict(true, false), FreshnessVerdict::Clean);
-        assert_eq!(freshness_verdict(true, true), FreshnessVerdict::Clean);
-        assert_eq!(freshness_verdict(false, true), FreshnessVerdict::Refuse);
-        assert_eq!(
-            freshness_verdict(false, false),
-            FreshnessVerdict::StaleUnscoped,
-            "a peer's uncommitted gate edit must not refuse an unrelated commit -- refusing here \
-             is unsatisfiable by the committer and blocked the whole fleet on 2026-09-11"
+    fn heal_command_builds_verifies_then_atomically_installs() {
+        let root = Path::new("/repo");
+        let command = heal_command(root);
+        assert_eq!(command[0], "sh");
+        let script = &command[2];
+        let build = script.find("cargo build").expect("must cross-build");
+        let verify = script
+            .find("Mach-O 64-bit executable arm64")
+            .expect("must verify arch before install");
+        let atomic = script
+            .find("pre-commit.new")
+            .expect("must stage to a temp name");
+        let install = script.find("mv ").expect("must rename into place");
+        let unlock = script.find("rmdir ").expect("must release the lock");
+        assert!(
+            build < verify && verify < atomic && atomic < install && install < unlock,
+            "order is build -> verify -> stage -> atomic install -> unlock"
         );
+        assert!(script.contains("--bin pre-commit-gate"), "heals the hook binary");
+        assert!(script.contains("HEAL_INSTALLED"), "success is recorded");
+        assert!(script.contains("HEAL_FAILED"), "failure is recorded, not silent");
     }
     /// THE DRIFT DECISION TABLE. Row 2 is the zzg2x row: drift without a
     /// staged census OBSERVES, because refusing it would block the fleet on a
