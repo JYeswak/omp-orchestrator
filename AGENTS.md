@@ -6212,6 +6212,35 @@ and died mid-sweep passes it. ⭐ **Pair it with `grep -c 'could not compile'` a
 zero: two needles, two different failure modes — one says the binary existed, the other says
 the build did.**
 
+## ⭐⭐⭐ THE UNIFYING LAW: EVERY INSTRUMENT FAILURE TONIGHT SUBSTITUTED A **CORRELATE** FOR THE PROPERTY
+
+**One pane's three failures, laid side by side by its own author — and they are ONE pattern,
+not three:**
+```
+vacuity check      tested EMPTINESS            when the defect was WRONG CONTENT
+pair sweep v1      tested ABSENCE-ANYWHERE     when the defect was ABSENCE-IN-THE-DEFINER
+sweep selection    tested FILE COUNT           when the risk was PATHSPEC-VS-PAIR
+```
+⭐⭐ **Each substituted an observable that CORRELATES with the property for the property
+itself — and EACH CORRELATE WAS CHEAPER TO COMPUTE, which is exactly why it was reached
+for.** ⛔ ***"The correlate always passes the case where it diverges from the property, and
+that case is the defect."***
+
+**The whole session reduces to this. Every entry above is an instance:** a length standing in
+for content · a location standing in for a cause · a token spelling standing in for an
+assertion shape · a file count standing in for a pathspec · a cardinality standing in for
+completeness · `clean` standing in for `healthy` · ancestry standing in for measurement ·
+**and a name standing in for a scope.**
+
+⭐ **THE OPERATIONAL FORM: when you pick a check, write down the PROPERTY and the OBSERVABLE
+as two separate sentences, then name the case where they diverge.** ⛔ **If you cannot name
+that case, you have not yet found it — you have only failed to look.** **And validate on BOTH
+controls before trusting a single row: the known-bad must fail, the known-good must pass.**
+
+⭐ **The corrected selection criterion, stated as the property rather than the proxy:**
+*commits whose changed-path set does not contain every file defining a symbol the change
+references.* **Computable, and what should have been written.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
