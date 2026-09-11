@@ -1134,19 +1134,41 @@ fn strip_ansi(line: &str) -> String {
 /// NOT FIXED BY THIS: the `unattributed_target` label. That limitation is documented above at
 /// `parse_cargo_output` and its remedy is a per-invocation run, not a parser change.
 fn failure_causes(text: &str) -> Vec<(String, String)> {
-    let mut causes = Vec::new();
+    let mut causes: Vec<(String, String)> = Vec::new();
     let mut current: Option<String> = None;
     // (test, location-header) awaiting the MESSAGE line beneath it.
     let mut pending: Option<(String, String)> = None;
+    // An `assert_eq!`/`assert_ne!` prints its MESSAGE on the header-follower and its OPERANDS
+    // on the lines beneath THAT. Measured 2026-09-11 on run 34577876082: 10 of 55 CI causes
+    // announced `assertion `left == right` failed` and the whole 493,235-byte log contained
+    // ZERO occurrences of `left:` or `right:` — the deciding values never reached the
+    // artifact. Capturing header+message alone took the human label and dropped
+    // observed-vs-expected, which is the class where the label is LEAST informative.
+    // AN assert_eq PAYLOAD IS THREE LINES, NOT TWO.
+    let mut operands = false;
     for line in text.lines() {
         let plain = strip_ansi(line);
         let trimmed = plain.trim();
+        if operands {
+            if trimmed.starts_with("left:") || trimmed.starts_with("right:") {
+                if let Some((_, detail)) = causes.last_mut() {
+                    detail.push(' ');
+                    detail.push_str(trimmed);
+                }
+                continue;
+            }
+            // Bounded by SHAPE, not by a line budget: anything that is not an operand line
+            // ends the payload, so a panic with no operands costs nothing and cannot swallow
+            // the next test's output.
+            operands = false;
+        }
         if let Some((name, header)) = pending.take() {
             if trimmed.is_empty() {
                 pending = Some((name, header));
                 continue;
             }
             causes.push((name, format!("{header} {trimmed}")));
+            operands = trimmed.starts_with("assertion");
             current = None;
             continue;
         }
@@ -1161,6 +1183,9 @@ fn failure_causes(text: &str) -> Vec<(String, String)> {
                 pending = Some((name, trimmed.to_owned()));
             } else if trimmed.starts_with("assertion") {
                 causes.push((name, trimmed.to_owned()));
+                // BOTH paths reach an assertion -- via a panic header, and bare. Setting the
+                // flag on only the first would fix half the population and read as fixed.
+                operands = true;
                 current = None;
             }
         }
@@ -1261,6 +1286,18 @@ assertion `left == right` failed
         assert!(
             causes[0].1.contains("assertion `left == right` failed"),
             "the cause must carry the MESSAGE beneath the header, not only the location: {}",
+            causes[0].1
+        );
+        // THE SECOND REGRESSION, found 2026-09-11 by a grader chasing its own retraction. The
+        // fixture below ALREADY carried `left: 7` / `right: 6` and nothing asserted them, which
+        // is exactly why the gap survived a fix that was otherwise measured 55/55 in CI. Run
+        // 34577876082: 10 of 55 causes announced `assertion `left == right` failed` while the
+        // whole 493,235-byte log contained ZERO `left:` and ZERO `right:`. An assert_eq MESSAGE
+        // names what was compared; only the OPERANDS say what went wrong -- so this is the
+        // class where header+message is LEAST informative, and it read as the best-fixed one.
+        assert!(
+            causes[0].1.contains("left: 7") && causes[0].1.contains("right: 6"),
+            "an assert_eq payload is THREE lines: the operands must survive too: {}",
             causes[0].1
         );
     }
