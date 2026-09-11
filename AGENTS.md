@@ -388,16 +388,36 @@ BOTH needles; either alone misses a case.**
 MESSAGE** — the reading that survived three agents and two retractions. **An empty object
 database cannot hold a DIFFERENT object under a sha; it holds NO object.**
 
-⛔ **THE STANDING CONSEQUENCE: NO OPERATION AGAINST A NAMED REVISION CAN EVER RUN UNDER `rch`** —
-not `--compare`, not `git ls-tree <sha>`, not an archive check, and **not a one-tree probe against
+⛔ **THE STANDING CONSEQUENCE: NO OPERATION AGAINST A NAMED REVISION RESOLVES ON A WORKER** — not
+`--compare`, not `git ls-tree <sha>`, not an archive check, and **not a one-tree probe against
 anything but the working tree.** A typed `CHECKOUT_UNUSABLE` refusal is the honest answer there;
-**CI with `fetch-depth: 0` is the only surface these legs can run on.** That is a permanent
-property of the transport, **not a defect to file against a crate** — and a crate whose error
-names itself for it is misattributing (see `z1ck5`).
+**CI with `fetch-depth: 0` is the only surface these legs can run on** — **not a defect to file
+against a crate**, and a crate whose error names itself for it is misattributing (see `z1ck5`).
 
-**NO-CLAIM.** `n=1` on the fleet axis — all five probes ran on contabo-4 in one window. The
-mechanism is transport-level and should be uniform, but pinning a second worker to confirm is
-itself a violation, so this stays a declared limit rather than a fleet-wide assertion.
+**AND THE VERB IS NOT THE CONSTRAINT — `--job` DOES NOT UNBLOCK THESE LEGS.** Measured
+independently by a second agent on the new flag: `rch exec --job -- git rev-list --count --all`
+→ `0`, `exit=0`. **`--job` fixes the wrong-verb error; it does not fill an empty object
+database.** Anyone reading *"`--job` admits arbitrary jobs"* and concluding a named-revision leg
+was runnable all along is wrong, and there is now a measurement saying so rather than an
+inference.
+
+⚠️ **NO-CLAIM, AND THE WORD "EVER" WAS RETRACTED FROM THIS RULE WITHIN THE HOUR.** `n=1` on the
+WORKER axis: **four consecutive `--job` probes all selected contabo-4**, so repetition cannot
+reach a second box and `RCH_WORKER` pinning is forbidden. n=4 on the run axis for that one
+worker, plus one independent reproduction. The mechanism is transport-level and *should* be
+uniform — **but "uniform by construction" is an ARGUMENT, and this file retired four
+one-sample claims the same night.** A standing prohibition over a whole class of acceptance legs
+deserves better than one box.
+
+**THE ZERO-COST SETTLE — DO IT AS A PIGGYBACK, NEVER SPEND A WINDOW ON IT.** The next agent whose
+build lands on a worker that is **not** contabo-4 runs one `rch exec --job -- git rev-list
+--count --all` in that same window. `0` closes the fleet axis and this caveat comes out.
+
+**And the transferable rule from how `--job` was found is not "read the help when blocked."** Its
+finder had already used `rch exec` five times that night without reading `--help`, so the refusal
+was the prompt and **the prompt should not have been necessary**: ⭐ **READ THE HELP BEFORE YOU
+CONCLUDE A TOOL CANNOT DO A THING.** Twice in one night the tool already had the verb —
+`rch error explain` answered `E327` in one call after four agents scanned binaries for it.
 
 ## ⛔ DO NOT TOUCH THE CONTABO BOXES OR ANY `rch` CONFIG ⛔
 
