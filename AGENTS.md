@@ -5238,6 +5238,62 @@ the roster ABORTS THE BUILD (`UAD_EMPTY_ROSTER`), so it must be read from the CO
 `EXTRA` fires says nothing about `MISSING`. **Two directions, two arms, two difference-set
 texts — or the detector is half-proven.**
 
+## ⭐⭐ DECLARE **BENEFICIARY** INTEREST, NOT ONLY AUTHORSHIP
+
+**A new disclosure class, volunteered unprompted by a grader who was NOT the author:**
+
+> *"I am one of the four panes this change exists to serve — I built a six-leg bead on test
+> NAMES because CI would not surface causes, and my own acceptance item then refuted four of
+> them. That makes me motivated for this to work, which is a reason to be HARDER on it, not
+> softer."*
+
+⭐ **The independence bar this repo enforces is AUTHORSHIP — a different pane, not the
+implementer.** ⛔ **It says nothing about a grader who BENEFITS from the change passing**, and
+that is a real bias with no existing guard: a grader whose own blocked work is unblocked by the
+thing it is grading has an interest in a green verdict.
+
+**The remedy is disclosure plus a stated inversion — *harder, not softer* — and a pre-committed
+refusal condition.** ⭐ **Here: *"if arm A's reds are not a proper subset of arm B's, I will say
+so and the bead does not close on my say-so."*** **A grader who names in advance the
+observation that would make it refuse cannot quietly relax the bar afterwards.**
+
+⛔ **AND IT CAUGHT THE AUTHOR'S SCOPE ERROR IN THE SAME BREATH.** The author verified with
+`-p gate-runner --bins` → **26 passed**, and reported that as the unit's verification. The
+CRATE is **75 passed across EIGHT target groups**. ⭐ **Not wrong — but a narrower denominator
+reported under the wider noun, which is the `--lib`-as-the-crate error by the pane that landed
+that rule, for the SECOND time in one session.** **State the target selector beside every test
+count, always.**
+
+## ⛔⛔ A SIGNAL PRESENT IN **BOTH** CLASSES CANNOT ATTRIBUTE — presence is not discrimination
+
+**Caught by its own author before publication, on a partition of 52 failing legs.** Twelve were
+classified `LANE CONDITION` on the strength of real signal in their output:
+```
+fatal: ambiguous argument 'HEAD': unknown revision      <- the worker's empty object DB
+fixture repos missing .git/hooks/pre-commit
+br not on PATH
+```
+⛔ **Then the cross-check: ALL TWELVE ARE NAMED BY CI TOO — and CI has a real `.git` with a
+populated object database, so that condition CANNOT be their cause.** ⭐ **The signal was
+present and NON-DISCRIMINATING: it appears in both the class it was supposed to identify and
+the class it was supposed to exclude.**
+
+⭐ **Attribution requires a signal that is ABSENT from the other class.** Presence alone
+attributes nothing — this is the control rule (*a control must not share the disqualifying
+property with the lane under test*) arriving **inside a partition** rather than inside a probe.
+⛔ **Had it shipped, twelve legs would have been routed to a worker-provisioning remedy that
+cannot fix them.**
+
+**The corrected bucket is `UNCLASSIFIABLE`, and that is a real verdict:** *"both lanes failing
+is not one cause."* ⭐ **Naming a bucket unclassifiable is more useful than a confident wrong
+partition, because it is the bucket a new instrument can convert.**
+
+⭐ **AND THE METHOD THAT FOUND THE RATCHETS EXTENDS: message SHAPE, not name.** Five became
+seven — `every_live_bead_carries_at_least_one_taxonomy_label` (175 unlabelled against a ceiling
+of 59) **reads like a correctness check and is a ceiling underneath.** **Two independent panes
+found extra ratchets the same way, which argues for the method rather than against either
+count.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
