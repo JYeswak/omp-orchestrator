@@ -559,27 +559,27 @@ pub fn capture_snapshot(captured_at_secs: u64, text: &str) -> CaptureSnapshot {
 /// for an ADDITIONAL refusal, because the pane keeps whatever verdict `classify` gave it.
 ///
 /// ⛔ THE THRESHOLD IS A CHOICE, NOT A MEASUREMENT, and it is labelled here so it cannot inherit
-/// false authority from a fixture that never tested it. ONE substantive row is enough to decline
-/// the refusal. The fixtures separate at TEN rows against TWO, which is not a close call at any
-/// anchoring -- four different counts of the same 20-row capture were published today and all
-/// four still classified it correctly. NOTHING MEASURED HERE SAYS WHETHER THREE ROWS IS ALIVE.
-/// The boundary case -- a stale header, a half-drawn frame, a wrapped third error message -- is
-/// unexercised, and the nearest observation is a DEAD pane carrying "TODO + footer".
+/// false authority from fixtures that never tested its boundary. THE FLOOR IS
+/// [`SUBSTANTIVE_CONTENT_ROWS`] = 3: a pane must render at least that many substantive rows
+/// below its last limit line before this layer accepts that it recovered.
 ///
-/// The threshold is set at one DELIBERATELY, in the direction that never parks a working agent:
-/// this layer only subtracts from dispatchability, so a miss leaves the pre-existing verdict
-/// intact while a false refusal would idle a live agent for nothing. Raise it only with a
-/// measurement of the boundary, and change this sentence when you do.
+/// MEASURED ENDPOINTS on the live population, same mechanical rule: a pane dead ~83 hours scores
+/// ZERO once the title and footer are excluded (its raw count is 2, and that 2 IS the title and
+/// footer -- the exclusion clause is what collapses it), a pane dead ~87 hours scores ONE (a
+/// `TODO 247/284` header, which is not recovery), and the one working pane scores TEN. So the
+/// observed population is {0, 1} DEAD against {10} ALIVE and EVERY floor in 2..=10 separates it
+/// identically. Nothing measured distinguishes them; 3 is the middle of nothing.
 ///
-/// MEASURED ENDPOINTS on the live population, same mechanical rule: dead panes score ZERO once
-/// the title and footer are excluded (their raw count is 2, and that 2 IS the title and footer
-/// -- the exclusion clause is what collapses them), and the working pane scores 10. So `> 0` is
-/// the LEAST-INVENTED rule rather than a tuned one: every threshold in 1..9 separates the
-/// observed population identically, and nothing measured distinguishes them.
+/// ⛔ AN EARLIER VERSION OF THIS COMMENT SAID THE FLOOR WAS ONE, "in the direction that never
+/// parks a working agent". That setting was FALSIFIED by the ~87-hour pane above, which renders
+/// one row while dead, and the prose outlived the constant for two commits. The asymmetry it
+/// appealed to points the other way at this evidence: admitting a dead pane parks the WORK for
+/// days and nothing downstream recovers it, while refusing a live one costs idle capacity until
+/// the next tick. Fail open with no signal; fail CLOSED with a typed signal you cannot
+/// corroborate.
 ///
-/// RE-DERIVE PER TICK, NEVER CACHE. A pane was observed leaving the limit-bearing state entirely
-/// between two reads four minutes apart -- the phrase simply absent on the second. A cached
-/// refusal would idle an agent that has already recovered.
+/// RESIDUAL: a dead pane rendering three stale rows is still admitted. Raise the floor only with
+/// a measurement of the boundary, and change these sentences when you do.
 #[must_use]
 pub fn rate_limit_refusal(is_rate_limited: bool, capture: &str) -> Option<String> {
     if !is_rate_limited {
