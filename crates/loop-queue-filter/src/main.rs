@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 use loop_queue_filter::select::{
-    assign_peer_grade_with_ledger, parse_observed_panes, require_idle_grader,
+    assign_peer_grade_for_named_grader, assign_peer_grade_with_ledger, parse_observed_panes,
 };
 use loop_queue_filter::phase_gate::{
     apply_phase_gate, EXCEPTION_SET, GATED_PHASE, PHASE_GATE_ENABLED, SWITCH_ON_PRECONDITION,
@@ -91,13 +91,15 @@ fn assign_grade_cli(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if let Some(grader_pane) = grader.as_deref() {
-        if let Err(error) = require_idle_grader(grader_pane, &panes) {
-            eprintln!("{error}");
-            return ExitCode::from(2);
+    // A named grader carries the eligibility gauntlet INSIDE the selector, so
+    // its refusal cannot be overwritten by a later generic `no_idle_pane`.
+    let assigned = match grader.as_deref() {
+        Some(grader_pane) => {
+            assign_peer_grade_for_named_grader(&observer, grader_pane, &panes, &jsonl, &ledger)
         }
-    }
-    match assign_peer_grade_with_ledger(&observer, &panes, &jsonl, &ledger) {
+        None => assign_peer_grade_with_ledger(&observer, &panes, &jsonl, &ledger),
+    };
+    match assigned {
         Ok(assignment) => {
             if let Some(grader_pane) = grader.as_deref() {
                 if assignment.grader_pane != grader_pane {

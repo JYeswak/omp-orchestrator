@@ -994,8 +994,14 @@ pub fn parse_observed_panes(bytes: &[u8]) -> Result<Vec<ObservedPane>, AssignGra
     Ok(panes)
 }
 
-/// Refuse a grader that is carrying its own dispatch. This is the guarantee
-/// `current_pane_not_confirmed_idle` provided, applied to the TARGET pane.
+/// Refuse a grader that cannot legitimately hold a grading dispatch. This is
+/// the guarantee `current_pane_not_confirmed_idle` provided, applied to the
+/// TARGET pane.
+///
+/// Reachable from [`assign_peer_grade_for_named_grader`] and its callers only.
+/// The default selector builds its candidate set with
+/// `.filter(is_confirmed_idle)`, so a check refusing on `!is_confirmed_idle`
+/// is a tautology inside that loop and must not be placed there.
 pub fn require_idle_grader(
     grader_pane: &str,
     panes: &[ObservedPane],
@@ -1005,14 +1011,23 @@ pub fn require_idle_grader(
             reason: "grader_observation_row_missing",
         });
     };
-    if !pane.is_confirmed_idle() {
+    if pane.is_confirmed_idle() {
+        return Ok(());
+    }
+    // Two operator remedies, so two refusals: a pane carrying work must be
+    // waited out, a pane whose idleness is not twice-captured must be
+    // re-observed. One marker for both would report a false cause for the
+    // second, which is the defect this guard exists to avoid elsewhere.
+    if pane.is_working {
         return Err(AssignGradeError::GraderCarryingOwnDispatch {
             pane: grader_pane.to_owned(),
             liveness: pane.liveness.clone(),
             is_working: pane.is_working,
         });
     }
-    Ok(())
+    Err(AssignGradeError::NoEligibleGrader {
+        reason: "grader_liveness_unconfirmed",
+    })
 }
 
 /// Pick a grader that is not the observer. The observer may be WORKING.
@@ -1031,11 +1046,44 @@ pub fn assign_peer_grade_with_ledger(
     jsonl: &str,
     ledger_jsonl: &str,
 ) -> Result<GradeAssignment, AssignGradeError> {
+    assign_peer_grade_inner(observer_pane, None, panes, jsonl, ledger_jsonl)
+}
+
+/// Same as [`assign_peer_grade_with_ledger`] when an operator NAMES the grader
+/// (`assign-grade --grader %N`, `gate_peer_grading_for_pane`).
+///
+/// This is the path on which [`require_idle_grader`] can actually fire. A named
+/// pane is admitted by its caller on `is_dispatchable` alone, and tick-monitor
+/// emits `is_dispatchable` independently of `is_working`/`liveness` (a DIALOG
+/// pane reads dispatchable while carrying a dispatch), so a named grader can
+/// reach selection while carrying its own dispatch. Without the guard here the
+/// refusal degrades to `NO_ELIGIBLE_GRADER reason=no_idle_pane`, which names
+/// the fleet instead of the pane the operator asked about.
+pub fn assign_peer_grade_for_named_grader(
+    observer_pane: &str,
+    grader_pane: &str,
+    panes: &[ObservedPane],
+    jsonl: &str,
+    ledger_jsonl: &str,
+) -> Result<GradeAssignment, AssignGradeError> {
+    assign_peer_grade_inner(observer_pane, Some(grader_pane), panes, jsonl, ledger_jsonl)
+}
+
+fn assign_peer_grade_inner(
+    observer_pane: &str,
+    named_grader: Option<&str>,
+    panes: &[ObservedPane],
+    jsonl: &str,
+    ledger_jsonl: &str,
+) -> Result<GradeAssignment, AssignGradeError> {
     if observer_pane.trim().is_empty() {
         return Err(AssignGradeError::ObserverPaneUnresolved);
     }
     if panes.is_empty() {
         return Err(AssignGradeError::EmptyObservation);
+    }
+    if let Some(named) = named_grader {
+        require_idle_grader(named, panes)?;
     }
     let others: Vec<&ObservedPane> = panes
         .iter()
@@ -1064,7 +1112,6 @@ pub fn assign_peer_grade_with_ledger(
     }
     let mut missing_attribution: BTreeSet<String> = BTreeSet::new();
     for grader in &idle {
-        require_idle_grader(&grader.pane_id, panes)?;
         let Some(grader_assignee) = pane_assignee_key(&grader.pane_id) else {
             return Err(AssignGradeError::GraderIdentityUnresolved {
                 detail: format!("grader_pane={} is not a tmux pane id", grader.pane_id),
@@ -1717,14 +1764,79 @@ mod tests {
         );
     }
 
+    /// A pane tick-monitor lists as dispatchable while its state reads DIALOG
+    /// or WORKING: `is_dispatchable` and `is_working` come from different
+    /// facts in the same row, so this shape is real and passes every caller
+    /// pre-check that looks only at `is_dispatchable`.
+    fn dispatchable(id: &str, liveness: &str, working: bool) -> ObservedPane {
+        ObservedPane {
+            pane_id: id.to_owned(),
+            liveness: liveness.to_owned(),
+            is_dispatchable: true,
+            is_working: working,
+        }
+    }
+
     #[test]
-    fn assign_peer_grade_refuses_a_pane_carrying_its_own_dispatch() {
-        let panes = vec![pane("%3", "LIVE", true)];
-        let error = require_idle_grader("%3", &panes).expect_err("working grader");
+    fn named_grader_carrying_its_own_dispatch_is_refused_by_the_selector() {
+        let panes = vec![dispatchable("%3", "WORKING", true)];
+        let jsonl = jsonl_done_ack("reap-me", "%9");
+        let error =
+            assign_peer_grade_for_named_grader("__orchestrator__", "%3", &panes, &jsonl, "")
+                .expect_err("a named grader carrying a dispatch must be refused by name");
         let text = error.to_string();
         assert!(text.starts_with("GRADER_CARRYING_OWN_DISPATCH"), "{text}");
         assert!(text.contains("pane=%3"), "{text}");
         assert!(text.contains("is_working=true"), "{text}");
+        // Anti-vacuity: the guard cannot produce this refusal on the default
+        // path, whose candidate set is already `.filter(is_confirmed_idle)`.
+        // The marker below is what the operator got instead, and is why the
+        // guard could be deleted with every test still green.
+        let default_path = assign_peer_grade("__orchestrator__", &panes, &jsonl)
+            .expect_err("the default path names the fleet, not the pane");
+        assert_eq!(
+            default_path.to_string(),
+            "NO_ELIGIBLE_GRADER reason=all_panes_carrying_dispatches"
+        );
+    }
+
+    #[test]
+    fn named_grader_whose_idleness_is_unconfirmed_is_not_reported_as_carrying() {
+        let panes = vec![dispatchable("%3", "NEWLY_IDLE", false)];
+        let jsonl = jsonl_done_ack("reap-me", "%9");
+        let error =
+            assign_peer_grade_for_named_grader("__orchestrator__", "%3", &panes, &jsonl, "")
+                .expect_err("one capture is not a confirmed idle");
+        assert_eq!(
+            error.to_string(),
+            "NO_ELIGIBLE_GRADER reason=grader_liveness_unconfirmed",
+            "an unconfirmed pane is not carrying a dispatch and must not say so"
+        );
+    }
+
+    #[test]
+    fn named_grader_missing_from_the_observation_is_never_substituted() {
+        let panes = vec![pane("%3", "CONFIRMED_IDLE", false)];
+        let jsonl = jsonl_done_ack("reap-me", "%8");
+        let error =
+            assign_peer_grade_for_named_grader("__orchestrator__", "%9", &panes, &jsonl, "")
+                .expect_err("the named pane has no observation row");
+        assert_eq!(
+            error.to_string(),
+            "NO_ELIGIBLE_GRADER reason=grader_observation_row_missing",
+            "an unobserved named grader must refuse, never fall through to %3"
+        );
+    }
+
+    #[test]
+    fn named_grader_that_is_confirmed_idle_still_assigns() {
+        let panes = vec![pane("%3", "CONFIRMED_IDLE", false)];
+        let jsonl = jsonl_done_ack("reap-me", "%9");
+        let assigned =
+            assign_peer_grade_for_named_grader("__orchestrator__", "%3", &panes, &jsonl, "")
+                .expect("the guard must not refuse a confirmed-idle named grader");
+        assert_eq!(assigned.grader_pane, "%3");
+        assert_eq!(assigned.bead, "reap-me");
     }
 
     #[test]
