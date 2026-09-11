@@ -42,12 +42,42 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", crates_dir.display());
 
+    // THE ROSTER MUST HONOUR `exclude`, NOT JUST `members`.
+    //
+    // `read_dir` over `crates/` replicates the `members = ["crates/*"]` glob and NOTHING
+    // else, so an excluded directory still carries a `Cargo.toml` and still enumerated —
+    // producing a roster with one bin target cargo does not build. Measured 2026-09-11:
+    // `roster_tracks_the_runner_not_a_literal` reported "89 oracle targets, 90 generated.
+    // EXTRA in the roster (addresses nothing): [\"omp-idle-dispatch\"]", and
+    // `capabilities_drift_is_red` failed on the same one-name delta through
+    // `ompo capabilities --json`. Two red legs, one cause, one key.
+    //
+    // The workspace manifest is a real build input for this reason: adding an `exclude`
+    // entry changes the generated roster, so a stale cache here would re-introduce the
+    // drift after the manifest was fixed.
+    let workspace_manifest = crates_dir
+        .parent()
+        .expect("crates/ has a parent")
+        .join("Cargo.toml");
+    println!("cargo:rerun-if-changed={}", workspace_manifest.display());
+    let excluded = excluded_dirs(&workspace_manifest);
+
     let mut adapters: BTreeSet<String> = BTreeSet::new();
     let entries = std::fs::read_dir(&crates_dir)
         .unwrap_or_else(|error| panic!("cannot read {}: {error}", crates_dir.display()));
     for entry in entries.flatten() {
         let dir = entry.path();
         if !dir.is_dir() {
+            continue;
+        }
+        // An excluded directory is NOT a workspace member, so its bins are not cargo
+        // targets and must not enter the roster. Skipped here rather than filtered later
+        // so the anti-vacuity assert below still guards the real population.
+        if dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| excluded.contains(name))
+        {
             continue;
         }
         let manifest = dir.join("Cargo.toml");
@@ -82,6 +112,64 @@ fn main() {
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR")).join("adapters.rs");
     std::fs::write(&out, generated)
         .unwrap_or_else(|error| panic!("cannot write {}: {error}", out.display()));
+}
+
+/// Directory names the workspace manifest EXCLUDES, as bare basenames.
+///
+/// Hand-parsed for the same reason the rest of this file is: `build.rs` cannot call
+/// `cargo metadata` without recursing into cargo. `roster_tracks_the_runner_not_a_literal`
+/// is what makes that admissible — it compares this generator against cargo's own target
+/// discovery and goes RED naming the difference in both directions, so a parsing gap here
+/// surfaces as a named failure rather than as a quietly wrong roster.
+///
+/// Accepts the single-line form (`exclude = ["crates/foo"]`) and the multi-line array,
+/// stopping at the closing bracket so a later key cannot leak in. An ABSENT or unreadable
+/// manifest yields an EMPTY set, which is the correct default: it excludes nothing and
+/// leaves the roster a superset, which `roster_tracks_the_runner_not_a_literal` catches.
+/// The opposite default would silently shrink the roster, and a shrinking roster is how
+/// this surface goes vacuously green.
+fn excluded_dirs(workspace_manifest: &Path) -> BTreeSet<String> {
+    let Ok(text) = std::fs::read_to_string(workspace_manifest) else {
+        return BTreeSet::new();
+    };
+    let mut excluded = BTreeSet::new();
+    let mut in_array = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !in_array {
+            let Some(rest) = trimmed.strip_prefix("exclude") else {
+                continue;
+            };
+            let Some(rest) = rest.trim_start().strip_prefix('=') else {
+                continue;
+            };
+            in_array = true;
+            collect_quoted_basenames(rest, &mut excluded);
+        } else {
+            collect_quoted_basenames(trimmed, &mut excluded);
+        }
+        if trimmed.contains(']') {
+            in_array = false;
+        }
+    }
+    excluded
+}
+
+/// Push the LAST path component of every double-quoted entry in `line`.
+///
+/// `exclude` entries are workspace-relative paths (`crates/omp-idle-dispatch`); the
+/// roster loop walks `crates/` and compares directory names, so the basename is the
+/// join key.
+fn collect_quoted_basenames(line: &str, out: &mut BTreeSet<String>) {
+    for (index, piece) in line.split('"').enumerate() {
+        // Odd indices are the insides of quote pairs.
+        if index % 2 == 1 && !piece.is_empty() {
+            let basename = piece.rsplit('/').next().unwrap_or(piece);
+            if !basename.is_empty() {
+                out.insert(basename.to_owned());
+            }
+        }
+    }
 }
 
 include!("src/revision_env.rs");
