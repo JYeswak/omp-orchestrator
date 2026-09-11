@@ -255,6 +255,19 @@ fn run_probe(spec: &ProbeSpec) -> ProbeDecision {
         version,
     }
 }
+/// ONE authority for "this probe ANSWERED": status OK plus BOTH independent
+/// signals. Two consumers read it for different purposes — the process exit
+/// code and the probe-answer metric's numerator — and they held
+/// character-for-character duplicate copies of this conjunction until j4ert's
+/// class was measured. Two copies of one law with disjoint consumers can drift
+/// into `verdict: MEASURED_OK` alongside exit 1, so there is one copy and a
+/// conformance leg pinning both readings to it.
+pub fn answered(decision: &ProbeDecision) -> bool {
+    decision.status == "OK"
+        && decision.presence.as_ref().is_some_and(|value| !value.is_empty())
+        && decision.version.as_ref().is_some_and(|value| !value.is_empty())
+}
+
 /// Map the completed probe set onto the doctor's two subject-result bands.
 ///
 /// 0 means every probe established both independent signals. 1 means the doctor ran but at
@@ -264,11 +277,7 @@ pub fn doctor_exit_code(decisions: &[ProbeDecision]) -> Result<u8, DoctorError> 
     if decisions.is_empty() {
         return Err(DoctorError::EmptyProbeSet);
     }
-    Ok(if decisions.iter().all(|decision| {
-        decision.status == "OK"
-            && decision.presence.as_ref().is_some_and(|value| !value.is_empty())
-            && decision.version.as_ref().is_some_and(|value| !value.is_empty())
-    }) {
+    Ok(if decisions.iter().all(answered) {
         0
     } else {
         1
@@ -379,26 +388,24 @@ pub fn probe_answer_metric(
         metric.reason_code = format!("L1_METRIC_PARTIAL_PROBE_SET missing={}", missing.join(","));
         return metric;
     }
-    let answered = expected
+    let answered_count = expected
         .iter()
         .filter(|spec| {
-            decisions.iter().any(|decision| {
-                decision.name == spec.name
-                    && decision.status == "OK"
-                    && decision.presence.as_ref().is_some_and(|v| !v.is_empty())
-                    && decision.version.as_ref().is_some_and(|v| !v.is_empty())
-            })
+            decisions
+                .iter()
+                .any(|decision| decision.name == spec.name && answered(decision))
         })
         .count();
-    metric.probes_answered = answered;
-    let ratio = answered as f64 / declared as f64;
+    metric.probes_answered = answered_count;
+    let ratio = answered_count as f64 / declared as f64;
     metric.ratio = Some(ratio);
     if ratio >= metric.floor {
         metric.verdict = "MEASURED_OK".to_owned();
         metric.reason_code = "L1_METRIC_ALL_DECLARED_PROBES_ANSWERED".to_owned();
     } else {
         metric.verdict = "MEASURED_BELOW_FLOOR".to_owned();
-        metric.reason_code = format!("L1_METRIC_BELOW_FLOOR answered={answered} declared={declared}");
+        metric.reason_code =
+            format!("L1_METRIC_BELOW_FLOOR answered={answered_count} declared={declared}");
     }
     metric
 }
@@ -985,6 +992,49 @@ mod metric_tests {
         assert_eq!(metric.verdict, "ERROR");
         assert_eq!(metric.reason_code, "L1_METRIC_NO_DECLARED_PROBES");
         assert_eq!(metric.ratio, None);
+    }
+
+    /// CONFORMANCE, the pin the collapse alone cannot give: the EXIT CODE and
+    /// the METRIC must never disagree about what "answered" means. They read
+    /// one predicate for two different purposes, so a leg that exercises only
+    /// one of them cannot see a drift between them.
+    ///
+    /// The matrix walks every way a probe can fail to answer — status, absent
+    /// presence, empty presence, absent version, empty version — because the
+    /// two former copies agreed on `status` and it is the SIGNAL clauses that a
+    /// drift would most plausibly drop.
+    #[test]
+    fn the_exit_code_and_the_metric_agree_about_what_answered_means() {
+        let mutate: [(&str, fn(&mut ProbeDecision)); 6] = [
+            ("untouched", |_decision| {}),
+            ("status", |decision| decision.status = "UNPROBEABLE".to_owned()),
+            ("presence_absent", |decision| decision.presence = None),
+            ("presence_empty", |decision| {
+                decision.presence = Some(String::new());
+            }),
+            ("version_absent", |decision| decision.version = None),
+            ("version_empty", |decision| {
+                decision.version = Some(String::new());
+            }),
+        ];
+        for (label, apply) in mutate {
+            let mut decisions = all_answering();
+            apply(&mut decisions[0]);
+            let exit_code = doctor_exit_code(&decisions).expect("non-empty set");
+            let metric = probe_answer_metric(PROBES, &decisions);
+            assert_eq!(
+                exit_code == 0,
+                metric.ratio == Some(1.0),
+                "case={label}: exit_code={exit_code} disagrees with ratio={:?}",
+                metric.ratio
+            );
+            assert_eq!(
+                exit_code == 0,
+                metric.verdict == "MEASURED_OK",
+                "case={label}: exit_code={exit_code} disagrees with verdict={}",
+                metric.verdict
+            );
+        }
     }
 }
 
