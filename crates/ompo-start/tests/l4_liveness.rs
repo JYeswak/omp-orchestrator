@@ -344,3 +344,148 @@ fn disagreeing_pane_sets_are_named_as_disagreement_not_vacuity() {
         "a non-empty mismatch is disagreement, a distinct defect from vacuity"
     );
 }
+
+/// L4-SILENT (gbyo): a REQUIRED source that cannot produce the freshness
+/// quadruple — available / fresh / reason_code / age_ms — is Silent, and Silent
+/// is NotLive. The two failure shapes are distinct and both must refuse:
+///   present-but-unfreshable: in the vector, age_ms None
+///   absent entirely:         not in the vector at all
+/// An ABSENT source must NOT read as fresh; absence is the defect this leg
+/// exists to catch, because a missing row is the easiest thing for a
+/// population-driven classifier to score as all-fresh.
+#[test]
+fn silent_is_not_live() {
+    // KNOWN-GOOD control first: the same three names, all freshness-complete,
+    // are LIVE — so this leg is not simply refusing everything.
+    let live = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(live.status(), "LIVE", "the control must be LIVE");
+
+    // 1. PRESENT BUT LACKING FRESHNESS: available and fresh both claim true,
+    //    but no age was produced. A claim of freshness with no age behind it is
+    //    not freshness.
+    let unfreshable = SourceVerdict {
+        name: "agent-mail".to_owned(),
+        available: true,
+        fresh: true,
+        reason_code: String::new(),
+        age_ms: None,
+        panes: vec!["%7".to_owned()],
+    };
+    let verdict = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        unfreshable,
+    ])
+    .expect("three named sources is a complete set");
+    println!(
+        "L4_SILENT_NO_AGE status={} reason_code={}",
+        verdict.status(),
+        verdict.reason_code()
+    );
+    assert!(
+        matches!(verdict, LiveVerdict::NotLive { .. }),
+        "a required source with no age_ms cannot be Live"
+    );
+    assert_eq!(verdict.status(), "NOT_LIVE");
+    assert!(
+        verdict.reason_code().contains("agent-mail"),
+        "the reason must name the silent source, got {}",
+        verdict.reason_code()
+    );
+
+    // 2. ABSENT ENTIRELY: the row is missing, not merely stale. This must NOT
+    //    read as fresh, and it must not be scored against the population that
+    //    happens to be present.
+    let absent = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+    ])
+    .expect("a short vector is a verdict, not a parse error");
+    println!(
+        "L4_SILENT_ABSENT status={} reason_code={}",
+        absent.status(),
+        absent.reason_code()
+    );
+    assert!(
+        matches!(absent, LiveVerdict::NotLive { .. }),
+        "an absent required source must not read as fresh"
+    );
+    assert_eq!(absent.status(), "NOT_LIVE");
+    assert!(
+        absent.reason_code().contains("agent-mail"),
+        "the reason must name the source that never reported, got {}",
+        absent.reason_code()
+    );
+
+    // 3. STALE is also Silent: an age was produced, but the source disclaims
+    //    freshness. Stale must not be rescued by the presence of an age_ms.
+    let stale = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7"], true, false),
+    ])
+    .expect("complete source set");
+    assert_eq!(stale.status(), "NOT_LIVE", "a stale required source is Silent");
+    assert!(stale.reason_code().contains("agent-mail"));
+}
+
+/// L4-SRC-MAIL (fols), landed where the bead's acceptance command points:
+/// `cargo test -p ompo-start --test l4_liveness missing_mail_meta_is_silent`.
+/// Without this fn that command matched no test and exited 0 — a silent green.
+/// The full battery lives in `tests/l4_mail.rs`; this leg is not a delegating
+/// stub, it asserts the derivation AND the swarm verdict end to end.
+///
+/// AN ABSENT TIMESTAMP IS NOT AGE ZERO. `am robot status` with no
+/// `_meta.timestamp` yields SILENT with `age_ms` UNKNOWN, and one silent source
+/// makes the swarm NOT_LIVE.
+#[test]
+fn missing_mail_meta_is_silent() {
+    // The observer clock, deliberately far in the future (year 2096 in epoch ms)
+    // so the control envelope below yields a POSITIVE age. For the absent case the
+    // reading does not matter: with no writer clock the difference is UNKNOWN.
+    let observer_ms = 4_000_000_000_000_i64;
+    let no_meta = r#"{"_alerts":[],"sessions":[]}"#;
+
+    let freshness =
+        ompo_start::mail::mail_freshness(no_meta, observer_ms).expect("the envelope is JSON");
+    println!(
+        "SILENT status={} reason={}",
+        freshness.status(),
+        freshness.reason_code()
+    );
+    assert_eq!(freshness.status(), "SILENT");
+    assert_eq!(freshness.age_ms(), None, "absent must be UNKNOWN");
+    assert_ne!(
+        freshness.age_ms(),
+        Some(0),
+        "an absent _meta.timestamp must NOT read as age 0"
+    );
+
+    // KNOWN-GOOD control in the same leg, so SILENT is not simply what this
+    // returns for every input: a stamped envelope yields a real age.
+    let stamped = r#"{"_meta":{"timestamp":"2026-09-11T18:05:39.843+00:00"}}"#;
+    let fresh = ompo_start::mail::mail_freshness(stamped, observer_ms).expect("stamped is JSON");
+    assert_eq!(fresh.status(), "FRESH");
+    assert!(fresh.age_ms().is_some());
+
+    // And SILENT propagates: the mail source cannot carry the swarm.
+    let silent_mail = ompo_start::mail::mail_source(no_meta, observer_ms, vec!["%7".to_owned()])
+        .expect("the envelope is JSON");
+    assert!(!silent_mail.fresh);
+    assert_eq!(silent_mail.age_ms, None);
+    let verdict = classify(vec![
+        silent_mail,
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+    ])
+    .expect("complete source set");
+    println!("SILENT swarm={} {}", verdict.status(), verdict.reason_code());
+    assert!(matches!(verdict, LiveVerdict::NotLive { .. }));
+    assert_eq!(verdict.status(), "NOT_LIVE");
+    assert!(verdict.reason_code().contains("agent-mail"));
+}
