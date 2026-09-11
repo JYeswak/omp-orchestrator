@@ -13,6 +13,8 @@ use lifecycle_event::{
 };
 use serde::Serialize;
 use std::fmt;
+use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -129,6 +131,11 @@ pub struct DoctorSummary {
     pub probes: Vec<ProbeDecision>,
     pub remediation: Vec<String>,
     pub next_action: String,
+    /// Verified readback of the on-disk artifact this report names. `None` is
+    /// the pre-write state and the value serialized INTO the artifact; a
+    /// returned summary always carries `Some`, because `next_action` promises a
+    /// readback and an unverified write is not one.
+    pub report: Option<ReportReadback>,
 }
 
 #[derive(Debug)]
@@ -138,6 +145,9 @@ pub enum DoctorError {
     UnsupportedScope(String),
     CurrentDirectory(std::io::Error),
     Emit(EmitError),
+    ReportWrite { path: PathBuf, detail: String },
+    ReportReadbackAbsent { path: PathBuf },
+    ReportReadbackMismatch { path: PathBuf, detail: String },
 }
 
 impl fmt::Display for DoctorError {
@@ -155,6 +165,21 @@ impl fmt::Display for DoctorError {
             }
             Self::CurrentDirectory(error) => write!(f, "L1_DOCTOR_CURRENT_DIRECTORY error={error}"),
             Self::Emit(error) => write!(f, "L1_DOCTOR_LIFECYCLE_EMIT error={error}"),
+            Self::ReportWrite { path, detail } => write!(
+                f,
+                "L1_DOCTOR_REPORT_WRITE path={} detail={detail}",
+                path.display()
+            ),
+            Self::ReportReadbackAbsent { path } => write!(
+                f,
+                "L1_DOCTOR_REPORT_READBACK_ABSENT path={} — the write reported success but the artifact is not readable; a promised readback is not a readback",
+                path.display()
+            ),
+            Self::ReportReadbackMismatch { path, detail } => write!(
+                f,
+                "L1_DOCTOR_REPORT_READBACK_MISMATCH path={} detail={detail}",
+                path.display()
+            ),
         }
     }
 }
@@ -286,6 +311,169 @@ pub fn lifecycle_events(
     Ok(events)
 }
 
+/// Verified evidence that the DoctorReport artifact exists and reads back with
+/// the fields it was written with.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReportReadback {
+    pub path: PathBuf,
+    pub bytes: usize,
+    pub run_id: String,
+    /// `required_tools` as READ BACK from the inception artifact, not restated
+    /// from this crate's own constants.
+    pub required_tools: Vec<String>,
+    /// `READ_BACK` when the inception artifact supplied the set; otherwise a
+    /// named UNMEASURED reason. Never a silent empty list.
+    pub required_tools_status: String,
+}
+
+fn inception_artifact(repo: &Path) -> PathBuf {
+    repo.join(".omp-orchestrator").join("inception.json")
+}
+
+/// Read the declared tool set from the inception artifact. A missing or
+/// unreadable artifact is UNMEASURED with a reason, never an empty green set.
+fn required_tools_readback(repo: &Path) -> (Vec<String>, String) {
+    let artifact = inception_artifact(repo);
+    match inception::read_required_tools(&artifact) {
+        Ok(tools) => (tools, "READ_BACK".to_owned()),
+        Err(error) => (
+            Vec::new(),
+            format!(
+                "UNMEASURED_INCEPTION_REQUIRED_TOOLS reason={}",
+                error
+                    .to_string()
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("INCEPTION_UNKNOWN")
+            ),
+        ),
+    }
+}
+
+fn report_document(summary: &DoctorSummary, tools: &[String], tools_status: &str) -> String {
+    let document = serde_json::json!({
+        "schema": summary.schema,
+        "run_id": summary.run_id,
+        "scope": summary.scope,
+        "status": summary.status,
+        "exit_code": summary.exit_code,
+        "probe_count": summary.probe_count,
+        "event_count": summary.event_count,
+        "readback_lines": summary.readback_lines,
+        "probes": summary.probes,
+        "remediation": summary.remediation,
+        "required_tools": tools,
+        "required_tools_status": tools_status,
+    });
+    // to_string_pretty on a json! value cannot fail: every leaf is already a Value.
+    serde_json::to_string_pretty(&document).unwrap_or_else(|_| "{}".to_owned())
+}
+
+/// Durably write the DoctorReport artifact: temp file, fsync, rename, parent
+/// fsync. Returns nothing on its own — the caller MUST pair it with
+/// [`read_report_back`], because exit 0 from a write is not evidence.
+fn write_report_bytes(path: &Path, bytes: &[u8]) -> Result<(), DoctorError> {
+    let parent = path.parent().ok_or_else(|| DoctorError::ReportWrite {
+        path: path.to_path_buf(),
+        detail: "artifact path has no parent directory".to_owned(),
+    })?;
+    let fail = |detail: String| DoctorError::ReportWrite {
+        path: path.to_path_buf(),
+        detail,
+    };
+    fs::create_dir_all(parent).map_err(|error| fail(error.to_string()))?;
+    let temp = parent.join(format!(
+        ".report.json.{}.tmp",
+        std::process::id()
+    ));
+    {
+        let mut file = fs::File::create(&temp).map_err(|error| fail(error.to_string()))?;
+        file.write_all(bytes).map_err(|error| fail(error.to_string()))?;
+        file.sync_all().map_err(|error| fail(error.to_string()))?;
+    }
+    fs::rename(&temp, path).map_err(|error| fail(error.to_string()))?;
+    if let Ok(dir) = fs::File::open(parent) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
+}
+
+/// Re-open the artifact and verify it carries the run it claims. This is the
+/// half that turns `next_action: readback=…` from a promise into a receipt.
+pub fn read_report_back(
+    path: &Path,
+    expected_run_id: &str,
+    expected_tools: &[String],
+) -> Result<ReportReadback, DoctorError> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(DoctorError::ReportReadbackAbsent {
+                path: path.to_path_buf(),
+            });
+        }
+        Err(error) => {
+            return Err(DoctorError::ReportReadbackMismatch {
+                path: path.to_path_buf(),
+                detail: error.to_string(),
+            });
+        }
+    };
+    let mismatch = |detail: String| DoctorError::ReportReadbackMismatch {
+        path: path.to_path_buf(),
+        detail,
+    };
+    let value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| mismatch(error.to_string()))?;
+    let run_id = value
+        .get("run_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| mismatch("run_id absent from artifact".to_owned()))?;
+    if run_id != expected_run_id {
+        return Err(mismatch(format!(
+            "run_id expected={expected_run_id} found={run_id}"
+        )));
+    }
+    let tools: Vec<String> = value
+        .get("required_tools")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| mismatch("required_tools absent from artifact".to_owned()))?
+        .iter()
+        .filter_map(|entry| entry.as_str().map(str::to_owned))
+        .collect();
+    if tools != expected_tools {
+        return Err(mismatch(format!(
+            "required_tools expected={expected_tools:?} found={tools:?}"
+        )));
+    }
+    let required_tools_status = value
+        .get("required_tools_status")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| mismatch("required_tools_status absent from artifact".to_owned()))?
+        .to_owned();
+    Ok(ReportReadback {
+        path: path.to_path_buf(),
+        bytes: text.len(),
+        run_id: run_id.to_owned(),
+        required_tools: tools,
+        required_tools_status,
+    })
+}
+
+/// Write the DoctorReport artifact named by [`ARTIFACT_REFERENCE`] and read it
+/// back. The write alone is refused as evidence: if the artifact is not
+/// readable afterwards the caller gets a typed refusal, not a success.
+pub fn write_report_with_readback(
+    repo: &Path,
+    summary: &DoctorSummary,
+) -> Result<ReportReadback, DoctorError> {
+    let path = repo.join(ARTIFACT_REFERENCE);
+    let (tools, tools_status) = required_tools_readback(repo);
+    let document = report_document(summary, &tools, &tools_status);
+    write_report_bytes(&path, document.as_bytes())?;
+    read_report_back(&path, &summary.run_id, &tools)
+}
+
 /// Run the real bounded L1 probe loop and durably emit its lifecycle rows.
 fn doctor_run_id() -> String {
     let nanos = SystemTime::now()
@@ -308,14 +496,19 @@ fn remediation_for(decisions: &[ProbeDecision]) -> Vec<String> {
         .collect()
 }
 pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
-    match scope {
+    let mut summary = match scope {
         // The health/repair axis advertises these scopes (health_repair::SCOPES);
         // a scope health names must not die here. "system" runs the probe loop;
         // "inception" verifies control files plus the inception artifact.
         "system" => run_doctor_system(repo, scope),
         "inception" => run_doctor_inception(repo),
         _ => Err(DoctorError::UnsupportedScope(scope.to_owned())),
-    }
+    }?;
+    // ARTIFACT_REFERENCE was declared and named in `next_action` long before
+    // anything wrote it. Writing it here and READING IT BACK is what makes the
+    // promise a receipt; a failed readback fails the run.
+    summary.report = Some(write_report_with_readback(repo, &summary)?);
+    Ok(summary)
 }
 fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
     let run_id = doctor_run_id();
@@ -341,6 +534,7 @@ fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorEr
         probes: decisions,
         remediation,
         next_action,
+        report: None,
     })
 }
 
@@ -409,7 +603,144 @@ fn run_doctor_inception(repo: &Path) -> Result<DoctorSummary, DoctorError> {
         probes: decisions,
         remediation,
         next_action: format!("repair_scope=inception artifact={}", artifact.display()),
+        report: None,
     })
+}
+
+/// A DoctorSummary shaped for artifact tests: no probes are run, so the write
+/// path is exercised without depending on the host's tool set.
+#[cfg(test)]
+fn artifact_fixture_summary(run_id: &str) -> DoctorSummary {
+    DoctorSummary {
+        schema: "ompo.doctor.v1",
+        run_id: run_id.to_owned(),
+        scope: "system".to_owned(),
+        status: "OK",
+        exit_code: 0,
+        artifact: ARTIFACT_REFERENCE,
+        lifecycle_journal: PathBuf::from("/fixture/lifecycle.jsonl"),
+        probe_count: 0,
+        event_count: 0,
+        readback_lines: 0,
+        probes: Vec::new(),
+        remediation: Vec::new(),
+        next_action: format!("readback={ARTIFACT_REFERENCE}"),
+        report: None,
+    }
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// KNOWN-GOOD: the artifact is written and reads back, so the gate is not
+    /// merely refusing everything.
+    #[test]
+    fn doctor_report_artifact_is_written_and_read_back() {
+        let dir = tempdir().expect("fixture repo");
+        let summary = artifact_fixture_summary("fixture-run-good");
+        let readback =
+            write_report_with_readback(dir.path(), &summary).expect("artifact readback");
+        assert_eq!(readback.path, dir.path().join(ARTIFACT_REFERENCE));
+        assert_eq!(readback.run_id, "fixture-run-good");
+        assert!(readback.bytes > 0, "an empty artifact is not a readback");
+        // No inception artifact in the fixture repo, so the tool set is NAMED
+        // UNMEASURED rather than reported as an empty green list.
+        assert!(
+            readback
+                .required_tools_status
+                .starts_with("UNMEASURED_INCEPTION_REQUIRED_TOOLS"),
+            "status={}",
+            readback.required_tools_status
+        );
+        assert!(readback.required_tools.is_empty());
+    }
+
+    /// KNOWN-BAD: the write reports success and the artifact is then absent.
+    /// EXPECT a typed refusal, never a summary that still claims a readback.
+    #[test]
+    fn write_success_with_absent_artifact_is_refused() {
+        let dir = tempdir().expect("fixture repo");
+        let summary = artifact_fixture_summary("fixture-run-absent");
+        let path = dir.path().join(ARTIFACT_REFERENCE);
+        let (tools, status) = required_tools_readback(dir.path());
+        let document = report_document(&summary, &tools, &status);
+        write_report_bytes(&path, document.as_bytes()).expect("write leg succeeds");
+        assert!(path.exists(), "positive control: the write really landed");
+        std::fs::remove_file(&path).expect("simulate a write whose artifact is not there");
+        let error = read_report_back(&path, &summary.run_id, &tools)
+            .expect_err("an absent artifact must not read back");
+        assert!(
+            error
+                .to_string()
+                .starts_with("L1_DOCTOR_REPORT_READBACK_ABSENT"),
+            "error={error}"
+        );
+    }
+
+    /// KNOWN-BAD: the artifact exists but belongs to a different run.
+    #[test]
+    fn stale_artifact_from_another_run_is_refused() {
+        let dir = tempdir().expect("fixture repo");
+        let summary = artifact_fixture_summary("fixture-run-first");
+        write_report_with_readback(dir.path(), &summary).expect("first run");
+        let path = dir.path().join(ARTIFACT_REFERENCE);
+        let (tools, _status) = required_tools_readback(dir.path());
+        let error = read_report_back(&path, "fixture-run-second", &tools)
+            .expect_err("a stale artifact must not satisfy a later run");
+        assert!(
+            error
+                .to_string()
+                .starts_with("L1_DOCTOR_REPORT_READBACK_MISMATCH"),
+            "error={error}"
+        );
+    }
+
+    /// The inception tool set is READ BACK from the artifact, not restated from
+    /// this crate's constants.
+    #[test]
+    fn inception_required_tools_are_read_back_into_the_report() {
+        let dir = tempdir().expect("fixture repo");
+        std::fs::create_dir_all(dir.path().join(".omp-orchestrator")).expect("runtime dir");
+        std::fs::write(
+            inception_artifact(dir.path()),
+            r#"{"required_tools":["git","cargo","br","bv","ntm","am","jq"]}"#,
+        )
+        .expect("fixture inception artifact");
+        let summary = artifact_fixture_summary("fixture-run-tools");
+        let readback =
+            write_report_with_readback(dir.path(), &summary).expect("artifact readback");
+        assert_eq!(readback.required_tools_status, "READ_BACK");
+        assert_eq!(
+            readback.required_tools,
+            vec!["git", "cargo", "br", "bv", "ntm", "am", "jq"]
+        );
+    }
+
+    /// END-TO-END: the artifact is written BY `run_doctor` itself, so the
+    /// promise in `next_action` is discharged by the same call that makes it.
+    /// Prints the artifact so the readback is visible evidence, not a claim.
+    #[test]
+    fn run_doctor_writes_and_reads_back_the_named_artifact() {
+        let dir = tempdir().expect("fixture repo");
+        let summary = run_doctor(dir.path(), "inception").expect("inception scope");
+        let readback = summary
+            .report
+            .as_ref()
+            .expect("run_doctor must attach a VERIFIED readback, not a promise");
+        let path = dir.path().join(ARTIFACT_REFERENCE);
+        let text = std::fs::read_to_string(&path).expect("artifact must exist on disk");
+        println!(
+            "ARTIFACT_READBACK path={} bytes={} run_id={}\n{text}",
+            readback.path.display(),
+            readback.bytes,
+            readback.run_id
+        );
+        assert_eq!(readback.run_id, summary.run_id);
+        assert_eq!(readback.bytes, text.len());
+        assert!(text.contains("\"run_id\""), "artifact text={text}");
+    }
 }
 
 pub fn current_repo() -> Result<PathBuf, DoctorError> {

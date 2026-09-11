@@ -968,6 +968,66 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValida
     })
 }
 
+/// Read back the declared `required_tools` set from an on-disk inception
+/// artifact. Separate from [`read_inception`] because that readback answers
+/// "is this repo's identity intact"; this one answers "which tool set did the
+/// artifact actually commit to", which L1's doctor report must carry rather
+/// than restate from its own constant.
+///
+/// Refuses a partial set: a tool missing from the file is reported, never
+/// silently backfilled from [`REQUIRED_TOOLS`].
+pub fn read_required_tools(output: &Path) -> Result<Vec<String>, InceptionError> {
+    let contents = match fs::read_to_string(output) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(InceptionError::ReadbackMissing {
+                path: output.to_owned(),
+            });
+        }
+        Err(error) => {
+            return Err(InceptionError::Readback {
+                path: output.to_owned(),
+                detail: error.to_string(),
+            });
+        }
+    };
+    let value: Value =
+        serde_json::from_str(&contents).map_err(|error| InceptionError::ReadbackMalformed {
+            path: output.to_owned(),
+            detail: error.to_string(),
+        })?;
+    let array = value
+        .get("required_tools")
+        .and_then(Value::as_array)
+        .ok_or_else(|| InceptionError::ReadbackMissingKey {
+            path: output.to_owned(),
+            key: "required_tools".to_owned(),
+        })?;
+    let mut tools = Vec::with_capacity(array.len());
+    for (index, entry) in array.iter().enumerate() {
+        match entry.as_str() {
+            Some(tool) if !tool.trim().is_empty() => tools.push(tool.to_owned()),
+            _ => {
+                return Err(InceptionError::ReadbackWrongType {
+                    path: output.to_owned(),
+                    key: format!("required_tools[{index}]"),
+                    expected: "string",
+                    found: "non-string or empty",
+                });
+            }
+        }
+    }
+    for tool in REQUIRED_TOOLS {
+        if !tools.iter().any(|seen| seen == tool) {
+            return Err(InceptionError::ReadbackMissingKey {
+                path: output.to_owned(),
+                key: format!("required_tools.{tool}"),
+            });
+        }
+    }
+    Ok(tools)
+}
+
 pub fn read_inception(output: &Path) -> Result<InceptionReadback, InceptionError> {
     let contents = match fs::read_to_string(output) {
         Ok(contents) => contents,

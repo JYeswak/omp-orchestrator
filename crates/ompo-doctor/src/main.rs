@@ -1128,6 +1128,9 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
                     "readback_lines": summary.readback_lines,
                     "journal": summary.lifecycle_journal.display().to_string(),
                     "artifact": ompo_doctor::ARTIFACT_REFERENCE,
+                    // The VERIFIED readback of that artifact, not a restatement
+                    // of the promise in `next_action`.
+                    "artifact_readback": summary.report,
                     "probe_id_root": ProbeId::new("omp.identity.binary.root")
                         .map(|id| id.as_str().to_owned())
                         .unwrap_or_default(),
