@@ -74,6 +74,11 @@ pub enum InstallError {
         detail: String,
     },
     /// Typed SHA-256 verification failure. Never a warning or skip.
+    /// L0-VERIFY-SIGSTORE. Cosign version floor, keyless certificate identity,
+    /// or local-key policy refused the artifact.
+    SigstoreRefused {
+        detail: String,
+    },
     Sha256Refused {
         class: Sha256FailureClass,
         detail: String,
@@ -168,6 +173,9 @@ impl fmt::Display for InstallError {
             ),
             Self::MinisignRefused { detail } => {
                 write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
+            }
+            Self::SigstoreRefused { detail } => {
+                write!(formatter, "L0_SIGSTORE_REFUSED: {detail}")
             }
             Self::Sha256Refused { detail, .. } => {
                 write!(formatter, "L0_SHA256_REFUSED: {detail}")
@@ -397,6 +405,213 @@ pub fn verify_minisign_policy(
     }
 }
 
+/// L0-VERIFY-SIGSTORE. The cosign release this installer refuses to trust below.
+///
+/// ⛔ PROVENANCE: this constant is the CONTRACT'S DECLARED FLOOR, carried from
+/// `docs/contracts/s1_l0_install.md` row B05. This crate does not and cannot
+/// verify the advisory itself — nothing here reaches an upstream CVE database,
+/// and no measurement in this workspace establishes which cosign release fixed
+/// [`COSIGN_CVE_ID`]. The floor is a POLICY INPUT that an operator or a later
+/// advisory feed may raise; it is not a fact this code proves.
+pub const COSIGN_CVE_FLOOR: &str = "2.4.1";
+
+/// The advisory the floor exists for, so a refusal can be traced to its reason
+/// rather than to an unexplained version number.
+pub const COSIGN_CVE_ID: &str = "CVE-2026-22703";
+
+/// A three-component cosign release, ordered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CosignVersion {
+    pub major: u64,
+    pub minor: u64,
+    pub patch: u64,
+}
+
+impl fmt::Display for CosignVersion {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+/// Parse `2.4.1`, `v2.4.1`, `2.4.1-rc.1`, or `2.4.1+build.7` into an ordered
+/// triple.
+///
+/// A pre-release or build suffix is DISCARDED rather than ordered, so
+/// `2.4.1-rc.1` compares EQUAL to `2.4.1`. That is the permissive direction for
+/// a pre-release of the fixing release, which is why the refusal text carries
+/// the caller's RAW string alongside the parsed triple: an operator reading
+/// `cosign 2.4.1-rc.1` can see what was actually presented. Callers needing
+/// pre-release ordering must supply a released version.
+///
+/// Anything else is `None`, and an unparseable version REFUSES — a version this
+/// code cannot order is not a version it may approve.
+#[must_use]
+pub fn parse_cosign_version(raw: &str) -> Option<CosignVersion> {
+    let trimmed = raw.trim();
+    let trimmed = trimmed.strip_prefix('v').unwrap_or(trimmed);
+    // `split` always yields at least one element, so the core is never empty
+    // of a candidate; a leading `-` simply parses as an empty major and fails.
+    let core = trimmed.split(['-', '+']).next().unwrap_or(trimmed);
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(CosignVersion {
+        major,
+        minor,
+        patch,
+    })
+}
+
+/// How an artifact's sigstore signature claims to be trusted.
+///
+/// Keyless and local-key are DISTINCT modes, not two spellings of one. An
+/// artifact signed with a local key cannot satisfy a keyless identity policy by
+/// presenting a matching string, and the mismatch is named as a mode mismatch
+/// rather than silently compared field by field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SigstoreTrust {
+    /// Keyless: an OIDC certificate identity and the issuer that minted it.
+    /// The ISSUER is part of the identity: `release@example.com` from an
+    /// attacker-controlled issuer is a different principal from the same string
+    /// minted by the expected one.
+    CertificateIdentity { identity: String, issuer: String },
+    /// A configured local public key, named by its key id.
+    LocalKey { key_id: String },
+}
+
+impl SigstoreTrust {
+    fn mode(&self) -> &'static str {
+        match self {
+            Self::CertificateIdentity { .. } => "keyless",
+            Self::LocalKey { .. } => "local-key",
+        }
+    }
+}
+
+/// What a passing sigstore verification actually established, so a caller can
+/// assert the facts rather than infer them from the absence of an error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SigstoreVerdict {
+    pub cosign_version: CosignVersion,
+    pub floor: CosignVersion,
+    pub trust: SigstoreTrust,
+}
+
+/// L0-VERIFY-SIGSTORE. Cosign version floor, OIDC certificate identity, and
+/// local-key policy, all fail-closed.
+///
+/// Checks run in escalating order so the refusal names the FIRST thing wrong
+/// rather than the last: a below-floor cosign is refused before its signature is
+/// consulted, because a vulnerable verifier's verdict is not evidence.
+///
+/// NO-CLAIM: this is the POLICY, not the cryptography. `bundle_valid` is a
+/// caller-supplied input describing what a real `cosign verify` returned; this
+/// function does not execute cosign and does not check a signature. A caller
+/// that fabricates `true` gets a pass, exactly as [`verify_minisign_policy`]'s
+/// `signature_valid` does.
+pub fn verify_sigstore_policy(
+    cosign_version: Option<&str>,
+    presented: &SigstoreTrust,
+    expected: &SigstoreTrust,
+    bundle_valid: bool,
+) -> Result<SigstoreVerdict, InstallError> {
+    let floor = parse_cosign_version(COSIGN_CVE_FLOOR)
+        .expect("COSIGN_CVE_FLOOR is a compile-time constant in x.y.z form");
+    let Some(raw) = cosign_version else {
+        return Err(InstallError::SigstoreRefused {
+            detail: format!(
+                "cosign unavailable; sigstore policy requires at least {floor} for {COSIGN_CVE_ID}"
+            ),
+        });
+    };
+    let Some(version) = parse_cosign_version(raw) else {
+        return Err(InstallError::SigstoreRefused {
+            detail: format!(
+                "unparseable cosign version {raw:?}; a version that cannot be ordered \
+                 against the {COSIGN_CVE_ID} floor {floor} is never approved"
+            ),
+        });
+    };
+    if version < floor {
+        return Err(InstallError::SigstoreRefused {
+            detail: format!(
+                "cosign {version} is below the {COSIGN_CVE_ID} floor {floor} \
+                 (presented {raw:?})"
+            ),
+        });
+    }
+    if presented.mode() != expected.mode() {
+        return Err(InstallError::SigstoreRefused {
+            detail: format!(
+                "trust mode mismatch: artifact presented {} but policy requires {}",
+                presented.mode(),
+                expected.mode()
+            ),
+        });
+    }
+    match (presented, expected) {
+        (
+            SigstoreTrust::CertificateIdentity { identity, issuer },
+            SigstoreTrust::CertificateIdentity {
+                identity: want_identity,
+                issuer: want_issuer,
+            },
+        ) => {
+            if identity != want_identity || issuer != want_issuer {
+                return Err(InstallError::SigstoreRefused {
+                    detail: format!(
+                        "certificate identity mismatch: presented {identity} via {issuer}, \
+                         policy requires {want_identity} via {want_issuer}"
+                    ),
+                });
+            }
+        }
+        (
+            SigstoreTrust::LocalKey { key_id },
+            SigstoreTrust::LocalKey {
+                key_id: want_key_id,
+            },
+        ) => {
+            if key_id != want_key_id {
+                return Err(InstallError::SigstoreRefused {
+                    detail: format!(
+                        "local key mismatch: presented {key_id}, policy requires {want_key_id}"
+                    ),
+                });
+            }
+        }
+        // Unreachable while `mode()` gates the pair above, and still restrictive
+        // if that guard is ever weakened: an unrecognised combination refuses.
+        (presented, expected) => {
+            return Err(InstallError::SigstoreRefused {
+                detail: format!(
+                    "unrecognised trust pairing: {} against {}",
+                    presented.mode(),
+                    expected.mode()
+                ),
+            })
+        }
+    }
+    if !bundle_valid {
+        return Err(InstallError::SigstoreRefused {
+            detail: format!(
+                "sigstore bundle failed verification under cosign {version} \
+                 for {}",
+                expected.mode()
+            ),
+        });
+    }
+    Ok(SigstoreVerdict {
+        cosign_version: version,
+        floor,
+        trust: expected.clone(),
+    })
+}
+
 /// Every PATH directory that already contains `binary_name`.
 pub fn path_collision_hits(binary_name: &str, path_env: &str) -> Vec<PathBuf> {
     let mut hits = Vec::new();
@@ -491,6 +706,10 @@ pub fn merge_hooks(
     }
     Ok(backups)
 }
+
+// b09-x282: ratified roster + detection live in agent_families.rs (own file,
+// own tests) to stay clear of the active b07 lane in this file.
+pub mod agent_families;
 
 /// Detected agent families. Empty is unrepresentable as success.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1037,6 +1256,12 @@ pub const OWNED_BINARIES: &[(&str, &str)] = &[
     ("pane-truth", "pane-truth"),
     ("installer", "installer"),
     ("bead-availability", "bead-availability"),
+    // 8nuh item 3 (owner S1L3Obs, added here because this file already had a
+    // writer): an uncovered binary whose interface can drift is how the
+    // supervisor's reap-abort became latent. `crate_declares_bin` resolves this
+    // entry against the `[[bin]] name = "reap-finished-panes"` the crate
+    // declares, so a rename becomes a FINDING rather than a skipped row.
+    ("reap-finished-panes", "reap-finished-panes"),
 ];
 
 /// Every bin target name `crate_name` produces in this workspace: the explicit
