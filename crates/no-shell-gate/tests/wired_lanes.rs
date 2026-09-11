@@ -51,7 +51,11 @@ const UNWIRED_LANE_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
     (
         "fleet-idle-monitor",
         "decision kernel for 47g0, landed ahead of its conductor; the caller that will route a tick through it is item 9 of that bead and is not yet re-armed. Wiring it to crates/fleet-monitor today would be a FALSE green: fleet-monitor's only mention in .github/workflows/gate.yml is a comment at :43, which the census strips, so the chain would terminate at a crate with neither a caller nor an executor trigger",
-        "47g0 owner",
+        // A BEAD IS NOT AN OWNER. The sibling rows name a role that can be asked to act
+        // ("control-plane fast-dispatch owner", "S1 coverage owner"); this row named `47g0`,
+        // which is a work item and cannot answer a question. The bead stays in the reason and
+        // the dies_when, where an identifier belongs.
+        "fleet-idle-monitor conductor owner",
         "Dies when a tick routes its queue through fleet_idle_monitor::tick, or when control-plane's cron-invoked fleet-idle-monitor is repointed at this crate",
     ),
 ];
@@ -111,7 +115,18 @@ const GATE_IDENTIFIER_REFERENTS: &[GateIdentifier] = &[
     GateIdentifier { id: "GATE-021", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/state-wildcard-lint/tests/specimens.rs::mutation_removing_state_wildcard_is_green"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-022", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-023", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::ratchet_refuses_new_debt_slack_and_undeclared"), known_bad: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::ratchet_refuses_new_debt_slack_and_undeclared"), known_good: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::kernel_own_call_site_is_allowlisted"), anti_vacuity: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::real_workspace_ledger_balances"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-024", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate_reachability.rs::positive_control_runs_real_hook_and_refuses_staged_shell"), known_bad: Some("crates/no-shell-gate/tests/gate_reachability.rs::removing_ci_trigger_flips_gate_to_unreachable"), known_good: Some("crates/no-shell-gate/tests/gate_reachability.rs::known_good_fixture_reports_ci_trigger_and_unwired_gate"), anti_vacuity: Some("crates/no-shell-gate/tests/gate_reachability.rs::empty_gate_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
+    // GATE-024's four pointers were STALE, not absent: every one of them named a function
+    // `gate_reachability.rs` renamed under 28839a9 ("classify trigger and read-state verdicts")
+    // and d3d6b48. Verified role-by-role at source before repointing, because a pointer update
+    // that does not preserve the ROLE is laundering:
+    //   referent      positive control  -> `portable_no_shell_positive_control_does_not_require_hooks`
+    //                 asserts report["positive_control"]["reachable"] == true (:218-233)
+    //   known_bad     removing the CI trigger flips the verdict; only the verdict WORD changed,
+    //                 UNREACHABLE -> INERT (:133-147)
+    //   known_good    the known-good fixture leg, renamed as it grew executor/document/control
+    //                 separation (:82-129)
+    //   anti_vacuity  empty set is an error, now pinned to the typed exit code (:151-160)
+    GateIdentifier { id: "GATE-024", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Test }, referent: Some("crates/no-shell-gate/tests/gate_reachability.rs::portable_no_shell_positive_control_does_not_require_hooks"), known_bad: Some("crates/no-shell-gate/tests/gate_reachability.rs::removing_ci_trigger_flips_gate_to_inert"), known_good: Some("crates/no-shell-gate/tests/gate_reachability.rs::known_good_fixture_separates_executors_documents_and_controls"), anti_vacuity: Some("crates/no-shell-gate/tests/gate_reachability.rs::empty_gate_set_is_typed_error_exit_two"), owner: None, dies_when: None },
 ];
 
 /// A workspace lane: one member crate, derived — NEVER hand-listed. A hand-listed
@@ -222,9 +237,27 @@ fn is_ignored_directory(path: &Path) -> bool {
         ".git" | ".beads" | ".ntm" | ".zestgraph" | "target"
             | ".orchestrator" | ".rch-tmp" | ".ee" | ".claude"
     )
-        // `.rch-target-<64-hex>` is generated per remote worker pool, so the
-        // suffix cannot be enumerated — match the prefix.
-        || name.starts_with(".rch-target-")
+        // `.rch-target-<pool>-<64-hex>` is generated per remote worker pool, so the suffix
+        // cannot be enumerated — match the prefix.
+        //
+        // ⛔ MEASURED 2026-09-11: THE HYPHEN IN `".rch-target-"` WAS A HOLE, and the same
+        // defect this function was written for came back through it. rch also uses a BARE
+        // `.rch-target/`, which `starts_with(".rch-target-")` cannot match, so the scan walked
+        // `.rch-target/debug/build/ompo-doctor-<hash>/out/adapters.rs` — a file a BUILD SCRIPT
+        // GENERATES, containing the adapter TABLE of crate names — and handed a phantom
+        // "production caller" to nine crates that have none:
+        //
+        //   crate-soundness-verify :15   extraction-roster :22   fleet-idle-monitor :26
+        //   m2-grading-lane :51          omp-inventory-map :56   refill-idle-panes :79
+        //   silent-success-census :83    worker-tag-gate :92     (+ tick-dispatch)
+        //
+        // THE SYMPTOM WAS NON-DETERMINISM, NOT A RED: `no_caller_at_all` was 4 names in one
+        // run and 13 in the next with no source change between them, because whether that
+        // directory exists depends on which target dir the worker used. It is absent on this
+        // Mac and absent in CI, so the phantom callers were invisible from both places a human
+        // looks — and CI's census (run 34607406545) disagreed with the lane's for exactly the
+        // nine crates above. A generated OUT_DIR artifact is not this tree's wiring.
+        || name.starts_with(".rch-target")
         || name.starts_with(".rch-cargo-cache")
 }
 
@@ -1741,12 +1774,29 @@ struct MetadataMember {
     cargo_callers: Vec<String>,
     has_bin: bool,
     has_lib: bool,
+    /// Bins this crate declares to `gate-runner` through `[package.metadata.gate].checks`,
+    /// kept only when the crate actually BUILDS the named bin. See `gate_check_executors`.
+    gate_check_bins: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReachabilityClass {
     CargoPathDependency,
     WiredByNonCargoEdge,
+    /// Invoked by `gate-runner --run`, which reads `[package.metadata.gate].checks` out of
+    /// `cargo metadata`'s passthrough (`gate-runner/src/lib.rs:896` `derive_checks`) and
+    /// executes each phase. The workflow fires that executor at
+    /// `.github/workflows/gate.yml:164`.
+    ///
+    /// THIS CLASS EXISTS BECAUSE THE TEXT SCAN STRUCTURALLY CANNOT SEE THAT TRIGGER. The
+    /// stanza names a BIN, never the crate, so a scan for the crate name returns zero and the
+    /// census reported `omp-inventory-map` UNWIRED in CI (run 34607406545) while
+    /// `gate-runner --run` was executing its check. That crate's advisory row was deleted on
+    /// 2026-09-11 for exactly this reason, recorded at `omp-orchestrator/src/lib.rs:489-494`:
+    /// *"reachable through its own `[package.metadata.gate]` stanza — a trigger class a
+    /// crate-level grep structurally cannot see"*. The ruling was made; only this census had
+    /// not learned it, which is a missing trigger class, not an exception.
+    WiredByGateMetadataCheck,
     NoCallerAtAll,
     LegitimatelyTerminal,
 }
@@ -1757,6 +1807,61 @@ struct ReachabilityRow {
     class: ReachabilityClass,
     cargo_callers: Vec<String>,
     non_cargo_caller: Option<CallerHit>,
+}
+
+/// Bins a package declares to `gate-runner` in `[package.metadata.gate].checks`, kept ONLY
+/// when the package actually builds the bin that would run.
+///
+/// # Why a declaration counts as wiring here, and what stops it being a free green
+///
+/// `gate-runner --run` reads this stanza from the same `cargo metadata` JSON this function
+/// reads (`gate-runner/src/lib.rs:896`, `derive_checks`) and executes every phase; the CI job
+/// fires that verb at `.github/workflows/gate.yml:164`. So the stanza is a real edge to a
+/// real executor — it is exactly as load-bearing as a `-p <crate>` line in a workflow, which
+/// this census has always counted.
+///
+/// The predicate is deliberately strict, because a stanza is text and text is cheap:
+///
+/// * an ABSENT or non-array `checks` yields nothing — silence is never wiring;
+/// * a table phase must name a `bin` THE PACKAGE BUILDS. A stanza naming a bin that does not
+///   exist cannot execute, and `gate-runner` would refuse it; counting it would be the
+///   declaration-instead-of-capability defect (`N043`, BUILT != WIRED) in one more surface;
+/// * a bare-argv phase runs the package's DEFAULT bin, so it counts only if the package has
+///   at least one bin target;
+/// * an empty argv, a table without `bin`, or a scalar phase yields nothing. `gate-runner`
+///   treats each of those as UNREADABLE rather than absent, and a census that scored them as
+///   wiring would disagree with the executor about the same bytes.
+///
+/// A crate cannot therefore buy this class with prose: it must ship a bin, name it, and give
+/// it argv that `gate-runner` will run.
+fn gate_check_executors(package: &Value, bin_names: &[String]) -> Vec<String> {
+    let Some(phases) = package
+        .get("metadata")
+        .and_then(|metadata| metadata.get("gate"))
+        .and_then(|gate| gate.get("checks"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut executors = Vec::new();
+    for phase in phases {
+        if let Some(argv) = phase.as_array() {
+            if argv.is_empty() || bin_names.is_empty() {
+                continue;
+            }
+            executors.push(bin_names[0].clone());
+        } else if let Some(table) = phase.as_object() {
+            let Some(bin) = table.get("bin").and_then(Value::as_str) else {
+                continue;
+            };
+            if bin_names.iter().any(|candidate| candidate == bin) {
+                executors.push(bin.to_owned());
+            }
+        }
+    }
+    executors.sort();
+    executors.dedup();
+    executors
 }
 
 fn metadata_members(root: &Path) -> Result<Vec<MetadataMember>, String> {
@@ -1795,15 +1900,22 @@ fn metadata_members(root: &Path) -> Result<Vec<MetadataMember>, String> {
         }
         let mut has_bin = false;
         let mut has_lib = false;
+        let mut bin_names = Vec::<String>::new();
         for target in package["targets"].as_array().into_iter().flatten() {
             for kind in target["kind"].as_array().into_iter().flatten() {
                 match kind.as_str() {
-                    Some("bin") => has_bin = true,
+                    Some("bin") => {
+                        has_bin = true;
+                        if let Some(bin) = target["name"].as_str() {
+                            bin_names.push(bin.to_owned());
+                        }
+                    }
                     Some("lib" | "proc-macro") => has_lib = true,
                     _ => {}
                 }
             }
         }
+        let gate_check_bins = gate_check_executors(package, &bin_names);
         for dependency in package["dependencies"].as_array().into_iter().flatten() {
             if dependency["kind"].as_str() == Some("dev") || dependency["path"].as_str().is_none() {
                 continue;
@@ -1822,6 +1934,7 @@ fn metadata_members(root: &Path) -> Result<Vec<MetadataMember>, String> {
             cargo_callers: Vec::new(),
             has_bin,
             has_lib,
+            gate_check_bins,
         });
     }
     let indexes: std::collections::BTreeMap<String, usize> = members
@@ -1902,6 +2015,17 @@ fn classify_member(
             non_cargo_caller: Some(hit),
         });
     }
+    // Checked AFTER the text scan on purpose: a crate with a source-visible caller should keep
+    // reporting that caller's file:line, which is the more actionable citation. This class is
+    // the fallback for the trigger the scan cannot see, never a replacement for it.
+    if !member.gate_check_bins.is_empty() {
+        return Ok(ReachabilityRow {
+            name: member.lane.name.clone(),
+            class: ReachabilityClass::WiredByGateMetadataCheck,
+            cargo_callers: Vec::new(),
+            non_cargo_caller: None,
+        });
+    }
     let class = if member.has_bin && !member.has_lib {
         ReachabilityClass::LegitimatelyTerminal
     } else {
@@ -1915,10 +2039,37 @@ fn classify_member(
     })
 }
 
+/// Refuse a member that has no caller at all and no named exception in EITHER allowance
+/// registry.
+///
+/// # Why two registries, and why reading only one was the defect
+///
+/// This repository declares "deliberately unwired, with a story" in two places:
+/// `ADVISORY_ALLOWANCE` (`omp-orchestrator/src/lib.rs:409`, two fields) and
+/// `UNWIRED_LANE_ALLOWANCE` (this file, FOUR fields — reason, owner, dies_when, all
+/// validated by `validate_allowance_rows`). `every_declared_lane_has_a_production_caller`
+/// already merges both and asserts the same property this function asserts.
+///
+/// Reading only the advisory registry made `fleet-idle-monitor` simultaneously ALLOWANCED for
+/// one leg and UNALLOWANCED for another, on the same measured fact, in the same file — the
+/// two-gates-one-list contradiction already recorded for `s1-coverage` at
+/// `omp-orchestrator/src/lib.rs:414-422`. The remedy belongs at the predicate that disagrees,
+/// not in the list: moving the row instead would push the live advisory count from 29 to 30
+/// against `ADVISORY_CEILING = 29`, and raising that ceiling is the amnesty this fleet
+/// refused on 2026-09-11.
+///
+/// THE OBJECTION, STATED RATHER THAN HIDDEN: the union is a larger tolerated set than the
+/// capped registry alone, so a row could in principle dodge the ceiling by landing in the
+/// uncapped list. Two things hold that shut, and the second is the reason this is safe to
+/// read as a tightening rather than a loosening: the uncapped list's rows pass a STRICTER
+/// validator, and `every_declared_lane_has_a_production_caller` REFUSES any row in it whose
+/// lane acquires a caller. The census also prints the split below, in the same line a reader
+/// checks the counts in, so growth in either registry is visible where the ceiling is read.
 fn enforce_reachability(
     members: &[MetadataMember],
     rows: &[ReachabilityRow],
     advisory: &std::collections::BTreeMap<String, String>,
+    declared_unwired: &std::collections::BTreeMap<String, String>,
 ) -> Result<(), String> {
     if members.is_empty() || rows.is_empty() {
         return Err("ERROR: reachability census has an empty member or row set".to_owned());
@@ -1943,13 +2094,16 @@ fn enforce_reachability(
     let unallowlisted: Vec<_> = rows
         .iter()
         .filter(|row| {
-            row.class == ReachabilityClass::NoCallerAtAll && !advisory.contains_key(&row.name)
+            row.class == ReachabilityClass::NoCallerAtAll
+                && !advisory.contains_key(&row.name)
+                && !declared_unwired.contains_key(&row.name)
         })
         .map(|row| row.name.clone())
         .collect();
     if !unallowlisted.is_empty() {
         return Err(format!(
-            "UNWIRED CRATE: no caller at all and absent from ADVISORY_ALLOWANCE {unallowlisted:?}"
+            "UNWIRED CRATE: no caller at all and absent from ADVISORY_ALLOWANCE and \
+             UNWIRED_LANE_ALLOWANCE {unallowlisted:?}"
         ));
     }
     Ok(())
@@ -1959,6 +2113,13 @@ fn run_reachability_census(root: &Path) -> Result<Vec<ReachabilityRow>, String> 
     let members = metadata_members(root)?;
     let sources = collect_sources(root)?;
     let advisory = advisory_allowance(root)?;
+    // The second registry is validated BEFORE it is trusted: a four-field row with an empty
+    // owner or dies_when must never buy an exemption.
+    validate_allowance_rows(UNWIRED_LANE_ALLOWANCE, "reachability-declared-unwired")?;
+    let declared_unwired: std::collections::BTreeMap<String, String> = UNWIRED_LANE_ALLOWANCE
+        .iter()
+        .map(|(lane, reason, _, _)| ((*lane).to_owned(), (*reason).to_owned()))
+        .collect();
     let rows: Vec<_> = members
         .iter()
         .map(|member| classify_member(member, &sources, STRIP_TEST_CODE))
@@ -1973,13 +2134,18 @@ fn run_reachability_census(root: &Path) -> Result<Vec<ReachabilityRow>, String> 
         .filter(|row| row.class == ReachabilityClass::NoCallerAtAll)
         .map(|row| row.name.as_str())
         .collect();
-    eprintln!("REACHABILITY_PRECHECK no_caller_names={pre_no_caller:?} advisory_stale_wired={stale_wired:?}");
-    enforce_reachability(&members, &rows, &advisory)?;
+    eprintln!(
+        "REACHABILITY_PRECHECK no_caller_names={pre_no_caller:?} advisory_stale_wired={stale_wired:?} advisory_rows={} declared_unwired_rows={}",
+        advisory.len(),
+        declared_unwired.len()
+    );
+    enforce_reachability(&members, &rows, &advisory, &declared_unwired)?;
     let mut counts = std::collections::BTreeMap::<&'static str, usize>::new();
     for row in &rows {
         let label = match row.class {
             ReachabilityClass::CargoPathDependency => "cargo_path_dependency",
             ReachabilityClass::WiredByNonCargoEdge => "wired_by_non_cargo_edge",
+            ReachabilityClass::WiredByGateMetadataCheck => "wired_by_gate_metadata_check",
             ReachabilityClass::NoCallerAtAll => "no_caller_at_all",
             ReachabilityClass::LegitimatelyTerminal => "legitimately_terminal",
         };
@@ -1990,11 +2156,17 @@ fn run_reachability_census(root: &Path) -> Result<Vec<ReachabilityRow>, String> 
         .filter(|row| row.class == ReachabilityClass::NoCallerAtAll)
         .map(|row| row.name.as_str())
         .collect();
+    let gate_metadata: Vec<_> = rows
+        .iter()
+        .filter(|row| row.class == ReachabilityClass::WiredByGateMetadataCheck)
+        .map(|row| row.name.as_str())
+        .collect();
     eprintln!(
-        "CRATE_REACHABILITY_CENSUS members={} cargo_path_dependency={} wired_by_non_cargo_edge={} no_caller_at_all={} legitimately_terminal={} no_caller_names={no_caller:?}",
+        "CRATE_REACHABILITY_CENSUS members={} cargo_path_dependency={} wired_by_non_cargo_edge={} wired_by_gate_metadata_check={} no_caller_at_all={} legitimately_terminal={} no_caller_names={no_caller:?} gate_metadata_names={gate_metadata:?}",
         rows.len(),
         counts.get("cargo_path_dependency").copied().unwrap_or_default(),
         counts.get("wired_by_non_cargo_edge").copied().unwrap_or_default(),
+        counts.get("wired_by_gate_metadata_check").copied().unwrap_or_default(),
         counts.get("no_caller_at_all").copied().unwrap_or_default(),
         counts.get("legitimately_terminal").copied().unwrap_or_default(),
     );
@@ -2028,15 +2200,27 @@ fn planted_unwired_member_is_red_then_green() {
         cargo_callers: Vec::new(),
         has_bin: true,
         has_lib: true,
+        gate_check_bins: Vec::new(),
     };
     let sources = [rust_source("src/other.rs", "fn run() {}\n")];
     let row = classify_member(&member, &sources, STRIP_TEST_CODE).expect("fixture scan");
     assert_eq!(row.class, ReachabilityClass::NoCallerAtAll);
     let empty = std::collections::BTreeMap::new();
-    assert!(enforce_reachability(&[member.clone()], &[row.clone()], &empty).is_err());
+    assert!(
+        enforce_reachability(&[member.clone()], &[row.clone()], &empty, &empty).is_err(),
+        "KNOWN-BAD: unwired and named in NEITHER registry must refuse"
+    );
     let mut allowance = std::collections::BTreeMap::new();
     allowance.insert(member.lane.name.clone(), "planted known-bad row".to_owned());
-    assert!(enforce_reachability(&[member], &[row], &allowance).is_ok());
+    assert!(
+        enforce_reachability(&[member.clone()], &[row.clone()], &allowance, &empty).is_ok(),
+        "a row in the advisory registry is a named exception"
+    );
+    assert!(
+        enforce_reachability(&[member], &[row], &empty, &allowance).is_ok(),
+        "and so is a row in the declared-unwired registry — the two registries must not \
+         disagree about the same measured fact"
+    );
 }
 
 #[test]
@@ -2050,10 +2234,153 @@ fn reachability_census_rejects_empty_inputs() {
         cargo_callers: Vec::new(),
         has_bin: true,
         has_lib: true,
+        gate_check_bins: Vec::new(),
     };
     assert!(classify_member(&member, &[], STRIP_TEST_CODE).is_err());
-    assert!(enforce_reachability(&[], &[], &std::collections::BTreeMap::new()).is_err());
+    let empty = std::collections::BTreeMap::new();
+    assert!(enforce_reachability(&[], &[], &empty, &empty).is_err());
 }
+
+/// The scan must never treat a GENERATED tree as this repository's wiring.
+///
+/// This leg exists because the class recurred: `.rch-tmp/` broke the positive control on
+/// 2026-09-01, the remedy enumerated `".rch-target-"` WITH its hyphen, and the bare
+/// `.rch-target/` walked straight through that prefix on 2026-09-11 and invented callers for
+/// nine crates out of a build script's `OUT_DIR`. Both spellings are pinned here so the next
+/// directory rch mints cannot reopen it silently.
+#[test]
+fn generated_and_vendored_directories_are_never_scanned() {
+    for ignored in [
+        ".rch-target",
+        ".rch-target-contabo-2-pool-9fce9d67",
+        ".rch-tmp",
+        ".rch-cargo-cache-0123",
+        "target",
+        ".git",
+        ".beads",
+    ] {
+        assert!(
+            is_ignored_directory(Path::new(ignored)),
+            "{ignored} is generated or vendored and must not supply callers"
+        );
+        assert!(
+            is_ignored_directory(&PathBuf::from("/repo/nested").join(ignored)),
+            "{ignored} must be ignored wherever it is nested, not only at the root"
+        );
+    }
+    // ANTI-VACUITY: a predicate that ignores everything measures nothing. The directories the
+    // census actually depends on must still be walked.
+    for scanned in ["crates", ".github", "src", "workflows"] {
+        assert!(
+            !is_ignored_directory(Path::new(scanned)),
+            "{scanned} carries real callers and must stay in the scan"
+        );
+    }
+}
+
+/// The gate-metadata trigger class, proven at the predicate rather than on the live tree: a
+/// stanza is only wiring when `gate-runner` could actually run the bin it names.
+#[test]
+fn a_gate_metadata_check_counts_only_when_the_named_bin_exists() {
+    let table = serde_json::json!({
+        "metadata": { "gate": { "checks": [ { "bin": "omp-inventory-map", "args": ["--audit"] } ] } }
+    });
+    assert_eq!(
+        gate_check_executors(&table, &["omp-inventory-map".to_owned()]),
+        vec!["omp-inventory-map".to_owned()],
+        "KNOWN-GOOD: a declared bin the crate builds is a real executor edge"
+    );
+    assert!(
+        gate_check_executors(&table, &["some-other-bin".to_owned()]).is_empty(),
+        "KNOWN-BAD: a stanza naming a bin the crate does not build cannot execute, so it must \
+         not buy the wired class — declaration is not capability"
+    );
+    assert!(
+        gate_check_executors(&table, &[]).is_empty(),
+        "KNOWN-BAD: a crate with no bin targets at all has nothing for the runner to spawn"
+    );
+}
+
+#[test]
+fn unreadable_or_absent_gate_stanzas_are_not_wiring() {
+    let bins = ["gate-bin".to_owned()];
+    for (label, package) in [
+        ("absent", serde_json::json!({})),
+        ("no-gate-key", serde_json::json!({ "metadata": { "other": 1 } })),
+        (
+            "checks-not-an-array",
+            serde_json::json!({ "metadata": { "gate": { "checks": "gate-bin --run" } } }),
+        ),
+        (
+            "bare-empty-argv",
+            serde_json::json!({ "metadata": { "gate": { "checks": [[]] } } }),
+        ),
+        (
+            "table-without-bin",
+            serde_json::json!({ "metadata": { "gate": { "checks": [{ "args": ["--run"] }] } } }),
+        ),
+        (
+            "scalar-phase",
+            serde_json::json!({ "metadata": { "gate": { "checks": ["gate-bin"] } } }),
+        ),
+    ] {
+        assert!(
+            gate_check_executors(&package, &bins).is_empty(),
+            "{label} must yield no executor: gate-runner treats it as UNREADABLE, and a census \
+             that scored it as wiring would disagree with the executor about the same bytes"
+        );
+    }
+    // ANTI-VACUITY: the same reader on a well-formed bare-argv phase DOES resolve the default
+    // bin, so the emptiness above is the shape being refused and not a broken reader.
+    assert_eq!(
+        gate_check_executors(
+            &serde_json::json!({ "metadata": { "gate": { "checks": [["--run"]] } } }),
+            &bins
+        ),
+        vec!["gate-bin".to_owned()]
+    );
+}
+
+#[test]
+fn a_gate_metadata_member_is_wired_without_any_source_mention() {
+    let member = MetadataMember {
+        lane: Lane {
+            name: "stanza-only-member".to_owned(),
+            needle_hyphen: "stanza-only-member".to_owned(),
+            needle_underscore: "stanza_only_member".to_owned(),
+        },
+        cargo_callers: Vec::new(),
+        has_bin: true,
+        has_lib: true,
+        gate_check_bins: vec!["stanza-only-bin".to_owned()],
+    };
+    // No source in the scan set mentions the crate — the condition under which the text scan
+    // reported `omp-inventory-map` UNWIRED in CI while `gate-runner --run` was running it.
+    let sources = [rust_source("src/other.rs", "fn run() {}\n")];
+    let row = classify_member(&member, &sources, STRIP_TEST_CODE).expect("fixture scan");
+    assert_eq!(row.class, ReachabilityClass::WiredByGateMetadataCheck);
+
+    let mut stripped = member.clone();
+    stripped.gate_check_bins.clear();
+    let red = classify_member(&stripped, &sources, STRIP_TEST_CODE).expect("fixture scan");
+    assert_eq!(
+        red.class,
+        ReachabilityClass::NoCallerAtAll,
+        "removing the stanza must flip the same member back to unwired — the class is carried \
+         by the declaration, not by the member's existence"
+    );
+    assert!(
+        enforce_reachability(
+            &[stripped],
+            &[red],
+            &std::collections::BTreeMap::new(),
+            &std::collections::BTreeMap::new()
+        )
+        .is_err(),
+        "and that unwired row must still fail the census"
+    );
+}
+
 
 #[test]
 fn allowance_rows_require_owner_and_dies_when() {
