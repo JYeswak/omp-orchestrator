@@ -46,10 +46,36 @@ fn fresh_git_tree(test: &str) -> PathBuf {
         r#"{"id":"h1","prediction":"fixture","falsifier":"missing section","evidence_scope":"docs/plan","recorded_commit":"0123456789abcdef0123456789abcdef01234567","observed_result":null}"#.to_owned() + "\n",
     )
     .expect("write fixture hypotheses");
+    // A throwaway tree must be able to ANSWER the workspace-wide gates, not be exempted from
+    // them. Two rows refused every fixture here because the tree could not answer at all:
+    //   hook_freshness      -- no .git/hooks/pre-commit to stat
+    //   project-agent-gate  -- no .omp/agents/omp-grader.md to validate
+    // Both stay ARMED: the grader definition is the repository's real one, embedded at compile
+    // time, so a grader that stops satisfying its contract reddens these fixtures too.
+    fs::create_dir_all(dir.join(".omp/agents")).expect("create fixture agent dir");
+    fs::write(
+        dir.join(no_shell_gate::project_agent::OMP_GRADER_PATH),
+        include_str!("../../../.omp/agents/omp-grader.md"),
+    )
+    .expect("write fixture grader agent");
+    // The citation gate is restrictive by design: an unreadable mirror is a refusal, never a
+    // certified-clean deletion. A tree with no mirror at all cannot answer it, so the fixture
+    // carries one committed closed row that cites nothing.
+    fs::create_dir_all(dir.join(".beads")).expect("create fixture bead mirror dir");
+    fs::write(
+        dir.join(".beads/issues.jsonl"),
+        "{\"id\":\"fixture-closed\",\"status\":\"closed\",\"close_reason\":\"DONE: fixture baseline worker=local\"}\n",
+    )
+    .expect("write fixture bead mirror");
     run_git(&dir, &["init", "-q"], "git init");
+    // The fixture carries no hook SOURCES, so freshness is not applicable here; the file only
+    // lets the gate reach that determination instead of refusing an unstattable path.
+    fs::create_dir_all(dir.join(".git/hooks")).expect("create fixture hook dir");
+    fs::write(dir.join(".git/hooks/pre-commit"), "fixture hook placeholder\n")
+        .expect("write fixture hook");
     run_git(
         &dir,
-        &["add", "--", "crates/example/src/lib.rs", "docs/plan/HYPOTHESES.jsonl"],
+        &["add", "--", "crates/example/src/lib.rs", "docs/plan/HYPOTHESES.jsonl", ".beads/issues.jsonl"],
         "stage clean baseline",
     );
     run_git(
@@ -183,13 +209,17 @@ fn one_clean_staged_file_is_clean() {
     assert_no_ambiguous_nested_outcomes(&error);
 }
 /// KNOWN-GOOD: the extended vocabulary is accepted when the mirror is staged.
+///
+/// The rows also carry worker authority, which the newly-closed policy (059e08e) requires on
+/// top of the prefix. This leg still fires on a bad prefix -- swap either token for prose and
+/// it reddens -- it just stops asserting that an unattributed close is acceptable.
 #[test]
 fn staged_close_reason_policy_accepts_extended_prefixes() {
     let dir = fresh_git_tree("close-prefix-good");
     stage_close_mirror(
         &dir,
-        r#"{"id":"good-premise","status":"closed","close_reason":"PREMISE-FALSE: the premise was disproven"}
-{"id":"good-fixed","status":"closed","close_reason":"ALREADY-FIXED: landed in 0123456"}
+        r#"{"id":"good-premise","status":"closed","close_reason":"PREMISE-FALSE: the premise was disproven worker=local"}
+{"id":"good-fixed","status":"closed","close_reason":"ALREADY-FIXED: landed in 0123456 worker=contabo-4"}
 "#,
     );
     let output = run_gate(&dir);
