@@ -24,3 +24,20 @@ unsafe_code = "forbid"
 
 [build-dependencies]
 build-stamp = { path = "../build-stamp" }
+
+[package.metadata.gate]
+# omp-orchestrator-ky6yx: this crate's OWN check invocation, so `gate-runner` needs no edit
+# when a gate is added. `--selftest` is chosen over `status`/`composite` deliberately: those
+# grade the LIVE fleet, so their verdict flaps with pane state and a gate whose colour depends
+# on the weather trains operators to ignore it. `--selftest` runs the eleven geometric and
+# mutation assertions and is deterministic.
+#
+# VERIFIED BEFORE WIRING, because wiring a failing gate is worse than leaving one inert:
+#   rch exec -- cargo run --quiet -p fleet-composite -- --selftest
+#   Remote command finished: exit=0        (rch's own rc=102 is the darwin artifact-triple
+#                                           mismatch, NOT the program's verdict -- read the
+#                                           remote exit, never the wrapper's)
+# and the crate's own suite is green at 4+7+11 passed after 60d7260 made its temp fixture
+# hermetic. Until that commit it failed its own tests, which is why this stanza was NOT added
+# earlier -- the same refusal recorded for wired-but-inert-guard.
+checks = [["--selftest"]]
