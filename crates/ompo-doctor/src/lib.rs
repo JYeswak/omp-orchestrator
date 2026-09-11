@@ -276,15 +276,31 @@ pub fn answered(decision: &ProbeDecision) -> bool {
         && decision.version.as_ref().is_some_and(|value| !value.is_empty())
 }
 
+/// ONE authority for "a probe set may not be empty".
+///
+/// Extracted on a grading finding (S1L4ObsWriters on 9808d57): collapsing the
+/// two `answered` copies moved the guard's PROTECTION without moving the
+/// GUARD. `doctor_exit_code` refuses an empty set; the inception scope's own
+/// `.all(status == "OK")` is VACUOUSLY TRUE on zero decisions, so it would
+/// report exit 0 / status OK with no probes at all. That branch is unreachable
+/// today — `run_doctor_inception` pushes two decisions unconditionally — but
+/// NOTHING ASSERTED THAT INVARIANT, and an empty-set guard is not a signal
+/// clause, which is why it belongs in both places while the two-signal clauses
+/// deliberately do not.
+pub fn refuse_empty_probe_set(decisions: &[ProbeDecision]) -> Result<(), DoctorError> {
+    if decisions.is_empty() {
+        return Err(DoctorError::EmptyProbeSet);
+    }
+    Ok(())
+}
+
 /// Map the completed probe set onto the doctor's two subject-result bands.
 ///
 /// 0 means every probe established both independent signals. 1 means the doctor ran but at
 /// least one subject was absent, unprobeable, stale, or otherwise not OK. An empty set is an
 /// instrument error, never a healthy result.
 pub fn doctor_exit_code(decisions: &[ProbeDecision]) -> Result<u8, DoctorError> {
-    if decisions.is_empty() {
-        return Err(DoctorError::EmptyProbeSet);
-    }
+    refuse_empty_probe_set(decisions)?;
     Ok(if decisions.iter().all(answered) {
         0
     } else {
@@ -740,6 +756,14 @@ fn run_doctor_inception(repo: &Path) -> Result<DoctorSummary, DoctorError> {
             version: None,
         },
     });
+    // The two-signal clauses deliberately do NOT apply here — the inception
+    // scope has no version signal, so `answered` would report every decision
+    // unanswered. The EMPTY-SET refusal is not a signal clause, and without it
+    // `.all()` is vacuously true: zero decisions would read exit 0 / status OK
+    // with no probes at all. Unreachable today (two unconditional pushes
+    // above), so this guard exists to make the invariant ASSERTED rather than
+    // merely true.
+    refuse_empty_probe_set(&decisions)?;
     let exit_code = if decisions.iter().all(|decision| decision.status == "OK") { 0 } else { 1 };
     let status = if exit_code == 0 { "OK" } else { "DEGRADED" };
     let remediation = remediation_for(&decisions);
@@ -1000,6 +1024,42 @@ mod metric_tests {
         assert_eq!(metric.verdict, "ERROR");
         assert_eq!(metric.reason_code, "L1_METRIC_NO_DECLARED_PROBES");
         assert_eq!(metric.ratio, None);
+    }
+
+    /// ABSOLUTE, not a conformance pin: an empty probe set is refused, and it
+    /// is refused by ONE authority that both exit-code paths call. Written on
+    /// a grading finding — the `answered` collapse moved the guard's
+    /// protection without moving the guard, leaving the inception scope's
+    /// `.all()` vacuously true on zero decisions.
+    #[test]
+    fn an_empty_probe_set_is_refused_by_one_shared_authority() {
+        let error = refuse_empty_probe_set(&[]).expect_err("empty is an instrument error");
+        assert!(
+            error.to_string().starts_with("L1_DOCTOR_EMPTY_PROBE_SET"),
+            "error={error}"
+        );
+        // OVER-STRICTNESS CONTROL: a non-empty set passes, so the guard is not
+        // simply refusing everything.
+        refuse_empty_probe_set(&all_answering()).expect("a populated set is admissible");
+        // And the exit-code path routes through it rather than re-implementing
+        // the check, so the two cannot disagree about what "empty" means.
+        let refused = doctor_exit_code(&[]).expect_err("exit code refuses an empty set");
+        assert_eq!(refused.to_string(), error.to_string());
+    }
+
+    /// The INVARIANT that keeps the inception scope's vacuous-true branch
+    /// unreachable, asserted rather than left to a reader of two pushes: that
+    /// scope always reports at least the control-file and inception-artifact
+    /// decisions.
+    #[test]
+    fn the_inception_scope_never_reports_an_empty_probe_set() {
+        let dir = tempfile::tempdir().expect("fixture repo");
+        let summary = run_doctor(dir.path(), "inception").expect("inception scope");
+        assert!(
+            summary.probe_count >= 2,
+            "the inception scope must never report an empty probe set, got {}",
+            summary.probe_count
+        );
     }
 
     /// CONFORMANCE, the pin the collapse alone cannot give: the EXIT CODE and
