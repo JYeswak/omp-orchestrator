@@ -17,8 +17,10 @@
 //! It catches what the structural pin cannot — a re-add whose `InputManifest::new(` call has been
 //! moved OUT of the arm, e.g.
 //! `Err(error) if revision == "HEAD" && git_unavailable(&error) => return Ok(fabricate(revision)),`
-//! Measured 2026-09-11 on the rch worker: with that helper form in place the structural pin passes
-//! (2 passed, exit 0) while the defect is fully live. Neither pin is sufficient alone; keep both.
+//! Measured 2026-09-11 on contabo-4 with that helper form in place: `2 passed; 1 failed` — the
+//! structural pin GREEN, this test RED — while the defect is fully live (the CLI exits 0 and lists
+//! `.git/s1_cov.py` in both `tree` and `index`). The run itself exits 101 because this test fails;
+//! the structural pin's own green is the point. Neither pin is sufficient alone; keep both.
 //!
 //! # ⛔ THE IMPOSSIBILITY CLAIM IS TRUE ONLY OF `--mode tree`, WHICH IS THE DEFAULT
 //!
