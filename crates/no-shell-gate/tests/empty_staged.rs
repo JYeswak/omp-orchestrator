@@ -268,26 +268,27 @@ fn staged_close_reason_policy_refuses_prose_and_empty_reasons() {
     fs::remove_dir_all(dir).expect("remove close prefix bad fixture");
 }
 
-/// ANTI-VACUITY: an unreadable or record-free mirror cannot pass as a clean scan.
+/// ANTI-VACUITY: an unreadable or record-free STAGED mirror cannot pass as a clean scan.
+///
+/// The unreadable arm stages a malformed blob rather than deleting the worktree file. Deleting
+/// the worktree file stopped being a refusal when the reader moved from the worktree to the
+/// INDEX (249hz) -- and it never should have been one: the commit is made of the index, so a
+/// deleted worktree copy of a correctly staged mirror is a clean commit. The regression below
+/// pins that direction; this leg pins the direction where the index itself cannot be read.
 #[test]
 fn staged_close_reason_policy_fails_closed_for_missing_or_record_free_mirror() {
-    let missing = fresh_git_tree("close-prefix-missing");
-    stage_close_mirror(
-        &missing,
-        r#"{"id":"missing-at-read","status":"closed","close_reason":"DONE: staged first"}
-"#,
-    );
-    fs::remove_file(missing.join(".beads/issues.jsonl")).expect("remove mirror after staging");
+    let missing = fresh_git_tree("close-prefix-unreadable");
+    stage_close_mirror(&missing, "{not json at all\n");
     let missing_output = run_gate(&missing);
     let missing_error = stderr(&missing_output);
-    assert_eq!(missing_output.status.code(), Some(1), "missing mirror must refuse: {missing_error}");
+    assert_eq!(missing_output.status.code(), Some(1), "unreadable mirror must refuse: {missing_error}");
     assert!(
         missing_error.contains("close-reason-policy: state=ERROR")
             && missing_error.contains("PRE_DELETE_BEADS_UNREADABLE")
             && missing_error.contains("closed_beads=0"),
-        "missing mirror refusal must name unreadability and zero scanned rows: {missing_error}"
+        "unreadable mirror refusal must name unreadability and zero scanned rows: {missing_error}"
     );
-    fs::remove_dir_all(missing).expect("remove missing mirror fixture");
+    fs::remove_dir_all(missing).expect("remove unreadable mirror fixture");
 
     let record_free = fresh_git_tree("close-prefix-record-free");
     stage_close_mirror(
@@ -309,6 +310,40 @@ fn staged_close_reason_policy_fails_closed_for_missing_or_record_free_mirror() {
         "record-free refusal must remain distinct from a valid zero-conflict scan: {record_free_error}"
     );
     fs::remove_dir_all(record_free).expect("remove record-free mirror fixture");
+}
+
+/// FIRES-ON-KNOWN-BAD (open P0 omp-orchestrator-249hz): the gate reads the INDEX.
+///
+/// GradeCloseReason's repro against 6d9a50c: a violating row in the staged blob and a
+/// conforming row in the worktree scanned `state=CLEAN conflicts=0`, so the violating row
+/// committed behind a green gate. A worktree reader is not merely imprecise here, it is a
+/// FALSE GREEN, and a fooled certificate is worse than no certificate.
+#[test]
+fn staged_close_reason_policy_reads_the_index_not_the_worktree() {
+    let dir = fresh_git_tree("close-prefix-index-vs-worktree");
+    stage_close_mirror(
+        &dir,
+        r#"{"id":"sneaky","status":"closed","close_reason":"just finished it, felt right"}
+"#,
+    );
+    // Staged bad, worktree good: only an index reader can still see the violation.
+    fs::write(
+        dir.join(".beads/issues.jsonl"),
+        "{\"id\":\"sneaky\",\"status\":\"closed\",\"close_reason\":\"DONE: sneak worker=local\"}\n",
+    )
+    .expect("overwrite worktree mirror after staging");
+
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+    assert_eq!(output.status.code(), Some(1), "the staged violation must refuse: {error}");
+    assert_eq!(top_level_outcome(&error), "VIOLATION:", "{error}");
+    assert!(
+        error.contains("close-reason-policy: state=REFUSED")
+            && error.contains("sneaky")
+            && error.contains("CLOSE_REASON_POLICY_REFUSED leading=just"),
+        "the refusal must name the STAGED row, proving the index was the subject: {error}"
+    );
+    fs::remove_dir_all(dir).expect("remove index-vs-worktree fixture");
 }
 
 /// KNOWN-BAD: one staged forbidden-extension file reports VIOLATION, not a

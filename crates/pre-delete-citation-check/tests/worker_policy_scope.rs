@@ -52,10 +52,17 @@ fn a_mirror_change_that_closes_nothing_passes_with_legacy_rows() {
     assert_eq!(report.legacy_unrecoverable, vec!["legacy".to_owned()]);
 }
 
+/// The LOCAL worker conjunct, isolated from ack-spine's own rule.
+///
+/// The old fixture said "DONE: cargo test passed", which trips ack-spine's CargoWorkerMissing
+/// branch (it fires only when the reason carries a cargo figure), so the leg passed under
+/// EITHER rule and proved neither -- GradeCloseReason showed `has_worker_attribution` could be
+/// mutated to always-true with every suite still green. A reason with NO cargo figure can only
+/// be refused by the local conjunct, so this fixture measures exactly one thing.
 #[test]
 fn a_new_close_without_worker_authority_is_a_named_violation() {
     let head = row("open", "open", "");
-    let staged = [bead("bad", "DONE: cargo test passed")];
+    let staged = [bead("bad", "DONE: landed the fix")];
     let report =
         check_staged_close_reason_policy(Some(&head), &staged).expect("both inputs are readable");
 
@@ -67,6 +74,14 @@ fn a_new_close_without_worker_authority_is_a_named_violation() {
         report.violations[0].reason.contains("CLOSE_REASON_WORKER_MISSING"),
         "{report:?}"
     );
+
+    // The same reason WITH worker authority is the positive control: if the conjunct were
+    // mutated to always-true the leg above goes green, and if it were always-false this one does.
+    let good = [bead("good", "DONE: landed the fix worker=contabo-1")];
+    let control =
+        check_staged_close_reason_policy(Some(&head), &good).expect("both inputs are readable");
+    assert_eq!(control.verified, 1, "{control:?}");
+    assert!(control.violations.is_empty(), "{control:?}");
 }
 
 #[test]

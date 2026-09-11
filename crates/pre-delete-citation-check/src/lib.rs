@@ -402,8 +402,10 @@ pub struct StagedCloseReasonReport {
 /// Check the staged mirror's closed rows against the canonical close-reason policy.
 ///
 /// DETECTION, NOT PREVENTION. `br close` stores arbitrary reasons -- ack-spine names its own
-/// bypass at `crates/ack-spine/src/close_reason.rs:106-109` -- so a bad row is caught on the
-/// NEXT commit that stages the mirror, never at close time.
+/// bypass at `crates/ack-spine/src/close_reason.rs:34-37` ("the installed br accepts and
+/// stores arbitrary close-reason strings; it is not the validator") and again at `:123-124`
+/// -- so a bad row is caught on the NEXT commit that stages the mirror, never at close time.
+/// The caller must read that mirror from the INDEX; a worktree read is a false green (249hz).
 ///
 /// TWO ABSENCES ARE NOT ONE. `head_mirror == None` means the mirror is absent from HEAD (a
 /// first commit that ADDS it is legitimate, so the baseline is empty). A HEAD mirror that

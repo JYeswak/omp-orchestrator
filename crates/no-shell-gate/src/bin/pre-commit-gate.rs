@@ -946,18 +946,40 @@ fn validate_staged_close_reason_policy(
         None
     };
 
-    // RESIDUAL, stated: the mirror is read from the worktree, not from the index, so a mirror
-    // staged and then edited or removed before commit is reported as unreadable rather than
-    // silently scanned from the index blob. Failing closed there is the intended direction.
-    let staged_closed = match pre_delete_citation_check::read_closed_beads_from_mirror(repo_root) {
-        Ok(rows) => rows,
+    // THE INDEX IS THE SUBJECT, NEVER THE WORKTREE (open P0 omp-orchestrator-249hz, fourth
+    // instance -- found by GradeCloseReason against 6d9a50c, which read the worktree here).
+    // A worktree read is a FALSE GREEN in the direction that matters: index row
+    // `"close_reason":"just finished it, felt right"` with a conforming worktree row scanned
+    // CLEAN and the violating row committed. The commit is made of the index, so the index is
+    // what a commit-path gate must read; a fooled certificate is worse than no certificate.
+    let staged_bytes = match staged_blob(repo_root, MIRROR) {
+        Ok(bytes) => bytes,
         Err(error) => {
             refusals.push(format!(
-                "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 staged_mirror={MIRROR} {error} {detection_scope}"
+                "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 staged_mirror={MIRROR} PRE_DELETE_BEADS_UNREADABLE reason=staged_blob_unreadable detail={error} {detection_scope}"
             ));
             return;
         }
     };
+    let staged_text = match String::from_utf8(staged_bytes) {
+        Ok(text) => text,
+        Err(error) => {
+            refusals.push(format!(
+                "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 staged_mirror={MIRROR} PRE_DELETE_BEADS_UNREADABLE reason=not_utf8 detail={error} {detection_scope}"
+            ));
+            return;
+        }
+    };
+    let staged_closed =
+        match pre_delete_citation_check::parse_closed_beads_jsonl_checked(&staged_text) {
+            Ok(rows) => rows,
+            Err(error) => {
+                refusals.push(format!(
+                    "close-reason-policy: state=ERROR closed_beads=0 verified=0 conflicts=0 staged_mirror={MIRROR} {error} {detection_scope}"
+                ));
+                return;
+            }
+        };
     let report = match pre_delete_citation_check::check_staged_close_reason_policy(
         head_mirror.as_deref(),
         &staged_closed,
