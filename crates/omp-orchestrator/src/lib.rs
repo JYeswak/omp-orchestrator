@@ -1411,12 +1411,21 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                         "declared in gate.yml but no git remote: the workflow can never execute"
                             .into(),
                 }
+            } else if declares_gate_check(repo_root, gate) {
+                // THIRD ARM (udtqk): the crate's own [package.metadata.gate]
+                // stanza, discovered by gate-runner. Placed LAST on purpose:
+                // it can only turn an Unreachable row Reachable, never
+                // re-attribute a row an earlier arm already explained. Uses
+                // the same detector and trigger string as crate_reachability.
+                GateReachability::Reachable {
+                    trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                        .into(),
+                }
             } else {
                 GateReachability::Unreachable {
                     reason: "not invoked by the installed hook and not declared in gate.yml".into(),
                 }
             },
-            // CURATED, therefore BLOCKING: this row was triaged before `leht`.
             disposition: CensusDisposition::Blocking,
         });
     }
