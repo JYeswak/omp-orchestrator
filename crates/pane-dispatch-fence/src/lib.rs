@@ -13,14 +13,20 @@
 //! NO-CLAIM: the lease refuses stale effects; it does not prove the receiver is
 //! alive, does not prove delivery, and does not survive an ntm pane renumbering
 //! the observer never saw.
-//! Caller: `crates/omp-orchestrator/src/main.rs` `admit_immediately_before_send`,
+//! Caller: `crates/omp-orchestrator/src/resident.rs` `admit_immediately_before_send`,
 //! immediately before tmux/ntm send. Not at enqueue, not from a cached snapshot.
 
 use std::num::NonZeroU64;
-use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
-/// Wired at `crates/omp-orchestrator/src/main.rs` `admit_immediately_before_send`.
-pub const CALLER: &str = "crates/omp-orchestrator/src/main.rs:admit_immediately_before_send";
+/// Wired at `crates/omp-orchestrator/src/resident.rs` `admit_immediately_before_send`.
+///
+/// omp-orchestrator-nar5l: this named `src/main.rs` until 2026-09-11, a path absent from TREE,
+/// INDEX and WORKTREE -- the crate is lib-plus-`src/bin/`. The claim was TRUE and only the
+/// address was dead: `admit_immediately_before_send` is defined at `resident.rs:3237` and called
+/// at `:2841` and `:3548`. Repointed at the file that carries the behaviour, never at `lib.rs`,
+/// which would resolve without carrying it.
+pub const CALLER: &str = "crates/omp-orchestrator/src/resident.rs:admit_immediately_before_send";
 
 /// Measured 2026-09-06. Age is recorded so a grader can see it was not used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,9 +95,7 @@ impl IncarnationMint {
     #[must_use]
     pub fn mint(&self) -> PaneIncarnation {
         let n = self.next.fetch_add(1, Ordering::SeqCst);
-        PaneIncarnation(
-            NonZeroU64::new(n).expect("incarnation counter overflowed to zero"),
-        )
+        PaneIncarnation(NonZeroU64::new(n).expect("incarnation counter overflowed to zero"))
     }
 }
 
@@ -130,8 +134,14 @@ impl Lease {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeaseRefusal {
-    NotMonotone { from: Lease, to: Lease },
-    CasMismatch { expected: Lease, observed: Option<Lease> },
+    NotMonotone {
+        from: Lease,
+        to: Lease,
+    },
+    CasMismatch {
+        expected: Lease,
+        observed: Option<Lease>,
+    },
 }
 
 /// One occupancy of `{session, pane}`. The lease is the only mutable field.
@@ -315,7 +325,9 @@ mod tests {
 
     impl SendStub {
         fn new() -> Self {
-            Self { calls: Cell::new(0) }
+            Self {
+                calls: Cell::new(0),
+            }
         }
 
         fn send_if_admitted(
@@ -374,8 +386,7 @@ mod tests {
 
     #[test]
     fn known_good_live_pane_with_current_incarnation_is_admitted() {
-        let (_mint, occupancy, incarnation) =
-            live_occupancy("%9", MEASURED_LIVE_SUPERVISOR);
+        let (_mint, occupancy, incarnation) = live_occupancy("%9", MEASURED_LIVE_SUPERVISOR);
         let presented = Presented {
             session: "omp-orchestrator".into(),
             pane: "%9".into(),
@@ -389,8 +400,7 @@ mod tests {
 
     #[test]
     fn foreign_session_pane_id_is_a_typed_refusal_not_absent() {
-        let (_mint, occupancy, incarnation) =
-            live_occupancy("%1414", MEASURED_LIVE_SUPERVISOR);
+        let (_mint, occupancy, incarnation) = live_occupancy("%1414", MEASURED_LIVE_SUPERVISOR);
         let presented = Presented {
             session: "control-plane".into(),
             pane: "%1414".into(),
@@ -475,8 +485,7 @@ mod tests {
 
     #[test]
     fn draining_lease_is_refused() {
-        let (_mint, occupancy, incarnation) =
-            live_occupancy("%7", MEASURED_LIVE_SUPERVISOR);
+        let (_mint, occupancy, incarnation) = live_occupancy("%7", MEASURED_LIVE_SUPERVISOR);
         occupancy
             .advance_lease(Lease::Admitting, Lease::Draining)
             .unwrap();
@@ -497,27 +506,37 @@ mod tests {
     #[test]
     fn lease_advances_only_by_cas_and_never_backward() {
         let (_mint, occupancy, _) = live_occupancy("%7", MEASURED_LIVE_SUPERVISOR);
-        assert!(occupancy
-            .advance_lease(Lease::Draining, Lease::Revoked)
-            .is_err());
-        assert!(occupancy
-            .advance_lease(Lease::Admitting, Lease::Revoked)
-            .is_err());
-        assert!(occupancy
-            .advance_lease(Lease::Admitting, Lease::Admitting)
-            .is_err());
+        assert!(
+            occupancy
+                .advance_lease(Lease::Draining, Lease::Revoked)
+                .is_err()
+        );
+        assert!(
+            occupancy
+                .advance_lease(Lease::Admitting, Lease::Revoked)
+                .is_err()
+        );
+        assert!(
+            occupancy
+                .advance_lease(Lease::Admitting, Lease::Admitting)
+                .is_err()
+        );
         occupancy
             .advance_lease(Lease::Admitting, Lease::Draining)
             .unwrap();
-        assert!(occupancy
-            .advance_lease(Lease::Draining, Lease::Admitting)
-            .is_err());
+        assert!(
+            occupancy
+                .advance_lease(Lease::Draining, Lease::Admitting)
+                .is_err()
+        );
         occupancy
             .advance_lease(Lease::Draining, Lease::Revoked)
             .unwrap();
-        assert!(occupancy
-            .advance_lease(Lease::Revoked, Lease::Admitting)
-            .is_err());
+        assert!(
+            occupancy
+                .advance_lease(Lease::Revoked, Lease::Admitting)
+                .is_err()
+        );
     }
 
     #[test]
