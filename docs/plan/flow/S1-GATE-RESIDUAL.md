@@ -21,6 +21,30 @@ SUPERSEDED  34566431257 / 98e44cc  06:01Z  FAILING count=7
 SUPERSEDED  34549975939 / cb9d3941 01:16Z  FAILING count=16
 ```
 
+⛔ BEFORE YOU READ ANY ROW BELOW, CLEAR FOUR RUNGS. Three of them were skipped tonight and
+each produced a confident wrong reading:
+  1. PUSHED     git ls-remote origin refs/heads/main      <- NEVER a tracking ref; origin/main is a CACHE
+  2. CONTAINED  git merge-base --is-ancestor <fix> <headSha>
+  3. GATE RAN   grep -c 'GATE_RUNNER ' <log>   MUST be nonzero
+                grep -c 'could not compile'    MUST be zero
+  4. LEG'S ROW  your crate's row present in THAT output
+
+⛔⛔ RUNG 3 EXISTS BECAUSE OF A LIVE SPECIMEN: run 34577201755 CONTAINS the cause-capture fix
+and produced ZERO GATE_RUNNER lines, because that same commit's unpaired consumer broke
+gate-runner's build (E0432 unresolved import). ITS SILENCE ABOUT A LEG IS ABSENT-BY-BUILD,
+NOT A VERDICT -- and "0 cause lines" there reads exactly like "the feature regressed".
+THE FEATURE'S OWN COMMIT PREVENTED THE BUILD THAT WOULD HAVE MEASURED IT. Repaired by
+454328b. A zero on rung 3 at a head containing 454328b is a NEW defect, not this one.
+
+⭐ The rung-3 needle is a FINISHED marker, not a started one: the census prints at main.rs:374
+from a report built at :372, downstream of the run loop at :264. The trailing space is
+load-bearing -- it excludes GATE_RUNNER_FAILURE_CAUSE (using the feature under test to prove
+the gate ran would be circular) AND the early GATE_RUNNER_PLAN lines. Do not widen it, do not
+substitute GATE_RUNNER_PLAN_TOTAL (that one is emitted at :219, BEFORE the sweep), and note a
+healthy log scores 2: one emission plus one ci-citation step quoting it verbatim. It is a
+liveness check, never a count of gate invocations, and it is not portable to a cargo-test log
+of gate-runner itself, where ci_citation.rs self-matches nine times.
+
 ⛔⛔ **THE "SIX LEGS" FIGURE THIS DOCUMENT'S DISPATCHES ONCE CARRIED FOR `no-shell-gate` WAS
 SELF-INFLICTED: a `grep -oE 'failing_tests[^|]{0,400}'` clipped a 2951-byte line at 400
 characters.** The producer was complete throughout; **no CI line carries an ellipsis and every
