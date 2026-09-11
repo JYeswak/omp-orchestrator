@@ -7,4 +7,11 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
+# Inherit [workspace.lints.rust]: `unsafe_code = "forbid"` plus `unused_must_use = "deny"`.
+# The crate-level `#![forbid(unsafe_code)]` in src/lib.rs is not the workspace contract —
+# `every_crate_declares_the_forbid_lint` reads the MANIFEST, because an inner attribute is
+# per-file and a new module can omit it while the manifest cannot.
+[lints]
+workspace = true
+
 [dependencies]
