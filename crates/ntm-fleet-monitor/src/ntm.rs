@@ -492,6 +492,84 @@ mod tests {
         assert!(!working.agents[0].dispatchable());
     }
 
+    /// The VERBATIM `--robot-activity` row for `omp-orchestrator` pane 3, captured
+    /// 2026-09-11T20:01:19Z. Ground truth at that instant: the pane was an IDLE SHELL at a
+    /// prompt whose visible window carried "You have hit your ChatGPT usage limit (pro plan).
+    /// Try again in ~5014 min." -- the agent was RATE-LIMITED for about 3.5 DAYS. Panes 4 and
+    /// 6 carried the same shape. Only the fields this parser reads are kept; nothing softened.
+    const LIVE_RATE_LIMITED_IDLE_PANE3: &str = r#"{"pane":"3","pane_idx":3,"agent_type":"omp-claude","state":"ERROR","confidence":0.95,"observation_state":"idle","observation_confidence":0.95,"observation_freshness":"fresh","safe_to_dispatch":true,"capture_provenance":"live","capture_collected_at":"2026-09-11T20:01:19Z"}"#;
+
+    /// Bead `omp-orchestrator-mm9zf`, the OPPOSITE POLARITY of the riqd row above.
+    ///
+    /// riqd proved `observation_state` can be confidently wrong. This row proves `state` can
+    /// be, in the same field set, from the same command: here `observation_state: "idle"` is
+    /// correct ABOUT THE SHELL while `state: "ERROR"` is correct ABOUT THE CAPACITY, and NEITHER
+    /// channel expresses "rate-limited until a named future time". So the corrected law --
+    /// both channels must agree, a disagreement is a refusal -- is load-bearing in BOTH
+    /// directions and must not be weakened to a preference for either channel.
+    ///
+    /// WHY THE `safe_to_dispatch` ASSERTION BELOW IS THE POINT OF THIS LEG: our refusal is
+    /// INCIDENTAL. We refuse because `state` said ERROR, not because anything here understands
+    /// rate limiting. ntm's own summary said dispatch was SAFE on all three panes. A fixture
+    /// that omitted `safe_to_dispatch: true` would pass without testing that we override it.
+    #[test]
+    fn l2_a_rate_limited_pane_is_refused_even_though_ntm_says_dispatch_is_safe() {
+        let live = parse_activity_json(&format!(
+            r#"{{"success":true,"agents":[{LIVE_RATE_LIMITED_IDLE_PANE3}]}}"#
+        ))
+        .expect("the verbatim live payload must parse");
+        let a = &live.agents[0];
+
+        // The idle side really did read idle, at full confidence.
+        assert_eq!(a.observation_state, SignalState::Idle);
+        // And ntm really did offer it. This is the clause the refusal has to survive.
+        assert!(
+            a.safe_to_dispatch,
+            "ntm really did say safe_to_dispatch=true on a pane blocked for ~3.5 days"
+        );
+        // `is_omp` CANNOT be the refusing reason: omp-claude is a native OMP variant, so the
+        // row clears the kind check and is refused on evidence rather than on agent family.
+        assert!(
+            a.kind.is_omp(),
+            "is_omp must be TRUE so it cannot be the reason"
+        );
+        assert_eq!(
+            a.freshness,
+            EvidenceFreshness::Live,
+            "nor may staleness be the reason"
+        );
+        assert_eq!(
+            a.readiness,
+            Readiness::Error,
+            "an ERROR on either channel must force Error, which is what refuses this row"
+        );
+        assert!(!a.dispatchable(), "a rate-limited pane must not be dispatchable");
+        assert!(!a.capture_eligible(), "nor eligible for the capture gate");
+
+        // DIRECTIONAL, and it is what makes this row distinct from riqd rather than a second
+        // copy of it: the same idle observation refuses through a DIFFERENT arm. riqd's row
+        // (THINKING vs idle) scores Conflicting; this one (ERROR vs idle) scores Error. A
+        // single mutation cannot redden both, which is why both fixtures are kept.
+        let riqd = parse_activity_json(&format!(
+            r#"{{"success":true,"agents":[{LIVE_FALSE_IDLE_PANE1}]}}"#
+        ))
+        .expect("the riqd payload must parse");
+        assert_eq!(riqd.agents[0].readiness, Readiness::Conflicting);
+        assert_ne!(
+            riqd.agents[0].readiness, a.readiness,
+            "the two live false-idle rows must refuse through different arms"
+        );
+
+        // KNOWN-GOOD ARM: the Error arm must not refuse everything. An agreeing idle OMP row
+        // is still dispatchable, or this guard is a fleet-wide outage.
+        let agree = parse_activity_json(&response(&[row("omp", "IDLE", "idle")]))
+            .expect("agreeing row must parse");
+        assert!(
+            agree.agents[0].dispatchable(),
+            "an agreeing idle OMP row must remain dispatchable"
+        );
+    }
+
     #[test]
     fn all_native_omp_variants_are_typed() {
         for (name, expected) in [
