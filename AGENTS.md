@@ -191,12 +191,78 @@ let **160 scripts and 60,467 lines** accrete in the repo this substrate is extra
 
 ## ⛔ `cargo test` refuses to run? YOU DO NOT BUILD HERE. (gate live 2026-09-07)
 
-**LOCAL BUILDS ARE HARD-REFUSED. `exit=75`. There is no reason string and no confirm token that
-unlocks it.**
+**THE POLICY IS ABSOLUTE: build on Contabo, never locally.** ⛔ **BUT THE SENTENCE THAT USED TO SIT
+HERE — "LOCAL BUILDS ARE HARD-REFUSED, `exit=75`" — IS FALSE AS A STATEMENT OF MECHANISM, AND YOU
+MUST READ THE CORRECTION BELOW BEFORE RELYING ON IT.** The shim refuses the BYPASS, not the verb;
+a bare `cargo build` runs through to `exec "$real_cargo"`. What keeps agents off this Mac is rch's
+tool-call hook, which is not in that file and does not exist at a human terminal.
 
 ```
 RCH_CARGO_WRAPPER_BYPASS=1 cargo build   ->   exit=75   LOCAL BUILD REFUSED
 ```
+
+### ⛔ CORRECTED 2026-09-10 — "LOCAL BUILDS ARE HARD-REFUSED" IS FALSE. THE SHIM DOES NOT STOP A BARE VERB.
+
+**The RULING above stands and is not in question. What is false is the sentence describing the
+mechanism that enforces it**, and that matters because agents trust it and act on it.
+
+`~/.local/bin/cargo` (sha256 `67ec73de…`, 1074 lines) ends at its last line with
+
+```
+exec "$real_cargo" "${remaining[@]}"
+```
+
+and **contains no rch handoff anywhere.** The `exit 75` gate at `:185` sits entirely inside
+`if [[ "${RCH_CARGO_WRAPPER_BYPASS:-0}" == 1 ]]` (`:147`–`:218`). Measured behaviourally by
+`ShimAudit` under `eux9p`, with the real cargo made unreachable so the probe could not compile:
+
+```
+bare `cargo build`, no bypass   -> rc=200, stderr STUB-CARGO-REACHED argv=build
+same verb + bypass              -> rc=75
+`metadata` + bypass (control)   -> rc=200
+```
+
+**Arm A did not merely miss the gate — it ran to `exec "$real_cargo"`.** Without the interposed
+stub, that bare `cargo build` would have COMPILED LOCALLY ON THIS MAC. The shim refuses the
+**escape hatch**; it does not refuse the **verb**.
+
+**WHAT ACTUALLY KEEPS AGENTS OFF LOCAL BUILDS IS rch's TOOL-CALL HOOK, WHICH IS NOT IN THIS FILE.**
+A bare compiling verb from an agent is intercepted above the shell and offloaded
+(`INFO rch::hook: Selected worker …` at `rch/src/hook.rs:2645`). Three consequences:
+
+1. **A human at a terminal has no such hook and WILL build locally.** Never quote `:194` to anyone
+   as a guarantee.
+2. **Slot budgets cannot be derived by counting `rch exec` invocations** — a bare verb takes a
+   worker with no `rch exec` in its argv. Pane 1 leaked three such probes in one tick while telling
+   the fleet slots were scarce.
+3. **`cargo check` is therefore usable as a ~15s type oracle** (rung 2 of the ladder), which two
+   agents and pane 1 had each written off as refused.
+
+**AND `exit 75` CARRIES SIX CAUSES, NOT ONE.** `grep 'exit 75'` finds a single literal at `:185`;
+the rest route through `fail <MARKER> 75` → `exit "$status"` at `:23-29`:
+
+```
+:185 bypass refused        :356 CARGO_PREBUILD_WORKER_FULL      :557 CARGO_MINT_CONTAINER_EXHAUSTED
+:662 CARGO_MINT_PEAK_WOULD_BREACH_FLOOR   :722 CARGO_LANE_IDENTITY_MISSING
+:728 / :730 CARGO_LANE_IDENTITY_UNSTABLE
+```
+
+Seven sites, six causes. **The MESSAGE channel is already split — every site emits a distinct
+marker — and only the exit code is overloaded.** So gate rule 7 applies exactly: read the marker,
+never the 75 alone. A grep for the literal `exit 75` finds one of seven and is itself an
+instrument defect.
+
+**THE CORPUS CONTRADICTS ITSELF ON THIS, so check both before citing either.**
+`docs/inventories/CENSUS-ARCHIVE-INSTRUMENTS.md:48` says the bypass *"is the sanctioned local
+path"* — true before `f4e9d68`, refused after — which is the exact opposite of `:194`. Five beads
+still name `RCH_CARGO_WRAPPER_BYPASS=1 cargo test …` as their sanctioned route; every one of those
+acceptance legs now terminates at `:185` and is **unexecutable as written**.
+
+**NO-CLAIM.** This corrects the MECHANISM, not the POLICY. `RCH_REQUIRE_REMOTE=1 rch exec` remains
+the one sanctioned form, and nobody should read this as licence to build locally — the point is
+that the file does not stop you, so the discipline has to. The shim is SUBSTRATE: report, never
+patch. Tracked as `omp-orchestrator-eux9p`, cross-linked to `tvu5`.
+
 
 Joshua, verbatim: **"CONTABO OR BUST — I'm fucking pissed that I have to repeat this all day every
 day."** Live in `~/.local/bin/cargo` (`f4e9d68`), mutation-proven before install.
