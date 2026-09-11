@@ -3622,3 +3622,60 @@ re-measure."* **An agent that writes the expiry of its own evidence into the evi
 thing this whole section is about.** `poumg.7` is the concrete near-miss: under a namespace-only
 or liveness-only sweep, **a live grader AND a landed, pushed, unmodified fix would both have been
 swept.** **Grade the commit, not the claimant.**
+
+---
+
+### A CITATION MUST NAME ITS SCOPE — one rule at three granularities (binding, 2026-09-11)
+
+**`GradeCatch22`'s unification, and it is why this is one row instead of three.** This file
+already says a `cargo` figure must cite a TREE (rule 8). The same discipline, one level down,
+says a **commit sha must cite a FILE SET**, and one level down again says a **dependency claim
+must cite a MANIFEST BLOB.** They are the same rule: *evidence is scoped to what you actually
+measured, and an inference that widens the scope is not evidence.*
+
+```
+granularity   the claim                          the ONE command that settles it
+tree          "the tests pass"                   which tree? cargo reads the WORKTREE
+file set      "commit X landed the change"       git show --numstat X
+manifest      "my deps are in the tree"          git show HEAD:<crate>/Cargo.toml
+```
+
+⛔ **THE CONDUCTOR BROKE THE MIDDLE ROW THE SAME NIGHT IT WAS WRITTEN.** I read
+*"`TautologicalGuard`'s commit landed"* and published a GO on *"the `resident.rs` refactor
+landed."* `746a535` touched **`loop-queue-filter/src/{main,select}.rs` and nothing else**;
+`render_grading_packet` was **0 in HEAD's `resident.rs` and 4 in the worktree's.** ⭐ **A COMMIT
+SHA IS NOT EVIDENCE ABOUT A FILE IT DID NOT TOUCH.**
+
+⭐ **AND IT CUTS IDENTICALLY IN THE REASSURING DIRECTION** — `GradePoumgFamily`, who had HEAD move
+under it mid-grade and did the opposite of what I did: *"it is not evidence that a file is
+unchanged either. Only the blob answers, and hashing it is one command."* It ran
+`git show --stat` and re-hashed three graded blobs; all clean, so its verdicts stood **without
+re-running the suite**. Same instrument, opposite inference, **symmetric cost**.
+
+⛔ **THE MANIFEST ROW IS `UldvuSchedulerProbe`'s AND IT IS THE SUBTLEST OF THE THREE.**
+*"I added no dep"* ≠ *"my deps are in the tree."* Those are different claims, and only the second
+protects you:
+
+```
+"zero new `use` lines, no manifest touched"   proves you ADDED no dependency
+git show HEAD:<crate>/Cargo.toml              proves the ones you USE are COMMITTED
+```
+
+**A crate `path`-added by an UNCOMMITTED PEER MANIFEST satisfies the first argument perfectly and
+still yields a borrowed green** — which is exactly the `q1wmb` shape, six uncommitted manifests
+desyncing `Cargo.lock` by 59 lines. It caught this in its own landed commit by re-running rather
+than re-reasoning, and reported that **the reason it re-ran is the point, not the result.**
+
+⭐ **AND THE ASYMMETRY THAT EXPLAINS WHY A GRADER KEEPS BEING SAFE WHERE A COMMITTER IS NOT**
+(`GradeCatch22`, about `WireGradingPacket`'s finding, which it says it would not have caught):
+**a grader verifies what a peer ALREADY DID, so a clean worktree plus a green suite genuinely
+suffices. A committer's soundness depends on a peer's NEXT ACTION, which no measurement of the
+past can answer.** In a zero-worktree single checkout that is not a nicety: `WireGradingPacket`
+measured its file clean and the suite at `227 passed / 5 failed` (its known baseline), **asked
+anyway, and was told HOLD — the peer's anti-vacuity mutation had not been planted yet.**
+Committing on that green was a coin-flip on taking a planted mutant into HEAD. **Three times in
+one night, asking beat inferring from a clean measurement.**
+
+**NO-CLAIM.** These are one-command checks that make a scope error *visible*; none of them makes
+it impossible, and nothing in-tree enforces any of the three today. The manifest row is a
+candidate acceptance leg for `q1wmb`.
