@@ -7204,3 +7204,37 @@ because a message-only amend stages nothing, and `--no-verify` is forbidden.
 back from `git log --oneline -1` — which is how this was caught. **And normalise with
 `git stripspace` before committing**: the round-trip check compares your file to `COMMIT_EDITMSG`
 byte for byte, and refused a `1105` vs `1104` difference that was a single trailing newline.
+
+## ⛔ MY PRE-REGISTERED PREDICTION WAS **WRONG**, AND IT GETS THE SAME PROMINENCE AS THE HIT
+
+**Two ticks ago a pre-registered discriminator landed exactly (`rung 3 == 2`) and I gave it a
+block. This one missed and gets the same treatment, or the practice is decoration.**
+
+```
+PREDICTED   details containing "left:"   10
+MEASURED    run 34583101953 / b3b976c8    5      <- rungs: GATE_RUNNER ' ' 2 · could-not-compile 0 · causes 60
+DENOMINATOR details announcing `assertion `left == right` failed`   10
+```
+
+**So the operand capture is REAL and PARTIAL: `5 of 10`, against `0 of 10` before.** The
+prediction assumed the fix would be total; it captured half.
+
+⭐ **AND THE DENOMINATOR IS WHAT MAKES THIS READABLE AT ALL.** A bare `5` could mean *"5 of 5,
+complete"* or *"5 of 50, barely working"*. Measuring the population in the SAME run turned an
+ambiguous number into a verdict — the bounded-denominator rule, applied to my own good news.
+
+**Captured details run `309-460` chars; uncaptured run `323-384` — overlapping ranges, so LENGTH
+does not separate them and the residual is not a truncation.**
+
+⛔ **THE RESIDUAL'S MECHANISM IS `UNKNOWN`, AND THE ARTIFACT CANNOT ANSWER IT.** CI's log carries
+only the emitted `GATE_RUNNER_FAILURE_CAUSE` lines — **the raw cargo panic block is not in it** —
+so the line structure that defeated the collector is not observable from here. **Named candidate,
+explicitly unverified:** a multi-line assertion message, where the line after the message is
+continuation text rather than `left:`, terminating the operand scan by design (`operands = false`
+on the first non-operand line). One uncaptured specimen is consistent with this — its message
+ends `…: empty_staged: CLEAN staged_files=0 deletions=1 merge=None`, which is captured stderr
+embedded in an assertion — **but consistency is not evidence, and this is a hypothesis with a
+name, not a finding.**
+
+**How to settle it: run that one test and read the RAW output**, which is the only place the
+structure exists. Not from CI.
