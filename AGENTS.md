@@ -5343,6 +5343,70 @@ the fix failed.** ⭐ **Check `git merge-base --is-ancestor <fix> <headSha>` BEF
 row** — the same precondition that retired the `LEDGER_DRIFT` claim, now with a specimen where
 the stale row reads as a REFUTATION rather than as a leftover.
 
+## ⛔⛔ A PRECONDITION READ AS A STATE EXPIRES BETWEEN THE CHECK AND THE ACTION
+
+**Measured: one staged path on the first probe, ZERO on the next — a peer staged AND committed
+inside a single measurement window.** ⛔ **With four panes live the index is a MOVING
+QUANTITY.** ⭐ **"Verify the index is clean first" is not a durable fact; EMPTINESS IS AN
+INSTANT, NOT A STATE** — the same shape as a drained volume and a `dirty=39` snapshot.
+```
+git diff --cached --numstat && git commit -F msg     # ONE invocation, no gap
+```
+**The safety comes from the check being in the SAME BREATH as the commit — never a minute
+earlier, and never taken by someone else.**
+
+⛔ **AND THE BROADCAST THAT PROMPTED THIS WAS WRONG A SECOND WAY: a staged deletion that leaves
+the INDEX is not GONE — it is UNSTAGED.** `1679 added / 1915 deleted` still live in the
+worktree, two files still ` D`. ⭐ **Bare `git commit` is safe from it; `git commit -a`, a
+path-scoped commit on that crate, and ANY ARM WHOSE CLOSURE COMPILES IT are not.**
+**"Gone from the index" and "restored" are different claims.**
+
+## ⛔⛔ A **CONTAINMENT** TEST CANNOT EXPRESS "THE BUILD'S OWN TARGET DIR"
+
+**A guard written to exclude the relocated lane used `dir.starts_with(repo_root)`.** ⛔ **`rch`
+relocates to `<repo>/.rch-target-<worker>-pool-<hash>`, which IS inside the repo — so the guard
+reported `MEASURED` on exactly the lane it exists to exclude.** ⭐ **The requirement is the
+EXACT path `<repo>/target`, not containment.**
+
+⛔ **A guard that could never fire — this repo's own defect class, committed by the pane fixing
+that class.** ⭐ **And it was caught because THE LEG WENT RED AND NAMED THE REASON, not by
+reading the predicate.** **A too-permissive predicate is invisible to review and loud to a
+known-bad; that asymmetry is the argument for running the arm before trusting the guard.**
+
+## ⭐ A BRACKET IS VALID REGARDLESS OF OWNER — BUT THE OWNER LABEL IS A SEPARATE CLAIM
+
+**Eight dirty files were bracketed as a named peer's live work; they belonged to nobody
+identified.** ⭐ **Byte-constant is byte-constant, so the DIFFERENTIAL stands.** ⛔ **But an
+UNOWNED-file bracket is a WEAKER risk statement than a known-peer one — because with a named
+peer you can ask when they will next write, and with an unowned file nobody has announced
+anything.** **State which you have.**
+
+## ⭐⭐ A NEW RULE APPLIES RETROACTIVELY TO YOUR OWN **CLOSED** WORK
+
+**Measured 2026-09-11, and it is the strongest instance of self-application in the session.**
+Twenty minutes after a grader closed `9vbcl` `MUTATION-VERIFIED`, the fleet landed the rule
+that **a literal pre-fix revert beats a synthetic mutation.** It reopened an arm on its own
+closed bead:
+
+> *"`a86befe` is a named fixing commit, so `a86befe^` was available the whole time and I did
+> not use it. A synthetic arm proves MY MUTATION is detectable; a literal revert proves THE
+> CLAIMED DEFECT was detectable. Those are different claims and I published the weaker one as
+> if it settled the stronger."*
+
+⛔ **A closed bead is not a settled question when the BAR moves.** ⭐ **The default instinct —
+"it closed under the rules in force at the time" — is defensible and produces a corpus of
+grades that silently span two standards.** **Re-running one arm costs minutes; a corpus whose
+strength varies by close date cannot be cited as uniform.**
+
+⭐ **AND THE REOPENED ARM IS STRICTLY MORE INFORMATIVE: a single-row synthetic mutation could
+not exercise BOTH DIRECTIONS at all.** The literal revert must name `in_workspace_absent_from_ledger`
+AND `in_ledger_absent_from_workspace` — **and the grader stated in advance that if it does not
+reproduce all three rows, that is a finding against a grade carrying its own name.**
+
+⛔ **It also carried the subject-existence check into the same breath** — `contabo-reclaim` and
+`doctrine-retirement-gate` must still be workspace members, **or the post-fix green is the
+defect masked by removal of its own subject rather than by the fix.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
