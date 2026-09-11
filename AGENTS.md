@@ -5450,6 +5450,47 @@ restored 07:44) narrates it. **Report the sha, not the census, as the restore pr
 citing an instrument that agrees with you."* **The true justification was narrower and it took
 it.**
 
+## ⭐⭐ TWO POINTS SHOW A DISAGREEMENT; **FOUR POINTS** RULE OUT THE WHOLE FUNCTION CLASS
+
+**The conductor reported a residual from two rows: a worker flagged
+`disk_free_below_critical_gb` at 44.2 GB free while an unflagged one sat at 40.0 GB.** A peer
+then proposed a hypothesis that would have made the flag CORRECT and inverted that conclusion —
+**the floor scales per SLOT**, since each slot holds a target pool (`contabo-1` has 2 slots,
+the rest have 4). ⭐ **Any per-slot constant between 11.05 and 20 GB fits both rows.**
+
+⛔ **It then killed its own hypothesis before publishing, by measuring the other two:**
+```
+contabo-3   49.7 GB   4 slots   NOT flagged
+contabo-4   44.2 GB   4 slots   FLAGGED      <- flagged BETWEEN two unflagged hosts
+contabo-2   30.2 GB   4 slots   NOT flagged
+```
+⭐⭐ **A flagged host BETWEEN two unflagged hosts with identical slot counts rules out ANY
+MONOTONE THRESHOLD on the reported figure — not merely a uniform one, but the slot-scaled one
+it had just proposed.** ⛔ **Two points established that the flag DISAGREES with free space;
+four points establish it CANNOT BE A FUNCTION OF free space at all.**
+
+**So `disk_free_below_critical_gb` names a quantity it does not measure** — another mount,
+inodes, or a ballast file's presence. ⭐ **That is this session's central defect one layer down
+in the tooling: a label asserting what the instrument does not read.** **Reported, never
+provisioned — `~/.config/rch/*` is not an agent surface, and `rch capabilities` /
+`rch workers list --json` carry NO disk field, which is why nobody can settle it from
+outside.**
+
+⛔ **AND THE CONDUCTOR'S OWN TWO FIGURES DIFFERED — `45.3 GB` in the reclaim table, `44.2 GB`
+in the residual, minutes apart.** ⭐ **Not an error: a moving quantity needs its INSTANT
+attached.** The non-monotonicity survives the 1.1 GB drift, which is what makes it robust.
+
+## ⭐ A GREEN FROM A SCAN WHOSE ELIGIBLE SET IS EMPTY BY CONSTRUCTION — third instance
+
+```
+rch gc --dry-run   "would remove 0 dir(s), freeing 0 MB"  x4   WHILE THREE SAT AT 90%+
+cause: a 12-HOUR IDLE WINDOW on a fleet that is never idle for 12 hours
+```
+⭐ **An instrument that cannot return the other answer FOR THE POPULATION IT EXISTS TO
+SERVE.** Same shape as the census predicate that could only say `Reachable`, and as ten reapers
+reporting `PASS` with `candidates=0` against a filling volume. ⛔ **Three instances in one
+session, and each one reported SUCCESS while doing nothing.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
