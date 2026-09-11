@@ -1,8 +1,37 @@
-# S1 gate residual — the 20 non-PASS crates, ENUMERATED
+# S1 gate residual — the non-PASS crates, ENUMERATED
 
 ```
-SOURCE      run 34587961695   headSha df49750a   completed/failure   2026-09-11
+⛔ THE TITLE SAID "the 20 non-PASS crates" AND THE RESIDUAL IS NOW 9. Superseded 2026-09-11
+   by pane %33. The old figure is kept below as SUPERSEDED rather than deleted, because a
+   deleted number cannot be checked against the run that produced it.
+
+AUTHORITATIVE  run 34592771605   headSha 39b52fee   conclusion=failure   2026-09-11
+  GATE_RUNNER_FAILING      count=5  no-shell-gate, omp-inventory-map, omp-orchestrator,
+                                    ompo-doctor, s1-coverage
+  GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
+                                    finding:MISSING_EXECUTABLE,
+                                    loop-driver:POLICY_UNAVAILABLE,
+                                    loop-queue-filter:MISSING_EXECUTABLE
+  non-PASS = 9.  SUM CONTROL against GATE_RUNNER_PLAN crates=90:  81 + 5 + 4 = 90.
+
+  ⚠️ THE SUM CONTROL VALIDATES THE TALLY, NEVER THE ORACLE. This file has twice published a
+  correct tally of the WRONG run, so the control above is necessary and not sufficient: it
+  would read equally true at the stale head. The run id and headSha are the claim.
+
+  ⚠️ AND UNMEASURABLE IS NOT A SMALLER KIND OF PASS. Four crates produce NO VERDICT —
+  two for a missing executable, two for an unavailable policy — and an absent verdict is
+  indistinguishable from a pass at the exit code. They are residual, not resolved.
+
+SUPERSEDED   run 34587961695   headSha df49750a   completed/failure   2026-09-11   non-PASS 20
 ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest "completed"
+
+  ELEVEN CRATES LEFT THE NON-PASS SET BETWEEN THESE TWO RUNS. Anyone dispatched against the
+  superseded enumeration would have worked eleven crates that are already green — the exact
+  cost this file was written to prevent, now incurred by the file itself. RE-DERIVE BEFORE
+  DISPATCHING, with the two commands the newest runs make sufficient:
+    gh run list --limit 12 --json databaseId,conclusion,headSha
+    gh run view <id> --log | grep -aoE 'GATE_RUNNER_(FAILING|UNMEASURABLE) count=[0-9]+ names=.*'
+  The newest runs ship the NAMES inline, so no per-crate scraping and no `sort -u` is needed.
 
 ✅ THE CAUSE-CAPTURE ARC IS CLOSED ON THIS RUN. Four rungs cleared before a row was read:
   GATE_RUNNER ' ' 2 · could-not-compile 0 · GATE_RUNNER_FAILURE_CAUSE 59 lines
