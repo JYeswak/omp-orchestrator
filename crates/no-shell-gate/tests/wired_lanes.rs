@@ -48,6 +48,12 @@ const UNWIRED_LANE_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
         "S1 coverage owner",
         "Dies when S1 build waves consume the coverage artifact through a production caller",
     ),
+    (
+        "fleet-idle-monitor",
+        "decision kernel for 47g0, landed ahead of its conductor; the caller that will route a tick through it is item 9 of that bead and is not yet re-armed. Wiring it to crates/fleet-monitor today would be a FALSE green: fleet-monitor's only mention in .github/workflows/gate.yml is a comment at :43, which the census strips, so the chain would terminate at a crate with neither a caller nor an executor trigger",
+        "47g0 owner",
+        "Dies when a tick routes its queue through fleet_idle_monitor::tick, or when control-plane's cron-invoked fleet-idle-monitor is repointed at this crate",
+    ),
 ];
 fn unwired_allowance_refs() -> Vec<(&'static str, &'static str)> {
     UNWIRED_LANE_ALLOWANCE
