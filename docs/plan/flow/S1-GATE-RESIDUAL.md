@@ -1,10 +1,27 @@
 # S1 gate residual — the 20 non-PASS crates, ENUMERATED
 
 ```
-SOURCE      run 34570440318   headSha f2dbf3eb   completed/failure   2026-09-11T06:33Z
+SOURCE      run 34577876082   headSha 2deb06cd   completed/failure   2026-09-11
 ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest "completed"
+
+⭐ FIRST RUN IN THIS DOCUMENT'S HISTORY WHOSE CAUSE TEXT CARRIES MESSAGES, NOT LOCATIONS:
+  GATE_RUNNER_FAILURE_CAUSE  55 lines · header-only 0 of 55 (was 59 of 59) · detail 94..6351 B
+  Emitted by f60845e (cause capture) + 9176b51 (message capture), repaired by 454328b.
+  The four rungs below were cleared on this run by FOUR panes independently.
+
+⛔ AND THE PAYOFF IS A CARDINALITY CORRECTION, NOT MERE LEGIBILITY: seven of no-shell-gate's
+  legs emit ONE byte-identical cause ("empty_staged: CLEAN staged_files=1 deletions=0"), so
+  one behaviour closes seven legs. Seven distinct NAMES and seven distinct LOCATIONS report
+  seven problems; only the MESSAGE shows one. Size the work off the message.
+
 SUMMARY     GATE_RUNNER crates=89 · pass=81 · fail=4 · unmeasurable=4   (81+4+4=89 ✓)
 FAILING     no-shell-gate · omp-inventory-map · omp-orchestrator · ompo-doctor
+
+⛔ THE TALLY IS BYTE-IDENTICAL TO THE SUPERSEDED RUN (89/81/4/4, same four names). NOTHING
+  ABOUT THE VERDICTS CHANGED -- only their LEGIBILITY. Do not read the message-capture fix as
+  progress on the failing set; it is progress on our ability to size it, and the sizing it
+  produced (7 legs -> 1 cause) cut one crate's apparent backlog rather than its verdict.
+
 UNMEASURABLE admission-reason:POLICY_UNAVAILABLE · finding:MISSING_EXECUTABLE
              loop-driver:POLICY_UNAVAILABLE · loop-queue-filter:MISSING_EXECUTABLE
 
@@ -19,6 +36,7 @@ independent parses of the same line disagreed until each declared its own:
 SUPERSEDED  34569451324 / 3093989  06:19Z  FAILING count=4
 SUPERSEDED  34566431257 / 98e44cc  06:01Z  FAILING count=7
 SUPERSEDED  34549975939 / cb9d3941 01:16Z  FAILING count=16
+SUPERSEDED  34570440318  f2dbf3eb  06:33Z  FAILING count=4  (same four names)
 ```
 
 ⛔ BEFORE YOU READ ANY ROW BELOW, CLEAR FOUR RUNGS. Three of them were skipped tonight and
