@@ -6,7 +6,7 @@ use asupersync::Cx;
 use s1_coverage::{
     checkout_cannot_resolve, checkout_unusable, compare_reports, compute_with_manifest,
     parse_beads_jsonl, refusal_exit_code, render_markdown, BeadRecord, CoverageComparison,
-    CoverageInput, CoverageReport, InputManifest, SourceText, CONTRACT_PATHS,
+    CoverageInput, CoverageReport, CoverageInputManifest, SourceText, CONTRACT_PATHS,
 };
 use std::env;
 use std::fs;
@@ -185,7 +185,7 @@ fn git_unavailable(error: &str) -> bool {
     checkout_cannot_resolve(error)
 }
 
-async fn build_manifest(cx: &Cx, repo: &Path, revision: &str) -> Result<InputManifest, String> {
+async fn build_manifest(cx: &Cx, repo: &Path, revision: &str) -> Result<CoverageInputManifest, String> {
     let tree = match git_capture(cx, repo, &manifest_args("tree", revision)).await {
         Ok(output) => lines(output),
         // NO HEAD SPECIAL CASE. A checkout that cannot resolve HEAD gets the same exit 4 as any
@@ -201,7 +201,7 @@ async fn build_manifest(cx: &Cx, repo: &Path, revision: &str) -> Result<InputMan
     let index = lines(git_capture(cx, repo, &manifest_args("index", revision)).await?);
     let worktree = lines(git_capture(cx, repo, &manifest_args("worktree", revision)).await?);
     let worktree_only = lines(git_capture(cx, repo, &manifest_args("worktree_only", revision)).await?);
-    Ok(InputManifest::new(revision, tree, index, worktree, worktree_only))
+    Ok(CoverageInputManifest::new(revision, tree, index, worktree, worktree_only))
 }
 
 async fn read_tree_file(cx: &Cx, repo: &Path, revision: &str, path: &str) -> Result<String, String> {
@@ -233,7 +233,7 @@ async fn load_tree(
     cx: &Cx,
     repo: &Path,
     revision: &str,
-) -> Result<(CoverageInput, InputManifest), String> {
+) -> Result<(CoverageInput, CoverageInputManifest), String> {
     let mut contracts = Vec::with_capacity(CONTRACT_PATHS.len());
     for path in CONTRACT_PATHS {
         cx.checkpoint()
@@ -250,7 +250,7 @@ async fn load_tree(
     Ok((make_input(contracts, s1_toml, beads), manifest))
 }
 
-async fn load_worktree(cx: &Cx, repo: &Path, revision: &str) -> Result<(CoverageInput, InputManifest), String> {
+async fn load_worktree(cx: &Cx, repo: &Path, revision: &str) -> Result<(CoverageInput, CoverageInputManifest), String> {
     let contracts = CONTRACT_PATHS
         .into_iter()
         .map(|path| {

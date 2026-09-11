@@ -2,7 +2,7 @@ use s1_coverage::{
     checkout_cannot_resolve, checkout_unusable, classify_convergence, compare_reports, compute,
     compute_with_manifest, parse_beads_jsonl, refusal_exit_code, render_markdown,
     validate_doc_only_reason, validate_manifest, BeadRecord, ConvergenceDecision, CoverageError,
-    CoverageInput, CoverageState, InputManifest, InputState, ManifestVerdict, SourceText,
+    CoverageInput, CoverageState, CoverageInputManifest, InputState, ManifestVerdict, SourceText,
 };
 
 fn input(contract: &str, beads: Vec<BeadRecord>) -> CoverageInput {
@@ -183,7 +183,7 @@ branches = ["one", "two"]
 }
 #[test]
 fn tree_index_worktree_provenance_is_typed() {
-    let manifest = InputManifest::new(
+    let manifest = CoverageInputManifest::new(
         "HEAD",
         vec!["tree-input".to_owned()],
         vec!["index-input".to_owned()],
@@ -198,7 +198,7 @@ fn tree_index_worktree_provenance_is_typed() {
 
 #[test]
 fn clean_tree_is_consistent() {
-    let manifest = InputManifest::new(
+    let manifest = CoverageInputManifest::new(
         "HEAD",
         vec!["docs/plan/flow/S1-COVERAGE.md".to_owned(), "crates/s1-coverage/Cargo.toml".to_owned(), "crates/s1-coverage/src/main.rs".to_owned()],
         vec!["docs/plan/flow/S1-COVERAGE.md".to_owned(), "crates/s1-coverage/Cargo.toml".to_owned(), "crates/s1-coverage/src/main.rs".to_owned()],
@@ -221,7 +221,7 @@ fn clean_tree_is_consistent() {
 
 #[test]
 fn worktree_only_requirement_is_restrictive() {
-    let mut manifest = InputManifest::new(
+    let mut manifest = CoverageInputManifest::new(
         "HEAD",
         vec!["tracked".to_owned()],
         vec!["tracked".to_owned()],

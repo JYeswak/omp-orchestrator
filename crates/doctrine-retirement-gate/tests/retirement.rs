@@ -19,7 +19,7 @@
 //! is count-independent by construction.
 
 use doctrine_retirement_gate::{
-    effective_doctrine, retired_spans, scan, span_count, Document, Reason, SpanError, Verdict,
+    effective_doctrine, retired_spans, scan, span_count, Document, RetirementReason, SpanError, Verdict,
     RETIRED_CLOSE, RETIRED_OPEN, SCANNED_DOCUMENTS,
 };
 use std::path::PathBuf;
@@ -348,7 +348,7 @@ fn the_two_refusal_causes_are_distinguishable_by_code_and_by_message() {
         panic!("expected Refused, got {unmarked:?}");
     };
     assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0].reason, Reason::UnmarkedOccurrence);
+    assert_eq!(findings[0].reason, RetirementReason::UnmarkedOccurrence);
     assert_eq!(findings[0].reason.code(), "RETIREMENT_UNMARKED");
     assert!(
         findings[0].to_string().contains("do NOT delete the quote"),
@@ -367,7 +367,7 @@ fn the_two_refusal_causes_are_distinguishable_by_code_and_by_message() {
     let Verdict::Refused { findings } = &destroyed else {
         panic!("expected Refused, got {destroyed:?}");
     };
-    assert_eq!(findings[0].reason, Reason::RecordDestroyed);
+    assert_eq!(findings[0].reason, RetirementReason::RecordDestroyed);
     assert_eq!(findings[0].reason.code(), "RETIREMENT_RECORD_DESTROYED");
     assert!(
         findings[0].to_string().contains("restore the quoted sentence"),
@@ -375,8 +375,8 @@ fn the_two_refusal_causes_are_distinguishable_by_code_and_by_message() {
         findings[0]
     );
     assert_ne!(
-        Reason::RecordDestroyed.code(),
-        Reason::UnmarkedOccurrence.code(),
+        RetirementReason::RecordDestroyed.code(),
+        RetirementReason::UnmarkedOccurrence.code(),
         "two causes sharing one code IS the defect this crate exists for"
     );
 }

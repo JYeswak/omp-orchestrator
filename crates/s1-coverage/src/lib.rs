@@ -198,8 +198,23 @@ pub enum ManifestVerdict {
     DenominatorWorktreeOnly,
 }
 
+/// The provenance of one coverage measurement: which revision, and which of tree / index /
+/// worktree the file set came from.
+///
+/// RENAMED FROM `InputManifest` 2026-09-11. The `input-manifest` crate exports a public
+/// `InputManifest` too — an enum about cargo input BOUNDS (`Full` / `Refused`), consumed by
+/// `gate-runner::ci_citation` — and two crates exporting one public type name is the seam bug
+/// `no_public_type_name_collisions_across_crates` refuses. The domains are genuinely disjoint,
+/// which is what an allowance row would have recorded; a specific name records it too and
+/// leaves nothing to expire.
+///
+/// `tests/head_fabrication_pin.rs:115,139` pin the constructor by the SOURCE TEXT
+/// `"InputManifest::new("`, and that needle still matches as a substring of
+/// `CoverageInputManifest::new(`, so the fabrication pin's mechanism is unchanged by the
+/// rename — verified rather than assumed, because a rename that silently disarms a pin is the
+/// failure this crate's own pin exists to catch.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InputManifest {
+pub struct CoverageInputManifest {
     pub revision: String,
     pub tree: Vec<String>,
     pub index: Vec<String>,
@@ -208,7 +223,7 @@ pub struct InputManifest {
     pub historical: HistoricalClaim,
 }
 
-impl InputManifest {
+impl CoverageInputManifest {
     #[must_use]
     pub fn new(
         revision: impl Into<String>,
@@ -258,7 +273,7 @@ pub struct CoverageComparison {
     pub schema: String,
     pub base_revision: String,
     pub head_revision: String,
-    pub input_manifest: InputManifest,
+    pub input_manifest: CoverageInputManifest,
     pub worktree_only: Vec<String>,
     pub growth: usize,
     pub closure: usize,
@@ -272,7 +287,7 @@ pub struct CoverageReport {
     pub schema: String,
     pub rev_mode: String,
     pub revision: String,
-    pub input_manifest: InputManifest,
+    pub input_manifest: CoverageInputManifest,
     pub manifest_verdict: ManifestVerdict,
     #[serde(default)]
     pub generator_tracked: bool,
@@ -323,7 +338,7 @@ impl CoverageError {
 impl std::error::Error for CoverageError {}
 
 #[must_use]
-pub fn validate_manifest(manifest: &InputManifest) -> Result<ManifestVerdict, CoverageError> {
+pub fn validate_manifest(manifest: &CoverageInputManifest) -> Result<ManifestVerdict, CoverageError> {
     if manifest.worktree_only.is_empty() {
         Ok(ManifestVerdict::DenominatorConsistent)
     } else {
@@ -343,9 +358,9 @@ pub const fn classify_convergence(growth: usize, closure: usize) -> ConvergenceD
 }
 
 #[must_use]
-pub fn manifest_for_input(revision: impl Into<String>, input: &CoverageInput) -> InputManifest {
+pub fn manifest_for_input(revision: impl Into<String>, input: &CoverageInput) -> CoverageInputManifest {
     let tree: Vec<String> = input.contracts.iter().map(|source| source.path.clone()).collect();
-    InputManifest::new(revision, tree.clone(), tree, Vec::new(), Vec::new())
+    CoverageInputManifest::new(revision, tree.clone(), tree, Vec::new(), Vec::new())
 }
 
 /// True when git refused because the CHECKOUT cannot resolve the revision, as opposed to any
@@ -469,7 +484,7 @@ pub fn compute_with_manifest(
     input: &CoverageInput,
     rev_mode: impl Into<String>,
     revision: impl Into<String>,
-    manifest: InputManifest,
+    manifest: CoverageInputManifest,
 ) -> Result<CoverageReport, CoverageError> {
     if input.contracts.is_empty() {
         return Err(CoverageError::ScanEmpty);

@@ -82,8 +82,15 @@ pub const SCANNED_DOCUMENTS: &[&str] = &["AGENTS.md"];
 ///
 /// Two arms, not one, because the two failures have OPPOSITE remedies. Collapsing them would
 /// reproduce this crate's own subject defect inside the crate: one channel, two populations.
+///
+/// NAMED `RetirementReason`, NOT `Reason`. `blocker-taxonomy` already declares a public
+/// `Reason`, and two crates exporting the same public type name is the seam bug
+/// `no_public_type_name_collisions_across_crates` refuses. An allowance row was the wrong
+/// remedy here: nothing consumes this type by name across a crate boundary
+/// (`pre-commit-gate.rs:1415` destructures the `reason` FIELD and never names the type), so
+/// the fix costs one specific name instead of a permanent exception.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Reason {
+pub enum RetirementReason {
     /// A string marked dead in one place occurs UNMARKED somewhere else in the same document, so
     /// a substring match still reports the retracted claim as live.
     UnmarkedOccurrence,
@@ -92,7 +99,7 @@ pub enum Reason {
     RecordDestroyed,
 }
 
-impl Reason {
+impl RetirementReason {
     /// The stable code a caller may match on.
     pub const fn code(self) -> &'static str {
         match self {
@@ -120,7 +127,7 @@ pub struct Finding {
     pub file: String,
     /// The span's content, bounded for the message — never the whole document.
     pub subject: String,
-    pub reason: Reason,
+    pub reason: RetirementReason,
 }
 
 impl fmt::Display for Finding {
@@ -357,7 +364,7 @@ pub fn scan(documents: &[Document]) -> Verdict {
                 findings.push(Finding {
                     file: document.path.clone(),
                     subject: body.clone(),
-                    reason: Reason::RecordDestroyed,
+                    reason: RetirementReason::RecordDestroyed,
                 });
                 continue;
             }
@@ -368,7 +375,7 @@ pub fn scan(documents: &[Document]) -> Verdict {
                 findings.push(Finding {
                     file: document.path.clone(),
                     subject: subject.to_owned(),
-                    reason: Reason::UnmarkedOccurrence,
+                    reason: RetirementReason::UnmarkedOccurrence,
                 });
             }
         }
