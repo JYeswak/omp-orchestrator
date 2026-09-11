@@ -388,6 +388,85 @@ toolchain for the same asupersync builds, so pinning buys nothing and refuses of
 2026-09-07, unpinned `rch exec` succeeded **12+ times** including the Mach-O cross-build, while
 pinned attempts returned `RCH-I005 project_excluded`.
 
+### ⛔ THE ONE DARWIN EXCEPTION: REBUILDING `.git/hooks/pre-commit`, AND NOTHING ELSE
+
+**This is not a re-authorisation of routine cross-building.** `:310-316` stands: *"we shouldn't
+build darwin"* is Joshua's ruling and the routine lane is the Linux one-liner at `:305`. This
+section documents the ONE path that the retirement did not contemplate, because it is an
+operational necessity rather than a preference.
+
+**WHY IT IS UNAVOIDABLE.** `.git/hooks/pre-commit` is a **Mach-O arm64** binary; local builds are
+refused; there is no Darwin worker. `hook_freshness` refuses every commit in the tree while the
+installed hook is older than any `HOOK_SOURCE_CRATE` source. So **editing a hook source crate
+requires a cross-build or the tree stays locked forever.** Measured 2026-09-11: two such locks cost
+the fleet roughly forty minutes.
+
+**IT HAS RUN AND IT WORKS.** Three darwin cross-builds succeeded on 2026-09-11; two produced hook
+binaries, and one of those is the binary gating every commit in this tree:
+
+```
+installed hook  7d03b2490a2f6f57...  Mach-O 64-bit executable arm64  1283200 bytes
+                built on contabo-3 from the source committed in f194a01
+prior hook      536f4c67705f79ff...                                  1283408 bytes  (from 6d9a50c)
+```
+
+Both existed only because a `HOOK_SOURCE_CRATE` edit had locked the tree. Neither was routine.
+
+**THE FORM — add `--target-dir hook-dist/target` to the sanctioned `--config build.target=` shape.**
+Never `--target` (`:369`). The isolated directory is what keeps a cross-build's host-side artifacts
+out of the `./target` tree every other agent's `cargo` shares; `hook-dist/target` is untracked and
+exists for exactly this.
+
+⛔ **`rc=102` / `RCH-E327` IS THE EXPECTED OUTCOME OF A SUCCESSFUL CROSS-BUILD. DO NOT TREAT IT AS
+A FAILURE, AND DO NOT TRY TO MAKE IT ZERO.** Read the remote line and the artifact, never the
+wrapper's rc:
+
+```
+Remote command finished: exit=0                     <- the compile SUCCEEDED
+file <artifact>  ->  Mach-O 64-bit executable arm64 <- the deliverable is CORRECT
+[RCH] RCH-E327 ... returned executables for the WRONG PLATFORM ... exit 102
+```
+
+⭐ **MEASURED REFUTATION, 2026-09-11, and it kills the obvious fix.** `omp-orchestrator-iqguw`
+hypothesised that `RCH-E327` fires on OTHER binaries sitting in the shared pooled target dir, so
+isolating the directory would return `rc=0`. **Both arms were run and the hypothesis is REFUTED:**
+
+```
+WITHOUT --target-dir   remote exit=0 in  29187ms   rc=102   8 offenders
+WITH    --target-dir   remote exit=0 in 553361ms   rc=102   THE SAME 8 offenders
+offenders, both arms:  release/deps/lib{asupersync_macros,bincode_derive_next,pastey,
+                       pin_project_internal,prost_derive,rustversion,serde_derive,
+                       thiserror_impl}-<hash>.so   (ELF)
+```
+
+**Every offender is a host-built PROC MACRO.** A proc macro is compiled for the HOST and lands in
+the same target dir as the cross-built binary **by construction**, so no amount of directory
+isolation can separate them: `RCH-E327` inspects the host-triple output dir and will always find
+them there. **`rc=102` on a darwin cross-build is not contamination and not stale residue — it is
+the guard misreading a correct build.** `omp-orchestrator-a9zmf` reports this upstream; **rch is
+substrate, do not patch it.**
+
+**What `--target-dir` actually buys, stated at its real size:** the darwin artifacts and the host
+proc-macro `.so` land under `hook-dist/target/` instead of `./target/`, so a cross-build cannot put
+a foreign-platform file where a local gate execs `target/<profile>/<name>`. It does **not** change
+the rc and does **not** change the offender list. Measured on the release profile, both arms added
+**ZERO** executables and **ZERO** ELF files to `target/debug`, which held 86 and still holds 86 —
+so the **81 ELF binaries in `target/debug` came from DEBUG-profile cross-builds, not release ones.**
+A per-profile claim, not a per-directory one.
+
+⚠️ **THE RETIRED RECIPE IS NOW IN TWO PUSHED COMMIT MESSAGES — `6d9a50c` and `f194a01` — and a
+commit message cannot be amended after a push.** Those two are **historical records of this
+exception path, not a live recipe.** The authority is `:310-316`. If you grepped history for the
+retired `--config build.target=` form and landed on one of those two messages, you have found a
+record of a hook rebuild, not permission for a routine darwin build. **This section deliberately
+does not reproduce the full command either** (`:316`): it says WHERE `--target-dir` goes, not what
+the whole invocation is. Recover the invocation from `crates/worker-tag-gate/src/lib.rs:42-47`,
+which carries it as the sanctioned third path, or from those two commit messages.
+
+**THE BOUNDARY.** This path is for rebuilding the pre-commit hook. Every other build in this
+repository is the Linux-native one-liner at `:305`. If you want a darwin binary for any other
+reason, that is a decision to raise, not a flag to add.
+
 ### ⭐ TO PROBE A WORKER, USE `rch exec --job -- <cmd>`. PLAIN `rch exec` REFUSES NON-BUILDS.
 
 Discovered 2026-09-11 after four agents spent an evening inferring worker state from build
