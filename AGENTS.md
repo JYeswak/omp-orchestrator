@@ -5856,14 +5856,36 @@ that exact hazard against the RESTORE side minutes earlier and then committed it
 side** — the rule fired on the category I was thinking in, not the action I was taking, for
 the fifth time tonight.
 
-⭐⭐ **AND THE STRUCTURAL LESSON IS SHARPER THAN THE MISTAKE: `git status --porcelain <onefile>`
-CANNOT SEE A BROKEN PAIR.** **Two panes independently measured `main.rs` clean and BOTH WERE
-RIGHT ABOUT THAT FILE** — the breakage lived in the RELATION between two files, and a per-file
-oracle is blind to a relation by construction.
+⭐⭐ **AND THE STRUCTURAL LESSON, IN THE SHARPER FORM A PEER GAVE IT AFTER I PUBLISHED A LOOSER
+ONE.** I wrote that a per-file porcelain check *"certified the file as clean while it was
+broken."* ⛔ **That is unfair to the instrument. `git status --porcelain <onefile>` answers
+*"is this file modified?"* and it answered CORRECTLY** — indeed that correct answer is what
+established `HEAD:` had flipped to post-fix and saved a peer's arm from being a silent no-op.
 
-⛔ **The check that finds it is `git show HEAD:` on BOTH HALVES of the pair — which two of us
-had each run on our OWN commits and neither thought to run on someone else's.** **After any
-path-scoped commit touching a file a peer is editing, verify the pair, not the file.**
+⭐ **THE DEFECT IS IN THE READING, NOT THE TOOL: `clean` READS AS `healthy` TO THE NEXT
+PERSON.** **Two panes measured `main.rs` clean and both were right about that file; the
+breakage lived in the RELATION between `main.rs` and `lib.rs`, which no single-file question
+was ever asked about.**
+
+⭐⭐ **THE PAIR CHECK IS WORTH MORE POINTED OUTWARD THAN INWARD, and that is the part nobody
+did:**
+```
+git show <sha>:<consumer> | grep -c <symbol>
+git show <sha>:<definer>  | grep -c <symbol>
+```
+**A symbol used on one side and absent on the other is a broken pair AT THAT COMMIT — no
+build, no worktree, no ownership required.** ⛔ **Two panes ran exactly this on their OWN
+commits, which is why theirs landed coherent, and neither thought to run it on a peer's.**
+⭐ ***Your own commit is the one you already understand.*** **Run it on someone else's.**
+
+## ⛔⛔ RETRACTED: "PATH-SCOPED COMMIT IS THE SAFE FORM" IS **HALF** TRUE
+
+**The fleet generalised `git apply --cached` + bare `git commit` as the form that excludes a
+concurrent editor — correct, and then over-generalised.** ⛔ **`git commit -- <path>` excludes
+the INDEX and STILL RE-READS THE WORKTREE for the path it names: safe against the index, WIDE
+OPEN to the worktree.** ⭐ **That is how a commit swept an uncommitted consumer in while its
+definition sat uncommitted in a sibling file.** **Second unstated precondition of the session,
+beside the addition-is-its-own-revert one.**
 
 ## ⛔ THE ADDITION-IS-ITS-OWN-REVERT SHORTCUT HAS AN **UNSTATED PRECONDITION**
 
