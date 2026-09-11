@@ -6,6 +6,26 @@
 >
 > Original measurement dates present in this excerpt: not stated in the excerpt.
 >
+> ⛔ **AND THE DISCLAIMER ABOVE COVERS FIGURES. IT DOES NOT COVER INSTRUCTIONS, AND THIS FILE
+> CONTAINS AT LEAST ONE THAT IS NOW ACTIVELY HARMFUL.** Added 2026-09-10.
+>
+> A stale FIGURE is inert — a reader who cites it is merely wrong. A stale INSTRUCTION is
+> executed. `:48-49` of this file states that `RCH_CARGO_WRAPPER_BYPASS=1 cargo …` **"is the
+> sanctioned local path"**. That was true when measured on 2026-09-07 and was reversed by
+> `f4e9d68`: the bypass is now the ONE form the cargo shim refuses, at `exit 75`
+> (`~/.local/bin/cargo:147` opens `if [[ "${RCH_CARGO_WRAPPER_BYPASS:-0}" == 1 ]]`, the gate
+> fires at `:185`). Following that sentence today produces a refusal, and five beads whose
+> acceptance legs name that form are unexecutable as written.
+>
+> **The excerpt is deliberately NOT edited** — a verbatim archive that gets corrected in place
+> stops being a record of what was believed. This header is the correction. `AGENTS.md:192-198`
+> carries the current, opposite statement, itself corrected at `cb9d394` after the shim was
+> measured to refuse the BYPASS rather than the verb.
+>
+> **BEFORE RUNNING ANY COMMAND FROM AN ARCHIVE, CHECK IT AGAINST `AGENTS.md` FIRST.** Re-running
+> a producing command to re-derive a figure is what the disclaimer above asks for and is safe;
+> adopting a procedure because an archive called it sanctioned is not.
+>
 ## Instrument contracts: what each surface ACTUALLY returns
 
 Measured 2026-09-05/06. Every row cost someone real work in one session; five of the seven were
