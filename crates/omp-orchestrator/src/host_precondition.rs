@@ -102,11 +102,26 @@ pub enum HostRequirement {
     /// `.rch-target-<worker>-pool-<hash>` by construction, so a leg asserting
     /// about `<repo>/target` cannot hold on the only lane an agent may drive.
     UnrelocatedTargetDir,
+    /// `<repo>/.flywheel/sota-preflight/jsm-suggest.json` -- a TRACKED
+    /// repository artifact that `sota_preflight` reads.
+    ///
+    /// MEASURED 2026-09-11 on worker vmi3549740: `.flywheel` is ABSENT from the
+    /// worker tree while `.beads/`, `.cargo/`, `docs/` and `AGENTS.md` are all
+    /// PRESENT, and `git check-ignore` on the file is EMPTY -- it is committed,
+    /// not ignored, and 44 tracked files under `.flywheel` are unreachable on
+    /// that lane. So this is NOT a dot-directory rule and NOT a gitignore
+    /// effect; the sync is selective.
+    ///
+    /// This is a FILESYSTEM fact, so unlike `UnrelocatedTargetDir` it owns a
+    /// `host_path` -- and it is a plain FILE, not an executable and not a
+    /// directory, which is why `live_probe` gives it its own arm rather than
+    /// letting a reader file it under `is_executable_file`.
+    RetainedSotaArtifact,
 }
 
 impl HostRequirement {
     /// Every variant, so a census cannot silently omit one.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::TmuxPane,
         Self::TrackerBinary,
         Self::HostCargoShim,
@@ -114,6 +129,7 @@ impl HostRequirement {
         Self::ShasumTool,
         Self::RegisteredRootMount,
         Self::UnrelocatedTargetDir,
+        Self::RetainedSotaArtifact,
     ];
 
     /// The thing that is absent, as an operator would name it.
@@ -127,6 +143,7 @@ impl HostRequirement {
             Self::ShasumTool => "shasum",
             Self::RegisteredRootMount => "registered_root_mount",
             Self::UnrelocatedTargetDir => "unrelocated_target_dir",
+            Self::RetainedSotaArtifact => "retained_sota_artifact",
         }
     }
 
@@ -143,6 +160,7 @@ impl HostRequirement {
             Self::ShasumTool => "MISSING_PLATFORM_TOOL",
             Self::RegisteredRootMount => "VOLUME_NOT_MOUNTED",
             Self::UnrelocatedTargetDir => "CARGO_TARGET_DIR_RELOCATED",
+            Self::RetainedSotaArtifact => "TRACKED_ARTIFACT_UNSYNCED",
         }
     }
 
@@ -157,6 +175,7 @@ impl HostRequirement {
             Self::ShasumTool => "run on macOS, or port the leg to sha256sum",
             Self::RegisteredRootMount => "mount the registered target volume",
             Self::UnrelocatedTargetDir => "run where the build owns <repo>/target; rch relocates CARGO_TARGET_DIR by construction",
+            Self::RetainedSotaArtifact => "run where .flywheel is present; rch's sync excludes it although the file is tracked",
         }
     }
 
@@ -175,6 +194,9 @@ impl HostRequirement {
             Self::RegisteredRootMount => Some(PathBuf::from(
                 "/Volumes/ZestData/zeststream-offload-20260609/build-cache/cargo-targets",
             )),
+            Self::RetainedSotaArtifact => {
+                Some(repo_root()?.join(".flywheel/sota-preflight/jsm-suggest.json"))
+            }
         }
     }
 }
@@ -323,6 +345,12 @@ pub fn live_probe(requirement: HostRequirement) -> bool {
         // A DIRECTORY, and an unmounted volume is ABSENT rather than empty.
         HostRequirement::RegisteredRootMount => {
             requirement.host_path().is_some_and(|path| path.is_dir())
+        }
+        // A plain FILE. Not `is_executable_file` -- a data artifact with the
+        // execute bit unset is PRESENT, and asking for +x here would report a
+        // synced file as absent.
+        HostRequirement::RetainedSotaArtifact => {
+            requirement.host_path().is_some_and(|path| path.is_file())
         }
         // TRUE when the target dir is the build's OWN `<repo>/target` -- unset,
         // empty, or exactly that path. Returns true on the MEASURABLE state,
