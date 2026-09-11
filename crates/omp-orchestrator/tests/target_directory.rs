@@ -2,6 +2,7 @@ use omp_orchestrator::target_directory::{
     ensure_owner_record, read_owner_record, reap_target, resolve_target_directory, OwnerRecord,
     ReapDecision, TargetDirectoryError,
 };
+use omp_orchestrator::host_precondition::{measurable_here, HostRequirement};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -122,6 +123,25 @@ fn empty_reap_scan_is_an_error() {
 
 #[test]
 fn repository_cargo_policy_forces_the_owned_target() {
+    // u3f6q: the SECOND half of this leg reads the owner record the build
+    // script writes into `<repo>/target`. Under `rch exec` the target dir is
+    // relocated to `.rch-target-<worker>-pool-<hash>` by construction, so
+    // `<repo>/target` carries no record and the leg cannot be measured on the
+    // only lane an agent may drive. UNMEASURABLE, never a pass and never a
+    // silent skip: the row names the requirement and the remedy.
+    //
+    // ⛔ The FIRST half (the `.cargo/config.toml` policy assertions) is
+    // host-independent and would still hold here — it is inside the guard
+    // because a partially-measured leg reporting MEASURED would be a worse
+    // lie than an honest UNMEASURABLE. Splitting it into its own unguarded
+    // leg is the better shape and is out of this bead's scope; recorded
+    // rather than done.
+    if !measurable_here(
+        "repository_cargo_policy_forces_the_owned_target",
+        &[HostRequirement::UnrelocatedTargetDir],
+    ) {
+        return;
+    }
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo = manifest_dir
         .parent()

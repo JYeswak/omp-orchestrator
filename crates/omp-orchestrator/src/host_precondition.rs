@@ -84,17 +84,36 @@ pub enum HostRequirement {
     /// absent rather than empty when its volume is not attached, and those are
     /// different facts.
     RegisteredRootMount,
+    /// `CARGO_TARGET_DIR` must be UNSET or resolve INSIDE the repository — the
+    /// build's own target directory, not a relocated one.
+    ///
+    /// ⛔ NAMED IN THE POSITIVE ON PURPOSE, because every other variant means
+    /// "this must be PRESENT for the leg to be measurable" and `live_probe`
+    /// returns `true` on presence. A `RelocatedTargetDir` spelling would read
+    /// "relocation is required", its probe would return `true` exactly when
+    /// relocated, and the guarded legs would skip on the UNRELOCATED host —
+    /// the one place they CAN be measured. That is an inverted guard reached
+    /// by a naming choice rather than by a logic error, so the variant names
+    /// the REQUIRED state and `code()` names the VIOLATION. Inverting either
+    /// alone is visible; inverting both cancels and reads correct while
+    /// behaving backwards.
+    ///
+    /// `rch exec` relocates the target dir to
+    /// `.rch-target-<worker>-pool-<hash>` by construction, so a leg asserting
+    /// about `<repo>/target` cannot hold on the only lane an agent may drive.
+    UnrelocatedTargetDir,
 }
 
 impl HostRequirement {
     /// Every variant, so a census cannot silently omit one.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::TmuxPane,
         Self::TrackerBinary,
         Self::HostCargoShim,
         Self::DarwinToolchainCargo,
         Self::ShasumTool,
         Self::RegisteredRootMount,
+        Self::UnrelocatedTargetDir,
     ];
 
     /// The thing that is absent, as an operator would name it.
@@ -107,6 +126,7 @@ impl HostRequirement {
             Self::DarwinToolchainCargo => "darwin_toolchain_cargo",
             Self::ShasumTool => "shasum",
             Self::RegisteredRootMount => "registered_root_mount",
+            Self::UnrelocatedTargetDir => "unrelocated_target_dir",
         }
     }
 
@@ -122,6 +142,7 @@ impl HostRequirement {
             Self::DarwinToolchainCargo => "WRONG_HOST_PLATFORM",
             Self::ShasumTool => "MISSING_PLATFORM_TOOL",
             Self::RegisteredRootMount => "VOLUME_NOT_MOUNTED",
+            Self::UnrelocatedTargetDir => "CARGO_TARGET_DIR_RELOCATED",
         }
     }
 
@@ -135,6 +156,7 @@ impl HostRequirement {
             Self::DarwinToolchainCargo => "run on an aarch64-apple-darwin host; this leg cannot hold on Linux",
             Self::ShasumTool => "run on macOS, or port the leg to sha256sum",
             Self::RegisteredRootMount => "mount the registered target volume",
+            Self::UnrelocatedTargetDir => "run where the build owns <repo>/target; rch relocates CARGO_TARGET_DIR by construction",
         }
     }
 
@@ -144,7 +166,7 @@ impl HostRequirement {
     pub fn host_path(self) -> Option<PathBuf> {
         let home = || std::env::var_os("HOME").map(PathBuf::from);
         match self {
-            Self::TmuxPane | Self::TrackerBinary => None,
+            Self::TmuxPane | Self::TrackerBinary | Self::UnrelocatedTargetDir => None,
             Self::HostCargoShim => Some(home()?.join(".local/bin/cargo")),
             Self::DarwinToolchainCargo => Some(
                 home()?.join(".rustup/toolchains/nightly-aarch64-apple-darwin/bin/cargo-rch-real"),
@@ -272,6 +294,15 @@ fn is_executable_file(path: &Path) -> bool {
 /// The live host probe. Exhaustive by construction: a new [`HostRequirement`]
 /// variant must be answered here or the crate does not compile, so "present"
 /// can never become a default.
+/// The repository root, derived from this crate's manifest directory rather
+/// than from a literal, so the probe answers the same question in any checkout.
+fn repo_root() -> Option<PathBuf> {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(std::path::Path::parent)
+        .map(std::path::Path::to_path_buf)
+}
+
 #[must_use]
 pub fn live_probe(requirement: HostRequirement) -> bool {
     match requirement {
@@ -293,6 +324,22 @@ pub fn live_probe(requirement: HostRequirement) -> bool {
         HostRequirement::RegisteredRootMount => {
             requirement.host_path().is_some_and(|path| path.is_dir())
         }
+        // TRUE when the target dir is the build's OWN `<repo>/target` -- unset,
+        // empty, or exactly that path. Returns true on the MEASURABLE state,
+        // like every other arm, so the guard cannot invert on a reader.
+        //
+        // ⛔ `starts_with(repo)` IS THE WRONG PREDICATE AND WAS MEASURED WRONG:
+        // `rch` relocates to `<repo>/.rch-target-<worker>-pool-<hash>`, which
+        // IS inside the repository, so an inside-the-repo test reported
+        // MEASURED on the very lane this requirement exists to exclude. The
+        // guarded leg caught it by then failing for its real reason. The
+        // requirement is the EXACT owned path, not repo containment.
+        HostRequirement::UnrelocatedTargetDir => match std::env::var_os("CARGO_TARGET_DIR") {
+            None => true,
+            Some(value) if value.is_empty() => true,
+            Some(value) => repo_root()
+                .is_some_and(|repo| PathBuf::from(value) == repo.join("target")),
+        },
     }
 }
 
