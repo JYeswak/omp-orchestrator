@@ -33,7 +33,12 @@ on:
 
 concurrency:
   group: build-hook-macos-${{ github.ref }}
-  cancel-in-progress: true
+  # DO NOT cancel on push: an unconditional `true` killed every run of this
+  # job (34618510537, 34620663770, 34620763996, 34617916165, all CANCELLED, zero
+  # verdict-bearing) because each fleet push murders the in-flight macOS build
+  # before it finishes. gate.yml encodes the same lesson as a predicate; this
+  # matches it. A constant that looks like a tidy default is what produced this.
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   build-hook:
