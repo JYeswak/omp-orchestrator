@@ -519,6 +519,26 @@ pub fn capture_snapshot(captured_at_secs: u64, text: &str) -> CaptureSnapshot {
 /// useless for 83 HOURS. Neither verdict replaces the other, so this layers on top; the
 /// composer remains the authority on FREE.
 ///
+/// ⛔ AND IT IS THE MECHANISM, NOT A PROVISIONAL FALLBACK. 052de0b's message claimed this rule
+/// was awaiting a better oracle that `--no-caut` had switched off. THAT CLAIM IS FALSE and the
+/// commit could not be amended (the hook refuses a message-only commit as NOTHING_TO_CHECK), so
+/// the retraction lives here, where a reader of the code finds it. Measured on one pane, two
+/// calls ten seconds apart, raw payloads compared:
+///
+/// ```text
+/// WITHOUT --no-caut   caut_enabled true   caut_available TRUE
+/// WITH    --no-caut   caut_enabled false  caut_available false
+/// is_rate_limited     true / true      health_grade D / D
+/// recommendation      WAIT_FOR_RESET / same
+/// indicators.limit    ["try again"] / ["try again"]
+/// ```
+///
+/// The verdict does not move with caut REACHABLE, and the payload names its own mechanism:
+/// `indicators.limit: ["try again"]` is a text match. No oracle was suppressed. A provider-quota
+/// route may still be BUILDABLE -- caut is installed, codex is OAuth-authenticated, provider
+/// status resolves live -- but `usage.primary` is NULL with zero token accounts, so there is
+/// nothing to prefer over this rule today.
+///
 /// # ⛔ WHY THE TYPED FIELD ALONE IS NOT ENOUGH
 ///
 /// `local_state.is_rate_limited` is itself a TEXT MATCH one layer down, and it FAILS CLOSED on a
