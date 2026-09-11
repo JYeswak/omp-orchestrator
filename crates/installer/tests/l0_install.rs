@@ -1,11 +1,12 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
     git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks,
-    publish_atomic, publish_atomic_durable, refuse_path_collisions, resolve_platform_triple,
-    resolve_repo_ownership, seal_install_report, stage_artifact_stream,
-    probe_build_id_string, verify_identity, verify_minisign_policy, AgentOutcome,
-    DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite, IdentityCheck,
-    InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
+    parse_cosign_version, publish_atomic, publish_atomic_durable, refuse_path_collisions,
+    resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
+    probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_policy,
+    AgentOutcome, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite,
+    IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
+    SigstoreTrust, COSIGN_CVE_FLOOR, COSIGN_CVE_ID,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -1323,4 +1324,194 @@ fn production_install_path_routes_through_the_durability_seam() {
     assert_eq!(refused_metric.atomic_rename_attempts, 1, "{refused_metric:?}");
     assert_eq!(refused_metric.parent_fsync_successes, 0, "{refused_metric:?}");
     assert_eq!(refused_metric.verdict(), MetricVerdict::Red, "{refused_metric:?}");
+}
+
+// ── B05 / T05 / T06: L0 SIGSTORE COSIGN POLICY ────────────────────────────────
+//
+// MEASURED 2026-09-11 at HEAD 2774c6a: the strings cosign, sigstore,
+// L0_SIGSTORE_REFUSED and CVE-2026-22703 appeared NOWHERE under
+// crates/installer. The existing signature coverage is minisign, which is a
+// DIFFERENT mechanism — a minisign leg cannot evidence a cosign floor, and the
+// three sigstore beads' named selectors ran zero tests and exited 0.
+
+fn expected_keyless() -> SigstoreTrust {
+    SigstoreTrust::CertificateIdentity {
+        identity: "release@omp-orchestrator.invalid".to_owned(),
+        issuer: "https://token.actions.githubusercontent.com".to_owned(),
+    }
+}
+
+#[test]
+fn sigstore_policy_allows_supported_cosign_and_expected_identity() {
+    let expected = expected_keyless();
+    let verdict = verify_sigstore_policy(Some(COSIGN_CVE_FLOOR), &expected, &expected, true)
+        .expect("cosign exactly AT the floor with the expected identity must pass");
+    assert_eq!(verdict.floor.to_string(), COSIGN_CVE_FLOOR);
+    assert_eq!(verdict.cosign_version, verdict.floor, "{verdict:?}");
+    assert_eq!(verdict.trust, expected, "{verdict:?}");
+
+    // ABOVE the floor passes too, so the comparison is an ordering and not an
+    // equality that would refuse every future cosign release.
+    let above = verify_sigstore_policy(Some("9.99.99"), &expected, &expected, true)
+        .expect("a cosign release above the floor must pass");
+    assert!(above.cosign_version > above.floor, "{above:?}");
+
+    // A `v` prefix and a pre-release suffix of the fixing release both parse.
+    verify_sigstore_policy(Some("v9.0.0"), &expected, &expected, true).expect("v prefix parses");
+    verify_sigstore_policy(Some("9.0.0-rc.1"), &expected, &expected, true)
+        .expect("pre-release of an above-floor release parses");
+
+    // LOCAL-KEY policy is the contract's other trust mode and it also passes.
+    let key = SigstoreTrust::LocalKey {
+        key_id: "omp-release-2026".to_owned(),
+    };
+    let key_verdict = verify_sigstore_policy(Some("9.0.0"), &key, &key, true)
+        .expect("a matching local key must pass");
+    assert_eq!(key_verdict.trust, key, "{key_verdict:?}");
+}
+
+#[test]
+fn sigstore_policy_refuses_absent_unparseable_and_invalid_bundle() {
+    let expected = expected_keyless();
+
+    // ABSENT cosign is a refusal, never a skip: a verifier that is not there
+    // has not verified anything.
+    let error = verify_sigstore_policy(None, &expected, &expected, true)
+        .expect_err("absent cosign must refuse");
+    let text = error.to_string();
+    assert!(text.starts_with("L0_SIGSTORE_REFUSED"), "{text}");
+    assert!(text.contains(COSIGN_CVE_ID), "the refusal must name its reason: {text}");
+
+    // A version this code cannot ORDER is never approved.
+    for raw in ["", "two.four.one", "2.4", "2.4.1.5", "not-a-version"] {
+        let error = verify_sigstore_policy(Some(raw), &expected, &expected, true)
+            .expect_err("an unorderable cosign version must refuse");
+        let text = error.to_string();
+        assert!(
+            text.starts_with("L0_SIGSTORE_REFUSED") && text.contains("unparseable"),
+            "raw {raw:?} produced {text}"
+        );
+        assert_eq!(parse_cosign_version(raw), None, "raw {raw:?} must not parse");
+    }
+
+    // An INVALID bundle under an allowed cosign and the expected identity is
+    // still a refusal — the version floor and the identity are preconditions
+    // for trusting the signature, not substitutes for it.
+    let error = verify_sigstore_policy(Some("9.0.0"), &expected, &expected, false)
+        .expect_err("an invalid bundle must refuse");
+    assert!(
+        error.to_string().starts_with("L0_SIGSTORE_REFUSED"),
+        "{error}"
+    );
+}
+
+#[test]
+fn cosign_below_cve_floor_refuses() {
+    let expected = expected_keyless();
+    let floor = parse_cosign_version(COSIGN_CVE_FLOOR).expect("the floor constant must parse");
+
+    // One patch below the floor: the smallest possible below-floor version, so
+    // the test cannot pass by being far away from the boundary.
+    let just_below = format!("{}.{}.{}", floor.major, floor.minor, floor.patch - 1);
+    let error = verify_sigstore_policy(Some(&just_below), &expected, &expected, true)
+        .expect_err("cosign below the CVE floor must refuse");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_SIGSTORE_REFUSED"),
+        "the refusal must be typed: {text}"
+    );
+    // NAMING THE VERSION is the acceptance's own clause: the presented version,
+    // the floor, and the advisory all appear, so the refusal is actionable
+    // rather than a bare code.
+    assert!(text.contains(&just_below), "must name the presented version: {text}");
+    assert!(text.contains(COSIGN_CVE_FLOOR), "must name the floor: {text}");
+    assert!(text.contains(COSIGN_CVE_ID), "must name the advisory: {text}");
+    assert!(matches!(error, InstallError::SigstoreRefused { .. }), "{error:?}");
+
+    // Lower still refuses, and a below-floor PRE-RELEASE refuses too — the
+    // suffix must not become an escape hatch under the floor.
+    for raw in ["0.0.1", "1.99.99", "2.0.0", "2.4.0-rc.9"] {
+        if parse_cosign_version(raw).expect("fixture parses") >= floor {
+            continue;
+        }
+        let error = verify_sigstore_policy(Some(raw), &expected, &expected, true)
+            .expect_err("every below-floor version must refuse");
+        assert!(
+            error.to_string().contains(COSIGN_CVE_ID),
+            "raw {raw} produced {error}"
+        );
+    }
+
+    // KNOWN-GOOD BOUNDARY CONTROL so the gate is not over-strict: the floor
+    // itself is ALLOWED. A test that refused everything would satisfy the
+    // assertions above while breaking every install.
+    verify_sigstore_policy(Some(COSIGN_CVE_FLOOR), &expected, &expected, true)
+        .expect("cosign exactly at the floor is allowed, not refused");
+}
+
+#[test]
+fn sigstore_identity_mismatch_refuses() {
+    let expected = expected_keyless();
+
+    // A VALID signature from the WRONG identity is not trusted. `bundle_valid`
+    // is true throughout: this test is about identity, and passing a false
+    // bundle here would let the refusal come from the wrong clause.
+    let wrong_identity = SigstoreTrust::CertificateIdentity {
+        identity: "attacker@elsewhere.invalid".to_owned(),
+        issuer: "https://token.actions.githubusercontent.com".to_owned(),
+    };
+    let error = verify_sigstore_policy(Some("9.0.0"), &wrong_identity, &expected, true)
+        .expect_err("a foreign certificate identity must refuse");
+    let text = error.to_string();
+    assert!(text.starts_with("L0_SIGSTORE_REFUSED"), "{text}");
+    assert!(
+        text.contains("attacker@elsewhere.invalid")
+            && text.contains("release@omp-orchestrator.invalid"),
+        "the refusal must name BOTH the presented and the required identity: {text}"
+    );
+
+    // THE ISSUER IS PART OF THE IDENTITY. The same identity string minted by a
+    // different issuer is a different principal, and this is the leg a
+    // field-by-field comparison of only the identity would miss.
+    let wrong_issuer = SigstoreTrust::CertificateIdentity {
+        identity: "release@omp-orchestrator.invalid".to_owned(),
+        issuer: "https://attacker-oidc.invalid".to_owned(),
+    };
+    let error = verify_sigstore_policy(Some("9.0.0"), &wrong_issuer, &expected, true)
+        .expect_err("the right identity from the wrong issuer must refuse");
+    assert!(
+        error.to_string().contains("https://attacker-oidc.invalid"),
+        "{error}"
+    );
+
+    // TRUST MODE is not a string comparison: a local key cannot satisfy a
+    // keyless policy by presenting a matching-looking value.
+    let local = SigstoreTrust::LocalKey {
+        key_id: "release@omp-orchestrator.invalid".to_owned(),
+    };
+    let error = verify_sigstore_policy(Some("9.0.0"), &local, &expected, true)
+        .expect_err("a local key cannot satisfy a keyless identity policy");
+    let text = error.to_string();
+    assert!(
+        text.contains("trust mode mismatch")
+            && text.contains("local-key")
+            && text.contains("keyless"),
+        "{text}"
+    );
+
+    // And a mismatched local key under a local-key policy refuses by key id.
+    let want_key = SigstoreTrust::LocalKey {
+        key_id: "omp-release-2026".to_owned(),
+    };
+    let error = verify_sigstore_policy(Some("9.0.0"), &local, &want_key, true)
+        .expect_err("a foreign local key must refuse");
+    assert!(
+        error.to_string().contains("local key mismatch"),
+        "{error}"
+    );
+
+    // KNOWN-GOOD CONTROL: the expected identity against itself passes, so the
+    // identity gate is not refusing everything.
+    verify_sigstore_policy(Some("9.0.0"), &expected, &expected, true)
+        .expect("the expected identity must pass");
 }
