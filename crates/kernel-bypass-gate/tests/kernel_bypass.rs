@@ -304,10 +304,15 @@ fn report() {}
     );
 }
 
-/// GENUINE-SPAWN PROOF (bead -9ub39): a real raw `ntm` spawn outside the owning
-/// crate must STILL be refused, naming the dispatch kernel — and the owning
-/// crate's own spawn stays allowlisted. Deleting the bare-word rows must not
-/// cost the one genuine invocation the census found.
+/// GENUINE-SPAWN PROOF (bead -9ub39, owner moved by io67x): a real raw `ntm`
+/// spawn outside the owning crate must STILL be refused, naming the kernel —
+/// and the owning crate's own spawn stays allowlisted.
+///
+/// io67x moved the declared owner from `tick-monitor` to `ntm-kernel`, the crate
+/// that now builds the argv and spawns. `tick-monitor` held ZERO sites for this
+/// needle when the row moved, so the allowlist it loses was protecting nothing.
+/// This leg pins BOTH halves of the move, so a silent revert to the old owner
+/// cannot pass: the new owner is allowlisted AND the former owner is not.
 #[test]
 fn genuine_ntm_spawn_outside_kernel_still_matches() {
     let source = "\
@@ -318,13 +323,19 @@ fn fire() {
     let hits = lint_source("crates/my-crate/src/lib.rs", source);
     assert_eq!(hits.len(), 1, "the genuine spawn must still be refused: {hits:?}");
     assert_eq!(
-        hits[0].kernel, "dispatch robot-send",
+        hits[0].kernel, "ntm-kernel invocation",
         "the refusal must NAME the kernel: {hits:?}"
     );
-    let own = lint_source("crates/tick-monitor/src/main.rs", source);
+    let own = lint_source("crates/ntm-kernel/src/lib.rs", source);
     assert!(
         own.is_empty(),
         "the owning crate's own spawn stays allowlisted: {own:?}"
+    );
+    let former_owner = lint_source("crates/tick-monitor/src/main.rs", source);
+    assert_eq!(
+        former_owner.len(),
+        1,
+        "the FORMER owner is no longer allowlisted for ntm: {former_owner:?}"
     );
 }
 
