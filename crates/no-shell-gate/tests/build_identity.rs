@@ -80,8 +80,8 @@ use std::path::PathBuf;
 /// with the ratchet's own detector, never with a proxy that looks equivalent** — and when the
 /// detector disagrees with your proxy, the detector is not the one that is wrong.
 ///
-/// ⛔ WHY THESE FOUR ARE NOT SIMPLY STAMPED, which is the obvious next question.
-/// Stamping `preregistration-gate` was attempted and REVERTED. Adding a `build.rs`
+/// ⛔ WHY THESE WERE NOT SIMPLY STAMPED, which is the obvious next question, and what changed.
+/// Stamping `preregistration-gate` was attempted once and REVERTED. Adding a `build.rs`
 /// invalidates that crate's build cache, and `plan-assemble` DEPENDS on it, so
 /// `plan-assemble` must rebuild; its `[package.metadata.gate]` check must RUN its bin, so
 /// the pre-commit gate issues `cargo build -p plan-assemble`, which goes down the remote
@@ -92,13 +92,43 @@ use std::path::PathBuf;
 /// target triple aarch64-apple-darwin after a successful remote compile on contabo"
 /// ```
 ///
-/// The remote compile SUCCEEDS; the artifact is Linux and the host is darwin. Under the
-/// standing no-darwin-cross-build policy there is no admissible way to produce that
-/// artifact. **So a crate whose gate check must RUN its bin cannot absorb any
-/// cache-invalidating change — including a change to one of its dependencies.** The first
+/// The remote compile SUCCEEDS; the artifact is Linux and the host is darwin. The first
 /// diagnosis blamed the stamped crate's own cache and was refuted by reverting it: the crate
 /// went byte-identical to HEAD and the gate still failed, because the *dependency* was still
-/// dirty. Recorded rather than routed around; the bound is tightened to the honest 4.
+/// dirty. Recorded rather than routed around.
+///
+/// ✅ 2026-09-11: TWO crates stamped — `dispatch-claim-fence` and `omp-idle-dispatch` —
+/// each delegating to `build_stamp::emit()` rather than inlining the line a sixth time.
+/// The count falls 6 -> 4 at HEAD and the ceiling STAYS 4, which makes it TIGHT for the
+/// first time: before this commit CI read 6 against 4 and was RED; now one new omission
+/// reddens it. A ceiling is not lowered here because the honest floor IS 4.
+///
+/// ⛔ TWO MORE WERE STAMPED, REFUSED BY THE GATE, AND REVERTED — the trap above is LIVE and
+/// I re-derived it rather than inheriting it. Staging `plan-assemble` and
+/// `preregistration-gate` produced exactly the recorded failure:
+/// `plan-assemble-build: cargo build -p plan-assemble reason=BUILD_INCONCLUSIVE exit=102`,
+/// "Retrieved artifacts do not match the requesting host's target triple
+/// aarch64-apple-darwin after a successful remote compile on contabo". So those two cannot
+/// be stamped while `plan-assemble`'s gate check must RUN its bin on a darwin host, and the
+/// remedy is a policy question about cross-builds, not a stamping chore.
+///
+/// ⛔ THE OTHER TWO RESIDUALS ARE NOT OVERSIGHTS AND NEITHER IS MINE TO CLOSE:
+///   - `contabo-reclaim` HAS a correct `build.rs` calling `build_stamp::emit()` ON DISK,
+///     but that file is UNTRACKED at HEAD. A worktree scan reads one fewer than a clean
+///     checkout, which is exactly why CI read 6 while this Mac read 5. Its owner must
+///     commit it; committing another agent's untracked file is the hazard this repo paid
+///     for four times on 2026-09-11.
+///   - `ompo-doctor` DOES name its build, under different keys — its `build.rs` emits
+///     `OMPO_BUILD_COMMIT` and `OMPO_SOURCE_REVISION`, not `OMP_BUILD_ID`. Whether the
+///     installer's identity rule (`installer/src/main.rs:173`, which accepts `OMP_BUILD_ID`
+///     *or a HEAD the build host can resolve*) is satisfied by those keys is a RULING, not
+///     a stamping chore, and it is UNMEASURED here. It stays in the count until someone
+///     measures the installer against a real `ompo-doctor` artifact.
+///
+/// ⛔ DERIVE THIS COUNT FROM HEAD, NEVER FROM THE WORKTREE. `git ls-tree`/`git show`, not
+/// the filesystem: an untracked `build.rs` makes a worktree scan read a crate as stamped
+/// that a clean checkout reads as bare, and that one-crate gap is the whole difference
+/// between this Mac's 5 and CI's 6.
 ///
 /// A ratchet is only evidence while it is TIGHT. Lowering it is the second half of every
 /// stamping commit, not a follow-up — an untightened gain is a gain that silently regresses.

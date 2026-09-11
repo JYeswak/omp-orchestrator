@@ -33,3 +33,6 @@ checks = [{ bin = "omp-idle-dispatch", args = ["--selftest"] }]
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }
