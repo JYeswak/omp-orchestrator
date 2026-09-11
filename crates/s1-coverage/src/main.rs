@@ -188,12 +188,13 @@ fn git_unavailable(error: &str) -> bool {
 async fn build_manifest(cx: &Cx, repo: &Path, revision: &str) -> Result<InputManifest, String> {
     let tree = match git_capture(cx, repo, &manifest_args("tree", revision)).await {
         Ok(output) => lines(output),
-        // HEAD is the ONLY revision a worktree fallback can honestly stand in for.
-        Err(error) if revision == "HEAD" && git_unavailable(&error) => {
-            let paths = PROVENANCE_PATHS.iter().map(ToString::to_string).collect::<Vec<_>>();
-            return Ok(InputManifest::new(revision, paths.clone(), paths, Vec::new(), Vec::new()));
-        }
-        // Any other revision: the CHECKOUT cannot resolve it. Say so instead of naming this crate.
+        // NO HEAD SPECIAL CASE. A checkout that cannot resolve HEAD gets the same exit 4 as any
+        // other revision. The arm that used to sit here SYNTHESISED an all-present manifest —
+        // every provenance path in tree AND index, empty missing-sets — and it fired on every
+        // depth-zero checkout, so a genuinely absent path still reported present. Refusing to
+        // substitute a dirty worktree for a named tree and then substituting an ASSUMPTION for
+        // one is the same defect wearing a comment. Measured 2026-09-10: a remote manifest listed
+        // `.git/s1_cov.py` as present in the tree, which no real tree can contain.
         Err(error) if git_unavailable(&error) => return Err(checkout_unusable(revision, &error)),
         Err(error) => return Err(error),
     };
@@ -207,10 +208,9 @@ async fn read_tree_file(cx: &Cx, repo: &Path, revision: &str, path: &str) -> Res
     let args = vec!["show".to_owned(), format!("{revision}:{path}")];
     match git_capture(cx, repo, &args).await {
         Ok(text) => Ok(text),
-        Err(error) if revision == "HEAD" && git_unavailable(&error) => {
-            read_worktree_file(repo, path)
-                .map_err(|fallback| format!("S1_COVERAGE_TREE_READ path={path} error={fallback}"))
-        }
+        // Nor here: reading the WORKTREE while labelling the result `revision=HEAD mode=tree` is
+        // precisely the worktree-as-HEAD-truth substitution this crate exists to retire. Use
+        // `--mode worktree` to read the worktree on purpose.
         Err(error) if git_unavailable(&error) => Err(checkout_unusable(revision, &error)),
         Err(error) => Err(format!("S1_COVERAGE_TREE_READ path={path} error={error}")),
     }
