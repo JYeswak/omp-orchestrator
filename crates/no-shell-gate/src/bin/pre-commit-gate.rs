@@ -1333,20 +1333,46 @@ fn doctrine_retirement_on_commit_path(
         return;
     }
 
+    // omp-orchestrator-249hz items 1-2, AGAIN, AND THIS TIME IN THE GATE THAT SHIPPED WITH IT.
+    //
+    // This block read `std::fs::read_to_string(repo_root.join(relative))` -- WORKTREE bytes for
+    // a path selected from the STAGED set. The remedy was already in this file 1,006 lines above
+    // (`:333`), with a bead id, a reverted commit (`902e245`) and three `staged_blob` call
+    // sites, and I read that comment while writing this gate. READING THE FIX IS NOT APPLYING
+    // IT: selecting the path from the index made the worktree read look consistent.
+    //
+    // The false CLEAN needs the index DIRTIER than the worktree, which is the ordinary
+    // `git add AGENTS.md` -> keep editing until it is clean -> pathless `git commit` sequence.
+    // A retraction-breaking blob then lands under `CLEAN spans=N exit=0`, and a gate that
+    // reports PASS over bytes the commit does not contain is the defect this crate was built to
+    // refuse, wearing the crate's own badge. Found by GradePxhmd grading `cq4fb`.
+    //
+    // The CI half (`doctrine-retirement-gate --repo .`) is unaffected: no index exists there for
+    // the worktree to disagree with.
     let mut documents = Vec::new();
     for relative in in_scope {
-        let path = repo_root.join(relative);
-        match std::fs::read_to_string(&path) {
-            Ok(raw) => documents.push(doctrine_retirement_gate::Document {
-                path: relative.clone(),
-                raw,
-            }),
-            Err(error) => {
+        match staged_blob(repo_root, relative) {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(raw) => documents.push(doctrine_retirement_gate::Document {
+                    path: relative.clone(),
+                    raw,
+                }),
+                // Non-UTF-8 is an INSTRUMENT_ERROR, never a pass: the gate could not read the
+                // doctrine, which is a different state from the doctrine being clean.
+                Err(error) => {
+                    refusals.push(format!(
+                        "doctrine-retirement-gate: INSTRUMENT_ERROR \
+                         RETIREMENT_BLOB_NOT_UTF8 path={relative} detail={error} -- a document \
+                         this gate cannot decode is an ERROR, never a pass"
+                    ));
+                    return;
+                }
+            },
+            Err(why) => {
                 refusals.push(format!(
                     "doctrine-retirement-gate: INSTRUMENT_ERROR \
-                     RETIREMENT_FILE_UNREADABLE path={} detail={error} -- an unreadable \
-                     document is an ERROR, never a pass",
-                    path.display()
+                     RETIREMENT_STAGED_BLOB_UNREADABLE path={relative} detail={why} -- an \
+                     unreadable staged document is a REFUSAL, never a pass"
                 ));
                 return;
             }

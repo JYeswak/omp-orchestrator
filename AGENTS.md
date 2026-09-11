@@ -1950,6 +1950,90 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    leg still has to show the RED was caused by the mutation and not by unrelated breakage — the
    discriminator is that the other legs stay GREEN, per rule 7.
 
+
+8t. **AN ABSENCE CLAIM IS ONLY AS GOOD AS THE ARTIFACT YOU SEARCHED — KEY THE TABLE TO THE
+   ARTIFACT, NOT THE NEEDLE.** Added 2026-09-10 after the conductor declared an error code
+   nonexistent, retracted it, and then over-corrected into retiring a sound instrument. Converged
+   from three agents in one hour.
+
+   ```
+   ARTIFACT   NEEDLE                                   ABSENCE MEANS
+   SOURCE     any literal actually written there       SOUND      nothing composes it
+   BINARY     a NON-COMPOSED string literal            USABLE     stored verbatim in .rodata
+   BINARY     an identifier, release build             BLIND-ish  inlined / no retained symbol
+   BINARY     format!-composed text or assembled code  BLIND      split around placeholders
+   ANY        runtime observation                      BEATS ALL FOUR
+   ```
+
+   **THE AXIS IS "IS THIS EXACT BYTE SEQUENCE STORED CONTIGUOUSLY", NOT identifier-vs-message.**
+   This rule was drafted with the middle two rows INVERTED and was corrected by measurement
+   before it committed. On a release Mach-O with every needle confirmed present in source:
+
+   ```
+   parity_verdict               identifier   source 9   strings 0
+   PARITY_REASON_CURRENT        identifier   source 3   strings 0
+   probe_installed_verb_parity  identifier   source 1   strings 0
+   missing_provenance           identifier   source 16  strings 3   <- ALSO a JSON key literal
+   "installed verb set matches current source"   message    strings 1
+   "this build cannot state its own origin"      message    strings 2
+   zzz_absent_zzz               control                   strings 0
+   ```
+
+   Reproduced independently on a second release binary: `section_from_description` — a pure
+   function name, never written as a literal — scores **0**, while `adopted_method` (7) and
+   `OMPO_VERB_PARITY_CURRENT` (1) survive **because they are also string literals**. Identifiers
+   are not merely weak in a release build, they are mostly GONE; non-composed message literals
+   sit in the data section verbatim. **`RCH-E327` failed its sweep because it was COMPOSED, not
+   because it was a message** — keying the rule to message-vs-identifier explains that one case
+   by accident and gets the general population backwards, licensing exactly the inference that
+   failed twice tonight: *"I grepped an identifier, got zero, therefore absent."* On a release
+   binary that is wrong roughly three times in four.
+
+   **CHEAP DIAGNOSTIC FOR THE COMPOSED ROW: grep TWO CLAUSES OF THE SAME MESSAGE.** If one hits
+   and the other does not, you are reading fragments around `format!` holes and every absence in
+   that neighbourhood is uninformative. Measured: `WRONG PLATFORM` → 1 while
+   `the retrieved artifact(s) are ELF`, from the SAME sentence, → 0.
+
+   ⛔ **AND THE POSITIVE CONTROL MUST COME FROM INSIDE THE ARTIFACT UNDER TEST, IN THE SAME
+   CLASS.** A needle believed to be an identifier (`Selected_worker`) scored 0 and was
+   **indistinguishable from the negative control**, which also scored 0 — and it was prose from
+   a log line. But a class-check alone would NOT have saved it either, because the class itself
+   is unreliable in that artifact. The only sound form is: **grep something you have confirmed
+   is present IN THAT BINARY before believing any zero from it.** `missing_provenance` = 3 is
+   what makes the surrounding zeros interpretable; without it there are four absences and no way
+   to separate instrument failure from real absence.
+
+   **`8i` DOES NOT CATCH THIS AND NEITHER DOES ITS TWO-PROBE CONTROL** — both establish that the
+   INSTRUMENT can fire, not that your NEEDLE'S POPULATION is visible to it. That is a THIRD
+   probe, and it must be drawn from inside the artifact under test.
+
+   **THE MEASURED CASE.** `strings $(command -v rch) | grep -c 'E327'` → **0**, repeated across
+   eleven binaries, and the conclusion *"the code does not exist"* was false. The message is one
+   `format!` string stored in fragments around its placeholders — the stored bytes read
+   `"O SUCCEEDED but returned executables for the WRONG PLATF"`, **starting mid-word** — so no
+   contiguous literal holds the assembled text or the interpolated code. `RCH-E327` was then
+   **observed verbatim in live output**, which settled it.
+
+   **WIDENING A BLIND SWEEP DOES NOT MAKE IT SIGHTED. Eleven blind reads are still blind.**
+
+   **AND THE POSITIVE CONTROL WAS AVAILABLE AND UNRUN**: `grep -oE 'RCH-E[0-9]{3}' | sort -u` →
+   **27 distinct codes**, so the instrument demonstrably CAN return a code and `E327`'s absence
+   from that list is evidence of nothing. *(Denominator: 27 distinct CODES; `grep -c 'RCH-E'`
+   → 20 counts LINES. Quote the 27.)*
+
+   **DO NOT RETIRE THE SOUND ROW.** The first over-correction here read as retiring `grep` for
+   absence wholesale. A bead had closed on greps for `IoFailed` / `PipeReadOutcome` /
+   `terminate_and_reap` returning 0 — **over SOURCE**, the top row, independently confirmed by
+   `cargo check --all-targets` exiting 0. That verdict was never exposed to the defect at all,
+   because the defect is a binary property. A blanket *"grep cannot prove absence"* would have
+   cast doubt on a verdict the hazard could not reach. Same shape as `8s`: **a rule stated too
+   broadly forbids a legal operation.**
+
+   **NO-CLAIM.** SOUND here means only that the needle cannot be hidden by COMPOSITION. It does
+   not mean your needle was right, your corpus complete, or your tree the one you meant — `8i`'s
+   two-probe control still applies on top of this, and the `Selected_worker` case above is an
+   instance where `8i` alone would also have passed.
+
 8q. **AN `OR`ed READBACK NEEDLE IS ONLY AS STRONG AS ITS WEAKEST ALTERNATIVE — it confirms the FILE,
    not the EDIT.** Measured 2026-09-07 by `%20`, which caught it because two instruments disagreed.
 
