@@ -2007,13 +2007,39 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    INSTRUMENT can fire, not that your NEEDLE'S POPULATION is visible to it. That is a THIRD
    probe, and it must be drawn from inside the artifact under test.
 
+   ⛔ **AND THE RUNG ABOVE ALL OF THIS: ASK WHETHER THE ARTIFACT SHIPS A REGISTRY FOR THE THING
+   YOU ARE LOOKING FOR, BEFORE YOU SCAN ITS BYTES.** Four agents spent an hour deciding whether
+   `RCH-E327` existed — `strings` sweeps over eleven binaries, a raw byte dump, a runtime
+   observation — and the tool had shipped the oracle the whole time:
+
+   ```
+   rch error explain RCH-E327   ->  BuildArtifactForeignTarget, category + description + remediation
+   rch error explain RCH-E300   ->  BuildCompilationFailed          <- positive control, resolves
+   rch error explain RCH-E999   ->  Unknown code "RCH-E999".        <- negative control, REFUSES
+   ```
+
+   **A registry with a working negative control is a SOUND instrument** — it discriminates, which
+   is the whole property a `strings` sweep lacks. `rch --help` advertises it. So the ordering is:
+   **the tool's own oracle → a runtime observation → a scan of its bytes**, and the last is a
+   last resort that cannot prove absence at all.
+
+   **AND ASKING THE REGISTRY PAID A SECOND TIME, WITH THE FINDING THAT MATTERED.** Its
+   remediation list names *"pin the build to an explicit `--target`"* — **the exact form this
+   repo forbids**, because `--target` sets `required_os` and collapses the admissible worker
+   fleet. Its other two remedies require a same-platform worker, which this fleet does not have.
+   **The one workaround that works, `RCH_ALLOW_FOREIGN_ARTIFACTS=1`, is absent from the list.**
+   No byte scan could have found that: the defect is not in the code, it is that **every
+   documented remedy is unavailable or harmful here** — a strictly stronger report than "your
+   guard has a bug", and it came from reading the tool's own documentation surface.
+
    **AND THE SCOPE OF A SWEEP IS PART OF ITS NEEDLE.** Measured the same night while counting
-   beads whose description carries an `ACCEPTANCE` heading the dispatcher cannot parse: **243 of
-   720 live rows**. A sweep that greps for that needle without scoping to the DESCRIPTION also
-   matches the **127 live rows whose populated `acceptance_criteria` FIELD merely begins with an
-   `ACCEPTANCE`-ish line** — rows that are perfectly dispatchable, because a populated field
-   means the parser never reaches the description at all. Two populations, one needle, and the
-   larger one is the wrong answer. **Say which FIELD you searched, not just which string.**
+   beads whose DESCRIPTION carries an `ACCEPTANCE` heading the dispatcher cannot parse. A sweep
+   that greps for that needle without scoping to the description ALSO matches every row whose
+   populated `acceptance_criteria` FIELD merely begins with an `ACCEPTANCE`-ish line — rows that
+   are perfectly dispatchable, because a populated field means the parser never reaches the
+   description at all. That confounder was a substantial fraction of the headline figure. Two
+   populations, one needle, and the larger one is the wrong answer. **Say which FIELD you
+   searched, not just which string.**
 
    **AND "EXPOSURE" AND "VICTIMS" ARE TWO DENOMINATORS THAT BOTH SOUND LIKE THE ANSWER.** Same
    corpus, same hour: a large set of rows carry an unparseable `ACCEPTANCE` heading (**exposure**),
