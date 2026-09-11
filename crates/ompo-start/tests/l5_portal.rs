@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
-use ompo_start::portal::{data_hash_without_self, seal, SCHEMA_ID};
+use ompo_start::portal::{
+    data_hash_without_self, gates_verdict, parse_gates_aggregate, queue_depth, seal, SCHEMA_ID,
+};
 use serde_json::json;
-
-use ompo_start::portal::queue_depth;
 
 #[test]
 fn portal_hash_excludes_its_own_field() {
@@ -92,5 +92,63 @@ fn queue_depth_corrupt_lines_are_partial() {
     assert_eq!(queue["bound_value"], 2);
     assert_eq!(queue["lines_total"], 3);
     assert_eq!(queue["depth"], 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// KNOWN-GOOD: a well-formed aggregate line parses to its six keys with the
+/// invariant holding. Grammar mirrors ci_citation::parse_aggregate.
+#[test]
+fn gates_aggregate_parses_valid_line() {
+    let values =
+        parse_gates_aggregate("GATE_RUNNER crates=88 pass=80 fail=5 unmeasurable=3 short=0 no_tests=0\n")
+            .expect("valid line parses");
+    assert_eq!(values["crates"], 88);
+    assert_eq!(values["pass"], 80);
+    assert_eq!(values["fail"], 5);
+}
+
+/// KNOWN-BAD (mutation targets): each refusal shape is pinned so the grammar
+/// cannot drift -- missing line, missing key, broken invariant, non-numeric.
+#[test]
+fn gates_aggregate_refusals_are_typed() {
+    assert!(parse_gates_aggregate("nothing here\n").is_err());
+    assert!(parse_gates_aggregate("GATE_RUNNER crates=2 pass=2 fail=0 unmeasurable=0 short=0\n").is_err());
+    assert!(parse_gates_aggregate("GATE_RUNNER crates=2 pass=1 fail=0 unmeasurable=0 short=0 no_tests=0\n").is_err());
+    assert!(parse_gates_aggregate("GATE_RUNNER crates=2 pass=x fail=0 unmeasurable=0 short=0 no_tests=0\n").is_err());
+}
+
+/// KNOWN-BAD end to end: no aggregate file is TYPED UNOBSERVABLE (never a
+/// zero, never a panic). Break the source -> typed refusal.
+#[test]
+fn gates_verdict_missing_file_is_unobservable() {
+    let dir = std::env::temp_dir().join(format!("omp-gates-absent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let gates = gates_verdict(&dir);
+    assert_eq!(gates["state"], "UNOBSERVABLE");
+    assert!(gates.get("reason").is_some(), "refusal carries why: {gates}");
+    assert!(
+        gates.get("crates").is_none() && gates.get("fail").is_none(),
+        "no verdict fields when nothing was read: {gates}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// KNOWN-GOOD end to end: a written aggregate file reads FULL with its keys.
+#[test]
+fn gates_verdict_present_file_is_full() {
+    let dir = std::env::temp_dir().join(format!("omp-gates-present-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let target = dir.join("target");
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(
+        target.join("gate-runner-aggregate.line"),
+        "GATE_RUNNER crates=4 pass=3 fail=1 unmeasurable=0 short=0 no_tests=0\n",
+    )
+    .unwrap();
+    let gates = gates_verdict(&dir);
+    assert_eq!(gates["state"], "FULL");
+    assert_eq!(gates["crates"], 4);
+    assert_eq!(gates["fail"], 1);
     let _ = std::fs::remove_dir_all(&dir);
 }

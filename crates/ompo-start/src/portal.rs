@@ -98,3 +98,87 @@ pub fn queue_depth(repo_root: &std::path::Path) -> serde_json::Value {
         })
     }
 }
+
+/// Gate verdicts from the runner's aggregate line, never by re-running gates.
+///
+/// Source is `target/gate-runner-aggregate.line` (written AFTER a gate-runner
+/// measurement, removed BEFORE it, so absence means "no verdict was produced"
+/// -- gate-runner's own contract). Grammar mirrors
+/// `gate_runner::ci_citation::parse_aggregate`: a `GATE_RUNNER crates=` line of
+/// `key=value` u64 tokens with exactly crates/pass/fail/unmeasurable/short/
+/// no_tests present and pass+fail+unmeasurable==crates. A missing file is
+/// UNOBSERVABLE (no verdict to read); a malformed line is UNOBSERVABLE with
+/// the parse reason (no valid verdict to read). Neither is a zero, and neither
+/// passes anything (8vhx9).
+pub fn gates_verdict(repo_root: &std::path::Path) -> serde_json::Value {
+    const SOURCE: &str = "target/gate-runner-aggregate.line";
+    let path = match std::env::var("GATE_RUNNER_AGGREGATE") {
+        Ok(explicit) if !explicit.trim().is_empty() => std::path::PathBuf::from(explicit),
+        _ => repo_root.join(SOURCE),
+    };
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) => {
+            return serde_json::json!({
+                "state": "UNOBSERVABLE",
+                "source": SOURCE,
+                "reason": format!("no aggregate verdict on disk (no run produced one here): {error}"),
+            })
+        }
+    };
+    match parse_gates_aggregate(&text) {
+        Ok(values) => {
+            let mut verdict = serde_json::json!({
+                "state": "FULL",
+                "source": SOURCE,
+            });
+            for (key, value) in &values {
+                verdict[key] = serde_json::Value::from(*value);
+            }
+            verdict
+        }
+        Err(reason) => serde_json::json!({
+            "state": "UNOBSERVABLE",
+            "source": SOURCE,
+            "reason": reason,
+        }),
+    }
+}
+
+/// Parse one aggregate verdict line. Pure: every refusal shape is unit-pinned
+/// below, so the grammar cannot drift from `ci_citation::parse_aggregate`.
+pub fn parse_gates_aggregate(
+    text: &str,
+) -> Result<std::collections::BTreeMap<String, u64>, String> {
+    let line = text
+        .lines()
+        .filter(|line| line.starts_with("GATE_RUNNER crates="))
+        .last()
+        .ok_or_else(|| "no GATE_RUNNER crates= line".to_owned())?;
+    let mut values = std::collections::BTreeMap::new();
+    for token in line.split_whitespace().skip(1) {
+        let (key, value) = token.split_once('=').ok_or_else(|| {
+            format!("malformed token without '=': {token}")
+        })?;
+        let number: u64 = value.parse().map_err(|_| {
+            format!("non-numeric value for {key}: {value}")
+        })?;
+        values.insert(key.to_owned(), number);
+    }
+    for key in [
+        "crates",
+        "pass",
+        "fail",
+        "unmeasurable",
+        "short",
+        "no_tests",
+    ] {
+        if !values.contains_key(key) {
+            return Err(format!("missing required key: {key}"));
+        }
+    }
+    if values["pass"] + values["fail"] + values["unmeasurable"] != values["crates"] {
+        return Err("invariant violated: pass+fail+unmeasurable != crates".to_owned());
+    }
+    Ok(values)
+}
