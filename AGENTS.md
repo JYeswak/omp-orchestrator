@@ -1059,6 +1059,54 @@ you sent to.**
 and stays unenforced until the dispatch site does it — which is the same shape as `93lo`, where the
 ACK instruction still depends on the conductor remembering to write it.
 
+#### ⛔ AND `--robot-inspect-pane` IGNORES `--panes` ENTIRELY — IT ALWAYS RETURNS PANE ZERO
+
+**Measured 2026-09-11, while diagnosing the silence the rule above created.** Three workers had
+gone idle twice with no callback, so the conductor reached for the one NTM verb built to look
+inside a pane. It is worse than useless: **the `--panes` argument is discarded.**
+
+```
+ntm --robot-inspect-pane=omp-orchestrator --panes=1  ->  pane_id %25   pane_index 0
+                                          --panes=3  ->  pane_id %25   pane_index 0
+                                          --panes=4  ->  pane_id %25   pane_index 0
+                                          --panes=6  ->  pane_id %25   pane_index 0
+```
+
+**FOUR DISTINCT INPUTS, ONE OUTPUT.** And the first read of that output produced a confident,
+entirely false finding: the conductor reported *"`%19` is a BARE SHELL, no agent is running, my
+packets were typed into zsh"* — reading a real shell prompt and real `ntm add` output that
+belonged to **`%25`**, a pane it had never asked about. `%19`'s `pane_current_command` is `bun`;
+its agent was alive the whole time. **The finding was retracted within one command.**
+
+**Two things make this the sharpest instrument defect recorded here.**
+
+1. **The payload is INTERNALLY HONEST.** It reports `pane_index: 0` and `pane_id: %25` in every
+   response. Nothing is forged — the reader simply assumes the field echoes the request, because
+   every other verb's does. **A tool that answers a different question truthfully is harder to
+   catch than one that lies**, and the sum-to-88 lesson applies exactly: an internally consistent
+   payload validates itself, never the selector that produced it.
+2. **Only a NEGATIVE CONTROL caught it.** Varying the input and watching the output not move is
+   rule `8i`, and it is the whole reason the false finding survived less than a minute. A single
+   inspect call is indistinguishable from a working one. **Never diagnose from one probe of an
+   instrument you have not varied.**
+
+**`--panes` is therefore NOT a uniform NTM concept.** `--robot-send` honours it as a tmux index —
+proven by idle→working transitions on the intended panes. `--robot-inspect-pane` discards it. **Two
+verbs, one flag name, two behaviours**, which is precisely why the rule above says derive rather
+than cite: the map is per-verb, not per-session.
+
+**Operationally: there is currently NO WAY to see inside a specific pane through the robot
+surface.** `inspect-pane` is one of the five zero-consumption verbs `qg6or` tracks, and this
+measures *why* consuming it would not have helped. **Ask the pane instead** — a one-line reply
+with a literal copy-paste command is the only channel that works today, and a worker reporting
+*"ntm printed usage instead of sending"* is a finding, not a failure.
+
+**NO-CLAIM.** This is measured against the installed `ntm` on this machine on 2026-09-11, by
+response payload only. It does not prove the defect is in argument parsing rather than in session
+resolution, and it says nothing about the other four unconsumed verbs — `dialogs`,
+`answer-dialog`, `interrupt`, `agent-health` — each of which needs its own negative control before
+anyone trusts it.
+
 ### THE RECEIVER MUST **ANSWER**, AND NOBODY WAS EVER TOLD TO
 
 **The lifecycle chain above is missing a beat, and its absence stalled the whole session.**
