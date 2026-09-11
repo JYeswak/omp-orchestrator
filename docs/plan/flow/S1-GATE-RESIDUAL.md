@@ -1,16 +1,33 @@
 # S1 gate residual — the 20 non-PASS crates, ENUMERATED
 
 ```
-SOURCE      run 34569451324   headSha 3093989    completed/failure   2026-09-11T06:19Z
+SOURCE      run 34570440318   headSha f2dbf3eb   completed/failure   2026-09-11T06:33Z
 ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest "completed"
-SUMMARY     GATE_RUNNER_PLAN crates=89 · FAILING count=4 · UNMEASURABLE count=4
+SUMMARY     GATE_RUNNER crates=89 · pass=81 · fail=4 · unmeasurable=4   (81+4+4=89 ✓)
 FAILING     no-shell-gate · omp-inventory-map · omp-orchestrator · ompo-doctor
 UNMEASURABLE admission-reason:POLICY_UNAVAILABLE · finding:MISSING_EXECUTABLE
              loop-driver:POLICY_UNAVAILABLE · loop-queue-filter:MISSING_EXECUTABLE
 
+PER-CRATE LEG COUNTS, from the RAW LOG and with the parse rule stated, because three
+independent parses of the same line disagreed until each declared its own:
+  no-shell-gate      45 names / 20 target groups   2951 B   owner sc0h5
+  omp-orchestrator    9 names                       633 B   owners bz2na (4) + u3f6q (2) + uldvu (1)
+  ompo-doctor         6 names                       444 B   owner ue29h; 2 already fixed by 6a0a4ed
+  omp-inventory-map   1 name                        132 B   parked by design (poumg.3)
+  parse rule: grep -F 'FAIL crate=<name>' on `gh run view --log`, split on ',', sort -u
+
+SUPERSEDED  34569451324 / 3093989  06:19Z  FAILING count=4
 SUPERSEDED  34566431257 / 98e44cc  06:01Z  FAILING count=7
 SUPERSEDED  34549975939 / cb9d3941 01:16Z  FAILING count=16
 ```
+
+⛔⛔ **THE "SIX LEGS" FIGURE THIS DOCUMENT'S DISPATCHES ONCE CARRIED FOR `no-shell-gate` WAS
+SELF-INFLICTED: a `grep -oE 'failing_tests[^|]{0,400}'` clipped a 2951-byte line at 400
+characters.** The producer was complete throughout; **no CI line carries an ellipsis and every
+one terminates with `)`.** ⭐ **Truncation is ONE-DIRECTIONAL — it can hide a name, never invent
+one — so PRESENCE claims here are immune and only ABSENCE claims ever needed re-checking.** The
+one absence that mattered (`u3f6q`'s two legs missing from CI) was re-checked on the raw log and
+**holds**.
 
 ⭐⭐ **FAILING WENT 16 → 7 → 4 IN ONE SESSION, AND THE TRAJECTORY IS ONLY VISIBLE BECAUSE THE
 GATE CAN PRODUCE VERDICTS AGAIN.** Before `2d25494`, `cancel-in-progress: true` on a
