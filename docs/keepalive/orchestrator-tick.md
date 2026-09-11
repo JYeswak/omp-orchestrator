@@ -157,38 +157,53 @@ indistinguishable from a pass.** Also: `agreement.status = "draft"` not `converg
 and the cited `CONTRACT.md:82-113` predicates have MOVED (approval is at `:337`). **Do NOT flip
 `draft` → `converged` to make a gate pass — that is gate self-weakening.**
 
-**THE RESIDUAL R10 REVEALED, which is NOT S1 debt. ✅ THE DISPUTE IS SETTLED — `pd5ua` IS CLOSED
-AND THIS BLOCK WAS CITING A SUPERSEDED RUN.** The authoritative reading, from `pd5ua`'s close:
+**THE RESIDUAL R10 REVEALED, which is NOT S1 debt. ✅ SETTLED AND ENUMERATED —
+`docs/plan/flow/S1-GATE-RESIDUAL.md` NAMES ALL 20 NON-PASS CRATES. Read the doc, not this block.**
 
 ```
-AUTHORITATIVE  CI run 34289493517  head=475c702  crates=88  pass=72 fail=12 unmeasurable=4
-SUPERSEDED     CI run 34171417882                crates=88  pass=70 fail=16 unmeasurable=2
-fsu7's bank    sha=c5fcf898…                     crates=88  PASS 59 FAIL 17 UNMEASURABLE 12
-                 -- an eleven-row ALL_TESTS_SKIPPED window plus isolated subprocess-contract
+AUTHORITATIVE  run 34549975939  cb9d3941  2026-09-11  pass=68 fail=16 unmeasurable=4  sum 88
+SUPERSEDED     run 34289493517  475c702   2026-09-08  pass=72 fail=12 unmeasurable=4
+SUPERSEDED     run 34171417882  666ec909  2026-09-07  pass=70 fail=16 unmeasurable=2
+fsu7's bank    sha=c5fcf898…                          PASS 59 FAIL 17 UNMEASURABLE 12
 ```
 
-**CI is the strictly MORE COMPLETE reading** — `UNMEASURABLE` maps to a typed
-`MISSING_EXECUTABLE`, so CI measured crates the local run could not. Negative run control
-`999999999999999` → HTTP 404 rc=1. **The local bank is kept on purpose**: R10 was closed against
-it, so deleting it would make R10's close unverifiable. **This does NOT retract R10** — R10 asked
-whether the layer RAN, and it ran both times.
+**THE ORACLE IS "NEWEST run whose CONCLUSION is `success|failure`", NOT "newest completed"** —
+of the 8 most recent runs, **SIX are `cancelled`**, so the lazy oracle selects a run with no
+verdict at all. **The local bank is kept on purpose**: R10 was closed against it, so deleting it
+would make R10's close unverifiable. **This does NOT retract R10** — R10 asked whether the layer
+RAN, and it ran both times.
 
-⚠️ **`pd5ua` DELIVERED THE READING AND NOT THE ENUMERATION — do not inherit the second half.**
-This block used to say it owned *"picking the authoritative reading AND enumerating the ten."*
-Measured post-close: **0 of 11 failing crate names in its comments, 2 of 11 in its body** — and
-those two only as prose examples, not a classified list.
+⚠️ **THIS BLOCK NAMED A SUPERSEDED RUN "AUTHORITATIVE" TWICE IN TWO HOURS — the second time by
+the conductor who had just fixed the first.** Two agents caught it independently. **Eight crates
+moved between the two readings**, so it was not drift: `omp-idle-dispatch` and
+`reap-finished-panes` LEFT the failing set, while `finding-dispatch`, `installer`,
+`kernel-only-operator-hook`, `ompo-doctor`, `ompo-start` and `receiver-receipt` ENTERED it.
+**Six crates would have been dispatched against nothing and one repaired crate against a fixed
+defect.**
 
-**THE NEAR-MISS IS THE REUSABLE PART.** Grepping its two cited artifacts for the failing crates
-returned **11 of 11**, which reads as *"the enumeration is in the artifacts."* It is not:
-`docs/gate-roster.txt` is the **FULL 88-crate roster** and also contains `tick-monitor`,
-`pane-truth`, `bead-availability` and `subprocess-contract` — **all of which PASSED**. Every
-failing crate matched for the same reason every passing one did. ⛔ **NAMING ALL 88 IS NOT
-ENUMERATING THE 17**, and that is a structurally guaranteed match — the same class as
-`grep -c ompo` → 62 counting substrings.
+⛔ **AND A CORRECT TALLY OF THE WRONG RUN IS THE MOST CONVINCING KIND OF WRONG FIGURE.** The
+sum-to-88 control proves one run's internal consistency and says **nothing about which run**.
+`72+12+4 = 88` is equally true at the stale head. **The control validates the tally, not the
+oracle** — that is exactly what defeated both publications.
 
-**AND THE INSTRUMENT EVERYONE WAS TOLD TO USE CANNOT REACH THE DATA:** `grep -c 'GATE_RUNNER'`
-returns **9 against ~250 real rows**, shipped in every run since `568f2dfe`. Re-scoped onto
-`86zjl`, whose author made that exact error and retracted it.
+**THE DATING TELL, stronger than any timestamp comparison:** `Cargo.toml:7` is
+`exclude = ["crates/omp-idle-dispatch"]` and `cargo metadata` — **the roster's own source** —
+returns `ABSENT` while the directory sits on disk. It therefore CANNOT be a FAIL today; the
+newest run classifies it `GATE_RUNNER_LEDGER_DRIFT`. **A FAIL row for that crate PROVES the run
+predates the exclusion.** Content-derived, survives a corrupted timestamp or a relabelled id.
+
+**`pd5ua` DELIVERED THE READING AND NOT THE ENUMERATION** — 0 of 11 failing crate names in its
+comments, 2 of 11 in its body as prose. **THE NEAR-MISS IS THE REUSABLE PART:** grepping its
+cited `docs/gate-roster.txt` returned **11 of 11**, because that file is the **FULL 88-crate
+roster** and also contains `tick-monitor`, `pane-truth` and `bead-availability` — **all of which
+PASSED**. ⛔ **A SOURCE THAT CONTAINS THE WHOLE POPULATION CANNOT EVIDENCE A SUBSET OF IT** —
+same class as `grep -c ompo` → 62 counting substrings.
+
+**AND `grep -c 'GATE_RUNNER'` IS A MOVING TARGET, WHICH IS WORSE THAN A WRONG ONE:** **4** on
+`475c702`, **13** on `cb9d3941`. On the older runs the per-crate verdicts are bare
+`PASS crate=… / FAIL crate=…` lines carrying **no `GATE_RUNNER` token at all**. **The newest run
+ships the names directly** (`GATE_RUNNER_FAILING count=16 names=…`), so re-deriving needs no
+scraping and no `sort -u`. `86zjl`'s defect, confirmed from three runs.
 
 **AND THE SHARPER FACT, from `%20`'s `6nhj` census:** `gh run list --limit 100` returns **83
 completed runs — 71 failure, 12 cancelled, ZERO success** — with **no run id or SHA cited anywhere
