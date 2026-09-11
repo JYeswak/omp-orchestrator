@@ -111,13 +111,18 @@ pub fn sources_json(sources: &[SourceVerdict]) -> serde_json::Value {
 /// True only when EVERY observed source is available, fresh, and carries an age.
 ///
 /// An empty source set is `false`, never `true`: "nothing was observed" must not
-/// read as "everything is fresh".
+/// read as "everything is fresh". That emptiness guard is SEPARATE from the
+/// silence clause and stays outside the `any`, because folding it in would make
+/// `all_fresh(&[])` read true — `all` over an empty slice is vacuously true.
+///
+/// ONE AUTHORITY: this was the NEGATED spelling of the silence law — the third
+/// copy inside this file, invisible to a grep for the positive condition, which
+/// is why the census read three encodings where six existed. It now calls
+/// [`is_silent`], so `all_fresh`, [`source_json`]'s `silent` field and
+/// [`classify`]'s verdict all turn on ONE predicate.
 #[must_use]
 pub fn all_fresh(sources: &[SourceVerdict]) -> bool {
-    !sources.is_empty()
-        && sources
-            .iter()
-            .all(|source| source.available && source.fresh && source.age_ms.is_some())
+    !sources.is_empty() && !sources.iter().any(is_silent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

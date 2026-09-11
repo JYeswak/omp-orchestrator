@@ -582,8 +582,22 @@ fn pane_set_disagree_is_not_live() {
 
 /// L4-METRIC-SILENT (vdxb): a nonzero SILENT COUNT makes the swarm NOT_LIVE, and
 /// zero silent sources is the only state that can be LIVE. The count is derived
-/// from `is_silent`, the same predicate the row writer uses, so the metric and the
-/// verdict cannot disagree about what silent means.
+/// from `is_silent`.
+///
+/// ⛔ CORRECTED (j4ert). This comment previously claimed that deriving the count
+/// from `is_silent` meant "the metric and the verdict cannot disagree about what
+/// silent means". THAT WAS FALSE WHEN WRITTEN: `classify` re-implemented the
+/// condition inline and `all_fresh` carried it a third time in the NEGATED
+/// spelling, so three copies with disjoint consumers held one law and nothing
+/// pinned them. It was disproved, not argued: gutting `is_silent` left every
+/// verdict leg GREEN. The sentence is true only because 3274c9f collapsed
+/// `classify` onto `is_silent` and this commit collapsed `all_fresh` too —
+/// asserted by `the_row_writer_and_the_verdict_share_one_silence_predicate`, and
+/// measured by a mutation of `is_silent` that now reddens row-writer, verdict AND
+/// all_fresh legs in one run where it previously reddened none of the last group.
+///
+/// A guarantee a comment asserts is worth nothing until something fails when it
+/// stops holding.
 #[test]
 fn silent_count_nonzero_is_not_live() {
     fn silent_count(sources: &[SourceVerdict]) -> usize {
