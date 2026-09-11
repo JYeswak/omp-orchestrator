@@ -14,8 +14,8 @@
 #[path = "dispatch_cli_contract.rs"]
 mod dispatch_cli_contract;
 use fast_dispatch::{
-    admission_fresh_pass, cargo_lane_timeout_secs, classify_invoker, is_conductor_routed,
-    select_free_panes, session_repo_dir, strip_ansi, wedge_reason, AdmissionConfig,
+    admission_fresh_pass, cargo_lane_timeout_secs, classify_dialog_payload, classify_invoker,
+    is_conductor_routed, select_free_panes, session_repo_dir, AdmissionConfig, DialogVerdict,
     FastDispatchRules, SelectError, CORPUS_FIRST_CONTRACT,
 };
 use serde_json::{json, Value};
@@ -349,7 +349,47 @@ fn composer_occupied(raw_tail: &str) -> bool {
     }
 }
 
+/// Ask NTM whether a pane is sitting on an interactive dialog, INSTEAD OF INFERRING IT FROM PAINT.
+///
+/// Spawning is all this does; every decision about the answer lives in
+/// `fast_dispatch::classify_dialog_payload`, which is pure and carries the known-bad legs. The
+/// two text matches this replaced — `"Weekly limit left: 0%"` and
+/// `"Press up to edit queued messages"`, formerly `wedge_reason` — are DELETED in the same
+/// commit, because a silent fallback to scraping looks adopted and behaves scraped.
+///
+/// A spawn that never ran is Unanswerable, never NoDialog: the dispatch gate must refuse a pane
+/// it could not ask about.
+fn pane_dialog_verdict(session: &str, pane: &str) -> DialogVerdict {
+    let mut command = Command::new("ntm");
+    command
+        .arg(format!("--robot-dialogs={session}"))
+        .arg(format!("--panes={pane}"));
+    match bounded_output(&mut command, Duration::from_secs(20)) {
+        BoundedOutcome::Completed(output) => {
+            classify_dialog_payload(output.status.success(), &output.stdout)
+        }
+        BoundedOutcome::TimedOut => DialogVerdict::Unanswerable("timeout".to_owned()),
+        BoundedOutcome::Unspawned(error) => {
+            DialogVerdict::Unanswerable(format!("unspawned: {error}"))
+        }
+    }
+}
+
+/// A pane is live when NTM classifies no dialog on it AND its composer is empty.
+///
+/// The dialog half is now ASKED (`pane_dialog_verdict`). The composer half is a DIFFERENT oracle
+/// on a DIFFERENT signal — text typed into an otherwise healthy composer is not a dialog and no
+/// `--robot-dialogs` class covers it — so its capture stays, and the claim made here is bounded
+/// to the dialog detection in this file. Nothing else in this repository's 25 dialog-text
+/// matching sites is touched by this commit.
 fn pane_is_live(session: &str, pane: &str) -> bool {
+    match pane_dialog_verdict(session, pane) {
+        DialogVerdict::NoDialog => {}
+        // Both a real dialog and an unanswerable probe refuse the pane. A dispatch gate that
+        // guessed LIVE on an unanswerable probe would reintroduce exactly the collapse this
+        // adoption removes.
+        DialogVerdict::Dialog(_) | DialogVerdict::Unanswerable(_) => return false,
+    }
     let target = format!("{session}:0.{pane}");
     let mut cmd = Command::new(tick_monitor::TMUX);
     cmd.args([tick_monitor::CAPTURE_PANE, "-p", "-e", "-t", target.as_str()]);
@@ -369,8 +409,7 @@ fn pane_is_live(session: &str, pane: &str) -> bool {
         .rev()
         .collect::<Vec<_>>()
         .join("\n");
-    let plain = strip_ansi(&tail);
-    wedge_reason(&plain, composer_occupied(&tail)).is_none()
+    !composer_occupied(&tail)
 }
 
 fn list_panes(session: &str) -> Vec<String> {

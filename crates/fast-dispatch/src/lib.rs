@@ -305,24 +305,74 @@ pub fn strip_ansi(s: &str) -> String {
     out
 }
 
-/// Wedge/composer liveness, same three refusals as the shell pane_is_live.
-/// `composer_occupied` is the result of piping the raw tail to composer-typed.py.
-pub fn wedge_reason(tail_plain: &str, composer_occupied: bool) -> Option<&'static str> {
-    let footer: Vec<&str> = tail_plain.lines().rev().take(8).collect();
-    let footer = footer.into_iter().rev().collect::<Vec<_>>().join("\n");
-    if footer
-        .split('\n')
-        .any(|l| l.contains("Weekly limit left:") && l.contains("0%"))
-    {
-        return Some("provider_quota_exhausted");
+/// What `ntm --robot-dialogs` says about ONE pane. Three outcomes, never two.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DialogVerdict {
+    /// `dialog.class == "none"` on a pane the verb actually classified.
+    NoDialog,
+    /// A classified dialog, carried by its own label (trust prompt, rate-limit options, usage
+    /// overlay, paste limbo, destructive confirm).
+    Dialog(String),
+    /// The verb refused, or answered in a shape this consumer will not interpret. FAIL-CLOSED.
+    Unanswerable(String),
+}
+
+/// Decide a pane's dialog state from what NTM ANSWERED, replacing the text-matching that used to
+/// infer it from paint.
+///
+/// # What this deleted
+///
+/// `wedge_reason` lived here and string-matched two dialog classes out of a `tmux capture-pane`
+/// tail — `"Weekly limit left: 0%"` for a quota overlay and `"Press up to edit queued messages"`
+/// for paste limbo. Both are now ASKED via `--robot-dialogs`. The scraper is gone rather than
+/// kept beside the verb, because a silent fallback to scraping looks adopted and behaves scraped.
+/// Its `composer_nonempty` branch was NOT a dialog and moves to the call site's separate composer
+/// oracle; this function does not model it and does not claim to.
+///
+/// # Pure on purpose
+///
+/// It takes the exit status and the bytes, so every arm below is testable without a live pane,
+/// without tmux, and without git — which also makes it immune to the lane's fossil index.
+///
+/// # FAIL-CLOSED, and why this verb needs it more than most
+///
+/// "No dialogs" is this verb's NORMAL HEALTHY ANSWER, so a collapse between "no dialog" and
+/// "could not ask" reads as HEALTHY rather than merely negative. Measured shapes, ntm v1.31.0:
+///
+/// ```text
+/// healthy agent pane   exit=0  success:true   panes:[{dialog:{class:"none"}}]
+/// nonexistent session  exit=1  success:false  error_code SESSION_NOT_FOUND  panes:[]
+/// nonexistent pane     exit=1  success:false  error_code INVALID_FLAG       panes:[]
+/// no agent panes       exit=1  success:false  error_code INVALID_FLAG       panes:[]
+/// ```
+///
+/// The verb itself does not fail open — health is a positive `class`, absence is a typed nonzero.
+/// But `panes: []` is IDENTICAL across all three refusals, so the fail-open risk lives in the
+/// consumer, which is why this one checks the status and `success` BEFORE it reads a field.
+///
+/// ⛔ IT NEVER KEYS ON `error_code`. Measured across the four verbs adopted in parallel today,
+/// one condition — a nonexistent pane — yields `PANE_NOT_FOUND` from `--robot-interrupt` and
+/// `--robot-agent-health` but `INVALID_FLAG` from `--robot-dialogs` and `--robot-answer-dialog`.
+/// A consumer keyed on that string would look correct until the first missing pane.
+#[must_use]
+pub fn classify_dialog_payload(exit_ok: bool, stdout: &[u8]) -> DialogVerdict {
+    if !exit_ok {
+        return DialogVerdict::Unanswerable("nonzero exit".to_owned());
     }
-    if tail_plain.contains("Press up to edit queued messages") {
-        return Some("queued_unsubmitted");
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(stdout) else {
+        return DialogVerdict::Unanswerable("unparseable json".to_owned());
+    };
+    if document["success"].as_bool() != Some(true) {
+        return DialogVerdict::Unanswerable("success != true".to_owned());
     }
-    if composer_occupied {
-        return Some("composer_nonempty");
+    let Some(row) = document["panes"].as_array().and_then(|rows| rows.first()) else {
+        return DialogVerdict::Unanswerable("no pane row".to_owned());
+    };
+    match row["dialog"]["class"].as_str() {
+        Some("none") => DialogVerdict::NoDialog,
+        Some(class) => DialogVerdict::Dialog(class.to_owned()),
+        None => DialogVerdict::Unanswerable("no dialog class".to_owned()),
     }
-    None
 }
 
 #[cfg(test)]
@@ -705,18 +755,67 @@ mod tests {
         );
     }
 
+    /// KNOWN-BAD FIRST, because this is the collapse the adoption exists to prevent: a REFUSAL
+    /// payload carries `panes: []`, which a consumer reading the array would score as "no
+    /// dialogs" — the healthy answer. Every refusal shape must classify Unanswerable.
     #[test]
-    fn wedge_quota_and_queued_refuse() {
+    fn a_refusal_is_never_read_as_no_dialog() {
+        // Measured shapes, ntm v1.31.0: nonexistent session, nonexistent pane, and a session
+        // whose panes are not agent panes. All three: exit=1, success:false, panes:[].
+        for refusal in [
+            br#"{"success":false,"error_code":"SESSION_NOT_FOUND","panes":[]}"#.as_slice(),
+            br#"{"success":false,"error_code":"INVALID_FLAG","panes":[]}"#.as_slice(),
+        ] {
+            assert!(
+                matches!(
+                    classify_dialog_payload(false, refusal),
+                    DialogVerdict::Unanswerable(_)
+                ),
+                "a typed refusal must not read as NoDialog"
+            );
+        }
+        // The vicious arm: exit code 0 but `success:false`, so a consumer keyed only on the exit
+        // status still must not take the empty array as health.
+        assert!(matches!(
+            classify_dialog_payload(true, br#"{"success":false,"panes":[]}"#),
+            DialogVerdict::Unanswerable(_)
+        ));
+        // And a SUCCESSFUL call that returned no row for the pane we asked about is equally
+        // unanswerable — "we asked about one pane and got nothing back" is not "none".
+        assert!(matches!(
+            classify_dialog_payload(true, br#"{"success":true,"panes":[]}"#),
+            DialogVerdict::Unanswerable(_)
+        ));
+    }
+
+    /// KNOWN-GOOD: health is a POSITIVE class value on a row that exists, and a real dialog is
+    /// carried by its own label rather than collapsed into a boolean.
+    #[test]
+    fn a_classified_pane_is_none_or_named() {
         assert_eq!(
-            wedge_reason("Weekly limit left: 0%\nready", false),
-            Some("provider_quota_exhausted")
+            classify_dialog_payload(
+                true,
+                br#"{"success":true,"panes":[{"target":"%22","dialog":{"class":"none"}}]}"#
+            ),
+            DialogVerdict::NoDialog
         );
         assert_eq!(
-            wedge_reason("Press up to edit queued messages\n", false),
-            Some("queued_unsubmitted")
+            classify_dialog_payload(
+                true,
+                br#"{"success":true,"panes":[{"target":"%22","dialog":{"class":"paste limbo"}}]}"#
+            ),
+            DialogVerdict::Dialog("paste limbo".to_owned())
         );
-        assert_eq!(wedge_reason("❯ ", true), Some("composer_nonempty"));
-        assert_eq!(wedge_reason("❯ waiting for input", false), None);
+        // A row with no class at all is unanswerable, not healthy.
+        assert!(matches!(
+            classify_dialog_payload(true, br#"{"success":true,"panes":[{"target":"%22"}]}"#),
+            DialogVerdict::Unanswerable(_)
+        ));
+        // Unparseable output is unanswerable, never healthy.
+        assert!(matches!(
+            classify_dialog_payload(true, b"not json at all"),
+            DialogVerdict::Unanswerable(_)
+        ));
     }
 
     #[test]
