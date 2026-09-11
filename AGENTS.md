@@ -6061,6 +6061,81 @@ nothing in that direction.
 by reading a NON-BITING ARM as a result, the other by recording a GREEN as a DECLARED GAP.**
 **Those are the two habits that find a blind spot from inside it.**
 
+## ⛔⛔ A RUN CAN CONTAIN YOUR FIX AND BE EVIDENCE ABOUT **NOTHING** — check the gate PRODUCED OUTPUT
+
+**The worst-shaped trap of the session, caused by the conductor's own broken pair.**
+```
+newest verdict-bearing run  34577201755 / 9176b517   <- CONTAINS the fix AND the breakage
+error[E0432]: unresolved import `gate_runner::LedgerRead`
+error[E0425]: cannot find value `EXIT_LEDGER_UNREADABLE`
+GATE_RUNNER lines in 415,508 bytes:        0
+GATE_RUNNER_FAILURE_CAUSE lines:           0
+```
+⛔ **`cause lines: 0` at a run containing the cause-capture commit reads EXACTLY like *"the
+feature does not work."* It is not. THE GATE CRATE DID NOT COMPILE, so there is no output of
+any kind** — not the causes, not the verdicts, not the roster. ⭐ **An absent FEATURE and an
+absent BUILD are indistinguishable from the feature's own grep.**
+
+⭐⭐ **`merge-base --is-ancestor` IS NECESSARY AND NOT SUFFICIENT.** Third and worst variant of
+the stale-row trap: two earlier ones were runs that PREDATED a fix; **this one POSTDATES the
+fix and still shows nothing.** **THE POSITIVE CONTROL FOR EVERY CI READ:**
+```
+grep -c 'GATE_RUNNER ' <log>     # zero => the gate never ran; every figure is ABSENT-BY-BUILD
+```
+
+## ⛔⛔ A SWEEP WHOSE v1 **PASSED THE KNOWN-BROKEN COMMIT** — eleven greens worth nothing
+
+**An outward pair-check sweep over 18 single-file Rust commits returned eleven clean results,
+and its author ran the control instead of publishing them.**
+```
+v1 asked: does this identifier appear ANYWHERE in the crate?
+  LedgerRead at 9176b51 -> files-matching = 1 (main.rs ITSELF) -> v1 says "ok"
+VERDICT: v1 PASSES the known-broken commit -> VACUOUS for the class it was built for
+```
+⭐ **The defect is never *"the symbol appears nowhere"*; it is *"the symbol appears only in the
+CONSUMER and never in a DEFINER."*** ⛔ **v1 could not express that, so ELEVEN GREENS WOULD
+HAVE SHIPPED AS AN AUDIT.** **"Everything is clean" is exactly when to run the control.**
+
+**v2, validated on BOTH controls first:** positive `9176b51` → BROKEN-PAIR on three symbols;
+negative `454328b` → ok. **Sweep of 18: one genuine break (mine), six false positives, all
+confirmed by reading source — and the three residual mechanisms NAMED: backticked doc text, a
+fully-qualified `std::` path with no `use` line, and a string literal spanning a per-line
+quote-pairing.** ⭐ **Naming the residual classes matters more than the zero.**
+
+⛔ **AND THE LIMIT ON THE ZERO: only SINGLE-FILE commits were swept, because that is the risk
+signature — a multi-file commit can still break a pair if the definition belongs in a THIRD
+file it did not touch.** **The claim is "no broken pair among tonight's single-file Rust
+commits", never "HEAD is coherent."**
+
+## ⭐⭐ THE PUSH ORACLE IS `git ls-remote`, NOT `origin/main` — a tracking ref is a CACHE
+
+```
+git ls-remote origin refs/heads/main      <- what the SERVER has
+origin/main                               <- a LOCAL cache, stale in one direction, ahead in the other
+```
+⭐ **A claim about what is published is a claim about the SERVER.** ⛔ **And the local
+instrument was measurably self-contradicting: `.git/refs/remotes/origin/main` carried an mtime
+of `02:17` while resolving to a commit made minutes earlier — SO LOOSE-REF MTIME IS NOT A
+FRESHNESS SIGNAL.** The pane that found it did not reason from the mtime; **it asked the
+remote.**
+
+⛔ **AND THE TWO ERRORS COMBINE BADLY, which is why it is not pedantry.** The guidance attached
+to a wrong "unpushed" premise is *"check `merge-base --is-ancestor` before reading a CI row"* —
+**the CHECK is right and the PREMISE is wrong.** ⭐ **A reader who believes a commit is
+unpushed will read a CONTAINING run as impossible and dismiss a genuine verdict as stale.**
+**"Unpushed" and "pushed but unrun" demand the same ancestry check and license OPPOSITE
+conclusions when it comes back positive.**
+
+## ⭐ A TIMED-OUT PROBE IS `UNKNOWN`, NOT A NEGATIVE RESULT
+
+**A containment sweep over 40 runs died at 300 s with `error: read: interrupted`.** ⭐ **Its
+author reported the half it had PROVEN and explicitly declined the half it had not — rather
+than letting an unfinished probe stand in for a negative.**
+
+⛔ **This is the denied-probe rule aimed at a TIMEOUT**, which is the form most likely to be
+read as an answer because it looks like the command ran. **Name the clause you did not verify
+and the form that would verify it.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
