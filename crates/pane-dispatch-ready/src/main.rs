@@ -43,18 +43,22 @@ fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
 /// only ever SUBTRACTS from dispatchability; when it cannot ask, it leaves `classify`'s verdict
 /// exactly as it found it rather than inventing a refusal it cannot support.
 fn rate_limited_panes(session: &str) -> std::collections::BTreeMap<String, bool> {
-    let mut command = Command::new("ntm");
-    command.args([&format!("--robot-agent-health={session}"), "--no-caut"]);
-    let Some(output) = completed("ntm agent-health", spawn_timeout(command, Duration::from_secs(30)))
-    else {
+    // The invocation, the exit-first branch and the zeroed-payload refusal all
+    // belong to `ntm-kernel`. This call site no longer re-learns them: a
+    // non-Answered outcome has NO payload to read, so the "branch on success
+    // first" rule is enforced by the type rather than by this comment.
+    let outcome = ntm_kernel::invoke_bounded(
+        &ntm_kernel::NtmCall::on_session(ntm_kernel::NtmVerb::AgentHealth, session)
+            .arg("--no-caut"),
+        Duration::from_secs(30),
+    );
+    let Some(document) = outcome.payload() else {
+        eprintln!(
+            "pane-dispatch-ready: ntm agent-health {} — no additional refusal",
+            outcome.state()
+        );
         return std::collections::BTreeMap::new();
     };
-    let Ok(document) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
-        return std::collections::BTreeMap::new();
-    };
-    if document.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
-        return std::collections::BTreeMap::new();
-    }
     let Some(panes) = document.get("panes").and_then(serde_json::Value::as_object) else {
         return std::collections::BTreeMap::new();
     };

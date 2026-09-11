@@ -1,0 +1,437 @@
+#![forbid(unsafe_code)]
+
+//! The ONE owner of `ntm` invocation.
+//!
+//! Three crates were each hand-building a `Command::new("ntm")`: ompo-doctor's
+//! cass-context spawn (the single site the bypass ledger grants an amnesty to),
+//! pane-dispatch-ready's agent-health probe, and fast-dispatch's dialog probe.
+//! Five option-A verbs remain unadopted, so the handroll count was on a path to
+//! eight. Each handroll has to re-learn the SAME FIVE PAYLOAD TRAPS, measured
+//! against the live surface, and nothing checks that it did:
+//!
+//! 1. A not-found payload carries POPULATED, ZEROED objects, so reading a field
+//!    from a failed call yields a plausible answer. Branch on exit FIRST.
+//! 2. `error_code` is NOT a classifier: agent-health and interrupt emit
+//!    `PANE_NOT_FOUND` while dialogs and answer-dialog emit `INVALID_FLAG` for
+//!    the IDENTICAL condition. Key on the exit status.
+//! 3. Motion fields are NOT monotonic. A saturated busy pane holds `lines`
+//!    fixed, so a grew-the-line-count test reads it as IDLE. Compare snapshots.
+//! 4. `total_panes` is the AGENT count, not the pane count: deriving a pane
+//!    denominator from it silently DROPS non-agent panes (8 tmux, 7 by verb).
+//! 5. `critical_count` INVERTS: a dead pane is 1, a NONEXISTENT pane is 0, so
+//!    zero is not health.
+//!
+//! Those five live here, once, as types and functions with their own legs. The
+//! spawn path delegates to `subprocess-contract`, which owns the fresh process
+//! group, the concurrent drain of both pipes, and the deadline that signals the
+//! GROUP rather than the leader. This crate adds no second spawn kernel.
+
+use serde_json::Value;
+use std::time::Duration;
+
+/// The option-A robot verbs. Adding a verb here is how the sixth adoption
+/// happens WITHOUT a sixth handroll.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NtmVerb {
+    AgentHealth,
+    Dialogs,
+    AnswerDialog,
+    Interrupt,
+    InspectPane,
+    FleetHealth,
+    Assign,
+}
+
+impl NtmVerb {
+    /// The `--robot-*` flag, verbatim. One spelling, one place.
+    #[must_use]
+    pub fn flag(self) -> &'static str {
+        match self {
+            Self::AgentHealth => "--robot-agent-health",
+            Self::Dialogs => "--robot-dialogs",
+            Self::AnswerDialog => "--robot-answer-dialog",
+            Self::Interrupt => "--robot-interrupt",
+            Self::InspectPane => "--robot-inspect-pane",
+            Self::FleetHealth => "--robot-fleet-health",
+            Self::Assign => "--assign",
+        }
+    }
+}
+
+/// One invocation, described rather than spelled out at the call site.
+#[derive(Debug, Clone)]
+pub struct NtmCall {
+    verb: NtmVerb,
+    session: Option<String>,
+    panes: Option<String>,
+    /// A positional subcommand (`ntm spawn <session> …`) instead of a
+    /// `--robot-*` flag. The escape hatch exists so a non-robot invocation
+    /// still comes through this kernel rather than growing a fourth handroll.
+    subcommand: Option<Vec<String>>,
+    extra: Vec<String>,
+}
+
+impl NtmCall {
+    /// A verb whose flag takes a session value (`--robot-dialogs=<session>`).
+    #[must_use]
+    pub fn on_session(verb: NtmVerb, session: &str) -> Self {
+        Self {
+            verb,
+            session: Some(session.to_owned()),
+            subcommand: None,
+            panes: None,
+            extra: Vec::new(),
+        }
+    }
+
+    /// A verb with no session value (`--assign`).
+    #[must_use]
+    pub fn bare(verb: NtmVerb) -> Self {
+        Self {
+            verb,
+            session: None,
+            subcommand: None,
+            panes: None,
+            extra: Vec::new(),
+        }
+    }
+
+    /// A positional subcommand, e.g. `["spawn", session]`.
+    #[must_use]
+    pub fn subcommand<I, S>(parts: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        Self {
+            verb: NtmVerb::Assign,
+            session: None,
+            panes: None,
+            subcommand: Some(
+                parts
+                    .into_iter()
+                    .map(|part| part.as_ref().to_owned())
+                    .collect(),
+            ),
+            extra: Vec::new(),
+        }
+    }
+
+    /// `--panes=<spec>`, the one spelling.
+    #[must_use]
+    pub fn panes(mut self, panes: &str) -> Self {
+        self.panes = Some(panes.to_owned());
+        self
+    }
+
+    /// Extra flags, appended verbatim after the verb's own arguments.
+    #[must_use]
+    pub fn arg(mut self, arg: &str) -> Self {
+        self.extra.push(arg.to_owned());
+        self
+    }
+
+    /// Extra flags, appended verbatim.
+    #[must_use]
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.extra
+            .extend(args.into_iter().map(|arg| arg.as_ref().to_owned()));
+        self
+    }
+
+    /// The argv AFTER the program name, so a caller can assert on it without
+    /// spawning. This is the only place the flag grammar is assembled.
+    #[must_use]
+    pub fn argv(&self) -> Vec<String> {
+        let mut argv = Vec::new();
+        if let Some(parts) = &self.subcommand {
+            argv.extend(parts.iter().cloned());
+        } else {
+            match &self.session {
+                Some(session) => argv.push(format!("{}={session}", self.verb.flag())),
+                None => argv.push(self.verb.flag().to_owned()),
+            }
+        }
+        if let Some(panes) = &self.panes {
+            argv.push(format!("--panes={panes}"));
+        }
+        argv.extend(self.extra.iter().cloned());
+        argv
+    }
+}
+
+/// What the kernel will say about a call. The payload is reachable ONLY through
+/// [`NtmOutcome::Answered`], which is trap 1 enforced by the type system rather
+/// than by a comment: a consumer holding a `Refused` has no field to read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NtmOutcome {
+    /// Exit 0 AND a parsed payload whose own `success` is true.
+    Answered { payload: Value },
+    /// The process ran and refused. Carries the EXIT STATUS, never an
+    /// `error_code`: two verbs spell one condition two ways (trap 2).
+    Refused {
+        exit_code: Option<i32>,
+        stderr: String,
+    },
+    /// Exit 0 but the bytes are not a JSON object, or the payload's own
+    /// `success` is not true. Distinct from `Refused` so "the verb said no" and
+    /// "the verb answered something we cannot read" never merge.
+    Unparsable {
+        exit_code: Option<i32>,
+        detail: String,
+    },
+    /// The call never produced a verdict: unspawnable, or the deadline killed
+    /// the process group. Restrictive by construction.
+    Unanswerable {
+        reason_code: &'static str,
+        detail: String,
+    },
+}
+
+impl NtmOutcome {
+    /// The payload, or `None`. A failed call has NO payload here even when the
+    /// process printed a populated zeroed object.
+    #[must_use]
+    pub fn payload(&self) -> Option<&Value> {
+        match self {
+            Self::Answered { payload } => Some(payload),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn is_answered(&self) -> bool {
+        matches!(self, Self::Answered { .. })
+    }
+
+    /// A stable label for logs and refusal rows.
+    #[must_use]
+    pub fn state(&self) -> &'static str {
+        match self {
+            Self::Answered { .. } => "ANSWERED",
+            Self::Refused { .. } => "REFUSED",
+            Self::Unparsable { .. } => "UNPARSABLE",
+            Self::Unanswerable { .. } => "UNANSWERABLE",
+        }
+    }
+}
+
+/// Classify a completed invocation. EXIT STATUS FIRST, payload second.
+///
+/// `success` is the process's exit status, not any field of the payload. A
+/// not-found answer from `--robot-agent-health` exits nonzero AND prints
+/// `agent{process_running:false}` plus a zeroed `fleet_health`, so a consumer
+/// that parses before branching reads false-and-zero as measurement.
+#[must_use]
+pub fn classify(success: bool, exit_code: Option<i32>, stdout: &[u8], stderr: &[u8]) -> NtmOutcome {
+    if !success {
+        return NtmOutcome::Refused {
+            exit_code,
+            stderr: String::from_utf8_lossy(stderr).into_owned(),
+        };
+    }
+    let Ok(payload) = serde_json::from_slice::<Value>(stdout) else {
+        return NtmOutcome::Unparsable {
+            exit_code,
+            detail: "stdout is not JSON".to_owned(),
+        };
+    };
+    if payload.get("success").and_then(Value::as_bool) != Some(true) {
+        return NtmOutcome::Unparsable {
+            exit_code,
+            detail: "payload.success is not true".to_owned(),
+        };
+    }
+    NtmOutcome::Answered { payload }
+}
+
+/// Invoke `ntm` on the sanctioned bounded path and classify the result.
+///
+/// The spawn, the fresh process group, the concurrent drain of both pipes and
+/// the deadline that signals the GROUP all belong to `subprocess-contract`;
+/// this function owns the argv and the classification. No detached task is
+/// created: the call returns only after the child is reaped or its group is
+/// signalled.
+#[must_use]
+pub fn invoke_bounded(call: &NtmCall, deadline: Duration) -> NtmOutcome {
+    let argv = call.argv();
+    let mut command = std::process::Command::new("ntm");
+    command.args(&argv);
+    match subprocess_contract::bounded_output(&mut command, deadline) {
+        subprocess_contract::BoundedOutcome::Completed(output) => classify(
+            output.status.success(),
+            output.status.code(),
+            &output.stdout,
+            &output.stderr,
+        ),
+        subprocess_contract::BoundedOutcome::TimedOut => NtmOutcome::Unanswerable {
+            reason_code: "NTM_TIMEOUT",
+            detail: format!("ntm {} exceeded {:?}", argv.join(" "), deadline),
+        },
+        subprocess_contract::BoundedOutcome::Unspawned(error) => NtmOutcome::Unanswerable {
+            reason_code: "NTM_UNAVAILABLE",
+            detail: format!("{error}"),
+        },
+    }
+}
+
+/// A completed `ntm` run, for invocations whose output is NOT a robot payload
+/// (`ntm spawn …`). Exit status is carried as its own field so a consumer
+/// branches on it before reading either stream, exactly as [`classify`] does
+/// for the JSON verbs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NtmRun {
+    pub argv: Vec<String>,
+    pub success: bool,
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Run `ntm` and hand back the completed run, or the reason there is no run.
+///
+/// `Err` is the unanswerable case — unspawnable, or the deadline signalled the
+/// process GROUP — so "we never asked" can never be mistaken for "it said no".
+pub fn run_bounded(call: &NtmCall, deadline: Duration) -> Result<NtmRun, NtmOutcome> {
+    let argv = call.argv();
+    let mut command = std::process::Command::new("ntm");
+    command.args(&argv);
+    match subprocess_contract::bounded_output(&mut command, deadline) {
+        subprocess_contract::BoundedOutcome::Completed(output) => Ok(NtmRun {
+            argv,
+            success: output.status.success(),
+            exit_code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(NtmOutcome::Unanswerable {
+            reason_code: "NTM_TIMEOUT",
+            detail: format!("ntm {} exceeded {:?}", argv.join(" "), deadline),
+        }),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(NtmOutcome::Unanswerable {
+            reason_code: "NTM_UNAVAILABLE",
+            detail: format!("{error}"),
+        }),
+    }
+}
+
+/// The async path, for callers already inside a region. `&Cx` is FIRST per the
+/// asupersync contract, cancellation is the caller's, and nothing is detached.
+pub async fn invoke(cx: &asupersync::Cx, call: &NtmCall) -> NtmOutcome {
+    let argv = call.argv();
+    let mut command = asupersync::process::Command::new("ntm");
+    command.args(&argv);
+    match subprocess_contract::run_output(cx, command).await {
+        Ok(output) => classify(
+            output.status.success(),
+            output.status.code(),
+            &output.stdout,
+            &output.stderr,
+        ),
+        Err(error) => NtmOutcome::Unanswerable {
+            reason_code: "NTM_UNAVAILABLE",
+            detail: format!("{error}"),
+        },
+    }
+}
+
+/// One capture of a pane, digest included. Trap 3: motion is decided by
+/// COMPARING SNAPSHOTS, never by assuming a counter grows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaneSnapshot {
+    pub pane: String,
+    pub lines: u64,
+    pub chars: u64,
+    pub digest: String,
+}
+
+/// What two captures prove about a pane.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Motion {
+    /// The captures differ: the pane moved.
+    Moved,
+    /// The captures are identical: the pane did not move.
+    Still,
+    /// The captures cannot be compared (different panes, or a capture we never
+    /// got). NOT idleness — a pane we could not observe twice is unproven.
+    Indeterminate,
+}
+
+/// Decide motion from two captures of the same pane.
+///
+/// `lines` and `chars` are deliberately NOT consulted. A saturated busy pane
+/// holds `lines` fixed while its content churns, so a grew-the-line-count test
+/// calls the busiest pane in the fleet idle; and a scrollback-capped pane can
+/// hold `chars` fixed or move it either direction. The digest is the only field
+/// that answers the question asked.
+#[must_use]
+pub fn motion(first: &PaneSnapshot, second: &PaneSnapshot) -> Motion {
+    if first.pane != second.pane || first.digest.is_empty() || second.digest.is_empty() {
+        return Motion::Indeterminate;
+    }
+    if first.digest == second.digest {
+        Motion::Still
+    } else {
+        Motion::Moved
+    }
+}
+
+/// The pane denominator: how many PANES the payload describes.
+///
+/// Trap 4: `total_panes` is the AGENT count. Measured 2026-09-11, a session
+/// with 8 tmux panes reported `total_panes: 7`, so a ratio built on it silently
+/// drops every non-agent pane and reads as a complete census.
+///
+/// An absent or non-object `panes` map is an ERROR, never zero: "we could not
+/// see the panes" and "there are no panes" are different facts.
+pub fn pane_denominator(payload: &Value) -> Result<usize, &'static str> {
+    payload
+        .get("panes")
+        .and_then(Value::as_object)
+        .map(serde_json::Map::len)
+        .ok_or("NTM_NO_PANE_MAP")
+}
+
+/// Whether a named pane is present, and whether it is critical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Presence {
+    /// The pane is in the payload and not critical.
+    Healthy,
+    /// The pane is in the payload and critical.
+    Critical,
+    /// The pane is NOT in the payload. `critical_count` is 0 for this case and
+    /// 1 for a dead-but-present pane, so zero must never read as health.
+    Absent,
+}
+
+/// Resolve a pane's presence WITHOUT letting `critical_count` stand in for it.
+///
+/// Trap 5: `critical_count` INVERTS at the boundary — a dead pane contributes
+/// 1, a pane that does not exist contributes 0. Gating on `critical_count == 0`
+/// therefore treats the one pane nobody can reach as the healthiest in the
+/// fleet. Presence is resolved from the pane MAP; the count is only ever used
+/// once presence is established.
+#[must_use]
+pub fn presence(payload: &Value, pane: &str) -> Presence {
+    let Some(row) = payload
+        .get("panes")
+        .and_then(Value::as_object)
+        .and_then(|panes| panes.get(pane))
+    else {
+        return Presence::Absent;
+    };
+    let critical = row
+        .get("critical_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0)
+        > 0;
+    if critical {
+        Presence::Critical
+    } else {
+        Presence::Healthy
+    }
+}

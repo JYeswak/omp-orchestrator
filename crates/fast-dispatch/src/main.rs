@@ -413,18 +413,25 @@ fn composer_occupied(raw_tail: &str) -> bool {
 /// A spawn that never ran is Unanswerable, never NoDialog: the dispatch gate must refuse a pane
 /// it could not ask about.
 fn pane_dialog_verdict(session: &str, pane: &str) -> DialogVerdict {
-    let mut command = Command::new("ntm");
-    command
-        .arg(format!("--robot-dialogs={session}"))
-        .arg(format!("--panes={pane}"));
-    match bounded_output(&mut command, Duration::from_secs(20)) {
-        BoundedOutcome::Completed(output) => {
-            classify_dialog_payload(output.status.success(), &output.stdout)
+    // `ntm-kernel` owns the argv, the bounded spawn and the exit-first branch;
+    // `classify_dialog_payload` stays the pure oracle with its own known-bad
+    // legs. A non-Answered outcome hands it `false` and NO bytes, so a zeroed
+    // not-found payload can never be read as a dialog verdict.
+    let outcome = ntm_kernel::invoke_bounded(
+        &ntm_kernel::NtmCall::on_session(ntm_kernel::NtmVerb::Dialogs, session).panes(pane),
+        Duration::from_secs(20),
+    );
+    match &outcome {
+        ntm_kernel::NtmOutcome::Answered { payload } => {
+            classify_dialog_payload(true, payload.to_string().as_bytes())
         }
-        BoundedOutcome::TimedOut => DialogVerdict::Unanswerable("timeout".to_owned()),
-        BoundedOutcome::Unspawned(error) => {
-            DialogVerdict::Unanswerable(format!("unspawned: {error}"))
+        ntm_kernel::NtmOutcome::Refused { .. } | ntm_kernel::NtmOutcome::Unparsable { .. } => {
+            classify_dialog_payload(false, &[])
         }
+        ntm_kernel::NtmOutcome::Unanswerable {
+            reason_code,
+            detail,
+        } => DialogVerdict::Unanswerable(format!("{reason_code}: {detail}")),
     }
 }
 

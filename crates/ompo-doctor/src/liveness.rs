@@ -368,19 +368,34 @@ pub fn spawn(
         "--cass-context".to_owned(),
         repo.to_owned(),
     ]);
-    let borrowed = args.iter().map(String::as_str).collect::<Vec<_>>();
-    let mut command = Command::new("ntm");
-    command.args(&borrowed);
-    let output = match bounded_output(&mut command, Duration::from_secs(120)) {
-        BoundedOutcome::Completed(output) => output,
-        BoundedOutcome::TimedOut => return Err("L4_SPAWN_TIMEOUT — ntm spawn exceeded 120s".to_owned()),
-        BoundedOutcome::Unspawned(error) => return Err(format!("L4_SPAWN_UNAVAILABLE — {error}")),
+    // ONE owner of ntm invocation (io67x): the argv, the bounded spawn, the
+    // fresh process group and the exit-first contract belong to `ntm-kernel`.
+    // This site keeps its own typed report; what it no longer keeps is a
+    // second hand-built Command.
+    let run = match ntm_kernel::run_bounded(
+        &ntm_kernel::NtmCall::subcommand(args.iter().map(String::as_str)),
+        Duration::from_secs(120),
+    ) {
+        Ok(run) => run,
+        Err(ntm_kernel::NtmOutcome::Unanswerable {
+            reason_code: "NTM_TIMEOUT",
+            ..
+        }) => return Err("L4_SPAWN_TIMEOUT — ntm spawn exceeded 120s".to_owned()),
+        Err(outcome) => {
+            return Err(format!(
+                "L4_SPAWN_UNAVAILABLE — {}",
+                match &outcome {
+                    ntm_kernel::NtmOutcome::Unanswerable { detail, .. } => detail.clone(),
+                    other => other.state().to_owned(),
+                }
+            ))
+        }
     };
     Ok(SpawnReport {
         command: args,
-        exit_code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        exit_code: run.exit_code,
+        stdout: run.stdout,
+        stderr: run.stderr,
     })
 }
 

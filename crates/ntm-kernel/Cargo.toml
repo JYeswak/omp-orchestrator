@@ -1,0 +1,19 @@
+[package]
+license.workspace = true
+name = "ntm-kernel"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "the ONE owner of ntm invocation: argv, spawn, exit-first typed answers, and the five payload traps encoded once"
+
+[lints]
+workspace = true
+
+[lib]
+name = "ntm_kernel"
+path = "src/lib.rs"
+
+[dependencies]
+asupersync = { workspace = true }
+subprocess-contract = { path = "../subprocess-contract" }
+serde_json = "1"

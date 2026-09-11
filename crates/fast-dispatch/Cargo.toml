@@ -16,6 +16,7 @@ path = "src/lib.rs"
 [dependencies]
 composer-typed = { path = "../composer-typed" }
 loop-switch = { path = "../loop-switch" }
+ntm-kernel = { path = "../ntm-kernel" }
 subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
 finding = { path = "../finding" }

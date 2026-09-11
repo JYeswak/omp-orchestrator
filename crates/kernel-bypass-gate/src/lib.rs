@@ -125,7 +125,16 @@ const KERNEL_DISPATCH_SEND: &str = concat!("dispatch ", "robot", "-send");
 /// the row, rather than bounding the needle, is what removed the 11 false sites.
 pub const KERNEL_REGISTRY: &[(&str, &str, &str)] = &[
     (NEEDLE_SPAWN_TMUX, "tick-monitor pane access", "tick-monitor"),
-    (NEEDLE_SPAWN_NTM, KERNEL_DISPATCH_SEND, "tick-monitor"),
+    // io67x: ntm invocation now has ONE owner, the `ntm-kernel` crate, which
+    // builds the argv, spawns through `subprocess-contract` (fresh process
+    // group, both pipes drained, deadline signals the GROUP) and returns a
+    // typed answer that branches on EXIT before any payload field is read.
+    // The three handrolls this replaced — ompo-doctor's cass-context spawn,
+    // pane-dispatch-ready's agent-health probe and fast-dispatch's dialog
+    // probe — each had to re-learn the same five payload traps; the kernel
+    // encodes them once with a leg apiece. `tick-monitor` holds ZERO sites for
+    // this needle (measured), so moving the allowlist here strands nothing.
+    (NEEDLE_SPAWN_NTM, "ntm-kernel invocation", "ntm-kernel"),
     (
         NEEDLE_SPAWN_BR,
         "beads-workflow bead filing",
@@ -194,21 +203,23 @@ pub struct SystemicBypassAllowance {
 /// REFILL 2026-09-11 (bead -9ub39). The ledger above described the bare-word
 /// registry; when the five bare rows were deleted their violations went with them
 /// and the emptied ledger refused the tree with UNDECLARED_PATTERN on the one
-/// remaining true site. This row re-fills it for the execution-unit registry. The
-/// ceiling was measured on the committed tree with the new sources overlaid, per
-/// the provenance ritual above: exactly one live site,
-/// `crates/ompo-doctor/src/liveness.rs` spawning `ntm` for cass context — the same
-/// site `.beads/issues.jsonl#3167` classified as the only genuine invocation among
-/// twelve. The row ratchets it: a second `Command::new("ntm")` anywhere refuses
-/// with NEW_BYPASS, and routing liveness through a kernel refuses with
-/// CEILING_HAS_SLACK until this row is deleted. That is the debt system working,
-/// not an exemption: the count is exact in both directions.
-pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[SystemicBypassAllowance {
-    pattern: NEEDLE_SPAWN_NTM,
-    owner: "josh",
-    dies_when: "ompo-doctor liveness routes its cass-context spawn through a dispatch kernel, or its bespoke justification is renewed with cause",
-    ceiling: 1,
-}];
+/// remaining true site. That row re-filled it for the execution-unit registry at
+/// ceiling 1, the one live site being
+/// `crates/ompo-doctor/src/liveness.rs` spawning `ntm` for cass context.
+///
+/// PAID OFF 2026-09-11 (bead io67x), AND THE ROW IS DELETED RATHER THAN ZEROED,
+/// because `EmptyRow` refuses a zeroed row by name. The row's own `dies_when`
+/// was "ompo-doctor liveness routes its cass-context spawn through a dispatch
+/// kernel", and it now does: `ntm-kernel` owns the invocation, the registry
+/// above names that crate as the allowlisted owner, and the three handrolls
+/// (ompo-doctor liveness, pane-dispatch-ready agent-health, fast-dispatch
+/// dialogs) route through it. Measured outside the owning crate: ZERO.
+/// ⛔ THE CEILING WAS NEVER RAISED. It went 1 -> row deleted, which is the
+/// pay-off path this file documents; a raise would have been the amnesty
+/// pathology, and the ratchet is INTACT — a new `Command::new("ntm")` in any
+/// non-owning crate now refuses with UNDECLARED_PATTERN instead of
+/// NEW_BYPASS, which is a stricter refusal, not a weaker one.
+pub const BYPASS_DEBT: &[SystemicBypassAllowance] = &[];
 /// A detected kernel bypass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Bypass {
