@@ -49,6 +49,21 @@ use std::sync::Mutex;
 
 static SPAWN_CENSUS_LOCK: Mutex<()> = Mutex::new(());
 
+/// Take the census lock WITHOUT inheriting a sibling's panic.
+///
+/// The lock exists only to serialise the in-tree specimen against the live census; it guards no
+/// invariant that a panic could leave half-applied. With `.expect()`, a genuine failure in
+/// `every_spawning_crate_routes_through_the_contract_or_is_allowed` POISONED this mutex and
+/// `known_bad_in_tree_spawn_specimen_is_named` then died with `spawn census lock: PoisonError`
+/// -- a third leg reporting a cause that is not its own. Measured 2026-09-11: two real failures
+/// produced three reds, and the third named the mutex instead of the subject. Recovering the
+/// guard keeps every leg's verdict its own.
+fn census_lock() -> std::sync::MutexGuard<'static, ()> {
+    SPAWN_CENSUS_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -74,10 +89,18 @@ const SPAWN_ALLOWANCE: &[(&str, &str)] = &[
         "pre-delete-citation-check",
         "pre-commit-time check, bounded by the hook's lifetime rather than a runtime deadline",
     ),
+    // RETIRED 2026-09-11: `receiver-receipt` held a row reading "single tmux capture-pane read
+    // at hook time; ALLOWANCE IS WEAK -- should route through the contract once the fence
+    // lands". The crate no longer contains a single `Command::new`, so the row named a spawn
+    // that does not exist and `every_allowance_row_names_a_crate_that_still_spawns` refused it
+    // by name. Removing it is the ratchet moving DOWN, which is the only direction it moves.
     (
-        "receiver-receipt",
-        "single tmux capture-pane read at hook time; ALLOWANCE IS WEAK — this is runtime-adjacent \
-         and should route through the contract once the fence lands",
+        "build-stamp",
+        "BUILD TIME, not runtime: one site, `git rev-parse HEAD` from a build-script helper that \
+         72 crates consume as a [build-dependencies] entry. Routing it through the contract would \
+         pull subprocess-contract -- and asupersync behind it -- into 72 BUILD graphs to bound a \
+         synchronous one-shot that the build itself already bounds. Dies when the build stamp is \
+         derived without spawning a child at all",
     ),
     (
         "installer",
@@ -332,7 +355,7 @@ fn unrouted_spawners(root: &Path) -> Result<Vec<String>, String> {
 
 #[test]
 fn every_spawning_crate_routes_through_the_contract_or_is_allowed() {
-    let _lock = SPAWN_CENSUS_LOCK.lock().expect("spawn census lock");
+    let _lock = census_lock();
     let root = repo_root();
     let unrouted = unrouted_spawners(&root).unwrap_or_else(|error| panic!("{error}"));
     assert!(unrouted.is_empty());
@@ -350,7 +373,7 @@ impl Drop for InTreeSpecimen {
 
 #[test]
 fn known_bad_in_tree_spawn_specimen_is_named() {
-    let _lock = SPAWN_CENSUS_LOCK.lock().expect("spawn census lock");
+    let _lock = census_lock();
     let path = repo_root()
         .join("crates")
         .join(format!("w3yb1-spawn-specimen-{}", std::process::id()));
