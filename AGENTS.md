@@ -7490,3 +7490,37 @@ The third case is the one that bites an impatient reader: BOTH LINES ABSENT AND 
 ALIVE.** `exit=0` refused, `exit=N` decided, **nothing at all = still running.** The only safe
 action on the third is none — and the verdict arriving 4½ minutes after I stopped waiting is
 what proves the refusal was right rather than merely cautious.
+
+### ⛔⛔ AND THE GUARD'S `4 of 4` IS **THREE DIFFERENT VERDICTS WEARING ONE COUNT** — `C69` again
+
+**The enumeration I declined to guess last tick, obtained with `--json` once the build was
+warm. It changes the reading completely:**
+
+```
+bin/challenge-lane.sh                        invoker=-      ABSENT  (no such path; NEVER in history)
+crates/omp-idle-dispatch/src/main.rs         invoker=none   EXCLUDED (Cargo.toml:7 exclude=[…];
+                                                             cargo metadata: ABSENT from packages)
+crates/fleet-composite/src/main.rs           invoker=none   INERT
+crates/wired-but-inert-guard/src/main.rs     invoker=none   INERT  (itself)
+```
+
+**So `4 of 4 BUILT but NOT WIRED` is one dead subject, one deliberately excluded crate, and TWO
+genuine inerts.** The actionable count is **2**, and the guard reports **4**.
+
+⛔ **`bin/challenge-lane.sh` is a SHELL SCRIPT — the thing THE ONE RULE forbids — and it has
+never existed at that path in this repository's history.** The guard is watching for a file the
+repo's flagship rule guarantees can never exist. **That row cannot ever go green, so the guard
+is red by construction**, which is the rule-10 shape at subject granularity rather than count
+granularity.
+
+⛔ **And `omp-idle-dispatch` is EXCLUDED from the workspace by `Cargo.toml:7`** — the same
+exclusion this file elsewhere calls *the dating tell*. **A crate the build deliberately does not
+contain is not "unwired"; it is out of scope**, and counting it as a failure means the guard
+disagrees with the workspace manifest about what the workspace is.
+
+ **THIS IS `fh C69` INSIDE THE CRATE WRITTEN TO ENFORCE WIRING:** *"no such mechanism exists"*
+and *"the mechanism exists and was not exercised"* are two verdicts with two different remedies,
+and this guard emits one colour for three. **ABSENT → delete the row. EXCLUDED → scope the
+subject list to workspace members. INERT → wire it.** Fixing that is the prerequisite for wiring
+the guard at all — and it is why *"run the check before you wire it"* paid for itself twice: the
+first run said don't, and the second said why.
