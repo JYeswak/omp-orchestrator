@@ -193,19 +193,32 @@ impl fmt::Display for CloseReasonVerdict {
     }
 }
 
-/// Classify a close reason against the local six-prefix policy.
+/// True when a close reason cites a `cargo test` figure.
 ///
-/// `None` means the caller did not read the reason and yields
-/// [`CloseReasonVerdict::Unread`] — never a verified verdict.
-fn has_cargo_test_figure(reason: &str) -> bool {
+/// THE OWNER OF THE INVARIANT EXPORTS IT. Tree provenance is demanded of a
+/// NUMBER, so a reason that cites no cargo figure has no number to attribute and
+/// this predicate is the precondition every consumer must gate on. It is public
+/// because `pre-delete-citation-check` re-implemented the demand WITHOUT the
+/// precondition and emitted this crate's error name for it; two copies of a rule
+/// drift, and this one drifted into refusing rows that made no execution claim.
+#[must_use]
+pub fn has_cargo_test_figure(reason: &str) -> bool {
     reason.contains("cargo test")
 }
 
-fn has_worker_authority(reason: &str) -> bool {
+/// True when a close reason names where the figure ran: `worker=<name>`,
+/// `worker:<name>`, or `local`.
+#[must_use]
+pub fn has_worker_authority(reason: &str) -> bool {
     reason.split_whitespace().any(|token| {
         token == "local" || token.starts_with("worker=") || token.starts_with("worker:")
     })
 }
+
+/// Classify a close reason against the local six-prefix policy.
+///
+/// `None` means the caller did not read the reason and yields
+/// [`CloseReasonVerdict::Unread`] — never a verified verdict.
 #[must_use]
 pub fn classify_close_reason(reason: Option<&str>) -> CloseReasonVerdict {
     let Some(raw) = reason else {

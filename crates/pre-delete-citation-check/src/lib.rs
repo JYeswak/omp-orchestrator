@@ -374,11 +374,14 @@ pub struct ScopedCloseReasonViolation {
 /// the same input. The `MirrorBead` byte-level parser went with them: the staged scan now
 /// reuses [`parse_closed_beads_jsonl_checked`], so there is a single mirror reader.
 
-fn has_worker_attribution(reason: &str) -> bool {
-    reason
-        .split_whitespace()
-        .any(|token| token == "local" || token.starts_with("worker=") || token.starts_with("worker:"))
-}
+/// ONE AUTHORITY: the worker-attribution demand now lives ONLY in
+/// `ack_spine::close_reason::classify_close_reason`, which OWNS the invariant and
+/// already refuses a cargo figure lacking `worker=`/`local` as
+/// `CloseReasonVerdict::CargoWorkerMissing` (label `CLOSE_REASON_WORKER_MISSING`).
+/// The local `has_worker_attribution` copy and its unconditional arm were DELETED
+/// rather than kept in sync: two copies of a rule drift, and this one drifted into
+/// demanding execution authority from rows that made no execution claim — a row
+/// whose evidence is `df -h` and `du` has no number to attribute to a tree.
 
 /// One closed staged row's disposition under the staged close-reason policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -446,7 +449,7 @@ pub fn check_staged_close_reason_policy(
             report.historical_closed += 1;
             let historical =
                 ack_spine::close_reason::classify_close_reason(Some(&bead.close_reason));
-            if !historical.is_verified() || !has_worker_attribution(&bead.close_reason) {
+            if !historical.is_verified() {
                 report.legacy_unrecoverable.push(bead.id.clone());
             }
             continue;
@@ -460,16 +463,10 @@ pub fn check_staged_close_reason_policy(
             });
             continue;
         }
-        if !has_worker_attribution(&bead.close_reason) {
-            report.violations.push(ScopedCloseReasonViolation {
-                bead_id: bead.id.clone(),
-                reason: format!(
-                    "CLOSE_REASON_WORKER_MISSING bead={} -- new closed rows require worker=<name> or local",
-                    bead.id
-                ),
-            });
-            continue;
-        }
+        // NOTE: there is deliberately no second worker-authority arm here. The
+        // verdict above ALREADY refuses a cargo figure without `worker=`/`local`
+        // (CargoWorkerMissing, label CLOSE_REASON_WORKER_MISSING), so a local arm
+        // could only either restate it or disagree with it.
         report.verified += 1;
     }
     Ok(report)
