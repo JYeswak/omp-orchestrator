@@ -123,3 +123,56 @@ fn all_fresh_is_false_for_an_empty_or_silent_source_set() {
         "a source with no age is SILENT, so not all_fresh"
     );
 }
+
+// ---------------------------------------------------------------------------
+// L4-OBS-TICK (17nw): gap_secs, and EITHER an age or silent=true — never neither.
+// Known-bad: observed_at absent read as age 0, i.e. the freshest possible answer
+// for the source that answered least.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn tick_row_carries_gap_secs_derived_from_age() {
+    let mut tick = source("tick-monitor", &["%7"], true, true);
+    tick.age_ms = Some(90_500);
+    let row = ompo_start::liveness::source_json(&tick);
+    assert_eq!(row["age_ms"], serde_json::json!(90_500));
+    assert_eq!(row["gap_secs"], serde_json::json!(90), "whole-second gap");
+    assert_eq!(row["silent"], serde_json::json!(false));
+}
+
+#[test]
+fn tick_row_with_no_observed_at_is_silent_not_zero() {
+    let mut tick = source("tick-monitor", &["%7"], true, true);
+    tick.age_ms = None;
+    let row = ompo_start::liveness::source_json(&tick);
+    // KNOWN-BAD, pinned: the pre-fix reading of a missing observed_at.
+    let known_bad_gap = tick.age_ms.unwrap_or(0) / 1000;
+    assert_eq!(known_bad_gap, 0, "KNOWN-BAD: absent observed_at read as gap 0s");
+    // The writer under test refuses that default.
+    assert_eq!(row["gap_secs"], serde_json::Value::Null, "unmeasured, not 0");
+    assert_eq!(row["age_ms"], serde_json::Value::Null);
+    assert_eq!(
+        row["silent"],
+        serde_json::json!(true),
+        "acceptance: age_ms OR silent=true"
+    );
+}
+
+#[test]
+fn every_source_row_carries_an_age_or_silent_true() {
+    // The acceptance is a disjunction, so the invariant is that it can never be
+    // unsatisfied: no row may have a null age AND silent=false.
+    for age in [None, Some(0u64), Some(1), Some(300_000)] {
+        for (available, fresh) in [(true, true), (true, false), (false, false)] {
+            let mut probe = source("tick-monitor", &["%7"], available, fresh);
+            probe.age_ms = age;
+            let row = ompo_start::liveness::source_json(&probe);
+            let has_age = !row["age_ms"].is_null();
+            let silent = row["silent"] == serde_json::json!(true);
+            assert!(
+                (has_age && !silent) || silent,
+                "row satisfies neither leg: {row}"
+            );
+        }
+    }
+}

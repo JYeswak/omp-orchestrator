@@ -33,6 +33,16 @@ pub fn short_key(name: &str) -> &str {
     }
 }
 
+/// A source with no observable age.
+///
+/// `observed_at` absent is SILENT, not zero and not fresh: a missing timestamp
+/// once read as "age 0 ms", which is the freshest possible answer for the source
+/// that answered least.
+#[must_use]
+pub fn is_silent(source: &SourceVerdict) -> bool {
+    !source.available || !source.fresh || source.age_ms.is_none()
+}
+
 /// One source's census row.
 ///
 /// `names` is the pane census: WHICH panes the source saw, not how many. An
@@ -40,6 +50,12 @@ pub fn short_key(name: &str) -> &str {
 /// zero panes and a source that saw three were the same row from outside.
 /// `pane_count` is emitted beside it so a renderer that truncates the list shows
 /// up as a count mismatch instead of a silent drop.
+///
+/// `gap_secs` is the tick-monitor gap in whole seconds, derived from `age_ms` and
+/// `null` exactly when `age_ms` is `null`. It is never defaulted to 0: a gap of
+/// zero and an unmeasured gap are different facts, and `silent` is the field that
+/// distinguishes them. A reader gets EITHER an age or `silent: true`, never
+/// neither.
 #[must_use]
 pub fn source_json(source: &SourceVerdict) -> serde_json::Value {
     serde_json::json!({
@@ -48,6 +64,8 @@ pub fn source_json(source: &SourceVerdict) -> serde_json::Value {
         "fresh": source.fresh,
         "reason_code": source.reason_code,
         "age_ms": source.age_ms,
+        "gap_secs": source.age_ms.map(|age| age / 1000),
+        "silent": is_silent(source),
         "names": source.panes,
         "panes": source.panes,
         "pane_count": source.panes.len(),
