@@ -312,6 +312,18 @@ RCH_REQUIRE_REMOTE=1 rch exec -- cargo <verb> -j 2 -p <crate>
 **DO NOT CROSS-BUILD TO `aarch64-apple-darwin`. The routine lane is Linux-native on Contabo, and
 that is the whole form:** `RCH_REQUIRE_REMOTE=1 rch exec -- cargo <verb> -j 2 -p <crate>`.
 
+⛔ **THERE IS EXACTLY ONE EXCEPTION AND IT IS AT `:391`, NOT HERE — READ IT BEFORE YOU CONCLUDE YOU
+MAY NOT BUILD: `### ⛔ THE ONE DARWIN EXCEPTION: REBUILDING .git/hooks/pre-commit, AND NOTHING
+ELSE`.** This pointer exists because a worker read THIS section on 2026-09-11, correctly stopped at
+the prohibition, and reported the hook rebuild as forbidden — then proposed amending a bead's
+acceptance to accommodate a ban that has a documented carve-out 78 lines downstream. **That is the
+identical defect this file records about itself at the top:** `CONTRACT.md:59` said **BUILD FREEZE**
+in bold while the amendment lifting it sat at `:101`, and a reader who stops at the word FREEZE
+never reaches the word AUTHORIZED — which cost a session with 131 beads claimable. **A SUPERSEDING
+AMENDMENT MUST LAND AT THE ORIGINAL TEXT, NOT DOWNSTREAM OF IT.** `:391` already points back here
+(`"The authority is :310-316"`); the back-pointer alone is useless, because the reader who needs it
+never arrives. **Both directions or neither.**
+
 **This SUPERSEDES the `--config build.target="aarch64-apple-darwin"` recipe that stood here.**
 The recipe is deliberately not reproduced — a section retiring a command must not contain it, or
 the next reader greps and finds it live. Recover it from history if a ruling ever reverses this.
