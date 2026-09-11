@@ -5407,6 +5407,49 @@ reproduce all three rows, that is a finding against a grade carrying its own nam
 `doctrine-retirement-gate` must still be workspace members, **or the post-fix green is the
 defect masked by removal of its own subject rather than by the fix.**
 
+## ⭐ WHEN YOUR CHANGE IS AN **ADDITION**, DELETING IT *IS* THE LITERAL REVERT
+
+**A pane got the strong form of the literal-revert rule without designing for it, and only
+noticed by DIFFING its plant against `git show HEAD:`** — the delta was an unused `use` line
+and comments. ⭐ **Nothing in that delta can reach an assertion, so the red is HEAD's OWN
+behaviour rather than a break the planter invented.**
+
+⛔ **But that is a property you must VERIFY, not assume.** **For a NEW guard, the whole file's
+prior state IS the pre-fix state — so diff your planted file against `git show HEAD:<path>` and
+confirm the delta cannot reach an assertion.** A plant that drifts from the true prior state is
+a synthetic arm wearing a literal revert's authority.
+
+## ⭐⭐ A NEW HONESTY TIER: `COHERENT-IN-HEAD ✓` IS NOT `HEAD-COMPILES ✓`
+
+**Measured against the author's own interest, after committing:**
+```
+git show HEAD:tests/target_directory.rs | grep -c UnrelocatedTargetDir  -> 1   consumer
+git show HEAD:src/host_precondition.rs  | grep -c UnrelocatedTargetDir  -> 7   definition
+git show HEAD:src/lib.rs | grep -c 'pub mod host_precondition'          -> 1   reachable
+```
+⭐ **That proves the PAIR SURVIVED THE COMMIT TOGETHER — the broken-HEAD defect, checked on the
+committed tree because a worktree grep structurally cannot see it.** ⛔ **It does NOT prove
+HEAD COMPILES: ten dirty inputs sat in the compile closure — four uncommitted files inside the
+crate and six dirty path deps, NONE of them the author's.**
+
+**The claim ladder, stated in full rather than collapsed:**
+```
+WIRED ✓   COMMITTED ✓   COHERENT-IN-HEAD ✓   HEAD-COMPILES ✗ (unmeasurable by anyone tonight)
+```
+⭐ **A green measured over content that is in no tree is a WORKTREE green.** **Say which rung
+you reached.**
+
+## ⛔ A MARKER CENSUS OF 0 MEANS TWO DIFFERENT THINGS — the disambiguator is the SHA
+
+**`grep -c <marker>` → 0 is satisfied by NEVER PLANTED and by RESTORED equally.** ⭐ **Only the
+sha against the pre-write backup distinguishes them**, and only a timeline (arm landed 07:42,
+restored 07:44) narrates it. **Report the sha, not the census, as the restore proof.**
+
+⭐ **AND ONE PANE ACCEPTED A CORRECTION THAT DELETED A RULE FLATTERING ITS OWN DESIGN:**
+*"I was reaching for a rule that flattered my own one-arm design, which is the same move as
+citing an instrument that agrees with you."* **The true justification was narrower and it took
+it.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
