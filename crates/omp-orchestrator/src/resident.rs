@@ -9000,6 +9000,67 @@ exit 2
         );
     }
 
+    /// GradeCatch22's control, and the reason a typed skip here is not a
+    /// suppression.
+    ///
+    /// BOTH REMEDIES g5j5b EMITS ARE UNREACHABLE IN THE ONLY LANE WE RUN.
+    /// `run this leg from a tmux pane on the host` is closed off by
+    /// CONTABO-OR-BUST and `install br on the worker PATH` is outside an
+    /// agent's bounds, so these five legs are unmeasurable FOREVER on the
+    /// workers, not "until someone fixes the host". Before g5j5b that hole
+    /// announced itself as `exit=101`; after it the suite is `exit=0` over the
+    /// same hole. The typed reason DOCUMENTS that; it does not close it.
+    ///
+    /// What protects it is this census: the guarded set is pinned BY NAME, so a
+    /// sixth guarded leg cannot arrive silently — adding one reddens here until
+    /// someone writes it down deliberately. Unlike the remedies, this leg runs
+    /// on Contabo.
+    ///
+    /// It also pins the DISTRIBUTION of preconditions (4 pane + 1 tracker), so
+    /// a guard cannot be widened from one requirement to another unnoticed.
+    #[test]
+    fn the_guarded_leg_set_is_pinned_by_name_so_a_sixth_cannot_arrive_silently() {
+        let source = include_str!("resident.rs");
+        // Built at compile time from two fragments so this census does not
+        // count ITSELF as a guarded call site — the self-reference that makes
+        // a source-scanning leg quietly wrong.
+        let needle = concat!("measurable_here", "(");
+        let guarded: BTreeSet<&str> = source
+            .split(needle)
+            .skip(1)
+            .filter_map(|tail| tail.split('"').nth(1))
+            .collect();
+        let expected: BTreeSet<&str> = BTreeSet::from([
+            // Five HOST-ONLY legs: unmeasurable on a worker, asserting on the host.
+            "supervisor_claims_open_bead_before_authorized_dispatch",
+            "preflight_refusal_leaves_tracker_unclaimed",
+            "disabling_supervisor_claim_preserves_known_bad_refusal",
+            "supervisor_files_recurring_decision_through_finding_kernel",
+            "stale_docs_admits_grading_and_writes_degraded_row",
+            // The leg-3 control, which requires NOTHING of the host and so is
+            // always measured. It is guarded on purpose: it is the proof that a
+            // guard does not swallow a failure it can see.
+            "a_guarded_leg_still_fails_when_the_host_can_answer",
+        ]);
+        assert_eq!(
+            guarded, expected,
+            "the guarded set moved. A new guarded leg must be added to this census \
+             deliberately, because every guard is a leg the workers stop asserting"
+        );
+        assert_eq!(
+            source.matches(concat!("HostRequirement::", "TmuxPane")).count(),
+            4,
+            "four legs need a tmux pane; widening or narrowing that must be visible"
+        );
+        assert_eq!(
+            source
+                .matches(concat!("HostRequirement::", "TrackerBinary"))
+                .count(),
+            1,
+            "exactly one leg shells the real tracker"
+        );
+    }
+
     /// The dispatch path must not write a bare receiver name as the assignee.
     ///
     /// The supervisor performs the atomic claim transition, while the canonical
