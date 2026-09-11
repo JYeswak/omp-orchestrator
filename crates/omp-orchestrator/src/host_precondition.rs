@@ -52,7 +52,7 @@
 //! with no wildcard arm: a new variant fails to compile rather than defaulting
 //! to "present".
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// A fact about the HOST that a leg cannot synthesise.
 ///
@@ -68,11 +68,34 @@ pub enum HostRequirement {
     /// `br` must be resolvable on `PATH`. The finding kernel shells the real
     /// tracker; a worker without it reports `Process(NotFound("br"))`.
     TrackerBinary,
+    /// `$HOME/.local/bin/cargo` — the guarded cargo shim. `target_ownership`
+    /// SPAWNS it to observe the wrapper's own guard behaviour, so a host
+    /// without it reports `spawn wrapper cargo: NotFound`.
+    HostCargoShim,
+    /// `$HOME/.rustup/toolchains/nightly-aarch64-apple-darwin/bin/cargo-rch-real`.
+    /// THE PLATFORM IS IN THE PATH LITERAL, so this can only ever hold on an
+    /// Apple-Silicon Darwin host: `spawn real cargo: NotFound` anywhere else.
+    DarwinToolchainCargo,
+    /// `/usr/bin/shasum`. macOS ships it; Linux ships `sha256sum` and has no
+    /// such path, which is why the leg that hashes the wrapper panics on a
+    /// bare `hash` expect rather than on a comparison.
+    ShasumTool,
+    /// The registered target root must be MOUNTED. A path under `/Volumes` is
+    /// absent rather than empty when its volume is not attached, and those are
+    /// different facts.
+    RegisteredRootMount,
 }
 
 impl HostRequirement {
     /// Every variant, so a census cannot silently omit one.
-    pub const ALL: [Self; 2] = [Self::TmuxPane, Self::TrackerBinary];
+    pub const ALL: [Self; 6] = [
+        Self::TmuxPane,
+        Self::TrackerBinary,
+        Self::HostCargoShim,
+        Self::DarwinToolchainCargo,
+        Self::ShasumTool,
+        Self::RegisteredRootMount,
+    ];
 
     /// The thing that is absent, as an operator would name it.
     #[must_use]
@@ -80,16 +103,25 @@ impl HostRequirement {
         match self {
             Self::TmuxPane => "TMUX_PANE",
             Self::TrackerBinary => "br",
+            Self::HostCargoShim => "host_cargo_shim",
+            Self::DarwinToolchainCargo => "darwin_toolchain_cargo",
+            Self::ShasumTool => "shasum",
+            Self::RegisteredRootMount => "registered_root_mount",
         }
     }
 
     /// The REMEDY-SELECTING code. Two absences that are repaired in different
-    /// places must not share a code.
+    /// places must not share a code — and these four are repaired in four
+    /// different places, three of which are "use a different machine".
     #[must_use]
     pub const fn code(self) -> &'static str {
         match self {
             Self::TmuxPane => "TMUX_PANE_ABSENT",
             Self::TrackerBinary => "MISSING_EXECUTABLE",
+            Self::HostCargoShim => "HOST_SHIM_ABSENT",
+            Self::DarwinToolchainCargo => "WRONG_HOST_PLATFORM",
+            Self::ShasumTool => "MISSING_PLATFORM_TOOL",
+            Self::RegisteredRootMount => "VOLUME_NOT_MOUNTED",
         }
     }
 
@@ -99,6 +131,28 @@ impl HostRequirement {
         match self {
             Self::TmuxPane => "run this leg from a tmux pane on the host",
             Self::TrackerBinary => "install br on the worker PATH",
+            Self::HostCargoShim => "run on the host that installs ~/.local/bin/cargo",
+            Self::DarwinToolchainCargo => "run on an aarch64-apple-darwin host; this leg cannot hold on Linux",
+            Self::ShasumTool => "run on macOS, or port the leg to sha256sum",
+            Self::RegisteredRootMount => "mount the registered target volume",
+        }
+    }
+
+    /// Absolute path this requirement resolves to, when it is a filesystem
+    /// fact. `None` for requirements answered some other way (an env var).
+    #[must_use]
+    pub fn host_path(self) -> Option<PathBuf> {
+        let home = || std::env::var_os("HOME").map(PathBuf::from);
+        match self {
+            Self::TmuxPane | Self::TrackerBinary => None,
+            Self::HostCargoShim => Some(home()?.join(".local/bin/cargo")),
+            Self::DarwinToolchainCargo => Some(
+                home()?.join(".rustup/toolchains/nightly-aarch64-apple-darwin/bin/cargo-rch-real"),
+            ),
+            Self::ShasumTool => Some(PathBuf::from("/usr/bin/shasum")),
+            Self::RegisteredRootMount => Some(PathBuf::from(
+                "/Volumes/ZestData/zeststream-offload-20260609/build-cache/cargo-targets",
+            )),
         }
     }
 }
@@ -227,6 +281,18 @@ pub fn live_probe(requirement: HostRequirement) -> bool {
         HostRequirement::TrackerBinary => std::env::var("PATH")
             .map(|path| executable_on(&path, "br"))
             .unwrap_or(false),
+        // Filesystem facts. `host_path` owns the literal so the probe and the
+        // remedy cannot disagree about WHICH path was missing — a remedy
+        // naming a different path than the probe checked is a false remedy.
+        HostRequirement::HostCargoShim
+        | HostRequirement::DarwinToolchainCargo
+        | HostRequirement::ShasumTool => requirement
+            .host_path()
+            .is_some_and(|path| is_executable_file(&path)),
+        // A DIRECTORY, and an unmounted volume is ABSENT rather than empty.
+        HostRequirement::RegisteredRootMount => {
+            requirement.host_path().is_some_and(|path| path.is_dir())
+        }
     }
 }
 
@@ -292,18 +358,34 @@ mod tests {
     }
 
     #[test]
-    fn one_absent_of_two_is_unmeasurable_and_names_only_the_absent_one() {
+    fn one_absent_of_many_is_unmeasurable_and_names_only_the_absent_ones() {
         // ANTI-VACUITY for the classifier itself: the compliant verdict is not
         // a default branch, so a partially-present host cannot pass.
+        //
+        // MEMBERSHIP, NOT CARDINALITY (rule 10). The expected set is DERIVED
+        // from `ALL` minus the one present requirement, so a seventh variant
+        // cannot silently satisfy this leg — and it cannot break it either for
+        // the wrong reason. A transcribed `vec![TrackerBinary]` here asserted
+        // "ALL has exactly two", which is not the property under test.
+        let present_one = HostRequirement::TmuxPane;
         let verdict = classify(LEG, &HostRequirement::ALL, &|requirement| {
-            requirement == HostRequirement::TmuxPane
+            requirement == present_one
         });
         let HostPrecondition::Unmeasurable(leg) = verdict else {
             panic!("a partially-present host cannot be measurable");
         };
-        assert_eq!(leg.absent, vec![HostRequirement::TrackerBinary]);
+        let expected: Vec<HostRequirement> = HostRequirement::ALL
+            .into_iter()
+            .filter(|requirement| *requirement != present_one)
+            .collect();
+        assert!(
+            !expected.is_empty(),
+            "vacuous unless at least one requirement is absent"
+        );
+        assert_eq!(leg.absent, expected);
         let line = leg.render();
-        assert!(line.contains("absent=1"), "{line}");
+        assert!(line.contains(&format!("absent={}", expected.len())), "{line}");
+        // The named absence is still pinned by NAME, not by position.
         assert!(line.contains("br:MISSING_EXECUTABLE"), "{line}");
         assert!(
             !line.contains("TMUX_PANE"),
@@ -328,34 +410,43 @@ mod tests {
         assert!(measured.contains("skipped=0"), "{measured}");
         assert!(skipped.contains("skipped=1"), "{skipped}");
         assert!(measured.contains("absent=0"), "{measured}");
-        assert!(skipped.contains("absent=2"), "{skipped}");
+        assert!(
+            skipped.contains(&format!("absent={}", HostRequirement::ALL.len())),
+            "{skipped}"
+        );
         assert!(
             !measured.contains("UNMEASURABLE"),
             "the measured line must not carry the skip marker: {measured}"
         );
     }
 
+    /// How many DISTINCT values a requirement accessor yields across `ALL`.
+    /// Distinctness is the property; the count is derived from `ALL` so it is
+    /// never a transcribed number.
+    fn collect_distinct(of: fn(HostRequirement) -> &'static str) -> usize {
+        let mut seen: Vec<&str> = HostRequirement::ALL.into_iter().map(of).collect();
+        seen.sort_unstable();
+        seen.dedup();
+        seen.len()
+    }
+
     #[test]
-    fn the_two_requirements_carry_different_remedies() {
-        // gate-runner's leg 3, at leg scope: an absent pane and an absent
-        // executable are repaired in different places, so one shared code
-        // would send both repairs to the wrong one.
-        assert_ne!(
-            HostRequirement::TmuxPane.code(),
-            HostRequirement::TrackerBinary.code()
-        );
-        assert_ne!(
-            HostRequirement::TmuxPane.remedy(),
-            HostRequirement::TrackerBinary.remedy()
-        );
-        let mut codes: Vec<&str> = HostRequirement::ALL
-            .iter()
-            .map(|requirement| requirement.code())
-            .collect();
-        let total = codes.len();
-        codes.sort_unstable();
-        codes.dedup();
-        assert_eq!(codes.len(), total, "every requirement needs its own code");
+    fn every_requirement_carries_a_distinct_remedy() {
+        // gate-runner's leg 3, at leg scope: two absences repaired in
+        // different places must not share a code, or one repair is dispatched
+        // to the wrong machine. Asserted ACROSS `ALL` rather than for one named
+        // pair, so a new variant cannot arrive sharing an existing code.
+        for (what, rendered) in [
+            ("code", collect_distinct(HostRequirement::code)),
+            ("remedy", collect_distinct(HostRequirement::remedy)),
+            ("label", collect_distinct(HostRequirement::label)),
+        ] {
+            assert_eq!(
+                rendered,
+                HostRequirement::ALL.len(),
+                "every requirement needs its own {what}"
+            );
+        }
         for requirement in HostRequirement::ALL {
             assert!(!requirement.label().is_empty());
             assert!(!requirement.code().is_empty());
