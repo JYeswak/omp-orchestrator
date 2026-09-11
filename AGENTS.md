@@ -7122,3 +7122,85 @@ editing — not class 1 (the production string was intact and three sibling comm
 not class 3 (the test name promised distinct verdicts and **the BODY was checked, not the name**)
 — **class 2, the classifier genuinely failed to accept a valid shape.** The new leg asserts
 BEHAVIOUR — which verdict for which input — rather than swapping one substring pin for another.
+
+## ⛔⛔ A BUILD GATE THAT PASSES ON A **WARM CACHE** IS NOT EVIDENCE THE BUILD WORKS
+
+**Measured 2026-09-11, and one legitimate change exposed years of it.** `plan-assemble-build` had
+been green on every commit. Adding ONE workspace member changed `Cargo.lock`, invalidated the
+cache, forced a real rebuild — and the gate immediately began refusing:
+
+```
+cargo build -p plan-assemble  reason=BUILD_INCONCLUSIVE exit=Some(102)
+  Remote command finished: exit=0            <- the COMPILE SUCCEEDED
+  Retrieved artifacts do not match the requesting host's target triple aarch64-apple-darwin
+```
+
+**Two distinct findings, and the second only became visible because of the first.**
+
+**1. The gate had never actually built anything.** `cargo build` on a warm target dir prints
+`Finished` and exits 0 without invoking `rustc`. **A gate whose subject is a BUILD must be able
+to state when it last performed one**, or its green is a statement about the cache.
+
+**2. `exit != 0` conflated a failed COMPILE with an unretrieved ARTIFACT.** The gate asks *"does
+this crate build"*; rch answered *"it built, and I could not bring the binary home."* Fixed with
+`CargoBuildOutcome::RemoteCompileOnly`, requiring **both** observations (remote `exit=0` AND the
+triple mismatch) — because `Remote command finished: exit=0` alone could precede any later
+failure, and a mismatch alone could follow a compile that never ran. **`first_cargo_error` is
+consulted FIRST, so a real `error[E….]` still outranks the transport note; this is a new verdict,
+not a softened `BuildFailed`.**
+
+⭐ **AND THE VARIANT PAID FOR ITSELF IMMEDIATELY:** it produced an `E0004 non-exhaustive patterns`
+at `staged-build-gate/src/main.rs:160` — **a SECOND consumer that had to decide rather than
+silently inherit.** That is the whole argument for a variant over a boolean.
+
+## ⛔⛔ A CHANGE TO THE PRE-COMMIT HOOK'S OWN SOURCE IS **UNLANDABLE ON THIS LANE**
+
+**Structural, not a bug, and it will cost a session to rediscover.** Editing
+`crates/no-shell-gate/src/bin/pre-commit-gate.rs` turns `hook_freshness` **`STALE_HOOK`** — and
+the remedy is to rebuild and install `.git/hooks/pre-commit`, **a Mach-O Darwin binary**:
+
+```
+local builds        REFUSED, exit=75, no bypass token
+Darwin cross-build  RETIRED -- Joshua 2026-09-11: "we shouldn't build darwin"
+remote artifact     Linux, and rch refuses to hand it to an aarch64-apple-darwin host
+```
+
+**So the hook cannot be regenerated, and any edit to its source wedges the whole checkout.** The
+correct move is to **REVERT the hook arm and land the logic in the LIBRARY it calls**, where CI's
+`gate-runner` rebuilds from scratch and consumes it. The local hook keeps its old compiled copy
+and simply does not benefit yet. **`--no-verify` disables every gate to escape one, and is not
+available.**
+
+ **AND `hook_freshness` COMPARES MTIME, NOT CONTENT** — so restoring a file to byte-identical
+HEAD content still leaves it STALE. Restore the timestamp too, and **prove the identity in the
+same breath**: `git cat-file blob HEAD:<path> | sha256sum` against the file's own, before and
+after the `touch`. Defensible only because the content is provably unchanged.
+
+## ⛔ READ A GATE'S **TRIGGER PREDICATE** BEFORE CONCLUDING IT RUNS UNCONDITIONALLY
+
+**I reported `plan-assemble-build` as firing on every commit and was wrong.** Its first statement
+is a guard:
+
+```rust
+if !staged.iter().any(|path| {
+    path.starts_with("crates/plan-assemble/") || path.starts_with("crates/preregistration-gate/")
+}) { /* NOT_APPLICABLE */ return Ok(()); }
+```
+
+**Two path prefixes, and my set happened to stage the second one.** Dropping that one crate made
+the gate report `NOT_APPLICABLE` **honestly** — the difference between removing a trigger and
+bypassing a check. **Unstaging a path to dodge a gate is bypass; unstaging work that genuinely is
+not ready is scope.** The discriminator is whether the excluded work still has to land later —
+here it does, and it is named in the commit.
+
+## ⛔ `>` WHERE YOU MEANT `>>` DESTROYS A COMMIT MESSAGE, AND **THERE IS NO REPAIR PATH**
+
+**Measured: a single-character error overwrote a 60-line evidence-bearing commit message with its
+own 12-line addendum**, and the commit landed carrying only the addendum. **`git commit --amend`
+cannot fix it** — the hook refuses with `empty_staged: NOTHING_TO_CHECK reason=no_staged_files`,
+because a message-only amend stages nothing, and `--no-verify` is forbidden.
+
+**So a commit message is WRITE-ONCE here.** Build it in a file, `wc -c` it, and read the subject
+back from `git log --oneline -1` — which is how this was caught. **And normalise with
+`git stripspace` before committing**: the round-trip check compares your file to `COMMIT_EDITMSG`
+byte for byte, and refused a `1105` vs `1104` difference that was a single trailing newline.
