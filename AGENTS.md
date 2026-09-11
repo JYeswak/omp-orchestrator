@@ -2023,11 +2023,13 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    git is being helpful about your working tree. The resolvable-but-missing case says
    **`does not exist in '<rev>'`**, a different string that neither observation ever produced.
    The control was one run away and was explicitly advised against as not worth spending.
-
-   **So before you reason from an error string, make it produce its OTHER answer.** If you cannot
-   make the instrument say the opposite thing, you have not established that it distinguishes the
-   two conditions at all — which is `8i`'s two-probe control aimed at a message instead of a
-   needle, and the population half above aimed at a diagnostic instead of a corpus.
+   **SO BEFORE YOU REASON FROM AN ERROR STRING, MANUFACTURE THE CONDITION IT SUPPOSEDLY RULES
+   OUT AND CHECK THE MESSAGE CHANGES.** Not more evidence for the condition you believe — the
+   OTHER one. **A message that cannot distinguish two states is not evidence about either.**
+   That is `8i`'s two-probe control aimed at a diagnostic instead of a needle, and in all three
+   sightings the missing arm was the cheap one: `Selected_worker` needed a confirmed-identifier
+   arm, `RCH-E327` needed the runtime arm, `exists on disk` needed the unresolvable-rev arm.
+   **One run each.**
 
    ⛔ **AND THE RUNG ABOVE ALL OF THIS: ASK WHETHER THE ARTIFACT SHIPS A REGISTRY FOR THE THING
    YOU ARE LOOKING FOR, BEFORE YOU SCAN ITS BYTES.** Four agents spent an hour deciding whether
