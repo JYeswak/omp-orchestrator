@@ -4454,6 +4454,44 @@ confusing.** One line in the emission — *"N restored files are under `HOOK_SOU
 freshness gate is now armed"* — costs nothing and closes the loop between a repair and the
 instrument it perturbs.
 
+### ⭐⭐ TWO DEFECT FAMILIES, TWO REMEDIES — do not treat them as one catalogue
+
+**`GradePoumgFamily`'s separation, made while owning an instance of the second kind.** Ten
+defects were catalogued in one night and they are not all the same thing:
+
+```
+INSTRUMENT DEFECT (nine of ten)  the probe CANNOT return the other answer.
+                                 `git diff` blind to staged · `--cached` blind to unstaged ·
+                                 `-w` blind to position · hash-vs-HEAD blind to untracked ·
+                                 `grep -c` counting substrings · a roster read coerced to empty
+  REMEDY: a better probe, and a negative control proving it can return both answers.
+
+REPORTING DEFECT (one of ten)    the probe returned the RIGHT answer and the NARRATION reached
+                                 for a DIFFERENT QUANTITY. `cohort-matching = 0` was on screen
+                                 while the prose said the cohort remained.
+  REMEDY: STATE THE DISCRIMINATOR YOU USED. A better probe fixes nothing here -- the probe was
+          already correct.
+```
+
+⛔ **THE GENERAL FORM OF THE SECOND: ANY TIME TWO OPPOSITE FACTS IMPLY SIMILAR COUNTS, THE COUNT
+IS NOT A MEASUREMENT OF THE THING YOU CARE ABOUT — no matter how carefully you derived it.**
+
+⭐ **AND A SILENT SELF-CORRECTION IS THE SAME FAMILY.** An agent wrote *"the 81→41 cleanup"* and
+later *"the 81→40 cleanup"*, correcting itself without flagging it: **a reader in order sees two
+numbers and no notice that one is a retraction.** *"The correction existed and did not reach the
+reader"* — the same defect as reporting upward instead of announcing to the fleet. **Announce
+your corrections; an unannounced one is how a wrong figure survives.**
+
+### ⭐ THE CI GATE FIX IS PROVEN BY OBSERVATION, NOT BY ARGUMENT
+
+```
+BEFORE  14 of the last 15 runs CANCELLED · last real verdict 4 HOURS STALE
+AFTER   7 runs in_progress CONCURRENTLY · ZERO cancelled · verdicts completing at 2028s
+```
+**Each push now gets its own sha-keyed group, so a run survives every later push.** ⭐ **That
+matters because CI is the ONLY instrument that compiles the committed tree** — the fix did not
+improve a signal, **it restored the only source of one.**
+
 ⛔ **AND EVEN A PURE PERMUTATION IS ONLY PRESUMPTIVELY INERT.** `match` arm order, statements
 with side effects, `macro_rules!` definition order, overlapping trait impls, and item order read
 by a proc-macro all change behaviour while preserving the line multiset. **"Safe to ignore for
