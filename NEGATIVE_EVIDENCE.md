@@ -116,3 +116,64 @@ deletions.
 
 **RETRY CONDITION.** Re-open the kernel-boundary hypothesis only if the errors survive after that
 uncommitted diff lands. If they do, the symbols genuinely do not exist and the class changes.
+
+---
+
+## REFUTED 2026-09-11: "the macOS cross-build recipe names a linker this machine does not have"
+
+**Claimed by pane 1 (%33), propagated into a subagent deliverable as its `blocked_reason` before
+it was checked.** The claim was that `crates/no-shell-gate/src/bin/pre-commit-gate.rs` is
+permanently uneditable because the hook is a Mach-O arm64 binary, local builds are refused
+(exit=75), and no Darwin toolchain exists. On that basis an agent was told to revert finished,
+proven work.
+
+**REFUTED, one command:**
+
+```
+rch exec -- ls -l /usr/local/bin/zigcc-aarch64-darwin
+-rwxr-xr-x 1 root root 2617 Sep 11 09:07 /usr/local/bin/zigcc-aarch64-darwin
+```
+
+**The probe had the wrong SUBJECT.** The recipe's path is on the CONTABO WORKER; pane 1 ran `ls`
+on the Mac, got ABSENT, and published it. Same family as every instrument defect this repo
+records: the instrument produced the reading, not the subject. A negative control on the
+instrument's target (rule 8i) costs one command and was not run.
+
+**The disproof was already in the tree, which is the part worth keeping:**
+
+```
+.git/hooks/pre-commit                                sha 2bc3430a77fc  Mach-O 64-bit arm64
+target/aarch64-apple-darwin/release/pre-commit-gate  sha 2bc3430a77fc  Mach-O 64-bit arm64
+```
+
+Byte-identical. The installed hook IS a Contabo cross-build, so the procedure declared impossible
+is the procedure that produced the binary doing the refusing. There is a `hook-dist/` tree for it.
+
+**Then proven end to end** — `rch exec -- cargo build --config 'build.target="aarch64-apple-darwin"'
+--config 'target.aarch64-apple-darwin.linker="/usr/local/bin/zigcc-aarch64-darwin"'` returned
+`Remote command finished: exit=0`, `Finished dev profile in 4m 56s`, and landed
+`target/aarch64-apple-darwin/debug/pre-commit-gate`, 5,213,008 bytes, `Mach-O 64-bit executable
+arm64`. The `xcrun --show-sdk-path` warning is benign; zigcc supplies the SDK.
+
+**RETRY CONDITION.** Re-open "hook source is unlandable" only if a cross-build returns a non-Mach-O
+artifact or the worker's `zigcc-aarch64-darwin` disappears. Check the WORKER, not the Mac.
+
+### The trap that survives: a correct cross-build exits 102
+
+```
+[RCH] RCH-E327 remote compile on contabo-3 SUCCEEDED but returned executables for the WRONG
+PLATFORM ... Offending file(s): debug/gate-runner (ELF), debug/no-shell-gate (ELF) ...
+Treating as a build failure (exit 102)
+```
+
+**`exit=0` on the remote line and `rc=102` from the wrapper, with a correct Mach-O deliverable.**
+The offenders are the OTHER binaries in the shared pooled target dir, not the one requested with
+`--bin`. So on this lane `rc=102` does NOT mean the cross-build failed: `file` the artifact and
+believe that, not the exit code. Do NOT "fix" it with `--target`, which sets `required_os=darwin`,
+collapses the admissible fleet 4 -> 1 and returns `rc=103`.
+
+**And a pre-existing hazard it exposed, which is NOT caused by cross-building:** `target/debug/` on
+this Mac holds **81 x86-64 ELF binaries** retrieved from the Linux lane by ordinary `rch exec`
+runs all session. Any local gate that execs `target/debug/<name>` cannot run one. Pane 1 removed
+the 10 the E327 message named; the other 81 are older and untouched. Unmeasured: whether any live
+gate currently execs one and misreports the failure as absence.
