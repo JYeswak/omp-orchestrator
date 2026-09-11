@@ -5644,6 +5644,54 @@ instrument built to fix the one-directional problem.**
 sharing a blind spot produce confidence and no information. Ask what question each one asks,
 and if it is the same question, build one that asks a different one.**
 
+## ⛔⛔ A REMOTE WORKER TREE IS A SHARED MUTABLE SUBJECT — announce, restore, and NAME THE HOST
+
+**Protocol gap, disclosed by the pane that created it.** It announced a plant on a LOCAL file
+and then wrote `.flywheel/sota-preflight/jsm-suggest.json` **into a shared worker's tree with
+no announce at all.**
+```
+find .flywheel -type f on vmi3549740  ->  0          rch's next sync PRUNED the files
+ls -d .flywheel                       ->  .flywheel  the mkdir -p shells SURVIVED
+```
+⭐ **The window closed by ACCIDENT, not by design.** ⛔ **Between that write and the next sync,
+`sota_preflight` would have PASSED for any other pane landing on that host — a FALSE GREEN
+manufactured on shared infrastructure by a pane running a remedy proof.**
+
+⛔ **Our entire plant discipline assumed the shared subject lives in this checkout. It does
+not.** **Announce before writing to a worker, NAME THE HOST, restore and verify.**
+
+## ⛔ A PER-WORKER FACT PUBLISHED AS A LANE PROPERTY — by an instrument that could not tell workers apart
+
+```
+run 1  git show HEAD:<path>  -> fatal: not a git repository   HOST NOT CAPTURED
+run 2  ls -d .git            -> .git                          HOST NOT CAPTURED
+run 3  ls -d .git  HOST=vmi3549740 -> No such file or directory
+```
+⛔ **"The Contabo worker tree has no `.git`" was withdrawn because the runs producing the claim
+never recorded WHICH WORKER ANSWERED.** ⭐ **At least one lacks it, at least one invocation
+found it, and THE LANE WAS NEVER MEASURED — three panes were reasoning on it.**
+**CAPTURE THE HOST IN EVERY REMOTE PROBE, or you have a fleet claim built from one machine.**
+
+⭐ **What survived is narrower and real: `.flywheel`'s 44 TRACKED files absent while `.beads/`,
+`.cargo/`, `docs/` and `AGENTS.md` were present, and `git check-ignore` EMPTY — the sync is
+SELECTIVE, not a dot-directory rule.**
+
+## ⭐⭐ THE VARIANT FORM A TOKEN SCAN DROPS — `.code()` vs `.success()`
+
+```
+over 52 sites:  STATUS_SUCCESS 6 · STATUS_CODE 6 · VALUE_direct 40
+assert_eq!(output.status.code(), Some(0), "…")   <- subprocess-shaped, INVISIBLE to a success() grep
+```
+⛔ **HALF the subprocess-shaped sites use the variant spelling.** ⭐ **Same class as a
+character class that excludes digits — arriving in the DISCRIMINATOR rather than in the name.**
+**This is why a residue cannot be closed by adding more tokens, and why a structural test
+beats a lexical one.**
+
+⛔ **AND A CLASSIFIER USED A BACKWARD CONTEXT WINDOW: for a multi-line assert the asserted
+expression is on the lines BELOW the panic location.** ⭐ ***A window that looks the wrong way
+past the anchor is a capture-wide violation in the SOURCE-READING direction*** — the first
+member of that family pointed at source rather than at output.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
