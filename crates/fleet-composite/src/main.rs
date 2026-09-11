@@ -13,7 +13,15 @@ use subprocess_contract::{bounded_output, BoundedOutcome};
 
 const EXIT_CLI: u8 = 2;
 /// Could not resolve a repository or `$HOME`. Claims `sysexits.h` `EX_USAGE` (64).
-const EXIT_USAGE: u8 = 64;
+///
+/// Spelled `EXIT_EX_USAGE`, not `EXIT_USAGE`, and the prefix is the whole point:
+/// `crates/finding/src/main.rs:44` declares `const EXIT_USAGE: u8 = 2`, which is this tree's
+/// dominant usage code (`XC-002`). One name bound to 2 here and 64 there means a reader who
+/// learned `EXIT_USAGE` in one crate is confidently wrong in the next, which is the defect
+/// `exit_codes::no_exit_constant_name_is_bound_to_two_values` exists to refuse. Both causes
+/// survive under distinct names; neither is deleted, and the `EX_` prefix says which
+/// vocabulary this 64 is claiming.
+const EXIT_EX_USAGE: u8 = 64;
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Marker entries that identify a repository root while walking up from the cwd.
@@ -654,7 +662,7 @@ fn resolve_repo_for_report(flag: Option<&str>) -> Result<PathBuf, ConfigError> {
 /// not be found and how to provide it.
 fn config_error_exit(error: &ConfigError) -> ExitCode {
     eprintln!("fleet-composite: config error: {error}");
-    ExitCode::from(EXIT_USAGE)
+    ExitCode::from(EXIT_EX_USAGE)
 }
 
 #[cfg(test)]

@@ -81,7 +81,7 @@ fn run(ledger: &Path) -> ExitCode {
     }
     let ledger_exit = ledger_gate_exit(&unattributed);
     if ledger_exit != 0 {
-        return ExitCode::from(ledger_exit as u8);
+        return ExitCode::from(ledger_exit);
     }
     if actor_provenance_gate_exit(&actor_violations) == ACTOR_PROVENANCE_EXIT_VIOLATION {
         return ExitCode::from(ACTOR_PROVENANCE_EXIT_VIOLATION);

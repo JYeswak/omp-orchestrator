@@ -154,13 +154,28 @@ fn walk_rs(dir: &Path, out: &mut Vec<PathBuf>) {
 /// document a fiction. `a_code_that_appears_only_in_prose_is_not_an_emission` pins both
 /// directions.
 ///
-/// Structure is preserved rather than deleted — quotes stay, contents go — so
-/// `call_argument`'s paren balancing still sees a well-formed line. Multi-line `/* */`
-/// blocks are NOT handled: no such block in `crates/*/src` contains an exit pattern
-/// (verified), and a stateful stripper would be a second parser to keep correct. If one
-/// ever appears, this is where it goes.
-fn code_only(line: &str) -> String {
-    text_structure::code_only(line).into_owned()
+/// # Which shared helper, measured 2026-09-11
+///
+/// This wrapper called `text_structure::code_only`, which masks comments and DELIBERATELY
+/// KEEPS string literals — its own doc says to use it "when string literals are themselves
+/// the evidence being measured", which is the `oracle_routing` case (argv literals ARE the
+/// surface signal) and the exact opposite of this one. So the half of the defect above that
+/// lives in a STRING survived the fix that named it: `crates/cargo-lane-budget/src/lib.rs:989`
+/// quotes `ExitCode::from(selftest() as u8)` inside an assertion message and was scored as a
+/// live narrowing cast, and `crates/ompo-doctor/src/health_repair.rs:418-423` cites
+/// `adapter_exec.rs:138-142` and `:306-307` inside a `fn exit_code` body, which made
+/// `every_emitted_exit_code_is_documented` demand registry rows for codes 138, 142, 306 and
+/// 307 — four fictions, and 306/307 are not even representable in the `u8` that body returns.
+/// `text_structure::code_and_literals` is the helper for a scanner whose evidence is code and
+/// never prose; it blanks comment and literal bodies while preserving bytes and lines, so
+/// `call_argument`'s paren balancing still sees a well-formed line. No second parser is
+/// written here: both helpers already exist and this picks the correct one.
+///
+/// Multi-line `/* */` blocks ARE handled by the shared helper when it is given whole-file
+/// text; given one line at a time, as the emission loop does, an unterminated block comment
+/// masks only to end of line. No such block in `crates/*/src` contains an exit pattern.
+fn code_without_literals(line: &str) -> String {
+    text_structure::code_and_literals(line)
 }
 
 /// Digits immediately following `needle`, when the call is `needle<digits>)`.
@@ -367,7 +382,10 @@ fn scan(root: &Path) -> Scan {
             .to_string_lossy()
             .into_owned();
         let crate_name = rel.split('/').nth(1).unwrap_or("<unknown>").to_owned();
-        for value in exit_code_body_values(&text) {
+        // Whole-file masking, not per-line: an `fn exit_code` body is brace-matched across
+        // lines, and the prose inside one is where 138, 142, 306 and 307 came from.
+        let masked = code_without_literals(&text);
+        for value in exit_code_body_values(&masked) {
             emissions.push(Emission {
                 code: value,
                 file: rel.clone(),
@@ -376,8 +394,8 @@ fn scan(root: &Path) -> Scan {
         }
         for (n, raw_line) in text.lines().enumerate() {
             let lineno = n + 1;
-            // Prose is not an emission. See `code_only`.
-            let stripped = code_only(raw_line);
+            // Prose is not an emission. See `code_without_literals`.
+            let stripped = code_without_literals(raw_line);
             let line = stripped.as_str();
             for needle in ["ExitCode::from(", "process::exit("] {
                 for code in literal_after(line, needle) {
@@ -628,7 +646,7 @@ fn a_planted_documented_code_passes() {
 /// FIRES ON KNOWN-BAD, both directions: prose is not an emission, and code still is.
 ///
 /// The pair is the point. A leg that only asserted the comment is ignored would also pass
-/// if `code_only` deleted the whole line, and the gate would then see nothing at all —
+/// if `code_without_literals` deleted the whole line, and the gate would then see nothing —
 /// which is the vacuity this suite exists to refuse. So the SAME undocumented code is
 /// planted twice, once in a comment and once as a statement, and the verdicts must differ.
 ///
@@ -864,11 +882,19 @@ const NARROWING_ALLOWANCE: &[(&str, &str)] = &[
     ("crates/dispatcher-deadman/src/main.rs:185:verdict.exit as u8", "ALLOWANCE CATEGORY-2: verdict.exit forwards the child/status contract under XC-PT-VERDICT; range validation remains outside this gate."),
     ("crates/fleet-monitor/src/main.rs:457:EXIT_CANNOT_OBSERVE as u8", "ALLOWANCE CATEGORY-1: EXIT_CANNOT_OBSERVE is a named closed literal status code; its documented value is 69 and cannot wrap."),
 
-    ("crates/fleet-monitor/src/main.rs:490:rc as u8", "ALLOWANCE CATEGORY-2: rc forwards the child/status contract under XC-PT-RC; range validation remains outside this gate."),
+    // Re-anchored 2026-09-11: `:490` -> `:492`. The site MOVED, it did not change — the file
+    // holds exactly one `rc as u8` and it is still the `rc != 0` arm of the shell lane at
+    // `crates/fleet-monitor/src/main.rs:489-493`. Bumping the line is the whole repair; the
+    // reason below is unchanged because the reviewed fact is unchanged.
+    ("crates/fleet-monitor/src/main.rs:492:rc as u8", "ALLOWANCE CATEGORY-2: rc forwards the child/status contract under XC-PT-RC; range validation remains outside this gate."),
     ("crates/loop-driver/src/main.rs:40:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
     ("crates/loop-driver/src/main.rs:57:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
-    ("crates/loop-queue-filter/src/main.rs:18:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
-    ("crates/omp-idle-dispatch/src/main.rs:853:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate."),
+    // Re-anchored 2026-09-11: `:18` -> `:282` and `:853` -> `:1146`. `:18` is now inside the
+    // `usage:` string and `:853` inside `plan_queues`, so the rows had gone ORPHANED while the
+    // casts were undeclared at their new lines — the bidirectional check caught both halves of
+    // the same drift, which is the shape it was written for. One occurrence per file each.
+    ("crates/loop-queue-filter/src/main.rs:282:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/omp-idle-dispatch/src/main.rs:1146:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate."),
     ("crates/pane-oracle-diff/src/main.rs:103:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
     ("crates/pane-oracle-diff/src/main.rs:169:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
     ("crates/tick-dispatch/src/main.rs:385:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
@@ -954,9 +980,9 @@ const UNMATCHED_ROW_ALLOWANCE: &[(&str, &str)] = &[];
 /// emptied a row. `grep -rn 'ExitCode::from(selftest()' crates/` returned five hits, all
 /// of them prose.
 ///
-/// This is the exact mirror of the defect [`code_only`] fixed. There, the SCANNER invented
-/// a code nothing emits; here, the REGISTRY keeps a site nothing occupies. Same failure,
-/// opposite direction — and this direction had no leg at all.
+/// This is the exact mirror of the defect [`code_without_literals`] fixed. There, the SCANNER
+/// invented a code nothing emits; here, the REGISTRY keeps a site nothing occupies. Same
+/// failure, opposite direction — and this direction had no leg at all.
 ///
 /// The message names BOTH remedies because the gate cannot tell them apart: either the
 /// site is gone and the row must be retired, or the site still exists and the recogniser

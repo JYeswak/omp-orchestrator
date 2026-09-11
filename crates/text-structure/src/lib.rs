@@ -137,24 +137,43 @@ pub fn code_only(source: &str) -> Cow<'_, str> {
     }
 }
 
+/// Count complete-identifier occurrences of `needle` in ALREADY-MASKED text.
+///
+/// The boundary rule is the source-level equivalent of regex \b: a needle that is only a
+/// prefix or suffix of a longer identifier does not count, so `TMUX` does not match inside
+/// `TMUX_BIN` or `TMUX_TMPDIR`.
+///
+/// Takes masked text rather than masking internally because the two masks are not
+/// interchangeable and the caller is the only one who knows which it needs: a scanner
+/// hunting argv literals wants [`code_only`] (strings ARE the evidence), while a scanner
+/// hunting a shared constant wants [`code_and_literals`] (a bare `NTM` inside an assertion
+/// message is prose). [`has_identifier`] supplies [`code_only`] and is the argv-shaped
+/// caller.
+pub fn identifier_occurrences(masked: &str, needle: &str) -> usize {
+    if needle.is_empty() {
+        return 0;
+    }
+    masked
+        .match_indices(needle)
+        .filter(|(start, _)| {
+            let end = start + needle.len();
+            let left_ok = *start == 0
+                || !masked.as_bytes()[start - 1].is_ascii_alphanumeric()
+                    && masked.as_bytes()[start - 1] != b'_';
+            let right_ok = end == masked.len()
+                || !masked.as_bytes()[end].is_ascii_alphanumeric()
+                    && masked.as_bytes()[end] != b'_';
+            left_ok && right_ok
+        })
+        .count()
+}
+
 /// Match a complete identifier after comment masking.
 ///
 /// The boundary rule is the source-level equivalent of regex \b: a needle that
 /// is only a prefix of a longer identifier does not count.
 pub fn has_identifier(source: &str, needle: &str) -> bool {
-    if needle.is_empty() {
-        return false;
-    }
-    let code = code_only(source);
-    code.match_indices(needle).any(|(start, _)| {
-        let end = start + needle.len();
-        let left_ok = start == 0
-            || !code.as_bytes()[start - 1].is_ascii_alphanumeric()
-                && code.as_bytes()[start - 1] != b'_';
-        let right_ok = end == code.len()
-            || !code.as_bytes()[end].is_ascii_alphanumeric() && code.as_bytes()[end] != b'_';
-        left_ok && right_ok
-    })
+    identifier_occurrences(&code_only(source), needle) > 0
 }
 
 /// Return source with comments and literal bodies blanked while preserving bytes and lines.

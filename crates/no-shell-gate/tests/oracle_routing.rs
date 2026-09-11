@@ -95,7 +95,10 @@ const COMPARISON_SYMBOLS: &[&str] = &[
 
 /// Evidence that a crate invokes one of the two surfaces, per surface.
 ///
-/// Three forms, all read AFTER comments are stripped:
+/// Four forms, and the mask differs BY FORM because the evidence differs by form:
+///
+/// Read from [`text_structure::code_only`] — comments masked, STRING LITERALS KEPT, because an
+/// argv literal is itself the signal:
 ///
 /// * the exact string literal `"tmux"` / `"ntm"` — the argv form, however the spawn is
 ///   wrapped (`Command::new`, `PathBuf::from`, a helper taking `&str`);
@@ -104,17 +107,49 @@ const COMPARISON_SYMBOLS: &[&str] = &[
 ///   second-hand out of another lane's JSON. `loop-tick` reaches both surfaces only
 ///   this way and would otherwise be invisible.
 ///
-/// The exactness is load-bearing. A bare substring search for `ntm` matches prose in
-/// assertion messages, `NO_CLAIM` strings, and other crates' names in specimen tables;
-/// measured on this tree it produced six false dual-surface readers, including
-/// `pane-truth`, whose own documentation says "NTM labels are never consulted".
-fn surface_evidence(code: &str, binary: &str) -> usize {
+/// Read from [`text_structure::code_and_literals`] — comments AND literal bodies masked,
+/// because here a bare occurrence inside a message is prose:
+///
+/// * the complete identifier `TMUX` / `NTM`, which is the SHARED KERNEL CONSTANT
+///   `tick_monitor::TMUX` / `tick_monitor::NTM` (`crates/tick-monitor/src/kernel.rs:7,10`,
+///   re-exported at `src/lib.rs:31`). Identifier boundaries, so it does not double-count
+///   `TMUX_BIN` and does not match `TMUX_TMPDIR`, which names a socket directory and is not
+///   an invocation.
+///
+/// # Why the fourth form was added, measured 2026-09-11
+///
+/// **The surfaces were centralised into a shared constant and this recogniser went blind to
+/// every crate that adopted it.** Keying on the literal `"tmux"` scored `pane-oracle-diff` at
+/// `tmux=0 ntm=0` and `oracle-pane-state-differential` at `tmux=1 ntm=0` — the two crates
+/// [`the_crates_that_route_are_recognised_as_routing`] names as THE reference implementations
+/// of routing, both of which spawn `Command::new(tick_monitor::TMUX)` and
+/// `Command::new(tick_monitor::NTM)`. Five allowance rows (`fleet-truth`, `fleet-monitor`,
+/// `fast-dispatch`, `omp-idle-dispatch`, `tick-dispatch`) simultaneously read as STALE for the
+/// same reason, and [`no_allowance_row_outlives_the_defect_it_records`] said to delete them.
+/// **Deleting them would have removed five live DEBT exemptions for crates that do read both
+/// surfaces** — the recogniser was blind, the rows were not stale. This is the same
+/// scan-set defect `exit_codes` paid for when `git grep -l 'ExitCode|process::exit'` omitted
+/// the one file that declares `EXIT_CANNOT_OBSERVE = 78`: a census narrower than the thing it
+/// counts reports a clean bill.
+///
+/// The exactness of the first three forms remains load-bearing and is NOT relaxed here. A bare
+/// substring search for `ntm` matches prose in assertion messages, `NO_CLAIM` strings, and
+/// other crates' names in specimen tables; measured on this tree it produced six false
+/// dual-surface readers. One of those six was `pane-truth` — and on the constant form
+/// `pane-truth` is now a TRUE reader (`src/lib.rs:669,675,722` spawn `tick_monitor::TMUX`,
+/// `:207` resolves `ntm`), so the old note was right about the instrument and wrong as a
+/// standing claim about the crate. Its documentation says NTM LABELS are never consulted,
+/// which is a narrower claim than never invoking `ntm`.
+fn surface_evidence(source: &str, binary: &str) -> usize {
+    let argv = text_structure::code_only(source);
     let literal = format!("\"{binary}\"");
     let env_override = format!("{}_BIN", binary.to_uppercase());
     let derived = format!("{binary}_count");
-    code.matches(&literal).count()
-        + code.matches(&env_override).count()
-        + code.matches(&derived).count()
+    let named = argv.matches(&literal).count()
+        + argv.matches(&env_override).count()
+        + argv.matches(&derived).count();
+    let masked = text_structure::code_and_literals(source);
+    named + text_structure::identifier_occurrences(&masked, &binary.to_uppercase())
 }
 
 /// Strip `//` and `/* */` comments while KEEPING string literals.
@@ -183,9 +218,32 @@ fn tracked_crates(root: &Path) -> Vec<String> {
     names
 }
 
-/// Concatenate `crates/<name>/src/**/*.rs`. Deliberately NOT `tests/`.
-fn crate_sources(root: &Path, name: &str) -> String {
-    let mut body = String::new();
+/// Every `crates/<name>/src/**/*.rs`, sorted by path. Deliberately NOT `tests/`.
+///
+/// # Why this is a list and the order is fixed, measured 2026-09-11
+///
+/// It concatenated the files in `read_dir` order and every caller masked the JOINED text.
+/// Both halves of that are unsound, and together they produced a verdict that flipped
+/// between machines on one commit:
+///
+/// * **Masking a concatenation lets one file blank the next.** `code_only` and
+///   `code_and_literals` blank an unterminated `/*` to the end of their INPUT.
+///   `crates/omp-orchestrator/src/input_closure.rs` holds 4 `/*` against 1 `*/` and
+///   `src/lib.rs` holds 5 against 3 — legitimately, inside string literals and specimen
+///   text — so once the surrounding parse is misaligned by a lifetime apostrophe, a runaway
+///   block comment blanks every file joined after it.
+/// * **`read_dir` order is not defined**, so WHICH files get blanked depends on the
+///   filesystem. Measured on commit `7c90fbd`: `omp-orchestrator` scored `tmux=15 ntm=6` on
+///   APFS and `tmux=0 ntm=0` on the rch worker over a byte-identical 786,891-byte scan set,
+///   which made `no_allowance_row_outlives_the_defect_it_records` demand the deletion of a
+///   live allowance row on the lane and not on the Mac. A crate that spawns
+///   `tick_monitor::TMUX` fourteen times read as touching neither surface.
+///
+/// Per-file masking is what `exit_codes::scan` already does, and it is immune by
+/// construction: a construct unterminated in one file cannot reach another. Sorting makes
+/// the census reproducible rather than merely correct on this laptop.
+fn crate_source_files(root: &Path, name: &str) -> Vec<String> {
+    let mut texts: Vec<(PathBuf, String)> = Vec::new();
     let mut stack = vec![root.join("crates").join(name).join("src")];
     while let Some(dir) = stack.pop() {
         let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -201,12 +259,30 @@ fn crate_sources(root: &Path, name: &str) -> String {
                 continue;
             }
             if let Ok(text) = std::fs::read_to_string(&path) {
-                body.push_str(&text);
-                body.push('\n');
+                texts.push((path, text));
             }
         }
     }
+    texts.sort_by(|left, right| left.0.cmp(&right.0));
+    texts.into_iter().map(|(_, text)| text).collect()
+}
+
+/// The same files joined, in the same fixed order. For callers that need one blob.
+fn crate_sources(root: &Path, name: &str) -> String {
+    let mut body = String::new();
+    for text in crate_source_files(root, name) {
+        body.push_str(&text);
+        body.push('\n');
+    }
     body
+}
+
+/// Surface evidence for a whole crate, masked PER FILE and summed. Never over the join.
+fn crate_surface_evidence(root: &Path, name: &str, binary: &str) -> usize {
+    crate_source_files(root, name)
+        .iter()
+        .map(|text| surface_evidence(text, binary))
+        .sum()
 }
 
 #[derive(Debug, Clone)]
@@ -220,12 +296,19 @@ struct Reader {
 fn dual_surface_readers(root: &Path) -> BTreeMap<String, Reader> {
     let mut readers = BTreeMap::new();
     for name in tracked_crates(root) {
-        let code = strip_comments(&crate_sources(root, &name));
-        let tmux = surface_evidence(&code, "tmux");
-        let ntm = surface_evidence(&code, "ntm");
+        // Both scans mask PER FILE. `routing_of` gets the per-file-stripped texts rejoined,
+        // not a stripped join: a runaway `/*` in one file must not be able to blank a
+        // COMPARISON_SYMBOL in another. See `crate_source_files` for the measurement.
+        let tmux = crate_surface_evidence(root, &name, "tmux");
+        let ntm = crate_surface_evidence(root, &name, "ntm");
         if tmux == 0 || ntm == 0 {
             continue;
         }
+        let code = crate_source_files(root, &name)
+            .iter()
+            .map(|text| strip_comments(text))
+            .collect::<Vec<String>>()
+            .join("\n");
         let manifest = std::fs::read_to_string(root.join("crates").join(&name).join("Cargo.toml"))
             .unwrap_or_default();
         readers.insert(
@@ -241,8 +324,10 @@ fn dual_surface_readers(root: &Path) -> BTreeMap<String, Reader> {
 }
 
 /// Dual-surface readers permitted to compare without the shared kernel, each with the
-/// reason. SEEDED FROM THIS GATE'S OWN SCAN of `/Users/josh/Developer/omp-orchestrator`
-/// on 2026-09-02 — 12 dual-surface readers, 3 routed, 9 allowed below.
+/// reason. SEEDED FROM THIS GATE'S OWN SCAN of this workspace on 2026-09-02 — 12
+/// dual-surface readers, 3 routed, 9 allowed below. (The seeding note named the author's
+/// absolute checkout path until 2026-09-11; `path-literal-guard` refused it, correctly —
+/// a home path in a gate's doctrine is exactly the literal that makes a gate unportable.)
 ///
 /// Seeding a ceiling from a neighbouring measurement is how a mutation probe passed at
 /// 42 when the tree held 41. Every row here was produced by
@@ -250,6 +335,14 @@ fn dual_surface_readers(root: &Path) -> BTreeMap<String, Reader> {
 ///
 /// Adding a row is cheap and auditable; leaving one out is a build failure, and so is
 /// leaving one in after the crate starts routing. That asymmetry is the point.
+///
+/// **Re-seeded 2026-09-11, from the same function, after [`surface_evidence`] learned the
+/// shared-kernel constant form: 17 dual-surface readers, 3 routed, 14 allowed below.** The
+/// census grew by 5 and NOT because crates changed — the recogniser had been blind to
+/// `tick_monitor::TMUX` / `NTM`. Four rows are new (`tick-monitor`, `pane-truth`,
+/// `ompo-doctor`, `receiver-receipt`); the other five reappeared under rows that were about
+/// to be deleted as stale. Each new row names WHY it is not a comparison and what kills it,
+/// because a row with only a crate name in it is an exemption nobody can recheck.
 const UNROUTED_ALLOWANCE: &[(&str, &str)] = &[
     (
         "fleet-reconcile",
@@ -314,6 +407,46 @@ const UNROUTED_ALLOWANCE: &[(&str, &str)] = &[
          but src/ never calls a COMPARISON_SYMBOL — spawn helpers only. Same \
          executed-vs-named gap as the gate's own docs. Dies when tick-dispatch/src \
          names a COMPARISON_SYMBOL, at which point this row must be deleted",
+    ),
+    (
+        "tick-monitor",
+        "LIKELY CORRECT AS-IS: it is the crate that DECLARES both surface names — \
+         `pub const TMUX` / `pub const NTM` at src/kernel.rs:7,10, re-exported at \
+         src/lib.rs:31. Every other row in this table reads the surfaces THROUGH it. Its own \
+         src/main.rs:136,162 spawns tmux capture-pane only and never spawns ntm, so there is \
+         no second observation for a comparator to reconcile. Dies when tick-monitor/src \
+         invokes `ntm` itself rather than just naming it for others",
+    ),
+    (
+        "pane-truth",
+        "PROVISIONAL, and this row corrects a standing claim: the gate's own header cited \
+         pane-truth as a FALSE dual-surface reader, which was true of the substring \
+         instrument and is not true of the crate. It resolves `ntm` through \
+         PANE_TRUTH_NTM_BIN (src/lib.rs:207) and spawns `tick_monitor::TMUX` \
+         (src/lib.rs:669,675,722), then PROVENANCE-TAGS each row `tmux` or `ntm` \
+         (src/lib.rs:228,623). Tagging a row with where it came from is not reconciling two \
+         counts of the same fact, and its documented claim is the narrower one — NTM LABELS \
+         are never consulted. Whether the tagged rows are later compared has NOT been \
+         established here. Dies when pane-truth compares a tmux census against an ntm census",
+    ),
+    (
+        "ompo-doctor",
+        "LIKELY CORRECT AS-IS: PROBES (src/lib.rs:47-56) declares one liveness row per \
+         binary — `tmux -V`, `ntm --version` — and each is run and reported on its own. The \
+         only deeper reach is ntm-side (src/liveness.rs:212,404); src/liveness.rs contains no \
+         tmux reference at all, so the two surfaces are never two readings of one fact. A \
+         per-surface probe is a census of AVAILABILITY, not a comparison. Dies when \
+         ompo-doctor reads a pane count from both surfaces in one verdict",
+    ),
+    (
+        "receiver-receipt",
+        "LIKELY CORRECT AS-IS, and the weakest evidence in the table: the `TMUX` hit is a real \
+         capture-pane (src/bin/receiver-receipt.rs:127), while the `NTM` hit is a transport \
+         LABEL built inside an in-file `#[cfg(test)]` module (src/irc_delivery.rs:142) and is \
+         not an invocation at all. `crate_sources` sweeps src/ including inline test modules, \
+         which is deliberate — narrowing it would hide real invocations — so this row records \
+         a recogniser limit rather than a crate decision. Dies when receiver-receipt names \
+         `ntm` outside a test module",
     ),
 ];
 
@@ -387,15 +520,48 @@ fn no_allowance_row_outlives_the_defect_it_records() {
         repaired
     );
 
-    let stale: Vec<&str> = UNROUTED_ALLOWANCE
+    let roster: BTreeSet<String> = tracked_crates(&root).into_iter().collect();
+    let stale: Vec<String> = UNROUTED_ALLOWANCE
         .iter()
         .map(|(c, _)| *c)
         .filter(|c| !readers.contains_key(*c))
+        .map(|c| {
+            // The three causes look identical in a bare name list, so each is measured here.
+            if !roster.contains(c) {
+                format!("{c}: NOT IN THE GIT-DERIVED ROSTER — never scanned")
+            } else {
+                let files = crate_source_files(&root, c);
+                format!(
+                    "{c}: in the roster, {} file(s) / {} byte(s) scanned, tmux={} ntm={}",
+                    files.len(),
+                    files.iter().map(String::len).sum::<usize>(),
+                    crate_surface_evidence(&root, c, "tmux"),
+                    crate_surface_evidence(&root, c, "ntm")
+                )
+            }
+        })
         .collect();
     assert!(
         stale.is_empty(),
-        "{} allowance row(s) name a crate that no longer reads both surfaces: {:?}\n\
-         Remove them — an exemption nobody needs is an exemption nobody rechecks.",
+        "{} allowance row(s) name a crate that no longer reads both surfaces:\n{:#?}\n\n\
+         THREE DIFFERENT THINGS LOOK LIKE THIS AND THE NAME ALONE CANNOT TELL THEM APART, \
+         which is why each row above carries its measurement:\n\
+         (a) THE CRATE STOPPED READING BOTH SURFACES — one surface reads 0 over a plausible \
+         byte count. Remove the row: an exemption nobody needs is an exemption nobody \
+         rechecks, and it is what stops this list shrinking.\n\
+         (b) `surface_evidence` STOPPED SEEING THE INVOCATION — fix the recogniser, not the \
+         table. Measured 2026-09-11: five rows read as stale at once (`fleet-truth`, \
+         `fleet-monitor`, `fast-dispatch`, `omp-idle-dispatch`, `tick-dispatch`) because the \
+         surfaces had been centralised into `tick_monitor::TMUX` / `NTM` and this gate keyed \
+         only on the `\"tmux\"` argv literal. Deleting them on that message would have \
+         removed five live DEBT exemptions for crates that do read both surfaces.\n\
+         (c) THE ENVIRONMENT NEVER SCANNED IT — `NOT IN THE GIT-DERIVED ROSTER`, or a byte \
+         count far below what the tree holds. The roster comes from `git ls-files`, and on \
+         the rch worker that index is not a faithful mirror of the synced worktree: the same \
+         commit that yields 92 tracked crates on the Mac yields 85-86 there. A row is NOT \
+         stale because the lane could not see the crate.\n\n\
+         THE DISCRIMINATOR: several rows going stale in one run is (b) or (c); a byte count \
+         of 0 or a missing roster entry is (c). Read the crate's src/ before deleting a row.",
         stale.len(),
         stale
     );
@@ -586,26 +752,59 @@ fn the_scan_does_not_include_its_own_source() {
 }
 
 /// The roster must come from git, and a git failure must be loud rather than empty.
+///
+/// # Why this compares SETS and prints the difference, changed 2026-09-11
+///
+/// It compared two integers and said only `left: 85, right: 94`. Two counts can differ for
+/// three unrelated reasons and the reader cannot tell which: a crate on disk that is
+/// untracked, a tracked crate whose directory is gone, or an environment where `git` does not
+/// see the tree the filesystem shows. **All three were live on the same commit.** On the Mac
+/// the answer was 92/94 — two complete-but-untracked crate directories, `crates/kernel-only-gate`
+/// and `crates/omp-host-tool-guard`, authored 2026-09-08/09 and workspace members via the
+/// `crates/*` glob in the root manifest, so they BUILD and are invisible to every git-derived
+/// census including CI's. On the rch worker the same leg on the same commit reported 85/94, and
+/// no commit in the preceding forty has 85 top-level crate manifests (`HEAD` has 92, the
+/// thirty-eight before it have 91) — so the worker's index is not a faithful mirror of the
+/// worktree rch synced, and seven more crates vanish from the roster there. A leg whose verdict
+/// moves with the environment is measuring the environment; naming the members is what makes
+/// that visible instead of arithmetic.
+///
+/// The assertion is now strictly stronger: equal counts with different members used to pass.
 #[test]
 fn the_crate_roster_is_derived_from_git_and_covers_the_tree() {
     let root = repo_root();
-    let tracked = tracked_crates(&root);
+    let tracked: BTreeSet<String> = tracked_crates(&root).into_iter().collect();
     assert!(
         tracked.len() >= 40,
         "only {} tracked crate manifests found. A hand list is how a census went stale \
          at 27 while the tree held 51; if git is failing here the roster is a lie.",
         tracked.len()
     );
-    let on_disk = std::fs::read_dir(root.join("crates"))
+    let on_disk: BTreeSet<String> = std::fs::read_dir(root.join("crates"))
         .expect("crates/ exists")
         .flatten()
-        .filter(|e| e.path().join("Cargo.toml").exists())
-        .count();
-    assert_eq!(
+        .filter(|entry| entry.path().join("Cargo.toml").exists())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    let untracked: Vec<&String> = on_disk.difference(&tracked).collect();
+    let phantom: Vec<&String> = tracked.difference(&on_disk).collect();
+    assert!(
+        untracked.is_empty() && phantom.is_empty(),
+        "the git-derived roster ({} crates) and the tree on disk ({} crates) name different \
+         sets.\n\
+         ON DISK BUT UNTRACKED ({}): {:?}\n\
+           -> a crate `git ls-files` cannot see is a crate this gate never scans, and it is \
+              invisible to CI while still being a workspace member through the `crates/*` glob. \
+              Track it or remove it; do NOT widen this assertion.\n\
+         TRACKED BUT ABSENT FROM DISK ({}): {:?}\n\
+           -> either a deleted crate whose manifest is still indexed, or an environment whose \
+              git index does not match the worktree it was handed. Name the environment before \
+              believing either half.",
         tracked.len(),
-        on_disk,
-        "tracked crate count {} does not match the {on_disk} on disk — an untracked \
-         crate is invisible to this gate and its surfaces go unchecked",
-        tracked.len()
+        on_disk.len(),
+        untracked.len(),
+        untracked,
+        phantom.len(),
+        phantom
     );
 }

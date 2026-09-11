@@ -567,7 +567,13 @@ impl fmt::Display for CeilingVerdict {
 
 /// Exit 1 only on a ceiling breach. Slack and exact stay green so a clean
 /// ledger does not fail CI. Empty scan is 2, from the parser, not here.
-pub fn ledger_gate_exit(unattributed: &[String]) -> i32 {
+///
+/// Returns `u8`, the width `ExitCode::from` actually takes. It returned `i32` and the caller
+/// wrote `ExitCode::from(ledger_exit as u8)`, which is an exit-path narrowing cast over a
+/// value whose range is `{0,1}` — a cast that can never be exercised and still has to be
+/// justified to `exit_codes::every_narrowing_exit_cast_has_a_reasoned_allowance`. Removing
+/// the cast is cheaper and stronger than a reasoned allowance row for it.
+pub fn ledger_gate_exit(unattributed: &[String]) -> u8 {
     if CeilingVerdict::from_counts(unattributed.len(), UNATTRIBUTED_CLOSE_CEILING).refuses() {
         1
     } else {
