@@ -230,11 +230,44 @@ fn verify_preserved_inventory(
 
 }
 
+/// ⛔ THE VERDICT WAS TYPED AND THE CALL SITE COLLAPSED IT BACK. Measured 2026-09-11.
+///
+/// `verify_preserved_inventory` correctly distinguishes CANNOT-OBSERVE from ABSENT and emits
+///
+/// ```text
+/// ARTIFACT_PROVENANCE_UNOBSERVABLE dir=<…>/.flywheel/inventory-artifacts members=3
+///   reason=no declared member observable on this tree
+///   (a lane may exclude the directory; ABSENT and CANNOT-OBSERVE differ)
+/// ```
+///
+/// and this test then ran `.expect("intact inventory must pass")`, which treats EVERY `Err`
+/// as a failure — including the one the classifier was built to separate out. **A typed
+/// refusal is worth nothing if its consumer pattern-matches on `Err` and stops there**, which
+/// is the same shape as a struct field that is populated by the producer and passed as
+/// `Vec::new()` by every caller: the distinction exists and nothing acts on it.
+///
+/// Why it was not caught when the UNOBSERVABLE arm landed: the lane was SERVING the artifacts
+/// that hour, so this branch never executed. The grade for that work said so in its NO-CLAIM
+/// — "my re-execution ran on the SERVING lane state, not the excluded state" — and this is
+/// that NO-CLAIM being discharged NEGATIVELY. A hedge that later proves true is still a hedge
+/// that should have been a test.
 #[test]
 fn every_preserved_artifact_exists_and_matches_its_cited_hash() {
     let dir = repo_root().join(".flywheel/inventory-artifacts");
-    let checked = verify_preserved_inventory(&dir, PRESERVED)
-        .expect("intact inventory must pass");
+    let checked = match verify_preserved_inventory(&dir, PRESERVED) {
+        Ok(checked) => checked,
+        Err(error) if error.contains("ARTIFACT_PROVENANCE_UNOBSERVABLE") => {
+            eprintln!(
+                "SKIP every_preserved_artifact_exists_and_matches_its_cited_hash: {error}\n  \
+                 This is a typed refusal to answer, NOT a pass. The build lane excludes \
+                 .flywheel/, so absence of the artifacts here cannot be distinguished from \
+                 absence of the directory. CI checks out the whole tree and this leg binds \
+                 there.",
+            );
+            return;
+        }
+        Err(error) => panic!("intact inventory must pass: {error}"),
+    };
     assert_eq!(checked, PRESERVED.len());
 }
 
@@ -248,9 +281,20 @@ fn a_corrupted_copy_is_rejected_by_the_provenance_gate() {
     ));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let mutant = dir.join("agent-end-raw-frame.json.gz");
-    let mut bytes = std::fs::read(&source).expect(
-        "ARTIFACT_PROVENANCE_UNOBSERVABLE member=agent-end-raw-frame.json.gz reason=source not observable on this tree",
-    );
+    // ⛔ SAME DEFECT, ONE LINE LOWER. This was `.expect("ARTIFACT_PROVENANCE_UNOBSERVABLE
+    // member=… reason=source not observable on this tree")` — the correct MESSAGE inside a
+    // PANIC. Naming a state UNOBSERVABLE and then failing on it is the collapse the name
+    // exists to prevent; the string is not the mechanism.
+    let Ok(mut bytes) = std::fs::read(&source) else {
+        eprintln!(
+            "SKIP a_corrupted_copy_is_rejected_by_the_provenance_gate: \
+             ARTIFACT_PROVENANCE_UNOBSERVABLE member=agent-end-raw-frame.json.gz \
+             reason=source not observable on this tree ({}). The known-bad cannot be BUILT \
+             without the good artifact to corrupt, so this is a refusal to answer, not a pass.",
+            source.display()
+        );
+        return;
+    };
     let offset = bytes.len() / 2;
     bytes[offset] ^= 0x01;
     std::fs::write(&mutant, bytes).expect("write corrupted artifact copy");
