@@ -1907,6 +1907,40 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    delimiter is unbalanced; `cargo check -p <crate>` (~15 s local, also not refused) is the next
    rung and the only one that answers a type question.
 
+8s. **THREE RESTORE PRIMITIVES, THREE DIFFERENT SEMANTICS — AND A MUTATION LEG WANTS THE ONE
+   ALMOST NOBODY USES.** Added 2026-09-10 after the conductor broadcast the wrong one twice and
+   three agents corrected it independently.
+
+   Every gate rule here demands a mutation leg that restores **byte-identically**. The acceptance
+   text across this repo says `git checkout -- <path>`, which is **unexecutable** — `dcg` refuses
+   it as `core.git:checkout-discard` — and a worker following it verbatim reads the refusal as
+   its own error. But the substitute matters more than the blockage:
+
+   ```
+   cp aside, then cp back    restores the WORKTREE as it was    allowed      <- CORRECT for a mutation
+   git show HEAD:<path>      restores the TREE at HEAD          allowed      <- READBACK ONLY
+   git checkout -- <path>    restores the INDEX                 dcg-BLOCKED  <- and a peer moves the index
+   ```
+
+   **A mutation leg is asking "is the worktree exactly as I found it", and only the first answers
+   that.** Measured the same day: **125 dirty worktree entries, 87 modified-tracked.** In that
+   checkout `git show HEAD:<path>` **silently discards a peer's uncommitted work in the same file
+   while you believe you restored** — the whole-file hazard that also produced a 9-hunk sweep in a
+   path-scoped commit that same hour. `git checkout` is worse still: it restores from the INDEX,
+   which is shared state a peer can move under you mid-leg.
+
+   **HOUSE FORM:** `cp` the file aside **BEFORE** mutating, restore from the copy, prove with
+   `sha256`. `git show HEAD:<path>` keeps exactly one job — **READBACK**, proving what landed in
+   the tree — and is never a restore unless you have separately established the file was clean.
+
+   **AND `git diff --numstat` IS NOT AN ORACLE ON AN UNTRACKED FILE** — it is vacuously empty
+   there, so a restore "proven" that way proves nothing. Run it only against a tracked path, and
+   prefer `sha256` or `cmp`, which do not care about tracking state.
+
+   **NO-CLAIM.** This makes a restore *correct*; it does not make a mutation *attributable*. A
+   leg still has to show the RED was caused by the mutation and not by unrelated breakage — the
+   discriminator is that the other legs stay GREEN, per rule 7.
+
 8q. **AN `OR`ed READBACK NEEDLE IS ONLY AS STRONG AS ITS WEAKEST ALTERNATIVE — it confirms the FILE,
    not the EDIT.** Measured 2026-09-07 by `%20`, which caught it because two instruments disagreed.
 
