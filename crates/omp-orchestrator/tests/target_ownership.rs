@@ -377,7 +377,7 @@ fn every_host_dependent_leg_is_guarded_and_the_set_is_pinned_by_name() {
         "ANTI-VACUITY: the source split found no legs, so every assertion below is empty"
     );
 
-    // Direction 1: the named legs are guarded, by requirement NAME.
+    // Direction 1: TABLE ⊆ BODY. Every requirement the table names is named by the guard.
     for (leg, requirements) in GUARDED {
         let (_, body) = bodies
             .iter()
@@ -397,6 +397,52 @@ fn every_host_dependent_leg_is_guarded_and_the_set_is_pinned_by_name() {
                 "{leg} must name HostRequirement::{requirement}"
             );
         }
+    }
+
+    // Direction 1b: BODY ⊆ TABLE, AT REQUIREMENT GRANULARITY. THE OTHER HALF OF THE
+    // CONTAINMENT, AND ITS ABSENCE WAS A LIVE HOLE IN THIS VERY CENSUS.
+    //
+    // Found by a non-author grading `bz2na`, from an arm that DID NOT BITE: removing a
+    // requirement from the GUARDED table above left the suite at `5 passed; exit=0` — a silent
+    // no-op — because direction 1 only ever asks whether the table's entries appear in the
+    // body. Direction 2 catches an unlisted LEG; nothing caught an unlisted REQUIREMENT, so a
+    // requirement quietly dropped from the table DISARMED ITS OWN CHECK WITH NO SIGNAL.
+    //
+    // A SUBSET ASSERTION MUST STATE WHICH DIRECTION IT CHECKS AND WHAT THE OTHER WOULD MISS.
+    // Both directions now hold, so the table and the guard are pinned to each other rather
+    // than the table being pinned to itself.
+    for (leg, requirements) in GUARDED {
+        let (_, body) = bodies
+            .iter()
+            .find(|(name, _)| name == leg)
+            .expect("present, checked by direction 1");
+        // Literals stripped: a requirement NAMED IN A COMMENT is not a requirement the guard
+        // passes, and this census has already classified itself twice by reading its own prose.
+        let code = code_only(body);
+        let mut in_body: Vec<&str> = code
+            .match_indices("HostRequirement::")
+            .map(|(at, token)| {
+                let rest = &code[at + token.len()..];
+                let end = rest
+                    .find(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+                    .unwrap_or(rest.len());
+                &rest[..end]
+            })
+            .collect();
+        in_body.sort_unstable();
+        in_body.dedup();
+        assert!(
+            !in_body.is_empty(),
+            "ANTI-VACUITY: {leg}'s body names no requirement, so this direction is empty for it"
+        );
+        let mut tabled: Vec<&str> = requirements.to_vec();
+        tabled.sort_unstable();
+        assert_eq!(
+            in_body, tabled,
+            "{leg}: the guard and the census table must name the SAME requirements. A \
+             requirement in the body but absent from the table is the silent no-op this \
+             direction exists to catch"
+        );
     }
 
     // Direction 2: nothing host-dependent is missing from the set.
