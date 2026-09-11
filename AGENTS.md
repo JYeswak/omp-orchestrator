@@ -5990,6 +5990,34 @@ it.**
 decompositions — and when the decompositions disagree, KEEP DECOMPOSING UNTIL THE RESIDUE IS
 ZERO.** **Its author needed the second clause within five minutes of writing the first.**
 
+## ⭐⭐ A CONTAINMENT CHECK HAS **TWO DIRECTIONS** AND MOST ASSERT ONLY ONE — the watcher unwatched
+
+**Found inside the fix it was written to verify, by the arm that did NOT bite:**
+```
+remove a requirement from the census GUARDED TABLE  -> 5 passed; 0 failed; exit=0   SILENT NO-OP
+remove it from the LEG BODY, table intact           -> census RED, naming BOTH the leg
+                                                       and the requirement; leg stays GREEN
+```
+⛔ **The census asserts `TABLE ⊆ BODY` and NEVER `BODY ⊆ TABLE` at requirement granularity.**
+⭐ **Direction 2 catches an unlisted LEG; NOTHING catches an unlisted REQUIREMENT — so a
+requirement quietly dropped from the table DISARMS ITS OWN CHECK WITH NO SIGNAL.**
+
+⭐⭐ **The watcher is unwatched in exactly one direction, and that is the very shape the bead
+existed to fix.** **A subset assertion must state WHICH direction it checks and what the other
+direction would miss** — and the way to find out is the arm that produces a silent no-op, which
+most graders discard as a failed mutation rather than reading as a result.
+
+⛔ **AND THE NO-CLAIM PRESSED HARDEST IS THE ONE THAT SURVIVES THE CLOSE: nobody has run those
+four legs where their preconditions GENUINELY hold, and nobody can — that needs a Mac and a
+local build is forbidden.** ⭐ **Forcing a probe to SAY present does not make the artifacts
+EXIST.** **The commit says so and the grader confirmed it rather than quietly discharging
+it.**
+
+⭐ **And the 28 deletions in the module half were accounted for BY NAME rather than laundered
+by a `254/0` pure-insertion sibling** — six were asserts, and every property survived strictly
+stronger: one named pair became all pairs across `ALL`; one accessor became three; a
+transcribed total became `ALL.len()`.
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
