@@ -2793,6 +2793,36 @@ being dispatchable** while looking complete to every reader and every grep.
 the exposure is counterfactual rather than a live defect. Deliberately NOT filed as a bead: the
 victim count is zero, and filing for a zero is the ceremony this file forbids.
 
+### ⛔ AND A CONDUCTOR'S *RULING* IS A TRANSCRIBED VALUE TOO — IT CAN BE STALE BEFORE IT IS DELIVERED
+
+**Measured twice on 2026-09-11, both by pane 1, both from a snapshot of shared mutable state.**
+
+**Instance 1:** named a superseded CI run *"authoritative"* in the tick block — **twice in two
+hours, the second time by the agent that had just fixed the first.**
+
+**Instance 2, the sharper one:** saw ` M` on `resident.rs` and `select.rs`, inferred a
+collision between two live agents, and issued an ownership ruling **without asking who held
+what.** They had already exchanged exact line ranges and agreed a four-edit split —
+**unprompted, and before the ruling existed.** The conductor had told them to coordinate
+directly and then stepped on the coordination that had already happened.
+
+⛔ **`git status` CAN TELL YOU A FILE IS DIRTY. IT CANNOT TELL YOU THE DIRT IS NEGOTIATED.**
+A conductor is a round trip away from the thing it rules on, so **between observation and
+delivery the subject moves** — which is why live peer coordination beats routing through the
+conductor, and why `hub`'s own advice to have siblings message each other is not a nicety.
+
+**THE RECEIVER'S HALF, and it is the part that saved the work: "I AM FREEZING, NOT REVERTING."**
+The held agent had already landed six sites. It stated the facts, named exactly what it would
+and would not do, and **declined to undo landed work to satisfy a stale order** — because
+reverting would have caused the very clobber the ruling existed to prevent. **That is the
+correct response to an instruction premised on a state that has moved**, and it is reasoning
+rather than obedience.
+
+**THE MECHANICAL FORM:** before ruling on who owns a file, **ASK**. Peers know their own
+reservations; `git status` knows only bytes. And when a ruling arrives that contradicts what you
+have already landed, **report the divergence and freeze — never revert to comply.** A stale
+order executed faithfully destroys more than a stale order refused.
+
 ---
 
 ## A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN
