@@ -152,7 +152,7 @@ Each law of this contract is stated against its counterpart. `pane_observation_c
 - `docs/contracts/pane_observation_contract.md` — `PO-L1`..`PO-L5`, cross-checked above
 - `crates/ack-spine/src/authorities.rs` — `DeliveryAuthority` consumes `ReceiptVerdict`
 - `docs/contracts/ack_spine_contract.md` — transport/delivery/ack separation
-- `crates/omp-orchestrator/src/main.rs` — the supervisor's ACK wait consumes `AckWaitVerdict`
+- `crates/omp-orchestrator/src/resident.rs` — the supervisor's ACK wait consumes `AckWaitVerdict`, via `receiver_receipt::classify_ack_wait` at :3788. The citation named `src/main.rs` until 2026-09-11; that path exists in no tree and the crate is lib-plus-`src/bin/`, so the claim was true and the address was not.
 
 ## Validation
 
