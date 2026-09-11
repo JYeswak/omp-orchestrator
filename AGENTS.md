@@ -6136,6 +6136,82 @@ than letting an unfinished probe stand in for a negative.**
 read as an answer because it looks like the command ran. **Name the clause you did not verify
 and the form that would verify it.**
 
+## ⭐⭐ THE RISK SIGNATURE IS **A PATHSPEC NARROWER THAN THE PAIR** — not "single file"
+
+**A correction to the sweep scope committed one hour earlier, from the author of three of its
+rows.**
+```
+3 of the 18 swept commits were MULTI-file, and all three carry BOTH halves of their pair:
+  145383a  host_precondition.rs + tests/target_directory.rs
+  6805573  host_precondition.rs + tests/sota_preflight.rs
+  d7e0eb5  host_precondition.rs + tests/target_ownership.rs
+```
+⭐⭐ **A two-file commit carrying both halves is STRUCTURALLY INCAPABLE of the broken-pair
+defect — the pathspec covered definition and consumer together.** ⛔ **And a single-file commit
+is ZERO-risk when its symbol is self-contained and MAXIMUM-risk when its sibling holds the
+definition: `9176b51` was single-file PRECISELY BECAUSE the pathspec excluded `lib.rs`.**
+
+⛔ **So "single-file" OVER-includes 15 commits that could not break and UNDER-includes a
+multi-file commit whose definition lives in an untouched THIRD file.** ⭐ **The sweep's zero is
+not weakened — its JUSTIFICATION is, and the three extras are the safest members of the set.**
+
+⭐ **AND A FOURTH RESIDUAL CLASS, named by the commit's own author against a third party's
+attribution:** the stripper must handle **a bare `//` LINE COMMENT with no backticks**, not
+only backticked doc text. **Four residual classes, not three** — and the author flagged its own
+evidence as weaker than a third party's rather than letting it read as confirmation.
+
+## ⛔⛔ THE ANCESTRY CHECK I TOLD EVERYONE TO RUN WOULD HAVE LICENSED A FALSE READING
+
+**Stated by the pane that had issued the instruction:** run `34577201755` contains `6805573`
+**and** `9176b51`, so `merge-base --is-ancestor` comes back **POSITIVE** — ⛔ **and
+`grep -c 'GATE_RUNNER '` is ZERO because the gate did not compile.**
+
+⭐ **Its typed skip's ABSENCE from a failing list would have looked like ITS GUARD WORKING,
+when nothing was measured at all.** ⛔ ***"That is the exact trap I walked others toward in the
+same breath as warning them about stale rows."*** **Third variant of the family tonight, and
+the only one where the recommended check actively produces the wrong answer.**
+
+## ⭐⭐⭐ THE CI-EVIDENCE LADDER IS **FOUR RUNGS**, AND EVERY ONE WAS SKIPPED TONIGHT
+
+```
+1. PUSHED       git ls-remote origin refs/heads/main   <- NEVER a tracking ref
+2. CONTAINED    git merge-base --is-ancestor <sha> <headSha>
+3. THE GATE RAN grep -c 'GATE_RUNNER_PLAN_TOTAL' <log>  MUST be nonzero
+4. YOUR LEG RAN your crate's row present in that output
+```
+⛔ **One pane was missing rung 1 by reading a STALE tracking ref, and rungs 3-4 by never
+looking.** ⭐ **Ancestry establishes that a run COULD have seen your change; only a positive
+control establishes that it DID.**
+
+⛔⛔ **AND THE CIRCULAR CASE IS THE ONE WORTH REMEMBERING: a pane's guards WERE in a
+verdict-bearing run — and that run measured nothing, because the conductor's unpaired consumer
+took down the runner that would have measured them.** ⭐ **The honest tier is not `RUNNING ✗`
+but `PUSHED ✓ · CONTAINED ✓ · MEASURED ✗`**, and *"`RUNNING ✗` published as a modest claim was
+an unmeasured guess that happened to be wrong in BOTH directions — the commit ran, and nothing
+measured it."*
+
+## ⛔ MY POSITIVE CONTROL WAS FRAGILE EXACTLY ON THE **HEALTHY** CASE — use the plan marker
+
+```
+grep -c 'GATE_RUNNER '  (trailing space)  ->  2     <- the whole control rests on two emissions
+grep -c 'GATE_RUNNER'   (no space)        -> 68     <- 59 of those are the FEATURE UNDER TEST
+```
+⭐ **The trailing space is doing all the work, and doing it RIGHT: a needle matching
+`GATE_RUNNER_FAILURE_CAUSE` would be CIRCULAR — using the feature under test to prove the gate
+ran.** ⛔ **Do NOT widen it to bare `GATE_RUNNER`.**
+
+⛔ **But two bare emissions is thin, and the FRAGILE CASE IS THE GREEN ONE: a fully-passing run
+has zero cause lines, so if those two ever become conditional the control reports a PERFECT RUN
+as absent-by-build** — the same shape as an anti-prefix check declaring a complete run a
+prefix. ⭐ **THE ROBUST FORM IS AN UNCONDITIONAL PLAN-PHASE MARKER: `GATE_RUNNER_PLAN_TOTAL`,
+emitted once BEFORE any test outcome exists — nonzero on green, nonzero on red, zero exactly
+when the crate did not build.**
+
+⛔ **AND IT PROVES THE GATE *STARTED*, NEVER THAT IT FINISHED.** A gate that printed its census
+and died mid-sweep passes it. ⭐ **Pair it with `grep -c 'could not compile'` and `error\[E0` at
+zero: two needles, two different failure modes — one says the binary existed, the other says
+the build did.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
