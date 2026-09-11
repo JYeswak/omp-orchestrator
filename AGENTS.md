@@ -7456,3 +7456,37 @@ wire them"* — is the real one.** Eighteen wiring jobs, not a list edit.
 six-line diff that greens three tests; the other is eighteen units of work that leaves them red
 for a while. **A gate whose cheapest satisfying edit is an amnesty will eventually be satisfied
 that way unless someone writes down why not.**
+
+### ⛔⛔ AND THE GUARD FOR THIS EXACT CLASS IS **ITSELF UNWIRED** — verify before you wire
+
+**I picked `wired-but-inert-guard` as the first of the eighteen to wire: a guard crate with a
+`guard --repo {repo}` verb, a clean fit for the `[package.metadata.gate]` stanza that makes
+`gate-runner` invoke it. Ran it first, because wiring a gate that then fails makes CI worse:**
+
+```
+WIRED-GUARD FAIL (4 of 4 gates are BUILT but NOT WIRED)
+invoker=MANUAL  invoker_proof=unproven_parent          exit=1
+cargo test -p wired-but-inert-guard  ->  14 passed / 0 failed · 5 passed / 1 FAILED
+```
+
+**The crate whose job is detecting built-but-unwired gates is itself built and unwired, and
+reports 4 of 4 of its subjects in that state.** Wiring it today adds a FIFTH failing crate to
+CI and fixes nothing — it moves a red from invisible to visible while the four subjects stay
+unwired. **So the eighteen have an ORDERING CONSTRAINT, not just a size: this one is wireable
+only after the gates it watches are.**
+
+ **RUN THE CHECK BEFORE YOU WIRE IT. A stanza is a one-line diff and a failing gate is
+permanent noise** — and the crate looking most obviously ready to wire was the one that would
+have made the failing set worse.
+
+### ⛔ A MISSING `Remote command finished` MEANS **NO VERDICT YET** — neither pass nor fail
+
+**Measured in the same attempt.** The guard's log sat at 2,099 bytes with **no completion
+line**, so I classified it `UNKNOWN` and refused to wire on it. **The run had not failed — it
+was still executing, and finished 273 seconds later** with the verdict above.
+
+**This file already says a refused build exits 0 and that both proof lines must be present.
+The third case is the one that bites an impatient reader: BOTH LINES ABSENT AND THE JOB STILL
+ALIVE.** `exit=0` refused, `exit=N` decided, **nothing at all = still running.** The only safe
+action on the third is none — and the verdict arriving 4½ minutes after I stopped waiting is
+what proves the refusal was right rather than merely cautious.
