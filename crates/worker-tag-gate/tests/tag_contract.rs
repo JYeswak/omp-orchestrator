@@ -171,3 +171,88 @@ fn the_allowed_host_tag_set_is_declared_not_inferred() {
     assert!(!WorkerRow::DARWIN_HOST_TAGS.contains(&"linux"));
     assert_eq!(WorkerRow::OS_DARWIN, "os:darwin");
 }
+
+/// This crate's own source, read as text so the legs below can key on CLAIM TEXT rather than a
+/// line number. `:24-26` and `:157` both move the next time anyone edits this file — `AGENTS.md`
+/// moved a cited line from `:48` to `:68` inside one night, by the very commit that fixed the
+/// thing the cite was about.
+const THIS_CRATE_SOURCE: &str = include_str!("../src/lib.rs");
+
+/// Every in-source surface that still asserts darwin artifacts belong on the local Mac. HD-0013's
+/// decision stands and its quoted text is never edited; what must never again appear ALONE is the
+/// stale consequence, because a reader who meets it without the cross-build form stops.
+const STALE_CONSEQUENCE_CLAIMS: &[&str] = &[
+    // The HD-0013 ruling, quoted verbatim in the module docs.
+    "the LOCAL MAC for",
+    // The refusal message a reader actually receives from this gate.
+    "darwin artifacts belong on the local Mac",
+];
+
+/// The amendment must be reachable from the claim, not merely present somewhere in the file. An
+/// amendment a reader only meets AFTER acting on the stale text is not an amendment.
+const AMENDMENT_WINDOW_LINES: usize = 40;
+
+/// Needles proving the working form travels with the claim: the target triple, and the trap that
+/// `--target` is the wrong flag.
+const AMENDMENT_NEEDLES: &[&str] = &["aarch64-apple-darwin", "--target"];
+
+/// Does `pointer` occur within `window` lines at or after every line matching `claim`?
+///
+/// Returns the count of claim sites checked, so a caller can refuse a vacuous pass: a needle that
+/// matches nothing would otherwise satisfy a for-all assertion trivially.
+fn claim_sites_carrying(source: &str, claim: &str, pointer: &str, window: usize) -> (usize, usize) {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut sites = 0usize;
+    let mut carried = 0usize;
+    for (idx, line) in lines.iter().enumerate() {
+        if !line.contains(claim) {
+            continue;
+        }
+        sites += 1;
+        let end = (idx + window + 1).min(lines.len());
+        if lines[idx..end].iter().any(|l| l.contains(pointer)) {
+            carried += 1;
+        }
+    }
+    (sites, carried)
+}
+
+#[test]
+fn every_stale_local_mac_claim_carries_the_cross_build_form_at_the_claim() {
+    for claim in STALE_CONSEQUENCE_CLAIMS {
+        for needle in AMENDMENT_NEEDLES {
+            let (sites, carried) =
+                claim_sites_carrying(THIS_CRATE_SOURCE, claim, needle, AMENDMENT_WINDOW_LINES);
+            // Anti-vacuity: a claim needle that stopped matching is UNKNOWN, not absence. If the
+            // wording is deliberately changed, this leg must be re-derived, not silently pass.
+            assert!(
+                sites > 0,
+                "claim needle {claim:?} matched ZERO lines — an empty scan set is an ERROR, never a \
+                 pass; re-derive this leg against the current wording"
+            );
+            assert_eq!(
+                carried, sites,
+                "{sites} site(s) contain {claim:?} but only {carried} carry {needle:?} within \
+                 {AMENDMENT_WINDOW_LINES} lines — the stale consequence is unamended AT the claim"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_refusal_message_itself_names_the_cross_build_and_still_exits_2() {
+    // The strongest, position-free form of the leg above: what a reader actually RECEIVES.
+    let error = check(MEASURED_BAD, "fixture:bad").expect_err("os:darwin on a linux box must fail");
+    let text = error.to_string();
+    assert_eq!(error.exit_code(), 2, "cause-specific exit code, per rule 7: {text}");
+    assert!(
+        text.contains("OS_DARWIN_ON_NON_DARWIN_HOST"),
+        "code in message: {text}"
+    );
+    for needle in ["aarch64-apple-darwin", "--target", "rc=103"] {
+        assert!(
+            text.contains(needle),
+            "refusal must name the cross-build form and its traps; missing {needle:?} in: {text}"
+        );
+    }
+}

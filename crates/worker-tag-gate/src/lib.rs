@@ -25,6 +25,39 @@
 //! lanes by TARGET instead of cross-linking: contabo for Rust/Linux compilation, the LOCAL MAC for
 //! darwin builds."*
 //!
+//! **⚠ HD-0013's DECISION STANDS; ITS CONSEQUENCE IS STALE (re-derived 2026-09-10).** Nothing above
+//! is retracted — the quote is Joshua's ruling verbatim and stays that way. Its operative clause,
+//! *"NO macOS SDK on the Linux lane"*, is **still true**, and is exactly why a **zigcc
+//! cross-linker** exists instead of an SDK. What is stale is the inference that darwin artifacts
+//! must therefore be *produced* on the Mac. They are not: `file ~/.local/bin/ompo` →
+//! `Mach-O 64-bit executable arm64`, cross-built on Contabo with **zero local builds**.
+//!
+//! Read as a pair with `AGENTS.md`'s *"THE POLICY IS ABSOLUTE: build on Contabo, never locally"*,
+//! the stale consequence says a Mach-O can be built **nowhere** — the policy forbids the Mac, the
+//! consequence forbids the Linux lane. On 2026-09-10 that pair stalled a live agent mid-unit, which
+//! correctly refused to build locally and escalated for a ruling rather than guessing. **A third
+//! path exists and is already sanctioned**, under `AGENTS.md`'s heading *"For a macOS binary, the
+//! target goes in `--config`, NEVER in `--target`"*:
+//!
+//! ```text
+//! RCH_REQUIRE_REMOTE=1 rch exec -- cargo build --release -j 2 \
+//!   --config 'build.target="aarch64-apple-darwin"' \
+//!   --config 'target.aarch64-apple-darwin.linker="/usr/local/bin/zigcc-aarch64-darwin"' \
+//!   -p <crate> --bin <bin>
+//! ```
+//!
+//! Two traps, both measured:
+//!
+//! * **`--config build.target=`, NEVER `--target`.** `--target` sets `required_os=darwin`, which
+//!   collapses the admissible fleet 4 → 1 and is the `rc=103` cause. The `--config` form
+//!   deliberately leaves `required_os=none`, which is also why it is invisible to this gate (see
+//!   *What a green run does NOT establish*, below).
+//! * **SINGLE quotes outside, DOUBLE inside**, or cargo refuses with *"string values must be
+//!   quoted."* Copy the form; do not retype it.
+//!
+//! Do **not** cite a line number for that form — `AGENTS.md` moves, and a cited line there went
+//! from `:48` to `:68` inside one night. Search it for `build.target="aarch64-apple-darwin"`.
+//!
 //! # What a green run does NOT establish
 //!
 //! * **Tag hygiene, never lane health.** A correctly-tagged fleet can still be saturated, wedged,
@@ -154,7 +187,13 @@ impl core::fmt::Display for GateError {
                     "  rch restricts a worker declaring an OS to commands targeting that OS, so the tag \
                      subtracts capability rather than adding it. Measured 2026-09-07 on contabo-3: \
                      `RCH-I001 ... worker declares os=darwin, so it takes only commands targeting that OS`. \
-                     Remove the tag; darwin artifacts belong on the local Mac per HD-0013."
+                     Remove the tag. HD-0013 recorded that darwin artifacts belong on the local Mac; \
+                     that DECISION stands but its CONSEQUENCE is stale (re-derived 2026-09-10) — do \
+                     NOT build locally, which the Contabo policy forbids absolutely. Cross-build \
+                     instead: `--config 'build.target=\"aarch64-apple-darwin\"'` plus a zigcc \
+                     linker `--config`, NEVER `--target` (which sets required_os=darwin, collapses \
+                     the fleet 4->1, and is the rc=103 cause); SINGLE quotes outside, DOUBLE inside. \
+                     Search AGENTS.md for `build.target=\"aarch64-apple-darwin\"`."
                 )
             }
         }

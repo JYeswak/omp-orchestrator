@@ -224,11 +224,25 @@ Joshua's own decision, **recorded and unexecuted**:
 > Rust/Linux compilation, the LOCAL MAC for darwin builds**, adopting zeststream-cast's working
 > arrangement as prior art."*
 
-**That resolves the apparent conflict with the Contabo binding.** A binary for local `PATH` is a
-darwin build, which HD-0013 places on the local Mac; the Contabo binding governs Rust/Linux
-compilation. It also means **`qir1` (P0, "full macOS SDK on the contabo boxes") does the exact thing
-HD-0013 rules out** — and my own 653 s link failure plus `%20`'s `os_gate_excluded=3` were both us
-fighting a lane Joshua had already dissolved. **`qir1`'s retirement is Joshua's call, not mine.**
+**⚠ THE RESOLUTION BELOW IS STALE AS OF 2026-09-10 — READ THIS BEFORE ACTING ON IT.** HD-0013's
+*decision* stands and its quoted text above is untouched; what is retired is the consequence drawn
+from it here. <!--RETIRED-->"A binary for local `PATH` is a darwin build, which HD-0013 places on
+the local Mac; the Contabo binding governs Rust/Linux compilation."<!--/RETIRED--> That inference
+plus `AGENTS.md`'s *"THE POLICY IS ABSOLUTE: build on Contabo, never locally"* reads as **a Mach-O
+can be built nowhere**, and on 2026-09-10 that pair stalled a live agent mid-unit. It is false:
+`ompo` is on `PATH` right now as `Mach-O 64-bit executable arm64`, **cross-built on contabo with
+zero local builds**. The operative clause — no macOS **SDK** on the Linux lane — is still honoured,
+because the cross-build uses a **zigcc linker**, not an SDK. The working form is
+`--config 'build.target="aarch64-apple-darwin"'` plus a zigcc linker `--config`, **never
+`--target`** (which sets `required_os=darwin`, collapses the admissible fleet 4 → 1, and is the
+`rc=103` cause); **single quotes outside, double inside**, or cargo refuses with *"string values
+must be quoted."* Search `AGENTS.md` for `build.target="aarch64-apple-darwin"` rather than citing a
+line number, which moves.
+
+It remains true that **`qir1` (P0, "full macOS SDK on the contabo boxes") does the exact thing
+HD-0013 rules out** — the cross-linker is the sanctioned substitute for that SDK — and my own 653 s
+link failure plus `%20`'s `os_gate_excluded=3` were both us fighting a lane Joshua had already
+dissolved. **`qir1`'s retirement is Joshua's call, not mine.**
 
 ## The deeper answer
 

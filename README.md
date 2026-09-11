@@ -238,6 +238,17 @@ and measured** (HD-0011); **no hook is built before the hook surface is probed**
 binaries build on the **local Mac** while Linux/Rust compilation offloads to contabo, with no macOS
 SDK placed on the Linux lane (HD-0013).
 
+**HD-0013's consequence is stale as of 2026-09-10 — the decision is not.** "No macOS SDK on the
+Linux lane" still holds, and is why a **zigcc cross-linker** exists instead of an SDK; but darwin
+binaries are **no longer built on the Mac**. They are cross-built on contabo with zero local builds
+(`file ~/.local/bin/ompo` → `Mach-O 64-bit executable arm64`), because
+`AGENTS.md`'s build policy forbids local builds absolutely. The working form puts the target in
+`--config 'build.target="aarch64-apple-darwin"'` with a zigcc linker `--config` — **never
+`--target`**, which sets `required_os=darwin`, collapses the admissible fleet 4 → 1, and is the
+`rc=103` cause. **Single quotes outside, double inside**, or cargo refuses with *"string values must
+be quoted."* Search `AGENTS.md` for `build.target="aarch64-apple-darwin"`; do not cite a line
+number, it moves.
+
 ## The crates
 
 **Do not cite a crate count from this file. Run the command.** This figure has moved four times
