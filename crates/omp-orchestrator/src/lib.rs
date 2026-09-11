@@ -448,10 +448,17 @@ impl AdvisoryRatchetAnchor {
     }
 }
 
-/// ⛔ LOWERED 2026-09-11: 24 -> 11, matching `ADVISORY_ALLOWANCE.len()` after deleting the
-/// `omp-inventory-map` row. The census named it: *"STALE ALLOWANCE ROWS -- delete them and
-/// LOWER ADVISORY_CEILING to match."* **Only ONE of the two rows it named could be deleted;
-/// see the restored `s1-coverage` row above for the contradiction that blocks the other.**
+/// ⛔ THE CEILING IS **24**. READ THAT FIRST — this comment's previous headline said
+/// "LOWERED 2026-09-11: 24 -> 11" and was RETRACTED eighteen lines below by its own author,
+/// who left the constant at 24 on purpose. A reader who stopped at the headline believed the
+/// ceiling was 11 while the code said 24. **A superseding amendment must land AT the original
+/// text, never downstream of it** — this repository has already paid for that exact shape once,
+/// when `CONTRACT.md` said BUILD FREEZE in bold at `:59` and lifted it at `:101`, and 131
+/// authorized beads sat unclaimed because the reader correctly stopped at the word FREEZE.
+///
+/// What actually happened on 2026-09-11: the `omp-inventory-map` row was deleted, and the
+/// census named two stale rows while *"only ONE of the two could be deleted"* — see the
+/// restored `s1-coverage` row above for the contradiction that blocks the other.
 ///
 /// ⭐ A NARROWER PROBE DISAGREED AND WAS WRONG, which is why the mechanism is recorded here:
 /// `grep` over `crates/*/Cargo.toml` + `crates/*/src` reported `omp-inventory-map` as having
@@ -472,11 +479,38 @@ impl AdvisoryRatchetAnchor {
 /// `live_advisory_count == ADVISORY_CEILING`, and the live count is **29**. Every lowering
 /// moves the ceiling AWAY from the value that test demands, widening a gap from 5 to 18.
 ///
-/// **That test is currently UNSATISFIABLE and it is not mine to resolve:** it wants 29, while
-/// `the_allowance_never_grows_past_its_ceiling` documents that the ceiling *may only be
-/// LOWERED* from 24. No value satisfies both. Raising to 29 would be the forbidden direction;
-/// lowering satisfies neither and degrades one. **So this change moves EXACTLY ONE THING — a
-/// single stale row — and leaves every other number where it found it.**
+/// ⛔ RETRACTED 2026-09-11 by pane %33: **that test is NOT unsatisfiable, and the reason the
+/// previous author believed it was is the single most reusable thing in this comment.** The
+/// claim rested on *"`the_allowance_never_grows_past_its_ceiling` documents that the ceiling
+/// may only be LOWERED"*. Read at source, that test asserts exactly one thing:
+///
+/// ```text
+/// census_membership.rs:290   assert!(ADVISORY_ALLOWANCE.len() <= ADVISORY_CEILING, ...)
+/// ```
+///
+/// **It does not forbid raising the ceiling. Nothing does.** The only-lower rule lives in
+/// prose, and **a comment is not a gate** — this repository's own flagship lesson, applied
+/// here against itself. So `CEILING = 29` with 29 allowance rows satisfies `len <= ceiling`
+/// (29 ≤ 29), `len == ceiling`, and `live == ceiling` simultaneously. A value exists.
+///
+/// AND THE CEILING'S SEMANTICS ARE A MIRROR, NOT A BUDGET. The deadline test's own message
+/// says a ceiling that does not match the measurement is *"a hand-maintained number
+/// masquerading as a bound"*. It falls when gates get WIRED, not by being written smaller.
+/// Leaving it at 24 — matching neither the allowance (11) nor the live count (29) — is
+/// therefore the defect, not the conservative choice.
+///
+/// ⚠️ WHAT STILL BLOCKS THE EDIT, and it is NOT the direction of the change: two of the 18
+/// unnamed advisory crates — `kernel-only-gate` and `omp-host-tool-guard` — are **UNTRACKED**.
+/// They do not exist in a fresh clone, so the live count is 29 in this worktree and 27 in CI,
+/// and `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails` would flag rows for
+/// them as ABSENT. **The census reads the WORKTREE while CI reads a TREE** — the same split
+/// that makes a `cargo` figure inadmissible as evidence about a commit. Any ceiling written
+/// today is therefore right in exactly one of the two places.
+///
+/// **So the number is left at 24 and the reason is now the true one.** The remaining work is
+/// 18 allowance rows each carrying a reason that is TRUE and specific — filler would be
+/// amnesty at scale and is refused — plus a decision about the two untracked crates. That is
+/// a worker unit, not a constant edit.
 pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
     ceiling: 24,
     ceiling_at_recording: 24,
