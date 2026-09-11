@@ -9,18 +9,33 @@ ORACLE      the newest run whose CONCLUSION is success|failure -- NOT the newest
   Emitted by f60845e (cause capture) + 9176b51 (message capture), repaired by 454328b.
   The four rungs below were cleared on this run by FOUR panes independently.
 
-⛔ AND THE PAYOFF IS A CARDINALITY CORRECTION, NOT MERE LEGIBILITY: seven of no-shell-gate's
-  legs emit ONE byte-identical cause ("empty_staged: CLEAN staged_files=1 deletions=0"), so
-  one behaviour closes seven legs. Seven distinct NAMES and seven distinct LOCATIONS report
-  seven problems; only the MESSAGE shows one. Size the work off the message.
+⛔⛔ RETRACTED WITHIN THE HOUR BY ITS OWN AUTHOR -- DO NOT ACT ON THE DELETED TEXT. This block
+  read "seven of no-shell-gate's legs emit ONE byte-identical cause, so one behaviour closes
+  seven legs." IT IS UNFOUNDED. The shared string is `empty_staged: CLEAN staged_files=1` and
+  it is a PROGRESS TRACE, not a verdict: pre-commit-gate.rs:180 emits it UNCONDITIONALLY on any
+  invocation with staged files, BEFORE the refusal vector and before every validator. It means
+  "there are staged files, proceeding". 10 of 55 cause lines carry it, so it identifies an
+  INVOCATION SHAPE, not a defect. A needle that fires on every member of a class cannot
+  discriminate within it -- and "only one producer" was the evidence AGAINST, not corroboration:
+  one unconditional producer is exactly what a non-discriminating string looks like.
+
+⛔ AND THE REAL RESIDUAL, found by chasing that error: THE assert_eq! OPERANDS ARE ABSENT FROM
+  THE ARTIFACT ENTIRELY. 10 of 55 details announce `assertion 'left == right' failed`; details
+  containing "left:" -> 0; "right:" -> 0; and "left:"/"right:" anywhere in the 493,235-byte raw
+  log -> 0/0 (positive control). Rust prints an assert_eq message on the HEADER line and the
+  OPERANDS on the two lines beneath; the emitter captures header + the NEXT non-empty line, so
+  it takes the human label and drops observed-vs-expected. AN assert_eq PAYLOAD IS THREE LINES,
+  NOT TWO. For those 10 the deciding values are unreadable by anyone. The message-capture fix
+  is real (55/55 carry a message where 59/59 carried only a location) and INCOMPLETE.
 
 SUMMARY     GATE_RUNNER crates=89 · pass=81 · fail=4 · unmeasurable=4   (81+4+4=89 ✓)
 FAILING     no-shell-gate · omp-inventory-map · omp-orchestrator · ompo-doctor
 
 ⛔ THE TALLY IS BYTE-IDENTICAL TO THE SUPERSEDED RUN (89/81/4/4, same four names). NOTHING
-  ABOUT THE VERDICTS CHANGED -- only their LEGIBILITY. Do not read the message-capture fix as
-  progress on the failing set; it is progress on our ability to size it, and the sizing it
-  produced (7 legs -> 1 cause) cut one crate's apparent backlog rather than its verdict.
+  ABOUT THE VERDICTS CHANGED -- only their LEGIBILITY, and the first attempt to convert that
+  legibility into a SIZING was retracted above within the hour. The honest current state: the
+  causes are readable, one class (10 of 55 assert_eq) is still undecidable for lack of its
+  operands, and NO leg has yet been shown to share a defect with another.
 
 UNMEASURABLE admission-reason:POLICY_UNAVAILABLE · finding:MISSING_EXECUTABLE
              loop-driver:POLICY_UNAVAILABLE · loop-queue-filter:MISSING_EXECUTABLE

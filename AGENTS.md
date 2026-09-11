@@ -6584,33 +6584,72 @@ read first and explained afterwards; the one that was stated first came back exa
 crates is fixed, and it does not retract `GATE_RUNNER_FAILING count=16` three runs ago —
 **different populations at different heads, which is a partial order and not a contradiction.**
 
-## ⛔⛔ A FAILING-**LEG** COUNT IS NOT A **PROBLEM** COUNT — and only the MESSAGE can collapse them
+## ⛔⛔ RETRACTED, BY ITS REPORTER, WITHIN THE HOUR — "SEVEN LEGS, ONE DEFECT" WAS A TRACE LINE
 
-**Measured within minutes of the emitter fix landing, which is the entire justification for that
-thread:** a grader re-read its own twelve-leg bucket against CI's newly-readable cause text and
-found **SEVEN legs emitting one byte-identical cause**:
+**This block published a rule on a specimen that does not exist, and the specimen was the
+load-bearing half. DO NOT CITE THE RETRACTED FORM.** It read: *seven legs emit one byte-identical
+cause, so one behaviour closes seven at once; only the message collapses the set.*
+
+**The shared string is `empty_staged: CLEAN staged_files=1 deletions=0 merge=None`, and it is a
+PROGRESS TRACE, not a verdict:**
 
 ```
-one_clean_staged_file_is_clean                      empty_staged: CLEAN staged_files=1 deletions=0
-staged_close_reason_policy_accepts_extended_prefixes            "            "
-staged_rust_mode_100644_is_clean_and_names_write_time_residual  "            "
-executable_non_rust_staged_path_is_not_flagged_by_mode_gate     "            "
-unstaged_tick_ledger_is_not_applicable_not_nothing_to_check     "            "
-staged_good_tick_ledger_is_clean                                "            "
-hook_validates_staged_bytes_not_a_dirty_worktree_copy           "            "
+pre-commit-gate.rs:180   eprintln!("empty_staged: CLEAN staged_files={} …")
+  UNCONDITIONAL on any invocation with staged files — emitted BEFORE the refusal vector,
+  before commit_ratchets::run, before validate_project_agent, before validate_staged_rust_modes.
+  Means "there are staged files, proceeding."   10 of 55 cause lines carry it.
 ```
 
-**One behaviour — the gate answering `CLEAN staged_files=1` where each test expects a different
-verdict — closes seven legs at once.** The count was never seven problems.
+⛔ **SO IT IDENTIFIES AN INVOCATION SHAPE, NOT A DEFECT — and this is `sc0h5`'s own rule
+(a needle firing on every member of a class cannot discriminate within it) violated in the
+comment announcing the result.**
 
-⛔ **AND NO CHEAPER FIELD COULD HAVE SHOWN IT.** Seven distinct test NAMES; seven distinct
-LOCATIONS. **Name and location are maximally discriminating here and maximally wrong** — they
-report seven, which is the number of *call sites*, not the number of *defects*. Only the message
-is shared, so only the message collapses the set. **A dashboard keyed on leg count reports a
-seven-unit backlog for a one-unit fix**, and prioritises accordingly.
+⭐ **THE REUSABLE PART IS WHAT FELT LIKE CORROBORATION.** The reporter found a **single producer**
+for the shared string and read that as confirmation of one root cause. **It is the evidence
+against:** one **unconditional** producer is precisely what a non-discriminating string looks
+like. **"Few producers" supports a common cause only when the producer is CONDITIONAL on the
+property you are attributing.** An unconditional emitter with one call site is maximally shared
+and maximally uninformative — the same shape as a source containing the whole population.
 
-**This is the payoff shape to expect from any capture repair: not "we can read the failures now"
-but "the failure COUNT was the wrong cardinality and we were sizing work off it."**
+**What survives, narrower and still worth having: a leg count CAN over-report, and only the
+message could tell you. Nothing here demonstrates that it DID.** No leg in this run has been
+shown to share a defect with another.
+
+⛔⛔ **AND THE REASON A RETRACTION HAD TO REACH THE COMMITTED TEXT RATHER THAN A BROADCAST:
+A RULE PUBLISHED WITH A FALSE WORKED EXAMPLE GETS APPLIED BY PATTERN-MATCHING ON THE EXAMPLE.**
+The prose said *"a leg count can over-report"*; the example taught **"collapse legs that share a
+substring."** A reader takes the operation, not the caveat. **So the retracted form did not merely
+state something false — it installed the exact `sc0h5` failure it was written to retire, as
+doctrine, under the name of the agent who found that failure.**
+
+⭐ **AND RULE 4 RUNS ONE LEVEL UP FROM WHERE IT WAS WRITTEN.** It says a *surviving* conclusion
+shields a rotten argument. **This one did not survive — and still reached doctrine**, because the
+reporter went looking for CORROBORATION of a conclusion it liked instead of attacking it, and the
+argument looks strongest at exactly the moment you stop testing it. **The hazard is not only true
+conclusions with bad bases; it is PLAUSIBLE conclusions corroborated rather than refuted.**
+`/brennerbot`'s refuters-over-supporters, measured as a live cost inside one hour.
+
+## ⭐⭐ AN `assert_eq!` PAYLOAD IS **THREE** LINES — the capture fix is real and INCOMPLETE
+
+**Found by chasing the retraction above, which is the second time tonight that pursuing one's own
+error produced the better finding:**
+
+```
+details announcing `assertion 'left == right' failed`      10 of 55
+details containing "left:"                                  0
+details containing "right:"                                 0
+"left:" / "right:" anywhere in the 493,235-byte raw log     0 / 0    <- positive control
+```
+
+**Rust prints an `assert_eq!` MESSAGE on the header line and the OPERANDS on the two lines
+beneath.** The emitter takes *header + the next non-empty line*, so it captures the human label
+and **drops observed-vs-expected**. For those 10, the deciding values are unreadable by anyone.
+
+⛔ **AND `assert_eq!` IS EXACTLY THE CLASS WHERE THE MESSAGE ALONE IS LEAST INFORMATIVE** — the
+label says what was compared, the operands say what went wrong. So the fix moved 59 legs from
+*location-only* to *message*, and the class that most needed the payload is the one still short
+of it. **A capture repair sized by "how many lines now carry a message" cannot see this;
+it needs a per-ASSERTION-KIND census.**
 
 ## ⭐⭐ THE STRONGEST CONFIRMATION IS AN **INVERTED NEGATIVE CONTROL** WITH THE NEEDLE UNCHANGED
 
