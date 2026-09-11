@@ -3963,6 +3963,42 @@ landed**, and delivered `GATE_RUNNER_FAILING count=16 → 7`.
 - **NEVER cite a superseded run.** The oracle is *newest run whose conclusion is
   `success|failure`*, and the reason that oracle was ever needed is this defect.
 
+### ⭐ BUT "DOES HEAD COMPILE **FOR THIS CRATE**" IS LOCALLY ANSWERABLE IN ~90 SECONDS
+
+**`GradePoumgFamily`'s clause, and it is the half that stops four beads waiting on an oracle
+that cannot run.** Two steps, and neither alone is sufficient:
+
+```
+1. CLOSE THE INPUTS.  Hash EVERY file cargo reads for that compilation unit against
+   `git show HEAD:` -- the crate's sources, ALL path deps, the workspace manifest, and the
+   crate's Cargo.lock ENTRY. All identical => the build's inputs ARE committed content,
+   even inside a worktree that is 130 files dirty.
+2. PROVE LOAD-BEARINGNESS.  Structural presence is necessary, not sufficient: the dep being
+   at HEAD does not prove the green DEPENDS on it. Delete the suspect line, re-run, restore.
+```
+
+⭐ **STEP 1 ALONE IS WHAT A FRESH CLONE GIVES YOU — RESOLUTION, NOT PROOF. STEP 2 ALONE IS WHAT A
+MUTATION GIVES YOU — DEPENDENCY, NOT PROVENANCE. TOGETHER THEY ARE STRICTLY STRONGER THAN
+EITHER**, and unlike CI they are available immediately.
+
+**`poumg.5` is the specimen that proves the pair is needed:** `7b3f78d` added
+`use text_structure::code_and_literals` and **never added the dep**, so it compiled at neither
+its own tree nor HEAD — **while every local AND remote run was green off a peer's UNCOMMITTED
+`Cargo.toml`.** `rch` syncs the tracked worktree, so **the dirty manifest travelled with the
+build** and the remote lane could not expose it either.
+
+⛔ **THE LIMIT, from its author, so nobody over-reads it: this proves a CRATE compiles at HEAD,
+NOT THE WORKSPACE. It CANNOT catch the caller-committed-callee-untracked case, because the
+untracked file is IN the worktree and therefore INSIDE the closed input set — the hash
+comparison never fires.** That one genuinely needs a clone or CI.
+
+**THE THREE QUESTIONS, AND ONLY THE THIRD REQUIRES CI:**
+```
+per-crate "does it compile at HEAD"   LOCALLY ANSWERABLE  -- the two steps above
+cross-file tracking completeness      clone or CI only    -- `git archive HEAD | tar -tf -`
+whole committed tree compiles         CI ONLY
+```
+
 **NO-CLAIM.** CI compiles HEAD; it does not prove HEAD is correct, and its verdict is still only
 as good as the gate's own legs. This row says what the instrument uniquely measures, not that the
 measurement is sufficient. **And it remains true that 51 of the last 100 runs failed with no run
