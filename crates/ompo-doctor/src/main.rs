@@ -494,6 +494,7 @@ fn run_portal(rest: &[String]) -> ExitCode {
         "liveness": liveness_json(&observation),
         "inception": inception,
         "input_manifest": input_manifest,
+        "queue": ompo_start::portal::queue_depth(&repo),
     });
     let row = match ompo_start::portal::seal(row) {
         Ok(row) => row,
