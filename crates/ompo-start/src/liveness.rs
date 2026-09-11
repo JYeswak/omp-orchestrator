@@ -16,6 +16,71 @@ pub struct SourceVerdict {
     pub panes: Vec<String>,
 }
 
+/// The short jq-facing key for a canonical source name.
+///
+/// The acceptance readbacks are `.liveness.sources.ntm`, `.liveness.sources.tick`
+/// and `.liveness.sources.mail`, while the algebra's canonical names are `ntm`,
+/// `tick-monitor` and `agent-mail`. Both keys are emitted and carry the SAME
+/// object, so neither the short readback nor a consumer pinned to the canonical
+/// name can silently read `null` — a null there is indistinguishable from a
+/// source that was never probed.
+#[must_use]
+pub fn short_key(name: &str) -> &str {
+    match name {
+        "tick-monitor" => "tick",
+        "agent-mail" => "mail",
+        other => other,
+    }
+}
+
+/// One source's census row.
+///
+/// `names` is the pane census: WHICH panes the source saw, not how many. An
+/// earlier portal emitted only `work_coordination` for ntm, so a source that saw
+/// zero panes and a source that saw three were the same row from outside.
+/// `pane_count` is emitted beside it so a renderer that truncates the list shows
+/// up as a count mismatch instead of a silent drop.
+#[must_use]
+pub fn source_json(source: &SourceVerdict) -> serde_json::Value {
+    serde_json::json!({
+        "name": source.name,
+        "available": source.available,
+        "fresh": source.fresh,
+        "reason_code": source.reason_code,
+        "age_ms": source.age_ms,
+        "names": source.panes,
+        "panes": source.panes,
+        "pane_count": source.panes.len(),
+    })
+}
+
+/// The per-source census map, keyed by BOTH canonical and short name.
+#[must_use]
+pub fn sources_json(sources: &[SourceVerdict]) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for source in sources {
+        let row = source_json(source);
+        let short = short_key(&source.name).to_owned();
+        map.insert(source.name.clone(), row.clone());
+        if short != source.name {
+            map.insert(short, row);
+        }
+    }
+    serde_json::Value::Object(map)
+}
+
+/// True only when EVERY observed source is available, fresh, and carries an age.
+///
+/// An empty source set is `false`, never `true`: "nothing was observed" must not
+/// read as "everything is fresh".
+#[must_use]
+pub fn all_fresh(sources: &[SourceVerdict]) -> bool {
+    !sources.is_empty()
+        && sources
+            .iter()
+            .all(|source| source.available && source.fresh && source.age_ms.is_some())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LiveVerdict {
     Live { sources: Vec<SourceVerdict> },
