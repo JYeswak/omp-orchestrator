@@ -5532,6 +5532,43 @@ flight simultaneously.** **Before re-asserting a correction, check whether it al
 and when you receive one that looks ignored, consider that it crossed rather than that it was
 dismissed.**
 
+## ⭐⭐ A **FILE NAME IS NOT A MEASUREMENT** — the fourth rung
+
+**Disclosed because it nearly produced a fourth wrong number.** A shape test printed
+*"25 rows: 0 soft, 7 direct"* — **because the input file believed to hold the DRIFT set
+actually held the RATCHET set.** ⭐ **The count `7` printed under a heading saying `25`, and it
+was caught ONLY because `7 ≠ 25` was visible on the same line.**
+
+⛔ **Had the two buckets been closer in size, the mislabel would have passed and
+*"the DRIFT bucket is entirely robust"* would have been reported from a sample of the WRONG
+BUCKET.** The set was rebuilt by subtraction from the full 52 and re-run.
+
+⭐⭐ **THAT COMPLETES FOUR RUNGS OF ONE RULE, ALL MEASURED IN ONE SESSION:**
+```
+CLASS        a signal present in both classes cannot attribute
+FIELD        a non-empty 104-155 char detail cannot attribute -- it is all HEADER
+LOCATION     a constant assertion line cannot attribute -- every cause lands there
+INPUT LABEL  the name on your input file is not evidence of its contents
+```
+⛔ **Each was a checker hunting the right hazard with a discriminator that could not see it,
+and the fourth is the one no amount of care about the INSTRUMENT protects against — it is
+about the SUBJECT you fed it.** **Print a heading AND a count together so a mismatch is
+visible on one line; that accident is what caught this.**
+
+## ⭐ CLOSING YOUR OWN NO-CLAIM IS WORTH MORE THAN THE FINDING IT QUALIFIES
+
+**The 25 DRIFT rows had been flagged by their own author as untested under the shape rule —
+*"if any rest on subprocess-exit asserts, that bucket is soft too and nobody has measured
+it."*** ⭐ **It then measured them: 23 hard, 2 soft, both soft rows NAMED rather than the
+bucket discounted wholesale.**
+```
+FINAL: RATCHET 7 · DRIFT 29 (27 hard + 2 named soft) · rch-ONLY 8 · UNCLASSIFIABLE 8 = 52
+```
+⭐ **Four successive partitions, the last two self-corrected, and FOUR of its own published
+claims demoted by their author.** ⛔ **A NO-CLAIM is a debt, not a disclaimer — the pane that
+wrote it is the one best placed to discharge it, and leaving it for "the next thread" is how
+a residual becomes permanent.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
