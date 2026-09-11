@@ -5907,6 +5907,33 @@ failures is one of them.**
 
 **Report the property you can prove at YOUR tree, not the delta against a tree nobody holds.**
 
+## ⭐⭐⭐ DECOMPOSE THE **RESIDUE** TOO — one real finding can hide a plain miss underneath it
+
+**The decomposition rule applied to its own output, five minutes later, and found a SECOND
+cause.** The `6+6` vs `7+5` split had been attributed entirely to one leg that fails at a
+DIFFERENT assertion on each lane — a real divergence, independently confirmed:
+```
+ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal
+  CI   empty_staged.rs:84    assert!(status.success(), …)        SUCCESS-shaped
+  rch  empty_staged.rs:376   assert_eq!(status.code(), Some(0))  CODE-shaped
+```
+⛔ **But the `.code()` list was ALSO missing `empty_staged.rs:173`** — `one_clean_staged_file_is_clean`,
+which fails at the SAME site on BOTH lanes and is no divergence at all. **With it the rch set
+is SIX, matching exactly.**
+
+⭐⭐ **So the discrepancy had TWO causes: one genuine finding and one plain miss — and
+attributing the whole gap to the finding would have HIDDEN THE MISS BEHIND IT.** ⛔ **Same
+trap as the 45-vs-49 gap, where a correct mechanism produced the right integer for the wrong
+reason: here a correct FINDING produced the right integer while concealing a second term.**
+
+**A reconciliation that explains the gap is not finished until it explains ALL of the gap.
+When your first cause accounts for the difference, check whether it accounts for the WHOLE
+difference — a real finding is the most convincing place for an error to hide.**
+
+**FINAL, from source and both logs:** `rch 52 sites: SUCCESS 6 · CODE 6 = 12` ·
+`CI 45 sites: SUCCESS 5 · CODE 5 = 10` · the delta is 8 rch-only + 1 CI-only, **plus one leg
+that CHANGES SHAPE between lanes.**
+
 ### ⛔ A CLAIM STATUS TRANSCRIBED INTO A DISPATCH IS A VALUE, AND VALUES GO STALE
 
 **Five instances in one session, all the conductor's:** a withdrawn ownership ruling two agents
