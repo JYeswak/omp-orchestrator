@@ -52,7 +52,23 @@ both proof lines; they are NOT predictions.
 | `receiver-receipt` | ✅ **VERIFIED GREEN** | `6f3953b` · `7 passed` · `exit=0` |
 | `silent-success-census` | repaired | `poumg.5` `7b3f78d` — grading |
 | `undrained-pipe-lint` | ✅ **ALREADY-FIXED** | `bfced67` stale test DELETED · `19 passed` · `exit=0` |
-| `verify-dispatch` | FAIL | unowned — 8 tests, one root cause |
+| `verify-dispatch` | ✅ **FIXED** | `a4468ad` · `17 passed` · `exit=0` — one env degree of freedom, and 3 dead mutation legs |
+
+⛔ **SEVEN CRATES CANNOT CROSS-BUILD TO macOS THROUGH THE SANCTIONED FORM, AND EVERY TEST WE RUN
+IS BLIND TO IT** — `omp-orchestrator-8jlpp`, open. `chrono`'s `clock` feature pulls
+`iana_time_zone` → CoreFoundation, and `zigcc-aarch64-darwin` resolves no `_CF*` symbols. **It
+fails at LINK after a clean compile**, so `cargo check` and every `-p <crate>` test run return
+green. Affected, all shipping a `[[bin]]`: `fast-dispatch`, `fleet-truth`, `loop-driver`,
+`loop-switch`, `loop-tick`, `pane-truth`, `verify-dispatch`.
+**Positive control:** `receiver-receipt`, same flags, no `chrono` → `Finished` / `exit=0`, so
+the darwin path itself is sound. ✅ **`ompo` is NOT affected** — verified independently:
+`grep -c chrono crates/ompo-doctor/Cargo.toml` → **0**, against `verify-dispatch` → **1**.
+
+⚠️ **AND A SECOND PREMISE I GOT WRONG.** I briefed an agent *"there is NO bead yet, file one"*
+for `verify-dispatch`. **`poumg.7` already existed**; it claimed that instead of filing a
+duplicate. **Two dispatcher premise errors on this page, both caught by the worker** — which is
+why the standing rule is to re-derive a bead's premise before sending it, and why a worker
+correcting the packet is a success rather than friction.
 
 ⚠️ **A PREMISE I GOT WRONG, corrected by measurement.** I briefed an agent that `25b8af4` and
 `c5519dc` repaired **both** `finding-dispatch` and `receiver-receipt`. Measured: `25b8af4` fixed
