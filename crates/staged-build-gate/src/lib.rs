@@ -318,26 +318,6 @@ pub enum CargoBuildOutcome {
         code: Option<i32>,
         stderr_tail: String,
     },
-    /// The COMPILE succeeded remotely and only the ARTIFACT could not be brought home.
-    ///
-    /// Measured 2026-09-11: `rch` prints `Remote command finished: exit=0` and then exits
-    /// `102` with *"Retrieved artifacts do not match the requesting host's target triple
-    /// aarch64-apple-darwin after a successful remote compile"*. The compiler answered the
-    /// gate's question — **does this crate build** — and the non-zero code describes a
-    /// TRANSPORT failure about a binary this gate never runs.
-    ///
-    /// ⛔ NOT a softened `BuildFailed`: `first_cargo_error` is consulted FIRST, so a real
-    /// `error[E….]` still classifies as `BuildFailed` even when the artifact also fails to
-    /// return. Only a proven-successful remote compile with no compiler error reaches here.
-    ///
-    /// ⛔ AND IT IS WHY THIS WAS INVISIBLE FOR SO LONG: the gate had been passing on a WARM
-    /// CACHE. Adding one workspace member changed `Cargo.lock`, forced a real rebuild, and
-    /// the lane could not deliver a host-native artifact. **A build gate that passes without
-    /// building is not evidence the build works.**
-    RemoteCompileOnly {
-        code: Option<i32>,
-        detail: String,
-    },
     NotApplicable,
 }
 
@@ -364,25 +344,11 @@ pub fn classify_cargo_invocation(
     }
     match first_cargo_error(stderr) {
         Some(first_error) => CargoBuildOutcome::BuildFailed { code, first_error },
-        None if remote_compile_succeeded(stderr) => CargoBuildOutcome::RemoteCompileOnly {
-            code,
-            detail: stderr_tail(stderr),
-        },
         None => CargoBuildOutcome::BuildInconclusive {
             code,
             stderr_tail: stderr_tail(stderr),
         },
     }
-}
-
-/// Did the remote compile succeed while only artifact RETRIEVAL failed?
-///
-/// Both halves are required. `Remote command finished: exit=0` alone could accompany any later
-/// failure, and a triple mismatch alone could follow a compile that never ran. Conjunction of
-/// two independent observations, which is the discriminator this repo asks for.
-fn remote_compile_succeeded(stderr: &str) -> bool {
-    stderr.contains("Remote command finished: exit=0")
-        && stderr.contains("do not match the requesting host's target triple")
 }
 
 fn stderr_tail(stderr: &str) -> String {
@@ -1011,56 +977,5 @@ error: asupersync entry macros support only `()` or `Result<(), E>` return types
             classify_cargo_invocation(true, Some(0), ""),
             CargoBuildOutcome::Pass
         );
-    }
-    /// The specimen, verbatim from the 2026-09-11 lane failure that exposed this.
-    const RCH_ARTIFACT_MISMATCH: &str = "\
-  INFO rch::hook::transfer_orchestration: Remote command finished: exit=0 in 2720ms\n\
-  WARN rch::hook::transfer_orchestration: Retrieved artifacts do not match the requesting \
-host's target triple aarch64-apple-darwin after a successful remote compile on contabo-3\n";
-
-    /// A successful remote compile whose ARTIFACT did not return is not inconclusive: the
-    /// compiler answered the question the gate asked.
-    #[test]
-    fn a_successful_remote_compile_with_an_unretrieved_artifact_is_not_inconclusive() {
-        match classify_cargo_invocation(true, Some(102), RCH_ARTIFACT_MISMATCH) {
-            CargoBuildOutcome::RemoteCompileOnly { code, detail } => {
-                assert_eq!(code, Some(102));
-                assert!(
-                    detail.contains("target triple"),
-                    "the detail must name the transport reason: {detail}"
-                );
-            }
-            other => panic!("expected RemoteCompileOnly, got {other:?}"),
-        }
-    }
-
-    /// ⛔ THE LEG THAT STOPS THIS BEING A SOFTENED PASS. A REAL compiler error still fails,
-    /// even when the artifact ALSO fails to return — which is the exact input an author
-    /// hoping to sneak a broken build past the gate would produce.
-    #[test]
-    fn a_real_compiler_error_still_fails_even_when_the_artifact_also_does_not_return() {
-        let both = format!("error[E0432]: unresolved import `nope`\n{RCH_ARTIFACT_MISMATCH}");
-        match classify_cargo_invocation(true, Some(102), &both) {
-            CargoBuildOutcome::BuildFailed { first_error, .. } => {
-                assert!(first_error.contains("E0432"), "got {first_error}");
-            }
-            other => panic!("a compiler error must outrank a transport note, got {other:?}"),
-        }
-    }
-
-    /// BOTH halves are required, so neither observation alone can promote a failure.
-    #[test]
-    fn neither_half_alone_promotes_a_failure_to_remote_compile_only() {
-        let only_success = "INFO Remote command finished: exit=0 in 10ms\n";
-        let only_mismatch = "WARN do not match the requesting host's target triple\n";
-        for stderr in [only_success, only_mismatch] {
-            assert!(
-                matches!(
-                    classify_cargo_invocation(true, Some(102), stderr),
-                    CargoBuildOutcome::BuildInconclusive { .. }
-                ),
-                "one half alone must stay INCONCLUSIVE: {stderr:?}"
-            );
-        }
     }
 }
