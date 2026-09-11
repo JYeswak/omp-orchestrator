@@ -1143,6 +1143,10 @@ fn run_doctor_verb(rest: &[String]) -> ExitCode {
                     // The VERIFIED readback of that artifact, not a restatement
                     // of the promise in `next_action`.
                     "artifact_readback": summary.report,
+                    // L1's probe-answer metric WITH its denominator, the named
+                    // UNPROBEABLE set, the STALE band's measurability, and a
+                    // verdict (59up). A named metric with no verdict greens forever.
+                    "metric": summary.metric,
                     "probe_id_root": ProbeId::new("omp.identity.binary.root")
                         .map(|id| id.as_str().to_owned())
                         .unwrap_or_default(),

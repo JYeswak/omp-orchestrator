@@ -116,7 +116,7 @@ pub struct ProbeDecision {
     pub version: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DoctorSummary {
     pub schema: &'static str,
     pub run_id: String,
@@ -136,6 +136,9 @@ pub struct DoctorSummary {
     /// returned summary always carries `Some`, because `next_action` promises a
     /// readback and an unverified write is not one.
     pub report: Option<ReportReadback>,
+    /// L1's probe-answer metric WITH a verdict. `None` for scopes that run no
+    /// probe loop, so an absent measurement is not a zero-valued green one.
+    pub metric: Option<ProbeAnswerMetric>,
 }
 
 #[derive(Debug)]
@@ -272,6 +275,134 @@ pub fn doctor_exit_code(decisions: &[ProbeDecision]) -> Result<u8, DoctorError> 
     })
 }
 
+/// L1's probe-answer metric, emitted WITH a verdict.
+///
+/// WHY THIS SHAPE AND NOT A SEVENTH `METRICS.toml` ROW: `load_metrics` refuses
+/// any row count other than `EXPECTED_METRIC_COUNT` (= 6,
+/// lifecycle-monitor/src/lib.rs:128,173), so adding a row would break every
+/// caller of it. L1's row (`MET-L1-REPAIR-ACTION-RATE`) already exists; what
+/// was missing was an EMISSION carrying the ratio, its denominator, the named
+/// UNPROBEABLE set, and a verdict. Naming a metric is not an expectation, and a
+/// metric with no denominator greens forever.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProbeAnswerMetric {
+    pub id: &'static str,
+    /// How many probes L1 DECLARES. The denominator is published, never implied.
+    pub probes_declared: usize,
+    /// How many declared probes actually ANSWERED — presence AND version.
+    pub probes_answered: usize,
+    /// `None` whenever the metric is UNMEASURED. A zero ratio is a real
+    /// measurement; a missing one must never be rendered as 0.0.
+    pub ratio: Option<f64>,
+    pub floor: f64,
+    /// The UNPROBEABLE subjects BY NAME. A count alone cannot be acted on.
+    pub unprobeable: Vec<String>,
+    /// Subjects whose version is present but outside the required floor
+    /// (contract L1P-WRONG-VERSION-STALE). `None` while no version floor is
+    /// declared for any probe: reporting 0 there would be a green-by-
+    /// construction zero for a band that cannot currently be entered.
+    pub stale_count: Option<usize>,
+    pub stale_status: String,
+    pub verdict: String,
+    pub reason_code: String,
+}
+
+pub const PROBE_ANSWER_METRIC_ID: &str = "MET-L1-PROBE-ANSWER-RATE";
+
+/// Names the STALE band's measurability. `PROBES` declares no version floor, so
+/// the band is unreachable and its count is UNMEASURED rather than 0.
+fn stale_band(decisions: &[ProbeDecision]) -> (Option<usize>, String) {
+    let observed = decisions
+        .iter()
+        .filter(|decision| decision.status == "STALE")
+        .count();
+    if observed > 0 {
+        (Some(observed), "MEASURED".to_owned())
+    } else {
+        (
+            None,
+            "UNMEASURED_NO_VERSION_FLOOR_DECLARED".to_owned(),
+        )
+    }
+}
+
+/// Compute the probe-answer metric from the declared set and the results.
+///
+/// A missing declared result or an empty result set is UNMEASURED with a reason
+/// — never a zero-valued green metric.
+pub fn probe_answer_metric(
+    expected: &[ProbeSpec],
+    decisions: &[ProbeDecision],
+) -> ProbeAnswerMetric {
+    let declared = expected.len();
+    let unprobeable: Vec<String> = decisions
+        .iter()
+        .filter(|decision| decision.status == "UNPROBEABLE")
+        .map(|decision| decision.name.clone())
+        .collect();
+    let (stale_count, stale_status) = stale_band(decisions);
+    let mut metric = ProbeAnswerMetric {
+        id: PROBE_ANSWER_METRIC_ID,
+        probes_declared: declared,
+        probes_answered: 0,
+        ratio: None,
+        floor: 1.0,
+        unprobeable,
+        stale_count,
+        stale_status,
+        verdict: String::new(),
+        reason_code: String::new(),
+    };
+    if declared == 0 {
+        metric.verdict = "ERROR".to_owned();
+        metric.reason_code = "L1_METRIC_NO_DECLARED_PROBES".to_owned();
+        return metric;
+    }
+    if decisions.is_empty() {
+        // Contract LAW-L1-UNKNOWN: no authoritative observation is UNMEASURED
+        // with UNKNOWN_NO_RECORD, not a 0/N green.
+        metric.verdict = "UNMEASURED".to_owned();
+        metric.reason_code = "UNKNOWN_NO_RECORD".to_owned();
+        return metric;
+    }
+    let missing: Vec<&str> = expected
+        .iter()
+        .filter(|spec| {
+            !decisions
+                .iter()
+                .any(|decision| decision.name == spec.name)
+        })
+        .map(|spec| spec.name)
+        .collect();
+    if !missing.is_empty() {
+        metric.verdict = "UNMEASURED".to_owned();
+        metric.reason_code = format!("L1_METRIC_PARTIAL_PROBE_SET missing={}", missing.join(","));
+        return metric;
+    }
+    let answered = expected
+        .iter()
+        .filter(|spec| {
+            decisions.iter().any(|decision| {
+                decision.name == spec.name
+                    && decision.status == "OK"
+                    && decision.presence.as_ref().is_some_and(|v| !v.is_empty())
+                    && decision.version.as_ref().is_some_and(|v| !v.is_empty())
+            })
+        })
+        .count();
+    metric.probes_answered = answered;
+    let ratio = answered as f64 / declared as f64;
+    metric.ratio = Some(ratio);
+    if ratio >= metric.floor {
+        metric.verdict = "MEASURED_OK".to_owned();
+        metric.reason_code = "L1_METRIC_ALL_DECLARED_PROBES_ANSWERED".to_owned();
+    } else {
+        metric.verdict = "MEASURED_BELOW_FLOOR".to_owned();
+        metric.reason_code = format!("L1_METRIC_BELOW_FLOOR answered={answered} declared={declared}");
+    }
+    metric
+}
+
 /// Build the one-event-per-decision lifecycle batch in declaration order.
 pub fn lifecycle_events(
     expected: &[ProbeSpec],
@@ -364,6 +495,7 @@ fn report_document(summary: &DoctorSummary, tools: &[String], tools_status: &str
         "remediation": summary.remediation,
         "required_tools": tools,
         "required_tools_status": tools_status,
+        "metric": summary.metric,
     });
     // to_string_pretty on a json! value cannot fail: every leaf is already a Value.
     serde_json::to_string_pretty(&document).unwrap_or_else(|_| "{}".to_owned())
@@ -531,6 +663,7 @@ fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorEr
         probe_count: decisions.len(),
         event_count: events.len(),
         readback_lines: readback.lines,
+        metric: Some(probe_answer_metric(PROBES, &decisions)),
         probes: decisions,
         remediation,
         next_action,
@@ -604,6 +737,7 @@ fn run_doctor_inception(repo: &Path) -> Result<DoctorSummary, DoctorError> {
         remediation,
         next_action: format!("repair_scope=inception artifact={}", artifact.display()),
         report: None,
+        metric: None,
     })
 }
 
@@ -626,6 +760,7 @@ fn artifact_fixture_summary(run_id: &str) -> DoctorSummary {
         remediation: Vec::new(),
         next_action: format!("readback={ARTIFACT_REFERENCE}"),
         report: None,
+        metric: None,
     }
 }
 
@@ -740,6 +875,110 @@ mod artifact_tests {
         assert_eq!(readback.run_id, summary.run_id);
         assert_eq!(readback.bytes, text.len());
         assert!(text.contains("\"run_id\""), "artifact text={text}");
+    }
+}
+
+#[cfg(test)]
+mod metric_tests {
+    use super::*;
+
+    fn answering(name: &str) -> ProbeDecision {
+        ProbeDecision {
+            name: name.to_owned(),
+            status: "OK".to_owned(),
+            reason_code: reason_code(name, "OK"),
+            detail: "fixture".to_owned(),
+            presence: Some(format!("/fixture/{name}")),
+            version: Some("fixture-version".to_owned()),
+        }
+    }
+
+    fn all_answering() -> Vec<ProbeDecision> {
+        PROBES.iter().map(|spec| answering(spec.name)).collect()
+    }
+
+    /// POSITIVE CONTROL: every declared probe answers, and the metric is
+    /// reported WITH its denominator.
+    #[test]
+    fn all_probes_answering_reports_the_ratio_and_its_denominator() {
+        let metric = probe_answer_metric(PROBES, &all_answering());
+        assert_eq!(metric.id, PROBE_ANSWER_METRIC_ID);
+        assert_eq!(metric.probes_declared, PROBES.len());
+        assert_eq!(metric.probes_answered, PROBES.len());
+        assert_eq!(metric.ratio, Some(1.0));
+        assert_eq!(metric.verdict, "MEASURED_OK");
+        assert!(metric.unprobeable.is_empty());
+    }
+
+    /// KNOWN-BAD: omit ONE declared probe result. EXPECT UNMEASURED naming the
+    /// missing probe — never a ratio computed over a short denominator.
+    #[test]
+    fn omitting_one_declared_probe_result_is_unmeasured_not_a_green_ratio() {
+        let mut decisions = all_answering();
+        let dropped = decisions.remove(2).name;
+        let metric = probe_answer_metric(PROBES, &decisions);
+        assert_eq!(metric.verdict, "UNMEASURED");
+        assert!(
+            metric.reason_code == format!("L1_METRIC_PARTIAL_PROBE_SET missing={dropped}"),
+            "reason={}",
+            metric.reason_code
+        );
+        assert_eq!(metric.ratio, None, "a partial set must not publish a ratio");
+        assert_eq!(metric.probes_declared, PROBES.len());
+    }
+
+    /// KNOWN-BAD: no authoritative records at all. EXPECT UNMEASURED with
+    /// UNKNOWN_NO_RECORD, never 0/N rendered as a measurement.
+    #[test]
+    fn no_authoritative_records_is_unmeasured_never_a_zero_valued_metric() {
+        let metric = probe_answer_metric(PROBES, &[]);
+        assert_eq!(metric.verdict, "UNMEASURED");
+        assert_eq!(metric.reason_code, "UNKNOWN_NO_RECORD");
+        assert_eq!(metric.ratio, None);
+        assert_eq!(metric.probes_answered, 0);
+    }
+
+    /// A real shortfall IS a measurement: below the floor, with the
+    /// UNPROBEABLE subject NAMED rather than merely counted.
+    #[test]
+    fn an_unprobeable_subject_is_named_and_drops_the_metric_below_floor() {
+        let mut decisions = all_answering();
+        decisions[1].status = "UNPROBEABLE".to_owned();
+        decisions[1].version = None;
+        let metric = probe_answer_metric(PROBES, &decisions);
+        assert_eq!(metric.verdict, "MEASURED_BELOW_FLOOR");
+        assert_eq!(metric.unprobeable, vec![PROBES[1].name.to_owned()]);
+        assert_eq!(metric.probes_answered, PROBES.len() - 1);
+        assert!(metric.ratio.is_some_and(|ratio| ratio < metric.floor));
+    }
+
+    /// The STALE band is UNMEASURED while no version floor is declared. A 0
+    /// there would be green by construction for a band nothing can enter.
+    #[test]
+    fn stale_band_is_unmeasured_not_zero_while_no_version_floor_exists() {
+        let metric = probe_answer_metric(PROBES, &all_answering());
+        assert_eq!(metric.stale_count, None);
+        assert_eq!(metric.stale_status, "UNMEASURED_NO_VERSION_FLOOR_DECLARED");
+    }
+
+    /// When a STALE subject IS observed the count becomes a real measurement.
+    #[test]
+    fn an_observed_stale_subject_is_counted() {
+        let mut decisions = all_answering();
+        decisions[0].status = "STALE".to_owned();
+        let metric = probe_answer_metric(PROBES, &decisions);
+        assert_eq!(metric.stale_count, Some(1));
+        assert_eq!(metric.stale_status, "MEASURED");
+    }
+
+    /// The declared set cannot be empty: that is an instrument error, not a
+    /// healthy 0/0.
+    #[test]
+    fn an_empty_declared_set_is_an_instrument_error() {
+        let metric = probe_answer_metric(&[], &[]);
+        assert_eq!(metric.verdict, "ERROR");
+        assert_eq!(metric.reason_code, "L1_METRIC_NO_DECLARED_PROBES");
+        assert_eq!(metric.ratio, None);
     }
 }
 
