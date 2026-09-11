@@ -236,9 +236,15 @@ pub fn classify(mut sources: Vec<SourceVerdict>) -> Result<LiveVerdict, String> 
             reason_code: format!("L4_SILENT_MISSING_SOURCE sources={}", missing.join(",")),
         });
     }
+    // ONE AUTHORITY. This arm re-implemented `is_silent`'s condition inline, so
+    // the row writer and the swarm verdict held two copies of the silence law
+    // with DISJOINT consumers: gutting `is_silent` left every verdict leg green
+    // (measured by two graders from two sites), while a test doc comment claimed
+    // the metric and the verdict "cannot disagree about what silent means". They
+    // could. Now there is nothing to disagree with.
     let silent_source = sources
         .iter()
-        .find(|source| !source.available || !source.fresh || source.age_ms.is_none())
+        .find(|source| is_silent(source))
         .map(|source| source.name.clone());
     if let Some(name) = silent_source {
         return Ok(LiveVerdict::NotLive {

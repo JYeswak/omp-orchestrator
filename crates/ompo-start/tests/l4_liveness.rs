@@ -671,3 +671,63 @@ fn missing_gap_is_silent() {
     assert_eq!(zero_row["silent"], serde_json::json!(false));
     assert_eq!(zero_row["silent_reason"], serde_json::Value::Null);
 }
+
+// ---------------------------------------------------------------------------
+// ONE AUTHORITY FOR SILENCE. Two graders mutating from two sites measured that
+// `is_silent` fed ONLY the row writer while `classify` re-implemented the same
+// condition inline, so gutting the predicate left every verdict leg green — and
+// a doc comment in this file claimed the metric and the verdict "cannot
+// disagree about what silent means". They could. This leg makes the seam unable
+// to return: it asserts the ROW WRITER and the SWARM VERDICT answer from the
+// same predicate across the whole matrix, so a future inline copy reddens here.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn the_row_writer_and_the_verdict_share_one_silence_predicate() {
+    let mut checked = 0usize;
+    for age in [None, Some(0u64), Some(1), Some(300_000)] {
+        for (available, fresh) in [(true, true), (true, false), (false, true), (false, false)] {
+            let mut mail = source("agent-mail", &["%7"], available, fresh);
+            mail.age_ms = age;
+            let predicate = ompo_start::liveness::is_silent(&mail);
+
+            // The ROW WRITER's encoding of the same fact.
+            let row = ompo_start::liveness::source_json(&mail);
+            assert_eq!(
+                row["silent"],
+                serde_json::json!(predicate),
+                "row writer disagrees with is_silent for available={available} fresh={fresh} age={age:?}"
+            );
+
+            // The SWARM VERDICT's use of the same fact: the other two sources are
+            // fresh and agree, so the verdict can only turn on this one.
+            let verdict = classify(vec![
+                source("ntm", &["%7"], true, true),
+                source("tick-monitor", &["%7"], true, true),
+                mail.clone(),
+            ])
+            .expect("complete source set");
+            if predicate {
+                assert_eq!(
+                    verdict.status(),
+                    "NOT_LIVE",
+                    "a silent source must not be live: available={available} fresh={fresh} age={age:?}"
+                );
+                assert_eq!(
+                    verdict.reason_code(),
+                    "L4_SILENT_SOURCE source=agent-mail",
+                    "the verdict must name the source the predicate flagged"
+                );
+            } else {
+                assert_eq!(
+                    verdict.status(),
+                    "LIVE",
+                    "a non-silent, agreeing set must stay live: age={age:?}"
+                );
+            }
+            checked += 1;
+        }
+    }
+    // ANTI-VACUITY: an empty matrix would satisfy every assertion above.
+    assert_eq!(checked, 16, "the matrix must actually have been walked");
+}
