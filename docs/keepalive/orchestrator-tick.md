@@ -136,7 +136,7 @@ Nine live pane-text readers were enumerated and NONE asks a question `inspect-pa
 such that its scraper could be deleted in the same commit; every overlapping slice is already served
 by `is-working` / `agent-health` / `dialogs`. **So adopting the three now would ADD a caller and
 DELETE nothing — BUILT-not-WIRED in the other direction.** Option (A) is closer to EXHAUSTED than to
-3/7 incomplete, and the residual scraping is what option (B) exists to address. **Nobody dispatches
+3/7 incomplete, and the residual scraping is what **option B** exists to address. **Nobody dispatches
 one of these three without first naming the site whose scraper it deletes.** Spinner counts, if you
 need them, carry their regex: `[Ss]pinner` over `crates/*/src` = 77 raw / 16 files / 11 crates.
 Option (B), the pane-side RPC bridge is DEFERRED as the typed endgame, so **`fphs buz1 uvps jw9z djte` stay
