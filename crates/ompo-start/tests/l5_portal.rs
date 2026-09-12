@@ -854,3 +854,31 @@ fn decisions_owed_never_omitted() {
 
 }
 
+
+/// L5-METRIC-HOME (sheg): the `decisions_owed` age metric carries an
+/// UNMEASURABLE delta verdict, never a numeric green without a home. There
+/// is no xkr6 expectation row for this metric, so no threshold exists to
+/// compute a delta against; a number here would green forever.
+#[test]
+fn decisions_owed_delta_unmeasurable_without_home() {
+    use ompo_start::portal::decisions_owed_delta;
+
+    let verdict = decisions_owed_delta();
+    println!("L5_METRIC_HOME verdict={verdict}");
+    assert_eq!(
+        verdict["metric"], serde_json::json!("decisions_owed_age_s"),
+        "the label must name the metric it homes, got {verdict}"
+    );
+    assert_eq!(verdict["verdict"], serde_json::json!("UNMEASURABLE"));
+    assert_eq!(verdict["delta"], serde_json::json!("UNMEASURABLE"));
+    assert!(
+        verdict["expected"].is_null() && verdict["threshold"].is_null(),
+        "no fabricated threshold may stand in for the missing xkr6 row, got {verdict}"
+    );
+    assert!(
+        verdict["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("xkr6")),
+        "the label must name the missing home, got {verdict}"
+    );
+}

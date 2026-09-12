@@ -150,6 +150,27 @@ pub fn decisions_owed_from_repo(repo: &Path, now_s: u64) -> serde_json::Value {
     }
 }
 
+/// L5-METRIC-HOME (sheg): the expectation verdict for the `decisions_owed`
+/// age metric. There is no xkr6 row shipping a duration-capable threshold
+/// for this metric, so no numeric delta can be honestly computed: any number
+/// here would be a homeless green. The verdict is therefore UNMEASURABLE
+/// with the missing home named, in xkr6's own row vocabulary (`metric`,
+/// `unit`, `expected`, `threshold`, `delta`, `verdict`). When xkr6 ships the
+/// row, this function is where its expected/threshold land — not a parallel
+/// schema beside it.
+#[must_use]
+pub fn decisions_owed_delta() -> serde_json::Value {
+    serde_json::json!({
+        "metric": "decisions_owed_age_s",
+        "unit": "s",
+        "expected": null,
+        "threshold": null,
+        "delta": "UNMEASURABLE",
+        "verdict": "UNMEASURABLE",
+        "reason": "no xkr6 expectation row ships a duration-capable threshold for decisions_owed age; refusing a numeric delta without a home",
+    })
+}
+
 fn answer_targets(row: &decision_ledger::Row) -> Vec<String> {
     match row.value.get("answers") {
         Some(serde_json::Value::String(target)) if !target.is_empty() => vec![target.clone()],
