@@ -296,3 +296,36 @@ fn undecided_hd0009_blocks_tail() {
             .collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn second_start_same_ids() {
+    let mut first = fixture_steps();
+    apply_predicates(&mut first, false, false, false);
+    let first_ids = ordered_ids(&first);
+    // Second start over the same fixture: fresh state, same passes.
+    let mut second = fixture_steps();
+    apply_predicates(&mut second, false, false, false);
+    let second_ids = ordered_ids(&second);
+    println!("first_start {first_ids:?}");
+    println!("second_start {second_ids:?}");
+    assert_eq!(
+        second_ids, first_ids,
+        "second ompo start must report the same step ids"
+    );
+
+    // Known-bad, both directions: a second start that appends or drops must RED.
+    let mut appended = second.clone();
+    appended.push(first[0].clone());
+    assert_ne!(
+        ordered_ids(&appended),
+        first_ids,
+        "known-bad: second start that appends a step diverges"
+    );
+    let mut dropped = second.clone();
+    dropped.pop();
+    assert_ne!(
+        ordered_ids(&dropped),
+        first_ids,
+        "known-bad: second start that drops a step diverges"
+    );
+}
