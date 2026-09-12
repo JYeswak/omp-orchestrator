@@ -2422,6 +2422,23 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    the other undefended. Here the undefended half is the mutation's *arity*, and a cardinality count
    costs nothing and makes it self-evident.
 
+   ⛔ **PROVENANCE, RECORDED BECAUSE THE COMMIT THAT CARRIED THIS RULE DOES NOT NAME ITS
+   AUTHORS.** This rule was found by `GradePairAdm` and `grok` grading `sc0h5` double-blind —
+   their two mutations gave different answers, one disjoint and one overlapping, and NEITHER
+   WAS WRONG — and written up by the conductor. It reached the tree inside
+   `250db103` (`docs(reclaim): the name-shape gate is DELETED`), whose message describes only
+   the reclaim work, because `InvMapRed`'s path-scoped `git commit -- AGENTS.md` re-read the
+   worktree and took the conductor's staged hunks with it. Rule `8n` predicted exactly this:
+   path-scoping is whole-file and is no defence when the collision is INSIDE one file.
+   ⛔ **AND `8n`'s OWN REMEDY — "stage hunks, then commit from the INDEX with NO pathspec" —
+   IS UNSAFE IN A SHARED CHECKOUT AND MUST NOT BE APPLIED BLIND.** Measured at the moment
+   this line was written: the index already held two of a peer's files
+   (`dispatch_packet.rs`, `resident.rs`). A pathspec-free index commit would have swept a
+   THIRD agent's in-flight work — strictly worse than the collision it prevents.
+   **THE DEFENCE THAT ACTUALLY WORKS IS A PRE-COMMIT MEASUREMENT, NOT A STAGING FORM:** check
+   `git diff --cached --name-only` AND `git status --porcelain -- <path>` immediately before
+   committing, and only then choose. This line was landed that way.
+
    **NO-CLAIM.** The cardinality check proves a mutation is *not a swap*. It does NOT prove the edit
    is minimal in any deeper sense — a single ADD can still touch a row that several legs read, so
    disjointness must still be measured rather than inferred from arity. And it applies to registries
