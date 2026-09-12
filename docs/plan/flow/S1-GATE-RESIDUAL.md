@@ -562,6 +562,45 @@ and its companion positive control passed in the same run. Anchored control on e
 | `contabo-reclaim` | `in_workspace_absent_from_ledger` | `add_the_row` — **the crate WAS still run** |
 | `omp-idle-dispatch` | `in_ledger_absent_from_workspace` | `delete_the_row_or_restore_the_crate` |
 
+## Attributable repairs — THE ONLY MOVEMENTS THIS FILE MAY CITE, and they survive the flake finding
+
+Every run block above is SINGLE RUN, UNREPLICATED, because the gate produced two different failing
+sets for a byte-identical `crates/` tree (`chz3b`). **A movement is citable only if it is
+ATTRIBUTABLE BY CONSTRUCTION: the commit that targets X is the commit where X moves, its parent
+still shows X, and nothing else moved.** Flake has no mechanism, so it cannot produce that pattern.
+Verify with `git rev-parse <head>:crates` — compare TREE HASHES, never a chain of diffs.
+
+| what moved | parent (still red) | fixing commit | evidence |
+|---|---|---|---|
+| `loop-queue-filter` LEFT unmeasurable | `aaab351f` | **`620b991`** | 89/1/4 -> 90/1/3, PLAN 94 held, exactly one crate moved, and the commit deleted that crate's FALSE precondition |
+| `a_readable_head_does_not_excuse_an_unreadable_index` LEFT no-shell-gate | `456ba2db` (18 legs) | **`62518fb`** | 18 -> 17 legs; the leg is ABSENT in the child and PRESENT in the parent; one leg moved and it is the targeted one |
+
+⭐⭐ **AND THE SECOND ROW DEMONSTRATES THIS FILE'S CENTRAL LESSON ON A REAL REPAIR.** Across those
+two runs `pass=89 fail=2 unmeasurable=3` is **BYTE-IDENTICAL**. A leg left the failing set and the
+crate-level triple did not change a digit, because `no-shell-gate` still carries 17 red legs and
+remains FAILING. **Anyone tracking `fail=2` saw a flat line across a confirmed fix.** The counts are
+not the reading; the SETS are.
+
+⭐ **AND THE SECOND REPAIR WAS PREDICTED AND NOT CLAIMED.** Its author wrote, before any verdict
+existed: *"the next verdict-bearing run carrying 62518fb is the real observation and until then this
+leg's CI state is unmeasured — I am not claiming the CI red is closed, only that the mechanism is
+measured and removed."* The mechanism was found by simulating `GITHUB_ACTIONS=true` on a worker —
+**an arm NO LANE EXERCISES, which is exactly why the defect shipped invisible.** Mechanism first,
+observation second, claim last.
+
+⛔ **WHAT DOES NOT GO IN THIS TABLE, with the reason stated so the bar cannot erode:**
+- `456ba2db`'s temp-root hazard fix. It shows NO change to the failing set, **and that is the
+  expected result rather than a null** — it removed a HAZARD (a `--lib` test spawning an `rch exec`
+  cross-build into `.git/`), not a red. A hazard removal is justified by its source-derived path and
+  is not a CI movement at all.
+- `installed_hook_has_clean_staged_and_empty_index_bands` LEAVING no-shell-gate. It left with NONE
+  of `456ba2d`, `62518fb`, `4fed13a` in the tree — **it healed with no fix present**, so there is no
+  commit to attribute it to. Two parties recorded it as a candidate connection and attributed
+  nothing; had either claimed it, both would now be retracting.
+- Any TARGET or LEG count offered as corroboration by an UNPINNED run. `rch` ships the WORKING
+  TREE, so an rch figure cannot be commit-pinned, and **two figures corroborate each other only if
+  both are pinned to the same tree.**
+
 ## Instrument findings — these survive the re-derivation
 
 **1. `grep -c 'GATE_RUNNER'` IS A MOVING TARGET, WHICH IS WORSE THAN A WRONG ONE.** It returns
