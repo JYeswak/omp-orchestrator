@@ -1,8 +1,9 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
-    git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks, catalog_artifact_dir,
-    parse_cosign_version, publish_atomic, publish_atomic_durable, refuse_path_collisions,
-    resolve_platform_triple, resolve_repo_ownership, seal_install_report, select_fallback_artifact, stage_artifact_stream,
+    git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks,
+    catalog_artifact_dir, parse_cosign_version, publish_atomic, publish_atomic_durable,
+    refuse_path_collisions, resolve_platform_triple, resolve_repo_ownership, restart_and_verify,
+    running_process_start, seal_install_report, select_fallback_artifact, stage_artifact_stream,
     probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_policy,
     AgentOutcome, ArtifactEntry, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite,
     IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
@@ -230,6 +231,50 @@ fn real_restart_postcondition_lattice_is_restrictive() {
         classify_restart_postcondition(Some(10), Some(11), false),
         RestartPostcondition::IdentityMismatch
     );
+}
+
+#[test]
+fn installed_identity_readback() {
+    // Composed install/restart boundary from existing mechanism only — no
+    // duplicate identity system. install_binary publishes, verify_identity
+    // reads the installed bytes back, and the restart boundary observes
+    // without spawning (installer is launchd-unmanaged, so reads are Ok and
+    // terminal-free on every platform, Linux workers included).
+    let target = TempDir::new("identity-readback");
+    let check = install_binary(
+        &built_installer(),
+        target.path(),
+        &identity_head(),
+        &RepoOwnership::ThisRepo,
+    )
+    .expect("publish for readback");
+    assert!(check.consistent, "published identity did not verify: {check:?}");
+    let installed = target.path().join("installer");
+    // READBACK: installed bytes still tied to the verified build identity.
+    let reread = verify_identity(&installed, &identity_head(), &RepoOwnership::ThisRepo);
+    assert!(reread.consistent, "installed bytes lost identity: {reread:?}");
+    assert_eq!(reread.build_id_in_binary, check.build_id_in_binary);
+    // Restart boundary: read observes, restart characterizes, neither spawns.
+    let start = running_process_start("installer").expect("read must not fail");
+    assert_eq!(start, None);
+    let post = restart_and_verify("installer", &installed, &identity_head(), start)
+        .expect("boundary must not fail");
+    assert_eq!(post, RestartPostcondition::NotRunning);
+    // STAMPED versus UNSTAMPED pin: the real artifact verifies, a fixture
+    // without identity never does.
+    let stamped = verify_identity(&built_installer(), &identity_head(), &RepoOwnership::ThisRepo);
+    assert!(stamped.consistent, "stamped artifact must verify: {stamped:?}");
+    let bare = target.path().join("unstamped");
+    fs::write(&bare, b"no identity here\n").expect("unstamped fixture");
+    let unstamped = verify_identity(&bare, &identity_head(), &RepoOwnership::ThisRepo);
+    assert!(!unstamped.consistent, "unidentity must not verify: {unstamped:?}");
+    // KNOWN-BAD shape: altering installed bytes after publication breaks the
+    // readback. verify_identity reports (consistent=false) rather than
+    // refusing — the refusal lives in install_binary's IdentityMismatch arm,
+    // pinned by real_atomic_install_rejects_identity_mismatch_and_cleans_stage.
+    fs::write(&installed, b"tampered-bytes").expect("tamper");
+    let tampered = verify_identity(&installed, &identity_head(), &RepoOwnership::ThisRepo);
+    assert!(!tampered.consistent, "tampered bytes still verify: {tampered:?}");
 }
 
 #[test]
