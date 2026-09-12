@@ -176,6 +176,44 @@ fn duplicate_yaml_is_strict_parse_error_exit_one() {
 }
 
 #[test]
+fn flow_yaml_duplicate_is_strict_parse_error_exit_one() {
+    let root = fixture_root("flow-duplicate-yaml");
+    write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
+    write_fixture(
+        &root,
+        ".github/workflows/gate.yml",
+        "jobs:\n  foo: {runs-on: ubuntu-latest, runs-on: ubuntu-latest}\n",
+    );
+    let output = run_census(&root);
+    assert_eq!(output.status.code(), Some(1), "flow YAML duplicate must be a violation");
+    let report = json_output(&output);
+    assert_eq!(report["status"], "error");
+    let error = report["error"].as_str().unwrap_or_default();
+    assert!(error.starts_with("STRICT_YAML_PARSE"), "error prefix: {error}");
+    assert!(
+        error.contains("duplicate mapping key"),
+        "must name the duplicate, not a serde last-key-wins success: {error}"
+    );
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+#[test]
+fn unique_flow_yaml_mapping_is_not_a_parse_error() {
+    let root = fixture_root("flow-unique-yaml");
+    write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
+    write_fixture(
+        &root,
+        ".github/workflows/gate.yml",
+        "jobs:\n  foo: {steps: [{run: cargo test -p foo-gate}]}\n",
+    );
+    let output = run_census(&root);
+    assert_eq!(output.status.code(), Some(0), "unique flow mapping must parse");
+    let report = json_output(&output);
+    assert_ne!(report["status"], "error", "unique flow mapping must not STRICT_YAML_PARSE");
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+#[test]
 fn comments_do_not_create_executors() {
     let root = fixture_root("comments");
     write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");

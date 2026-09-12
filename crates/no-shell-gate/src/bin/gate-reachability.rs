@@ -212,8 +212,221 @@ fn duplicate_block_mapping_key(text: &str) -> Option<(String, usize)> {
     None
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FlowKind {
+    Map,
+    Seq,
+}
+
+struct FlowFrame {
+    keys: BTreeSet<String>,
+    want_key: bool,
+    kind: FlowKind,
+}
+
+fn line_of(offset: usize, line_at: &[(usize, usize)]) -> usize {
+    let mut line = 1;
+    for &(start, number) in line_at {
+        if start > offset {
+            break;
+        }
+        line = number;
+    }
+    line
+}
+
+fn parse_flow_key(chars: &[(usize, char)], start: usize) -> Option<(String, usize)> {
+    let c = chars.get(start)?.1;
+    if c == '"' || c == '\'' {
+        let quote = c;
+        let mut index = start + 1;
+        let mut out = String::new();
+        while index < chars.len() {
+            let ch = chars[index].1;
+            if quote == '"' && ch == '\\' && index + 1 < chars.len() {
+                out.push(chars[index + 1].1);
+                index += 2;
+                continue;
+            }
+            if quote == '\'' && ch == '\'' && index + 1 < chars.len() && chars[index + 1].1 == '\''
+            {
+                out.push('\'');
+                index += 2;
+                continue;
+            }
+            if ch == quote {
+                return Some((out, index + 1));
+            }
+            out.push(ch);
+            index += 1;
+        }
+        return None;
+    }
+    let mut end = start;
+    while end < chars.len() {
+        let ch = chars[end].1;
+        if ch == ':'
+            || ch == ','
+            || ch == '{'
+            || ch == '}'
+            || ch == '['
+            || ch == ']'
+            || ch.is_whitespace()
+        {
+            break;
+        }
+        end += 1;
+    }
+    if end == start {
+        return None;
+    }
+    Some((chars[start..end].iter().map(|(_, ch)| *ch).collect(), end))
+}
+
+fn skip_flow_colon(chars: &[(usize, char)], mut index: usize) -> Option<usize> {
+    while index < chars.len() && chars[index].1.is_whitespace() {
+        index += 1;
+    }
+    if chars.get(index).map(|(_, ch)| *ch) != Some(':') {
+        return None;
+    }
+    index += 1;
+    while index < chars.len() && chars[index].1.is_whitespace() {
+        index += 1;
+    }
+    Some(index)
+}
+
+fn duplicate_flow_mapping_key(text: &str) -> Option<(String, usize)> {
+    let mut cleaned = String::new();
+    let mut line_at = Vec::new();
+    for (idx, raw) in text.lines().enumerate() {
+        if idx > 0 {
+            cleaned.push('\n');
+        }
+        line_at.push((cleaned.len(), idx + 1));
+        cleaned.push_str(&yaml_code_only(raw));
+    }
+    let chars: Vec<(usize, char)> = cleaned.char_indices().collect();
+    let mut stack: Vec<FlowFrame> = Vec::new();
+    let mut quote = None;
+    let mut i = 0;
+    while i < chars.len() {
+        let (off, c) = chars[i];
+        if let Some(q) = quote {
+            if q == '"' {
+                if c == '\\' && i + 1 < chars.len() {
+                    i += 2;
+                    continue;
+                }
+                if c == '"' {
+                    quote = None;
+                }
+            } else if c == '\'' {
+                if i + 1 < chars.len() && chars[i + 1].1 == '\'' {
+                    i += 2;
+                    continue;
+                }
+                quote = None;
+            }
+            i += 1;
+            continue;
+        }
+        if c.is_whitespace() {
+            i += 1;
+            continue;
+        }
+        let want_key = stack
+            .last()
+            .is_some_and(|frame| frame.kind == FlowKind::Map && frame.want_key);
+        if want_key && c != '}' && c != ']' && c != ',' && c != '{' && c != '[' {
+            let Some((key, after_key)) = parse_flow_key(&chars, i) else {
+                i += 1;
+                continue;
+            };
+            let Some(after_colon) = skip_flow_colon(&chars, after_key) else {
+                i += 1;
+                continue;
+            };
+            let frame = stack.last_mut().expect("map frame");
+            if !frame.keys.insert(key.clone()) {
+                return Some((key, line_of(off, &line_at)));
+            }
+            frame.want_key = false;
+            i = after_colon;
+            continue;
+        }
+        match c {
+            '"' | '\'' => {
+                quote = Some(c);
+                i += 1;
+            }
+            '{' => {
+                stack.push(FlowFrame {
+                    keys: BTreeSet::new(),
+                    want_key: true,
+                    kind: FlowKind::Map,
+                });
+                i += 1;
+            }
+            '}' => {
+                if stack
+                    .last()
+                    .is_some_and(|frame| frame.kind == FlowKind::Map)
+                {
+                    stack.pop();
+                    if let Some(frame) = stack.last_mut() {
+                        if frame.kind == FlowKind::Map {
+                            frame.want_key = false;
+                        }
+                    }
+                }
+                i += 1;
+            }
+            '[' => {
+                stack.push(FlowFrame {
+                    keys: BTreeSet::new(),
+                    want_key: false,
+                    kind: FlowKind::Seq,
+                });
+                i += 1;
+            }
+            ']' => {
+                if stack
+                    .last()
+                    .is_some_and(|frame| frame.kind == FlowKind::Seq)
+                {
+                    stack.pop();
+                    if let Some(frame) = stack.last_mut() {
+                        if frame.kind == FlowKind::Map {
+                            frame.want_key = false;
+                        }
+                    }
+                }
+                i += 1;
+            }
+            ',' => {
+                if let Some(frame) = stack.last_mut() {
+                    if frame.kind == FlowKind::Map {
+                        frame.want_key = true;
+                    }
+                }
+                i += 1;
+            }
+            _ => i += 1,
+        }
+    }
+    None
+}
+
 fn strict_workflow_parse(path: &Path, text: &str) -> Result<(), String> {
     if let Some((key, line)) = duplicate_block_mapping_key(text) {
+        return Err(format!(
+            "STRICT_YAML_PARSE path={} detail=duplicate mapping key {key:?} at line {line}",
+            path.display()
+        ));
+    }
+    if let Some((key, line)) = duplicate_flow_mapping_key(text) {
         return Err(format!(
             "STRICT_YAML_PARSE path={} detail=duplicate mapping key {key:?} at line {line}",
             path.display()
