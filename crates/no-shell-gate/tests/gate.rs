@@ -822,10 +822,33 @@ fn a_readable_head_does_not_excuse_an_unreadable_index() {
         check_repo(&dir).is_err(),
         "the consumer reads the index, so a corrupted index must deny it a verdict"
     );
+    // ⛔ THE DECISION IS READ FROM THE TYPED READ, NOT THROUGH THE CI-FATAL WRAPPER
+    // (`omp-orchestrator-guard-fires-on-test-double-n56fx`). This assert used to call
+    // `index_or_unmeasured`, whose UNREADABLE arm asserts `binding_environment().is_none()` --
+    // FATAL IN CI BY DESIGN, because a CI that cannot read an index is a broken checkout. This
+    // fixture makes an index unreadable ON PURPOSE, so in CI the leg tripped its OWN guard's fatal
+    // arm: RED in CI, GREEN on every worker, because no lane sets `GITHUB_ACTIONS`. The guard
+    // could not tell "the real repository's index is unreadable" from "a test double was broken
+    // deliberately" -- and the wrapper is CORRECT for its subject, which is legs adjudicating the
+    // REAL repo. So the FIXTURE changes, never the guard: widening the wrapper to tolerate this
+    // would weaken a CI-fatal arm to satisfy a test double.
+    //
+    // The property is unchanged and is still asserted: the INDEX read DECLINES exactly where the
+    // consumer cannot answer. `index_paths(...).is_err()` above IS the wrapper's decision input,
+    // and the corruption is proven real by the readable assertion before it plus the failure
+    // after -- a no-op corruption would pass by testing nothing.
     assert!(
-        common::index_or_unmeasured(&dir, "fixture-divergence", "crates").is_none(),
-        "the INDEX guard must decline exactly where the consumer cannot answer"
+        common::index_paths(&dir, "crates").is_err(),
+        "the INDEX read must decline exactly where the consumer cannot answer"
     );
+    // AND THE WRAPPER ITSELF IS STILL EXERCISED WHERE IT IS SAFE TO: outside a binding
+    // environment its decline is observable, so the lane keeps covering the arm CI cannot.
+    if common::binding_environment().is_none() {
+        assert!(
+            common::index_or_unmeasured(&dir, "fixture-divergence", "crates").is_none(),
+            "outside the oracle the wrapper must DECLINE on an unreadable index"
+        );
+    }
     assert!(
         common::paths_or_unmeasured(&dir, "fixture-divergence-commit", "crates").is_some(),
         "the COMMIT guard ADMITS here -- that is the gap this leg exists to pin, and why a \
