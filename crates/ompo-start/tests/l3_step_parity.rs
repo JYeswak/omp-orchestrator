@@ -238,3 +238,31 @@ fn ordered_ids_tui_json_steps() {
         "TUI that drops Skipped must FAIL the ordered compare"
     );
 }
+
+#[test]
+fn both_renderers_borrow_the_same_array() {
+    let steps = fixture_steps();
+    let tui = view(&steps);
+    let json = view(&steps);
+    assert!(
+        std::ptr::eq(tui, steps.as_slice()),
+        "TUI renderer must borrow STEPS, not a clone"
+    );
+    assert!(
+        std::ptr::eq(json, steps.as_slice()),
+        "JSON renderer must borrow STEPS, not a clone"
+    );
+    assert!(std::ptr::eq(tui, json), "both renderers borrow one array");
+
+    let mut cloned = steps.clone();
+    cloned.pop();
+    assert!(
+        !std::ptr::eq(cloned.as_slice(), steps.as_slice()),
+        "a cloned TUI vec is a fork; identity must RED"
+    );
+    assert_ne!(
+        ordered_ids(&cloned),
+        ordered_ids(&steps),
+        "known-bad: cloned TUI that drops last id diverges"
+    );
+}
