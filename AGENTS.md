@@ -3269,10 +3269,24 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    `check --repo .` scans **84 crates / 747 rows** and exits **1 / `ATOM_INCOMPLETE`**. It would
    have caught the crate above.
 
-   **It has never been invoked.** References to it in any workflow, hook, `.flywheel/` file or
-   crontab: **0**. So the gate that enforces "nothing ships unwired" is itself the purest instance
-   of the thing it forbids — rule 3 aimed at the rule-3 enforcer. The bead that owns wiring it
-   (`omp-orchestrator-d3gm`, P0) has been `in_progress` and stalled for the whole session.
+   ⛔ **CORRECTED 2026-09-12. "References … 0" IS FALSE.** Re-derived today, same
+   needles, POSCTRL first:
+
+   ```
+   .github/workflows     0     crate-atom-gate
+   .git/hooks            9     (pre-commit + 8 `.bak-*` / `.pre-3gates` binaries via strings)
+   .flywheel             3
+   crontab               0
+   other crates' src     6     no-shell-gate (armed_gates, hook_digest, pre-commit-gate)
+                               kernel-bypass-gate · orchestration-tick-gate · s1-coverage
+   POSCTRL               gate-runner → 2 workflow files
+                         (.github/workflows/gate.yml, build-hook-macos.yml)
+   ```
+
+   A mention is not an invocation (rule 9). The **zero is wrong**; "the gate is wired"
+   is **not** thereby established. What the old sentence licensed — routing around
+   crate-atom-gate as inert — is the defect. The disk-vs-git check at
+   `main.rs:582` exists; DISK vs METADATA did not, which is `t3d2c`.
 
    And wiring it as-is would refuse forever, for the wrong reason. Its ceilings were set at a
    ~69-crate workspace; the workspace is now 83, and three parts move in **exact lockstep** with

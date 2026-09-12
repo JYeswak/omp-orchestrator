@@ -19,7 +19,8 @@
 
 use crate_atom_gate::metric_auth::require_vector_text;
 use crate_atom_gate::workspace_hygiene::{
-    crate_names_from_git_paths, extra_glob_members, HygieneError,
+    crate_names_from_git_paths, declared_exclusion_dirs, disk_not_in_metadata_reason,
+    extra_glob_members, extra_metadata_exclusions, HygieneError,
 };
 use crate_atom_gate::{
     assess_crate, ceiling_breaches, parse_allowances, verdict, Allowances, Caller, CrateFacts,
@@ -106,6 +107,7 @@ fn main() -> ExitCode {
         },
     };
     outcome = fold_untracked(outcome, measure_untracked_members(&repo));
+    outcome = fold_excluded(outcome, measure_excluded_members(&repo, &packages));
 
     // COMMIT-PATH ATTRIBUTION (omp-orchestrator-nu8lc), OPT-IN and only here.
     //
@@ -611,6 +613,54 @@ fn measure_untracked_members(repo: &Path) -> Result<Vec<String>, String> {
         &["diff", "--cached", "--name-only"],
     )?);
     extra_glob_members(&disk, &committed, &staged).map_err(|error| error.to_string())
+}
+
+/// Directory names under `crates/` derived from each package's *manifest path*,
+/// never from `package.name`.
+fn metadata_crate_dirs(repo: &Path, packages: &[Package]) -> BTreeSet<String> {
+    let crates = repo.join("crates");
+    let mut names = BTreeSet::new();
+    for package in packages {
+        if let Ok(rel) = package.dir.strip_prefix(&crates) {
+            if let Some(name) = rel
+                .components()
+                .next()
+                .and_then(|c| c.as_os_str().to_str())
+            {
+                names.insert(name.to_owned());
+            }
+        }
+    }
+    names
+}
+
+fn measure_excluded_members(repo: &Path, packages: &[Package]) -> Result<Vec<String>, String> {
+    let disk = disk_crate_names(repo)?;
+    let metadata = metadata_crate_dirs(repo, packages);
+    extra_metadata_exclusions(&disk, &metadata, &declared_exclusion_dirs())
+        .map_err(|error| error.to_string())
+}
+
+fn fold_excluded(outcome: GateVerdict, extras: Result<Vec<String>, String>) -> GateVerdict {
+    match extras {
+        Err(reason) if reason.contains("WORKSPACE_HYGIENE_UNRUN") => GateVerdict::Unrun { reason },
+        Err(reason) => GateVerdict::InstrumentError { reason },
+        Ok(names) if names.is_empty() => outcome,
+        Ok(names) => {
+            let reason = disk_not_in_metadata_reason(&names);
+            match outcome {
+                GateVerdict::Refused { mut reasons } => {
+                    reasons.push(reason);
+                    GateVerdict::Refused { reasons }
+                }
+                GateVerdict::Pass
+                | GateVerdict::Unrun { .. }
+                | GateVerdict::InstrumentError { .. } => GateVerdict::Refused {
+                    reasons: vec![reason],
+                },
+            }
+        }
+    }
 }
 
 fn fold_untracked(outcome: GateVerdict, extras: Result<Vec<String>, String>) -> GateVerdict {
