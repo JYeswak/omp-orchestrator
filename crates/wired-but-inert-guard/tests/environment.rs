@@ -1,7 +1,14 @@
 //! ENV PARITY CONTRACT for the wired-but-inert-guard Rust port (control-plane#cp-79am1).
 //!
 //! bin/wired-but-inert-guard.sh — deleted by the Rust port, restored here from git
-//! (45c613d^) — exported NOTHING: its only environment statement was `set -uo pipefail`.
+//! (control-plane@45c613d^) — exported NOTHING: its only environment statement was `set -uo pipefail`.
+//! THAT REVISION DOES NOT RESOLVE IN THIS REPOSITORY -- lines 3-4 are a citation, not an
+//! instruction a reader can run. Measured 2026-09-11: `git rev-parse --verify 45c613d`
+//! -> fatal: Needed a single revision; `git log --all --diff-filter=D -- 'bin/*'` ->
+//! EMPTY across all 1633 commits. `control-plane@` names the repository the revision is
+//! INFERRED to belong to, the same import as this file's `cp-` bead id. `CONTRACT_SOURCE`
+//! below records the same string and has NO REFERENCE anywhere in the crate.
+//!
 //! The parity contract is therefore AMBIENT INHERITANCE: the Rust binary must make no
 //! hidden environment demands beyond the tools it spawns (git, crontab) and must fail
 //! loudly through its typed error channel when its inputs are absent — never silently
@@ -15,7 +22,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-const CONTRACT_SOURCE: &str = "bin/wired-but-inert-guard.sh @ 45c613d^ (env surface: empty — set -uo pipefail only)";
+const CONTRACT_SOURCE: &str = "bin/wired-but-inert-guard.sh @ control-plane@45c613d^ (env surface: empty — set -uo pipefail only)";
 
 fn bin_path() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_wired-but-inert-guard"))

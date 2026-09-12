@@ -1,7 +1,7 @@
 //! ENV PARITY CONTRACT for the omp-idle-dispatch Rust port (control-plane#cp-79am1).
 //!
 //! bin/omp-idle-dispatch.sh — deleted by the Rust port, restored here from git
-//! (45c613d^, lines 25-27) — exported, in order:
+//! (control-plane@45c613d^, lines 25-27) — exported, in order:
 //!
 //!   PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 //!   TMUX_TMPDIR="${TMUX_TMPDIR:-$HOME/.tmux-sockets}"
@@ -14,6 +14,16 @@
 //! a hardcoded checkout compiles fine after a move and then reads the WRONG machine, and
 //! the port's own behaviour here is HOME-DERIVED, so the normalized form is also the
 //! accurate description of what the Rust side does.
+//!
+//! AND THE REVISION ITSELF DOES NOT RESOLVE HERE, which makes line 3-4 a citation and
+//! NOT an instruction -- a reader who runs it loses a unit. Measured 2026-09-11:
+//!   git rev-parse --verify 45c613d               -> fatal: Needed a single revision
+//!   git show 45c613d^:bin/omp-idle-dispatch.sh   -> fatal: invalid object name
+//!   git log --all --diff-filter=D -- 'bin/*'     -> EMPTY across all 1633 commits
+//! `control-plane@` names the repository the revision is INFERRED to belong to, the same
+//! import as this file's `cp-` bead id. The quoted exports above therefore cannot be
+//! re-derived in this checkout: they are a RECORD, and this contract is only as good as
+//! whoever transcribed it.
 //!
 //! The Rust port dropped all three. Under cron — which supplies NO environment — tmux
 //! attached to its private default socket and rewrote tab delimiters, so the dispatcher
@@ -28,7 +38,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-const CONTRACT_SOURCE: &str = "bin/omp-idle-dispatch.sh @ 45c613d^ lines 25-27";
+const CONTRACT_SOURCE: &str = "bin/omp-idle-dispatch.sh @ control-plane@45c613d^ lines 25-27";
 
 fn bin_path() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_omp-idle-dispatch"))
@@ -167,7 +177,7 @@ fn complete_environment_passes_startup() {
 #[test]
 fn contract_record_matches_the_deleted_shell_exports() {
     assert!(CONTRACT_SOURCE.contains("omp-idle-dispatch.sh"));
-    // Re-derived from git (45c613d^ lines 25-27):
+    // Re-derived from git (control-plane@45c613d^ lines 25-27):
     //   export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     //   export TMUX_TMPDIR="${TMUX_TMPDIR:-$HOME/.tmux-sockets}"
     //   export LC_ALL="${LC_ALL:-C.UTF-8}"  # cron gives NO locale; tmux -F rewrites TAB to '_'

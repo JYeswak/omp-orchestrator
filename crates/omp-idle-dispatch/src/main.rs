@@ -1018,11 +1018,18 @@ fn config_error_exit(error: &ConfigError) -> u8 {
 }
 
 /// ENV PARITY CONTRACT (control-plane#cp-79am1). bin/omp-idle-dispatch.sh — deleted by the Rust port,
-/// restored here from git (45c613d^, lines 25-27) — exported, in order:
+/// restored here from git (control-plane@45c613d^, lines 25-27) — exported, in order:
 ///   PATH=<fleet PATH, personal bin dir first>
 ///   TMUX_TMPDIR set-if-unset to the user's tmux socket dir (the deleted script
 ///     hardcoded an absolute home path here — see the contract record in tests/)
 ///   LC_ALL="${LC_ALL:-C.UTF-8}"  # cron gives NO locale; tmux -F rewrites TAB to '_' without it
+/// THAT REVISION DOES NOT RESOLVE IN THIS REPOSITORY, so the sentence above is a
+/// citation and not an instruction. Measured 2026-09-11:
+///   git rev-parse --verify 45c613d          -> fatal: Needed a single revision
+///   git show 45c613d^:bin/omp-idle-dispatch.sh -> fatal: invalid object name
+///   git log --all --diff-filter=D -- 'bin/*' -> EMPTY, across all 1633 commits
+/// The `control-plane@` prefix names the repository the revision is INFERRED to belong
+/// to -- the same import as this file's `cp-` bead id, which is also not our prefix.
 /// The Rust port DROPPED all three, so under cron (which supplies no environment) tmux
 /// attached to its private default socket and rewrote tab delimiters — observing the
 /// wrong world silently. This contract restores the set-if-unset semantics with

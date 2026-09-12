@@ -117,7 +117,7 @@ fn state_of(line: &str) -> &str {
 ///
 /// PR-L1 (bead `omp-orchestrator-readiness-l1-wedge-blind-46y7`) required either that the
 /// shell gain the same clause or that the divergence be declared here with a reason. The
-/// shell cannot gain it: `bin/` no longer exists in this repository (deleted at `45c613d`)
+/// shell cannot gain it: `bin/` no longer exists in this repository (deleted at `control-plane@45c613d`)
 /// and `AGENTS.md`'s first rule forbids re-adding a `.sh` file, so there is no oracle to
 /// extend. Every differential test above therefore ALREADY skips loudly with
 /// `reason=missing_script` and compares 0 cases.

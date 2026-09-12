@@ -926,7 +926,7 @@ top the list and can never close.
 
 ### A port that deletes a file invalidates every CLOSED bead that cited it
 
-`45c613d` deleted four scripts. All four were legitimately superseded and every citing bead was
+`control-plane@45c613d` deleted four scripts. All four were legitimately superseded and every citing bead was
 **validly closed at the time**. Hours later it surfaced as `check.sh` close-evidence RED with
 everything downstream UNRUN — a gate refusing every dispatch, far from the mistake.
 

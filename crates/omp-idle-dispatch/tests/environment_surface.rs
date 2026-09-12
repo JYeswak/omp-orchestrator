@@ -3,6 +3,21 @@
 //! The historical files are intentionally read from the port commit's parent because the current
 //! tree deleted them. Every git invocation clears its environment first; ambient PATH, LANG, and
 //! TMUX_TMPDIR cannot make this check appear healthy.
+//!
+//! ⛔ THIS SUITE CANNOT PASS IN THIS REPOSITORY, and the value below is left UNCHANGED
+//! because inventing a revision would be worse than recording the defect. `PORT_COMMIT`
+//! is not prose: `historical_source` interpolates it into `git show {PORT_COMMIT}:{path}`
+//! and ASSERTS success. Measured 2026-09-11:
+//!   git rev-parse --verify 45c613d                 -> fatal: Needed a single revision
+//!   git show 45c613d^:bin/omp-idle-dispatch.sh     -> fatal: invalid object name
+//!   git log --all --diff-filter=D -- 'bin/*'       -> EMPTY across all 1633 commits
+//! So every leg here fails at its first `git show` -- and nobody has noticed because
+//! `Cargo.toml:7` excludes this crate from the workspace, so no `cargo test -p` and no
+//! CI lane ever builds it. A parity oracle keyed on an unresolvable revision, inside a
+//! crate nothing compiles, is an UNRUN check that reads as a written one.
+//! REPAIR NEEDS A DECISION, not a patch: either the real revision in the repository that
+//! carries it (the `control-plane@` prefix elsewhere in this crate names the repository
+//! it is INFERRED to be), or this oracle is deleted and the parity claim withdrawn.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
