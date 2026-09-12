@@ -257,6 +257,13 @@ fn tick_source(session: &str) -> SourceVerdict {
         Ok(value) => value,
         Err(source) => return source,
     };
+    classify_tick(&value)
+}
+
+/// Pure tick-observe classifier: gap_secs maps to age_ms, and a missing (or
+/// unmeasurable) gap is SILENT, never a default age. Zero is a measured
+/// freshness, not a default, so absence must not construct it.
+fn classify_tick(value: &Value) -> SourceVerdict {
     let panes = value
         .get("omp_lifecycle")
         .and_then(|lifecycle| lifecycle.get("panes"))
@@ -276,8 +283,16 @@ fn tick_source(session: &str) -> SourceVerdict {
         .get("gap_secs")
         .and_then(Value::as_f64)
         .filter(|gap| gap.is_finite() && *gap >= 0.0)
-        .map(|gap| (gap * 1_000.0) as u64);
-    let available = value.get("omp_lifecycle").is_some();
+        .map(|gap| gap * 1_000.0)
+        .filter(|ms| ms.is_finite())
+        .and_then(|ms| {
+            if ms < u64::MAX as f64 {
+                Some(ms as u64)
+            } else {
+                None
+            }
+        });
+    let available = value.get("omp_lifecycle").is_some() && age.is_some();
     let fresh = available && age.is_some_and(|age| age <= MAX_FRESH_MS);
     SourceVerdict {
         name: "tick-monitor".to_owned(),
@@ -417,6 +432,26 @@ mod tests {
             Some(true)
         );
         assert_eq!(parse_rfc3339_millis("not-a-timestamp"), None);
+    }
+
+    #[test]
+    fn missing_gap_is_silent() {
+        // A present lifecycle with no gap_secs is SILENT, never a default
+        // age: zero is a measured freshness, not a default.
+        let missing = classify_tick(&json!({"omp_lifecycle": {"panes": [{"pane": "%1"}]}}));
+        assert!(!missing.available);
+        assert!(!missing.fresh);
+        assert_eq!(missing.reason_code, "L4_TICK_SILENT");
+        assert_eq!(missing.age_ms, None);
+        assert_eq!(missing.panes, vec!["%1".to_owned()]);
+        // Positive control: a finite gap classifies as a source with the
+        // exact millisecond age, proving the silence above is the missing
+        // gap and not a broken classifier.
+        let present = classify_tick(&json!({"omp_lifecycle": {"panes": []}, "gap_secs": 12.5}));
+        assert!(present.available);
+        assert!(present.fresh);
+        assert_eq!(present.reason_code, "L4_TICK_SOURCE");
+        assert_eq!(present.age_ms, Some(12_500));
     }
 
     #[test]
