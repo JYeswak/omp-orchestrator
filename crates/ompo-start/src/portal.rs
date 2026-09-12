@@ -42,6 +42,32 @@ pub fn seal(mut row: serde_json::Value) -> Result<serde_json::Value, String> {
     Ok(row)
 }
 
+/// Required envelope fields of an observability block: the four a reader
+/// depends on. `schema_id` versions the grammar, `sources` carries the
+/// per-source ages, `readback_ok` carries the readback verdict, and
+/// `data_hash` covers the other three. A block missing any of these is not a
+/// short row — it is not a row at all.
+pub const ENVELOPE_FIELDS: &[&str] = &["schema_id", "sources", "readback_ok", "data_hash"];
+
+/// Refuse a portal JSON missing a required envelope field. A missing field
+/// is a typed `Err` naming the field — never a partial object treated as
+/// success, and never a defaulted value standing in for an absent reading
+/// (the absent-collapses-to-a-value class: a missing `sources` defaulted to
+/// empty would read as "no sources observed" rather than "no block").
+pub fn require_envelope(row: &serde_json::Value) -> Result<(), String> {
+    let object = row
+        .as_object()
+        .ok_or_else(|| "L5_ENVELOPE_NOT_OBJECT — a portal row is a JSON object".to_owned())?;
+    for field in ENVELOPE_FIELDS {
+        if !object.contains_key(*field) {
+            return Err(format!(
+                "L5_ENVELOPE_MISSING_FIELD field={field} — a portal JSON without its envelope is not a row"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Queue depth read from the JSONL mirror, never from a subprocess.
 ///
 /// `br`/`bv` are absent on CI lanes (MISSING_EXECUTABLE at the gate runner),

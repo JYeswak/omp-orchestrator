@@ -3,8 +3,8 @@
 use ompo_start::inception::{read_inception, write_atomic_observed, AtomicWriteEffect};
 use ompo_start::liveness::SourceVerdict;
 use ompo_start::portal::{
-    data_hash_without_self, gates_verdict, observability, parse_gates_aggregate, queue_depth, seal,
-    SCHEMA_ID, SCHEMA_VERSION,
+    data_hash_without_self, gates_verdict, observability, parse_gates_aggregate, queue_depth,
+    require_envelope, seal, SCHEMA_ID, SCHEMA_VERSION, ENVELOPE_FIELDS,
 };
 use ompo_start::portal_contract::{
     alerts_are_complete, validate_one_next_action, AlertDefect, NextActionDefect,
@@ -657,4 +657,42 @@ fn write_zero_readback_fail_refuses() {
 #[test]
 fn hash_stable_under_hash_field() {
     hash_excludes_self_obs();
+}
+
+/// L5-ENVELOPE (wryz): a portal JSON missing a required envelope field is
+/// NOT a row. The refusal is typed and names the field — never a partial
+/// object treated as success, and never a default standing in for absence.
+#[test]
+fn missing_envelope_field_is_not_a_row() {
+    // KNOWN-GOOD control first: a sealed observability block passes — the
+    // gate does not refuse everything, so the refusals below are load-bearing.
+    let sources = [source("ntm", Some(900), true, true)];
+    let block = observability(&sources, true, false).unwrap();
+    assert!(
+        require_envelope(&block).is_ok(),
+        "a sealed block must satisfy its own envelope"
+    );
+
+    // TARGET: each required field removed in turn refuses, naming the field.
+    for field in ENVELOPE_FIELDS {
+        let mut partial = block.clone();
+        partial.as_object_mut().expect("block is an object").remove(*field);
+        let error = require_envelope(&partial).expect_err(
+            "a block missing an envelope field must REFUSE, not succeed",
+        );
+        println!("L5_ENVELOPE_MISSING field={field} refusal={error}");
+        assert!(
+            error.contains(*field),
+            "the refusal must name the missing field, got {error}"
+        );
+    }
+
+    // NOT AN OBJECT is not a row either, with its own typed refusal.
+    let scalar = json!(42);
+    let error = require_envelope(&scalar)
+        .expect_err("a non-object portal JSON must REFUSE, not succeed");
+    assert!(
+        error.contains("L5_ENVELOPE_NOT_OBJECT"),
+        "non-object refusal must be typed, got {error}"
+    );
 }
