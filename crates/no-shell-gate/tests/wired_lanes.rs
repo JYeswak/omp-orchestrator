@@ -1284,49 +1284,50 @@ fn no_public_type_name_collisions_across_crates() {
     assert!(!crates.is_empty(), "ANTI-VACUITY: zero crates scanned");
     validate_allowance_rows(COLLISION_ALLOWANCE, "leg5-collision").expect("collision rows must validate");
 
-    let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    let mut collisions: Vec<(String, String, String)> = Vec::new();
-    for name in &crates {
-        let src_dir = root.join("crates").join(name).join("src");
-        let Ok(entries) = std::fs::read_dir(&src_dir) else {
-            continue;
-        };
-        for e in entries.flatten() {
-            let p = e.path();
-            if p.extension().and_then(|x| x.to_str()) != Some("rs") {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(&p) else {
-                continue;
-            };
-            for line in text.lines() {
-                let t = line.trim();
-                for kw in ["pub struct ", "pub enum "] {
-                    if let Some(rest) = t.strip_prefix(kw) {
-                        if let Some(type_name) = rest
-                            .split(|c: char| !c.is_alphanumeric() && c != '_')
-                            .next()
-                        {
-                            if type_name.is_empty() {
-                                continue;
-                            }
-                            if let Some(first) = seen.get(type_name) {
-                                if first != name {
-                                    collisions.push((
-                                        type_name.to_owned(),
-                                        first.clone(),
-                                        name.clone(),
-                                    ));
-                                }
-                            } else {
-                                seen.insert(type_name.to_owned(), name.clone());
-                            }
-                        }
-                    }
+    // ONE CENSUS, NOT TWO. This leg used to carry its own scanner: a single
+    // `std::fs::read_dir` per crate, no recursion, so a public type declared in
+    // a SUBDIRECTORY was invisible to it while omp-inventory-map's recursive
+    // census saw it. Same population, two readers, and this was the blind one.
+    //
+    // MEASURED BEFORE SWAPPING (omp-orchestrator-f5otl option (c), export-only):
+    // the flat scanner found 43 distinct names, the recursive census 46, and the
+    // three it could not see are AppendOutcome, BlockerKind and LifecycleEvent --
+    // ALL THREE in crates/ntm-fleet-monitor/src/bead_lifecycle/, two levels down.
+    // LOST was ZERO: the recursive set is a strict superset, so nothing this leg
+    // used to catch stopped being caught. 18 nested .rs files across 7 crates
+    // make that blind spot real rather than theoretical.
+    //
+    // ⛔ AND THE THREE GAINED NAMES ALREADY HAD ALLOWANCE ROWS HERE, written
+    // against collisions this leg was structurally unable to observe. A pardon
+    // for something you cannot see pardons nothing, and the REDUNDANT COLLISION
+    // ALLOWANCE leg below could not have caught them either -- it fires only on
+    // collisions the leg CAN see. The swap is what finally lets those three be
+    // adjudicated.
+    let inventory = omp_inventory_map::types_inventory::scan_workspace_types(&root)
+        .expect("the shared recursive census must scan this workspace");
+    let collisions: Vec<(String, String, String)> = inventory
+        .collisions
+        .iter()
+        .filter_map(|c| {
+            let mut names = c.crates.clone();
+            names.sort();
+            // A collision needs two declaring crates; the census never emits
+            // fewer, and a one-crate row would be a census defect rather than a
+            // seam bug, so it is dropped rather than reported as a collision.
+            match (names.first(), names.get(1)) {
+                (Some(first), Some(second)) => {
+                    Some((c.name.clone(), first.clone(), second.clone()))
                 }
+                _ => None,
             }
-        }
-    }
+        })
+        .collect();
+    assert!(
+        !collisions.is_empty(),
+        "ANTI-VACUITY: the shared census reported zero collisions across {} crates, which \
+         means the scan is broken rather than the workspace clean",
+        crates.len()
+    );
     // ONE REGISTRY, TWO READERS -- and the authoritative one is the crate-pair
     // scoped table in omp-inventory-map, not this file's name-only list.
     //
