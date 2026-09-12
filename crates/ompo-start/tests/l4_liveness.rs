@@ -853,3 +853,46 @@ fn spawn_refused_without_hd0010() {
         "a Live swarm must refuse spawn even when HD-0010 is decided"
     );
 }
+
+/// L4-SPAWN-RECHECK (hcik): after a spawn, liveness is re-read. A swarm
+/// still NotLive must HALT with the verdict's cause attached — never proceed
+/// to L5 on a pre-spawn reading, and never halt silently.
+#[test]
+fn post_spawn_not_live_halts() {
+    use ompo_start::spawn::{post_spawn_recheck, Recheck};
+
+    // KNOWN-GOOD control first: a Live recheck proceeds — the gate does not
+    // halt everything, so the halt below is load-bearing, not vacuous.
+    let live = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(live.status(), "LIVE");
+    assert!(
+        matches!(post_spawn_recheck(&live), Recheck::ProceedToL5),
+        "a Live recheck must proceed to L5"
+    );
+
+    // TARGET: still NotLive after the spawn halts, naming the cause.
+    let mut ageless = source("agent-mail", &["%7"], true, true);
+    ageless.age_ms = None;
+    let not_live = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        ageless,
+    ])
+    .expect("complete source set");
+    assert_eq!(not_live.status(), "NOT_LIVE");
+    let halted = post_spawn_recheck(&not_live);
+    println!("L4_RECHECK_HALT recheck={halted:?}");
+    let reason = match halted {
+        Recheck::Halt { reason } => reason,
+        Recheck::ProceedToL5 => panic!("a still-NotLive recheck must halt, not proceed to L5"),
+    };
+    assert!(
+        reason.contains("agent-mail"),
+        "the halt must carry the verdict's cause, got {reason}"
+    );
+}

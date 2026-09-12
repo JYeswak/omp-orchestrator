@@ -169,3 +169,32 @@ pub fn spawn_gate(verdict: &crate::liveness::LiveVerdict, hd0010_decided: bool) 
     }
     SpawnGate::Allowed
 }
+
+/// L4-SPAWN-RECHECK (hcik): the post-spawn live recheck.
+///
+/// A spawn that leaves the swarm still NotLive must HALT, never proceed to
+/// L5. The halt is a typed [`Recheck::Halt`] carrying the verdict's own
+/// reason — which names the silent or missing source — so a halt never reads
+/// as a pass and never drops the cause. Liveness is re-read after the spawn;
+/// the pre-spawn verdict is not reused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Recheck {
+    /// The recheck is Live; the lane may proceed to L5.
+    ProceedToL5,
+    /// Still NotLive after the spawn; `reason` carries the verdict's cause.
+    Halt { reason: String },
+}
+
+/// The single authority for whether the lane proceeds past a spawn.
+#[must_use]
+pub fn post_spawn_recheck(verdict: &crate::liveness::LiveVerdict) -> Recheck {
+    if verdict.is_live() {
+        return Recheck::ProceedToL5;
+    }
+    Recheck::Halt {
+        reason: format!(
+            "L4_RECHECK_HALT_STILL_NOT_LIVE — post-spawn recheck still {}; halting before L5",
+            verdict.reason_code()
+        ),
+    }
+}
