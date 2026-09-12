@@ -208,6 +208,130 @@ impl fmt::Display for CloseReasonVerdict {
     }
 }
 
+/// WHO closed the bead, as a typed value rather than prose.
+///
+/// # Why this is a SEPARATE classifier and not a new [`CloseReasonVerdict`] variant
+///
+/// The prefix verdict is asked of EVERY closed row, including the 447 already in
+/// the mirror. None of them carries an actor, so folding "no recorded actor" into
+/// that enum would redden the entire backlog the moment it shipped — and a gate
+/// that reddens the backlog is reverted by the first person it blocks. Keeping the
+/// axes apart lets the obligation land only where it can be complied with: rows
+/// whose close is NEW in the staged mirror.
+///
+/// # Three values, because the third is the whole point
+///
+/// `Missing` is NOT `Malformed` and neither is `Recorded`. A row that names
+/// `closed_by=InvMapRed` recorded a NAME, and AGENTS.md measures that a name is
+/// not an identity — WildStone carried three panes — so that row is Malformed and
+/// must not read as compliant. A row with nothing is Missing, which is the
+/// migration state the ratchet drains. Collapsing either into a boolean is how a
+/// third state dies at its call sites: measured tonight in `omp-orchestrator`,
+/// where `Undetermined` was added correctly and then erased by
+/// `refusing_gates()`/`advisory_gates()` both keying on `!is_reachable()`.
+///
+/// # NO-CLAIM
+///
+/// `closed_by=` is SELF-REPORTED AND FORGEABLE, exactly like the ACK comment. It
+/// converts an unrecorded fact into a CHECKABLE CLAIM — a claim can be compared
+/// against the comment record and the assignee history, silence cannot — and it is
+/// not an identity proof. Nothing here authenticates the pane it names.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CloseActor {
+    /// `closed_by=pane=%NN` was present and well-formed.
+    Recorded {
+        /// The pane id as written, including the leading `%`.
+        pane: String,
+    },
+    /// No `closed_by=` at all. The migration state, not a lie.
+    Missing,
+    /// `closed_by=` was written with something that is not a pane id — most
+    /// often an agent NAME, which is the exact substitution this token exists
+    /// to refuse.
+    Malformed {
+        /// What followed `closed_by=`, truncated to one token.
+        found: String,
+    },
+}
+
+/// The token that records the closing actor.
+pub const CLOSE_ACTOR_TOKEN: &str = "closed_by=";
+/// The only admitted shape after the token.
+pub const CLOSE_ACTOR_PANE_PREFIX: &str = "pane=%";
+
+impl CloseActor {
+    /// A stable label for logs and ledger rows, distinct from every
+    /// [`CloseReasonVerdict`] label so a reader can tell the two causes apart.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Recorded { .. } => "CLOSE_ACTOR_RECORDED",
+            Self::Missing => "CLOSE_ACTOR_MISSING",
+            Self::Malformed { .. } => "CLOSE_ACTOR_MALFORMED",
+        }
+    }
+
+    /// True ONLY for a well-formed pane id.
+    ///
+    /// Deliberately false for `Malformed`: a recorded name is not a recorded
+    /// actor, and a caller that cannot tell them apart has re-created the
+    /// name-is-not-an-identity defect one layer up.
+    #[must_use]
+    pub const fn is_recorded(&self) -> bool {
+        matches!(self, Self::Recorded { .. })
+    }
+}
+
+impl fmt::Display for CloseActor {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Recorded { pane } => write!(formatter, "CLOSE_ACTOR_RECORDED pane={pane}"),
+            Self::Missing => write!(
+                formatter,
+                "CLOSE_ACTOR_MISSING -- a close must record WHO closed it as \
+                 `{CLOSE_ACTOR_TOKEN}{CLOSE_ACTOR_PANE_PREFIX}NN`; without it no later check can \
+                 ask whether the closer was the implementer. This is a DIFFERENT refusal from a \
+                 bad prefix: the prefix says what evidence was claimed, this says who claimed it"
+            ),
+            Self::Malformed { found } => write!(
+                formatter,
+                "CLOSE_ACTOR_MALFORMED found={found} -- `{CLOSE_ACTOR_TOKEN}` must name a PANE \
+                 (`{CLOSE_ACTOR_PANE_PREFIX}NN`), never an agent name: one agent carries several \
+                 panes, so a name cannot answer whether the closer was the implementer"
+            ),
+        }
+    }
+}
+
+/// Classify the closing actor recorded in a close reason.
+///
+/// Takes the reason by value rather than as `Option`, deliberately: "the observer
+/// did not read the reason" is [`CloseReasonVerdict::Unread`] and belongs to that
+/// axis. Mixing it in here would give this enum a fourth state that means
+/// something about the caller rather than about the close.
+#[must_use]
+pub fn classify_close_actor(reason: &str) -> CloseActor {
+    let Some(index) = reason.find(CLOSE_ACTOR_TOKEN) else {
+        return CloseActor::Missing;
+    };
+    let rest = &reason[index + CLOSE_ACTOR_TOKEN.len()..];
+    if let Some(pane) = rest.strip_prefix(CLOSE_ACTOR_PANE_PREFIX) {
+        let digits: String = pane.chars().take_while(char::is_ascii_digit).collect();
+        if !digits.is_empty() {
+            return CloseActor::Recorded {
+                pane: format!("%{digits}"),
+            };
+        }
+    }
+    CloseActor::Malformed {
+        found: rest
+            .split_whitespace()
+            .next()
+            .unwrap_or("<end of reason>")
+            .to_owned(),
+    }
+}
+
 /// True when a close reason cites a `cargo test` figure.
 ///
 /// THE OWNER OF THE INVARIANT EXPORTS IT. Tree provenance is demanded of a
@@ -496,5 +620,106 @@ mod tests {
                 "{reason:?} names no tree and must refuse"
             );
         }
+    }
+
+    /// THE THIRD VALUE, AND THE TWO WRONG ANSWERS IT MUST NOT COLLAPSE INTO.
+    ///
+    /// A typed error is only as sharp as its call site: `Undetermined` was added
+    /// correctly to `omp-orchestrator`'s reachability and then erased by two
+    /// consumers that both keyed on `!is_reachable()`, so an UNMEASURED row
+    /// bucketed exactly as a MEASURED-and-failed one. These legs pin the WRONG
+    /// answers, not just the right one, so a boolean at a future call site
+    /// cannot quietly flatten `Missing` into either compliance or a prefix
+    /// violation.
+    #[test]
+    fn a_missing_actor_is_neither_recorded_nor_a_prefix_violation() {
+        let reason = "DONE the work landed and the leg is green";
+        let actor = classify_close_actor(reason);
+        assert_eq!(actor, CloseActor::Missing);
+        assert!(!actor.is_recorded(), "Missing must never read as recorded");
+
+        // AND THE OTHER AXIS IS UNTOUCHED: the very same reason is a perfectly
+        // good PREFIX. If these two ever move together, one of them is reading
+        // the other's evidence.
+        let verdict = classify_close_reason(Some(reason));
+        assert!(
+            verdict.is_verified(),
+            "a missing actor must not make a sanctioned prefix fail: {verdict}"
+        );
+        assert_ne!(
+            actor.label(),
+            verdict.label(),
+            "the two axes must not share a label, or one refusal will be read as the other"
+        );
+    }
+
+    /// A NAME IS NOT AN IDENTITY, and this is the substitution the token exists
+    /// to refuse. `WildStone` carried three panes, so `closed_by=WildStone`
+    /// cannot answer whether the closer was the implementer.
+    #[test]
+    fn an_agent_name_is_malformed_not_recorded() {
+        let actor = classify_close_actor("APPROVED by me closed_by=InvMapRed on a good grade");
+        assert_eq!(
+            actor,
+            CloseActor::Malformed {
+                found: "InvMapRed".to_owned()
+            }
+        );
+        assert!(
+            !actor.is_recorded(),
+            "a recorded NAME is not a recorded ACTOR"
+        );
+        assert_eq!(actor.label(), "CLOSE_ACTOR_MALFORMED");
+
+        // A half-written token is malformed too, not missing: the difference is
+        // between nobody having tried and somebody having tried wrongly.
+        assert_eq!(
+            classify_close_actor("DONE closed_by=pane=abc"),
+            CloseActor::Malformed {
+                found: "pane=abc".to_owned()
+            }
+        );
+    }
+
+    /// KNOWN-GOOD, and the pane survives verbatim including its `%`.
+    #[test]
+    fn a_well_formed_pane_is_recorded_verbatim() {
+        assert_eq!(
+            classify_close_actor("APPROVED non-author grade closed_by=pane=%33 -- legs green"),
+            CloseActor::Recorded {
+                pane: "%33".to_owned()
+            }
+        );
+        // Trailing punctuation must not be eaten into the pane id.
+        assert_eq!(
+            classify_close_actor("DONE closed_by=pane=%7, mutation reverted"),
+            CloseActor::Recorded {
+                pane: "%7".to_owned()
+            }
+        );
+        assert!(classify_close_actor("DONE closed_by=pane=%7").is_recorded());
+    }
+
+    /// ANTI-VACUITY ON THE CLASSIFIER ITSELF: it must be capable of all three
+    /// answers. A classifier that can only ever say one thing is a constant
+    /// wearing the shape of a measurement -- the defect this whole module was
+    /// written to remove.
+    #[test]
+    fn the_actor_classifier_can_return_each_of_its_three_values() {
+        let seen = [
+            classify_close_actor("DONE closed_by=pane=%1"),
+            classify_close_actor("DONE"),
+            classify_close_actor("DONE closed_by=somebody"),
+        ];
+        let labels: Vec<&str> = seen.iter().map(CloseActor::label).collect();
+        assert_eq!(
+            labels,
+            vec![
+                "CLOSE_ACTOR_RECORDED",
+                "CLOSE_ACTOR_MISSING",
+                "CLOSE_ACTOR_MALFORMED"
+            ],
+            "all three states must be reachable from real reasons"
+        );
     }
 }

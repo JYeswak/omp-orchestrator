@@ -520,6 +520,19 @@ pub struct StagedCloseReasonReport {
     /// visible disposition so history stays legible; never a refusal, because this commit did
     /// not close them.
     pub legacy_unrecoverable: Vec<String>,
+    /// Newly closed rows with NO well-formed `closed_by=pane=%NN` token, one entry per row
+    /// as `bead=<id> <CloseActor display>`.
+    ///
+    /// SEPARATE FROM `violations` ON PURPOSE. A bad prefix and an unrecorded actor are two
+    /// causes with two remedies -- "your evidence class is wrong" and "you did not say who
+    /// closed it" -- and folding them into one list rebuilds the collapse this repo caught on
+    /// 2sx1, where one refusal carried two causes and the reader could not tell which to fix.
+    ///
+    /// THE 447 HISTORICAL ROWS ARE NOT FORGIVEN, THEY WERE NEVER IN SCOPE: this list is
+    /// populated only for rows whose close is NEW in the staged mirror, so a row closed before
+    /// the token existed cannot appear here by construction rather than by an allowlist. An
+    /// exception list would need its own ratchet to stay honest; a structural scope does not.
+    pub actor_unrecorded: Vec<String>,
 }
 
 /// Check the staged mirror's closed rows against the canonical close-reason policy.
@@ -563,6 +576,7 @@ pub fn check_staged_close_reason_policy(
         historical_closed: 0,
         violations: Vec::new(),
         legacy_unrecoverable: Vec::new(),
+        actor_unrecorded: Vec::new(),
     };
     for bead in staged_closed {
         // The execution authority may live in the row's COMMENTS rather than its
@@ -590,6 +604,18 @@ pub fn check_staged_close_reason_policy(
             continue;
         }
         report.newly_closed += 1;
+        // THE SECOND AXIS, EVALUATED FOR EVERY NEWLY CLOSED ROW AND BEFORE THE
+        // PREFIX VERDICT SHORT-CIRCUITS. A row with a bad prefix AND no actor has
+        // two defects, and reporting only the first would make the second appear
+        // the day someone fixed their prefix -- the moving-target refusal this
+        // repo has had to apologise for before. Both lists are populated
+        // independently; neither `continue`s past the other.
+        let actor = ack_spine::close_reason::classify_close_actor(&bead.close_reason);
+        if !actor.is_recorded() {
+            report
+                .actor_unrecorded
+                .push(format!("bead={} {actor}", bead.id));
+        }
         let verdict = ack_spine::close_reason::classify_close_reason_with_external_authority(
             Some(&bead.close_reason),
             external_authority,
@@ -731,5 +757,114 @@ mod tests {
     fn close_reason_policy_rejects_an_empty_scan() {
         let error = check_close_reason_policy(&[]).expect_err("empty mirror must fail closed");
         assert!(error.contains("CLOSE_REASON_MIRROR_EMPTY"), "{error}");
+    }
+
+    fn closed_row(id: &str, reason: &str) -> ClosedBead {
+        ClosedBead {
+            id: id.to_owned(),
+            close_reason: reason.to_owned(),
+            comments: Vec::new(),
+        }
+    }
+
+    /// THE TWO AXES PRODUCE TWO OUTCOMES, which is the whole reason the actor
+    /// is not a `CloseReasonVerdict` variant.
+    ///
+    /// A distinct LABEL is not enough: if an unrecorded actor landed in
+    /// `violations` beside a bad prefix, two causes would share one remedy and
+    /// a reader could not tell which to fix. So this asserts the OUTCOMES are
+    /// disjoint -- a good prefix with no actor populates `actor_unrecorded` and
+    /// leaves `violations` EMPTY, and it still counts as `verified` on the
+    /// prefix axis because its prefix really is sanctioned.
+    #[test]
+    fn an_unrecorded_actor_is_a_different_outcome_from_a_bad_prefix() {
+        let good_prefix_no_actor = [closed_row("omp-orchestrator-aaa", "DONE the leg is green")];
+        let report = check_staged_close_reason_policy(None, &good_prefix_no_actor)
+            .expect("a first-commit baseline is legitimate");
+        assert_eq!(report.newly_closed, 1);
+        assert!(
+            report.violations.is_empty(),
+            "a sanctioned prefix must not be refused for lacking an actor: {:?}",
+            report.violations
+        );
+        assert_eq!(report.verified, 1, "the PREFIX axis is satisfied");
+        assert_eq!(report.actor_unrecorded.len(), 1, "the ACTOR axis is not");
+        assert!(
+            report.actor_unrecorded[0].contains("CLOSE_ACTOR_MISSING")
+                && report.actor_unrecorded[0].contains("omp-orchestrator-aaa"),
+            "the refusal must name its own cause and the row: {:?}",
+            report.actor_unrecorded
+        );
+
+        // AND THE MIRROR IMAGE: a bad prefix WITH an actor refuses on the prefix
+        // axis only. If either of these two ever moves the other, the axes have
+        // collapsed.
+        let bad_prefix_with_actor = [closed_row(
+            "omp-orchestrator-bbb",
+            "finished it closed_by=pane=%33",
+        )];
+        let report = check_staged_close_reason_policy(None, &bad_prefix_with_actor)
+            .expect("baseline");
+        assert_eq!(report.violations.len(), 1, "the prefix is not sanctioned");
+        assert!(
+            report.actor_unrecorded.is_empty(),
+            "the actor WAS recorded: {:?}",
+            report.actor_unrecorded
+        );
+    }
+
+    /// A ROW WITH BOTH DEFECTS REPORTS BOTH, on the first pass.
+    ///
+    /// The prefix arm `continue`s, so an actor check placed after it would have
+    /// stayed silent until someone fixed their prefix -- a refusal that grows a
+    /// new complaint the moment you satisfy it. The actor is therefore evaluated
+    /// BEFORE that short-circuit, and this leg is what holds it there.
+    #[test]
+    fn a_row_with_two_defects_reports_both_not_one_at_a_time() {
+        let both = [closed_row("omp-orchestrator-ccc", "just finished the thing")];
+        let report = check_staged_close_reason_policy(None, &both).expect("baseline");
+        assert_eq!(report.violations.len(), 1, "prefix defect reported");
+        assert_eq!(report.actor_unrecorded.len(), 1, "actor defect reported TOO");
+    }
+
+    /// THE 447 ARE SPARED BY CONSTRUCTION, NOT BY AN ALLOWLIST.
+    ///
+    /// A row already closed at HEAD carries no token and must not appear on the
+    /// actor axis at all -- not because it is excused, but because this commit
+    /// did not close it. An exception list would need its own ratchet to stay
+    /// honest; a structural scope cannot drift.
+    #[test]
+    fn a_row_already_closed_at_head_is_never_asked_for_an_actor() {
+        let head = "{\"id\":\"omp-orchestrator-old\",\"status\":\"closed\",\"close_reason\":\"DONE long ago\"}\n";
+        let staged = [closed_row("omp-orchestrator-old", "DONE long ago")];
+        let report = check_staged_close_reason_policy(Some(head), &staged)
+            .expect("a parsable HEAD baseline");
+        assert_eq!(report.historical_closed, 1);
+        assert_eq!(report.newly_closed, 0);
+        assert!(
+            report.actor_unrecorded.is_empty(),
+            "a historical row must never be asked for a token it could not have carried: {:?}",
+            report.actor_unrecorded
+        );
+    }
+
+    /// A NAME IS NOT AN ACTOR, end to end through the consumer.
+    ///
+    /// The classifier's own leg pins this, but a type is only as sharp as its
+    /// call site: if the consumer asked `is_recorded()`-adjacent questions
+    /// loosely, `closed_by=InvMapRed` would pass here while failing there.
+    #[test]
+    fn a_name_in_the_token_does_not_satisfy_the_consumer_either() {
+        let named = [closed_row(
+            "omp-orchestrator-ddd",
+            "APPROVED non-author grade closed_by=InvMapRed",
+        )];
+        let report = check_staged_close_reason_policy(None, &named).expect("baseline");
+        assert_eq!(report.actor_unrecorded.len(), 1);
+        assert!(
+            report.actor_unrecorded[0].contains("CLOSE_ACTOR_MALFORMED"),
+            "a name must be MALFORMED, not merely missing: {:?}",
+            report.actor_unrecorded
+        );
     }
 }
