@@ -468,6 +468,12 @@ pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeiling
     // table's crate-pair scoping, which is why they were invisible there and refused here.
     // 43 committed - GuardDecision - Authority - Resolution = 40, and the band closes to
     // equality again. Lowering is the only direction this bound moves and it moves as a pair.
+    // RECORD (poumg.3 fix unit, 2026-09-12): 33a09a8's message says "Bounds
+    // 42/42 + tolerance 0 untouched" and its own diff moved these to 40/40.
+    // The VALUES are correct and nobody wants a revert; the MESSAGE is wrong
+    // and pushed, so unamendable. The two ALLOWED_COLLISIONS rows plus this
+    // lowering are InvMapRed's under f5otl, not pane26's -- a whole-file
+    // `git add` carried them.
     ceiling: 40,
     ceiling_at_recording: 40,
     recorded_at_unix: 1_789_186_800,

@@ -105,16 +105,16 @@ mod tests {
     use super::*;
     use crate::types_inventory::{CrateTypes, TypeDecl, TypeKind};
 
-    fn fixture_crate(krate: &str, decls: &[&str]) -> CrateTypes {
+    fn fixture_crate(krate: &str, decls: &[(&str, &str)]) -> CrateTypes {
         CrateTypes {
             crate_name: krate.to_owned(),
             decls: decls
                 .iter()
-                .map(|name| TypeDecl {
+                .map(|(rel, name)| TypeDecl {
                     crate_name: krate.to_owned(),
                     name: (*name).to_owned(),
                     kind: TypeKind::Struct,
-                    rel_path: "src/lib.rs".to_owned(),
+                    rel_path: (*rel).to_owned(),
                     line: 1,
                     in_test_module: false,
                 })
@@ -135,8 +135,8 @@ mod tests {
     fn a_dropped_pair_side_reddens_naming_row_and_crate() {
         let rows: &[(&str, &str, &str)] = &[("Finding", "finding+state-wildcard-lint", "")];
         let inv = fixture_inventory(vec![
-            fixture_crate("finding", &["Finding"]),
-            fixture_crate("state-wildcard-lint", &[]),
+            fixture_crate("finding", &[("src/lib.rs", "Finding")]),
+            fixture_crate("state-wildcard-lint", &[] as &[(&str, &str)]),
         ]);
         let errors = check_referents_rows(&inv, rows);
         assert_eq!(errors.len(), 1, "exactly the dropped side must fire: {errors:?}");
@@ -153,8 +153,8 @@ mod tests {
     fn a_held_pair_resolves_silently() {
         let rows: &[(&str, &str, &str)] = &[("Finding", "finding+state-wildcard-lint", "")];
         let inv = fixture_inventory(vec![
-            fixture_crate("finding", &["Finding"]),
-            fixture_crate("state-wildcard-lint", &["Finding"]),
+            fixture_crate("finding", &[("src/lib.rs", "Finding")]),
+            fixture_crate("state-wildcard-lint", &[("src/lib.rs", "Finding")]),
         ]);
         let errors = check_referents_rows(&inv, rows);
         assert!(errors.is_empty(), "a held pair must not fault: {errors:?}");
@@ -185,5 +185,47 @@ mod tests {
     #[test]
     fn exemption_list_is_exactly_guard_decision() {
         assert_eq!(REFERENT_EXEMPT, &["GuardDecision"]);
+    }
+    /// LIVE-WRAPPER leg (poumg.3 fix unit): breaking a REAL row reddens
+    /// through the production `check()` path, not just the rows-parameterised
+    /// core. The fixture is shaped adjudicable (omp-inventory-map crate
+    /// present, Declared source from assemble) WITHOUT pretending the lane
+    /// is adjudicable -- on workers this source never occurs naturally, so
+    /// the shape is fixtured, not discovered. RULE 11: both directions
+    /// pinned -- the broken table reddens AND the repaired table passes, so
+    /// the leg can neither go green by accident nor be collapsed by refactor.
+    #[test]
+    fn live_wrapper_reddens_on_broken_row_repairs_clean() {
+        fn live_crates_without_finding() -> Vec<CrateTypes> {
+            vec![
+                fixture_crate("omp-inventory-map", &[("src/lib.rs", "InventoryMap")]),
+                fixture_crate("finding", &[] as &[(&str, &str)]),
+                fixture_crate("state-wildcard-lint", &[("src/lib.rs", "Finding"), ("src/lib.rs", "LintReport")]),
+                fixture_crate("undrained-pipe-lint", &[("src/lib.rs", "LintReport"), ("src/lib.rs", "Violation")]),
+                fixture_crate("no-shell-gate", &[("src/lib.rs", "Violation"), ("src/lib.rs", "GateError")]),
+                fixture_crate("ack-spine", &[("src/spine.rs", "DispatchIntent")]),
+                fixture_crate("dispatch-claim-fence", &[("src/lib.rs", "DispatchIntent")]),
+                fixture_crate("porting-gate", &[("src/lib.rs", "GateError")]),
+                fixture_crate("agent-mail-native", &[("src/packet.rs", "Authority")]),
+                fixture_crate("ompo-start", &[("src/hd0009.rs", "Authority"), ("src/hd0009.rs", "Resolution")]),
+                fixture_crate("refill-idle-panes", &[("src/lib.rs", "Resolution")]),
+                fixture_crate("contabo-reclaim", &[("src/model.rs", "GuardDecision")]),
+                fixture_crate("omp-host-tool-guard", &[("src/lib.rs", "GuardDecision")]),
+            ]
+        }
+        let broken = fixture_inventory(live_crates_without_finding());
+        let errs = broken.check().err().unwrap_or_default();
+        assert!(
+            errs.iter().any(|e| e.contains("REFERENT_UNRESOLVED") && e.contains("row=Finding")),
+            "breaking a real row must redden through check(): {errs:?}"
+        );
+        let mut repaired = live_crates_without_finding();
+        let finding = repaired.iter_mut().find(|c| c.crate_name == "finding").expect("finding present");
+        *finding = fixture_crate("finding", &[("src/lib.rs", "Finding")]);
+        let errs = fixture_inventory(repaired).check().err().unwrap_or_default();
+        assert!(
+            !errs.iter().any(|e| e.contains("REFERENT_")),
+            "the repaired table must pass with no referent errors: {errs:?}"
+        );
     }
 }
