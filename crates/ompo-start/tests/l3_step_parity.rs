@@ -1,8 +1,9 @@
 //! LAW-L3-SKIP-STAYS: Skipped / NotApplicable stay in STEPS; view() does not drop them.
 
 use ompo_start::{
-    apply_predicates, fixture_steps, json_next_command, json_ordered_ids, next_command, next_step,
-    ordered_ids, tui_next_command, tui_ordered_ids, view, Predicate, Step, StepStatus,
+    apply_predicates, check_id_parity, fixture_steps, json_next_command, json_ordered_ids,
+    next_command, next_step, ordered_ids, tui_next_command, tui_ordered_ids, view, Predicate,
+    Step, StepStatus,
 };
 
 
@@ -327,5 +328,31 @@ fn second_start_same_ids() {
         ordered_ids(&dropped),
         first_ids,
         "known-bad: second start that drops a step diverges"
+    );
+}
+
+#[test]
+fn divergent_ids_floor_zero() {
+    let mut steps = fixture_steps();
+    apply_predicates(&mut steps, false, false, false);
+    let tui = tui_ordered_ids(&steps);
+    let json = json_ordered_ids(&steps);
+    assert!(!tui.is_empty(), "vacuous input is refused, never floor-clean");
+    // Ordered-position count, not set/length-only: a swap is set-identical
+    // and length-identical yet divergent at two positions.
+    let divergent: Vec<usize> = tui
+        .iter()
+        .zip(json.iter())
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .map(|(i, _)| i)
+        .collect();
+    let count = divergent.len() + tui.len().abs_diff(json.len());
+    println!("divergent_positions {divergent:?}");
+    println!("divergent_count {count}");
+    assert_eq!(count, 0, "TUI/JSON ID positions diverged at {divergent:?}");
+    assert!(
+        check_id_parity(&tui, &json).is_ok(),
+        "production parity gate must agree with the floor"
     );
 }
