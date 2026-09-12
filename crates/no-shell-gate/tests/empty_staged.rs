@@ -555,3 +555,37 @@ fn executable_non_rust_staged_path_is_not_flagged_by_mode_gate() {
     assert!(!error.contains("mode-gate: REFUSED"), "mode gate over-scoped non-Rust path: {error}");
     fs::remove_dir_all(dir).expect("remove non-Rust executable fixture");
 }
+
+/// WIRES the grade-pin third axis end to end (xv30 follow-up): a staged
+/// mirror closing a bead on an unpinned grade is REFUSED naming
+/// GRADE_TREE_UNPINNED. The reason carries a sanctioned prefix and worker
+/// authority, so no other close-reason axis fires -- deleting the
+/// grade_unpinned enforcement loop (pre-commit-gate.rs) must turn this RED.
+/// Mirror `comments` are `[{"text": ...}]` objects: bare strings are dropped
+/// by the mirror parser, which would route here to the NoComments arm
+/// instead of the UNPINNED arm under test.
+#[test]
+fn staged_unpinned_grade_close_is_refused() {
+    let dir = fresh_git_tree("unpinned-grade-close");
+    stage_close_mirror(
+        &dir,
+        r#"{"id":"unpinned-grade","status":"closed","close_reason":"DONE. Graded 9f2c41d: suite 12 passed 3 failed worker=local","comments":[{"text":"re-ran the suite, all green."}]}
+"#,
+    );
+    let output = run_gate(&dir);
+    let error = stderr(&output);
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "an unpinned grade close must refuse: {error}"
+    );
+    assert_eq!(top_level_outcome(&error), "VIOLATION:", "{error}");
+    assert!(
+        error.contains("close-reason-policy: state=REFUSED")
+            && error.contains("GRADE_TREE_UNPINNED")
+            && error.contains("unpinned-grade"),
+        "the refusal must name its cause and its row: {error}"
+    );
+    fs::remove_dir_all(dir).expect("remove unpinned grade fixture");
+}
