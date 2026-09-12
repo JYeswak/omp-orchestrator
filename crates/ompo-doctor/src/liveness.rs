@@ -452,6 +452,41 @@ mod tests {
         assert!(present.fresh);
         assert_eq!(present.reason_code, "L4_TICK_SOURCE");
         assert_eq!(present.age_ms, Some(12_500));
+        // Integer gap and fractional truncation toward zero (12999.9 -> 12999,
+        // never rounded to 13000).
+        let int = classify_tick(&json!({"omp_lifecycle": {}, "gap_secs": 12}));
+        assert_eq!(int.age_ms, Some(12_000));
+        assert_eq!(int.reason_code, "L4_TICK_SOURCE");
+        let trunc = classify_tick(&json!({"omp_lifecycle": {}, "gap_secs": 12.9999}));
+        assert_eq!(trunc.age_ms, Some(12_999));
+        // Wrong-type, negative, and huge-but-finite gaps are SILENT.
+        // 1e308 is finite as a gap but infinite as milliseconds.
+        for gap in [json!("12.5"), json!(-5.0), json!(1e308)] {
+            let silent = classify_tick(&json!({"omp_lifecycle": {}, "gap_secs": gap}));
+            assert!(!silent.available, "gap {gap} must be silent");
+            assert_eq!(silent.reason_code, "L4_TICK_SILENT");
+            assert_eq!(silent.age_ms, None);
+        }
+        // Non-finite AT parse is unconstructible: serde_json refuses 1e400
+        // outright, so a gap can never arrive infinite from JSON. The live
+        // non-finite path is overflow in the ms multiply (1e308 above).
+        // u64-range boundary with exact endpoints: 2^54 fits, 2^64 refuses.
+        // Adjacency is unstatable in gap space (float round-trip), so the
+        // discriminator is Some versus None across the boundary.
+        let fits = classify_tick(&json!({"omp_lifecycle": {}, "gap_secs": 18014398509481984.0}));
+        assert!(fits.available);
+        assert!(fits.age_ms.is_some());
+        let overflows =
+            classify_tick(&json!({"omp_lifecycle": {}, "gap_secs": 18446744073709551616.0}));
+        assert!(!overflows.available);
+        assert_eq!(overflows.reason_code, "L4_TICK_SILENT");
+        assert_eq!(overflows.age_ms, None);
+        // Empty input anti-vacuity: {} is SILENT with no age (via missing
+        // lifecycle), never a source and never age zero.
+        let empty = classify_tick(&json!({}));
+        assert!(!empty.available);
+        assert_eq!(empty.reason_code, "L4_TICK_SILENT");
+        assert_eq!(empty.age_ms, None);
     }
 
     #[test]
