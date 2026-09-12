@@ -234,15 +234,23 @@ fn hook_freshness(repo_root: &Path, _staged: &[String], report: &mut CommitRatch
         // cross-build plus install dance, which trains `--no-verify`. The
         // stale hook still runs VALID old logic, and CI enforces the new
         FreshnessVerdict::Stale => {
+            // THE PRIOR HEAL'S FATE IS READ BEFORE THIS ONE IS REQUESTED
+            // (`omp-orchestrator-7h8kr`, second pass). A heal that fails to
+            // START was already loud (`spawn_failed_observed`); a heal that
+            // STARTS AND THEN FAILS -- rch refuses, the worker is full, the
+            // build breaks -- was INVISIBLE: every later commit printed
+            // `heal=queued` forever while the installed hook never changed,
+            // leaving the gate permanently inert behind a reassuring
+            // message. That is strictly worse than the refusal this replaced,
+            // which was at least loud. Still an OBSERVATION: the stall is
+            // named, never refused.
+            let progress = read_heal_progress(&heal_log_path(repo_root));
             let heal = ensure_heal(repo_root, &untracked);
-            report.observations.push(format!(
-                "hook_freshness: STALE_HEALING hook={} {} heal={} log={} \
-                 detail=a covered source differs from the stamp; this commit lands, \
-                 the hook rebuilds itself in the background",
-                hook.display(),
-                diff.summary(),
-                heal.state(),
-                heal_log_path(repo_root).display(),
+            report.observations.push(stale_healing_line(
+                &hook,
+                &diff.summary(),
+                &heal_state(&progress, &heal),
+                repo_root,
             ));
         }
         // SCOPED 2026-09-11 (`omp-orchestrator-zzg2x`). [SUPERSEDED 2026-09-11
@@ -476,10 +484,168 @@ fn heal_lock_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".git/hook-heal.lock")
 }
 
-/// Human-readable heal transcript. The observation names it so a reader can
-/// watch the rebuild without guessing where it went.
+/// The heal MILESTONE LEDGER: one line per lifecycle event
+/// (`HEAL_REQUESTED` / `HEAL_INSTALLED` / `HEAL_FAILED`), append-only, so a
+/// later commit can tell a heal that LANDED from one that started and died.
+/// The build transcript lives in a sibling file precisely so a cargo log
+/// cannot bury the three lines this file exists to preserve.
 fn heal_log_path(repo_root: &Path) -> PathBuf {
     repo_root.join(".git/hook-heal.log")
+}
+
+/// The heal's raw build transcript (truncated per run). Named in the
+/// observation because a reader chasing `heal=stalled` needs the rch/cargo
+/// error text, not just the milestone that is missing.
+fn heal_build_log_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(".git/hook-heal.build.log")
+}
+
+/// The milestone ledger is bounded so a chronically stalled repo cannot grow
+/// it without limit. The TAIL is kept: trimming can only ever discard
+/// `HEAL_INSTALLED` lines older than 200 events, and every event after the
+/// newest surviving install still counts as an attempt, so a trim can make
+/// the verdict no rosier than the truth.
+const HEAL_LOG_MAX_LINES: usize = 200;
+
+fn trim_heal_log(path: &Path) {
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.len() <= HEAL_LOG_MAX_LINES {
+        return;
+    }
+    let tail = lines[lines.len() - HEAL_LOG_MAX_LINES..].join("\n");
+    let _ = fs::write(path, format!("{tail}\n"));
+}
+
+/// What the ledger says about heals requested BEFORE this commit.
+///
+/// `Unknown` is a first-class arm, not a fold into health: an absent,
+/// unreadable, empty or marker-less ledger is a scan set this detector never
+/// measured, and reporting that as "healing fine" is the exact silence this
+/// bead exists to remove.
+#[derive(Debug, PartialEq, Eq)]
+enum HealProgress {
+    /// The newest request was followed by an install: the heal loop works.
+    Installed { at: String },
+    /// A request carries no `HEAL_INSTALLED` after it. The build started and
+    /// never delivered a hook -- observed, never refused.
+    Stalled { since: String, attempts: usize },
+    /// Nothing measurable. Named, never silently healthy.
+    Unknown { reason: &'static str },
+}
+
+impl HealProgress {
+    fn state(&self) -> Option<String> {
+        match self {
+            Self::Installed { .. } => None,
+            Self::Stalled { since, attempts } => {
+                Some(format!("stalled since={since} attempts={attempts}"))
+            }
+            Self::Unknown { reason } => Some((*reason).to_owned()),
+        }
+    }
+}
+
+/// Read the ledger. The two failure shapes are distinguished because they
+/// mean different things: no file at all is a heal loop that has never run
+/// here, an unreadable file is an instrument this gate cannot trust.
+fn read_heal_progress(path: &Path) -> HealProgress {
+    match fs::read_to_string(path) {
+        Ok(text) => heal_progress(&text),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => HealProgress::Unknown {
+            reason: "unknown_no_log",
+        },
+        Err(_) => HealProgress::Unknown {
+            reason: "unknown_unreadable_log",
+        },
+    }
+}
+
+/// THE STALL DECISION, pure over the ledger text.
+///
+/// "Newer than" is LINE ORDER in an append-only file, not timestamp
+/// arithmetic: the two writers stamp in different formats (this binary has no
+/// date kernel and will not grow a dependency for a log stamp) and ordering
+/// is the property that actually decides the question.
+fn heal_progress(log: &str) -> HealProgress {
+    let mut attempts = 0usize;
+    let mut since: Option<String> = None;
+    let mut installed_at: Option<String> = None;
+    let mut saw_request = false;
+    for line in log.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("HEAL_REQUESTED") {
+            saw_request = true;
+            attempts += 1;
+            if since.is_none() {
+                since = Some(stamp_or_unknown(rest));
+            }
+        } else if let Some(rest) = line.strip_prefix("HEAL_INSTALLED") {
+            installed_at = Some(stamp_or_unknown(rest));
+            attempts = 0;
+            since = None;
+        }
+    }
+    if log.trim().is_empty() {
+        return HealProgress::Unknown {
+            reason: "unknown_empty_log",
+        };
+    }
+    if !saw_request {
+        return HealProgress::Unknown {
+            reason: "unknown_no_request_marker",
+        };
+    }
+    // THE STALL ARM. A mutation that returns the healthy state here reddens
+    // the known-bad leg and nothing else.
+    if attempts == 0 {
+        return match installed_at {
+            Some(at) => HealProgress::Installed { at },
+            // Requests seen, all of them cancelled by an install that was
+            // never recorded: the ledger contradicts itself, so it is
+            // UNKNOWN rather than either verdict.
+            None => HealProgress::Unknown {
+                reason: "unknown_no_request_marker",
+            },
+        };
+    }
+    HealProgress::Stalled {
+        since: since.unwrap_or_else(|| "unknown".to_owned()),
+        attempts,
+    }
+}
+
+fn stamp_or_unknown(rest: &str) -> String {
+    let stamp = rest.trim();
+    if stamp.is_empty() {
+        "unknown".to_owned()
+    } else {
+        stamp.to_owned()
+    }
+}
+
+/// The reported `heal=` value. A stall or an unknown OVERRIDES the request
+/// outcome: "queued" is true and useless when the last three heals also
+/// queued and none installed.
+fn heal_state(progress: &HealProgress, outcome: &HealOutcome) -> String {
+    progress
+        .state()
+        .unwrap_or_else(|| outcome.state().to_owned())
+}
+
+/// The stale observation, built in ONE place so the known-bad leg pins the
+/// message and the state string together rather than re-typing the format.
+fn stale_healing_line(hook: &Path, summary: &str, state: &str, repo_root: &Path) -> String {
+    format!(
+        "hook_freshness: STALE_HEALING hook={} {summary} heal={state} log={} build_log={} \
+         detail=a covered source differs from the stamp; this commit lands, \
+         the hook rebuilds itself in the background",
+        hook.display(),
+        heal_log_path(repo_root).display(),
+        heal_build_log_path(repo_root).display(),
+    )
 }
 
 /// A heal already in flight counts as healing: the second stale commit must
@@ -512,7 +678,13 @@ impl HealOutcome {
 /// The exact heal command, pure and pinned by tests. Shape: cross-build the
 /// hook for Mac via the job rails, verify Mach-O BEFORE install (never
 /// install garbage over the working hook), atomic rename into place, release
-/// the lock. Every step appends to the log; the log is the audit trail.
+/// the lock.
+///
+/// The BUILD TRANSCRIPT goes to `hook-heal.build.log` (truncated per run) and
+/// only the milestones go to `hook-heal.log`. They used to share one file,
+/// truncated at every start, which is why a heal that started and died left
+/// nothing a later commit could read: the evidence was overwritten by the
+/// next attempt's cargo output.
 ///
 /// `untracked` covered sources ride as `--overlay-path`: the worker sync
 /// delivers tracked paths only, so without the overlay the rebuilt stamp
@@ -531,7 +703,7 @@ fn heal_command(repo_root: &Path, untracked: &[String]) -> Vec<String> {
          --config '\\''target.aarch64-apple-darwin.linker=\"/usr/local/bin/zigcc-aarch64-darwin\"'\\'' \
          -p no-shell-gate --bin pre-commit-gate && cp \
          target/mac-build/aarch64-apple-darwin/release/pre-commit-gate target/mac-bins/' \
-         > \"{root}/.git/hook-heal.log\" 2>&1; \
+         > \"{root}/.git/hook-heal.build.log\" 2>&1; \
          file \"{root}/target/mac-bins/pre-commit-gate\" | grep -q \"Mach-O 64-bit executable arm64\" \
          && cp \"{root}/target/mac-bins/pre-commit-gate\" \"{root}/.git/hooks/pre-commit.new\" \
          && mv \"{root}/.git/hooks/pre-commit.new\" \"{root}/.git/hooks/pre-commit\" \
@@ -571,14 +743,41 @@ fn ensure_heal(repo_root: &Path, untracked: &[String]) -> HealOutcome {
         .stderr(std::process::Stdio::null())
         .spawn()
     {
-        Ok(_) => HealOutcome::Requested {
-            spawned: true,
-            detail: "background cross-build queued".to_owned(),
-        },
+        Ok(_) => {
+            // The request is recorded HERE, by this process, before anyone
+            // reads the ledger again: the child cannot be relied on to
+            // announce itself (the failure this detects is the child dying)
+            // and only a recorded request makes a missing install visible.
+            record_heal_request(repo_root);
+            HealOutcome::Requested {
+                spawned: true,
+                detail: "background cross-build queued".to_owned(),
+            }
+        }
         Err(error) => HealOutcome::Requested {
             spawned: false,
             detail: format!("spawn:{error}"),
         },
+    }
+}
+
+/// Append one `HEAL_REQUESTED` milestone. Best effort: a ledger this gate
+/// cannot write becomes an UNKNOWN on the next commit, which is the honest
+/// report, not a refusal.
+///
+/// The stamp is epoch seconds because this crate has no date kernel and a log
+/// stamp does not justify a dependency; the shell writes `%FT%TZ`. Nothing
+/// compares the two -- the ledger is append-only, so ORDER decides which
+/// milestone is newer.
+fn record_heal_request(repo_root: &Path) {
+    let path = heal_log_path(repo_root);
+    trim_heal_log(&path);
+    let stamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs());
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        use std::io::Write as _;
+        let _ = writeln!(file, "HEAL_REQUESTED {stamp}");
     }
 }
 
@@ -976,6 +1175,196 @@ mod tests {
             overlaid.contains("--overlay-path crates/no-shell-gate/src/new.rs"),
             "untracked covered source must reach the worker"
         );
+    }
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |since| since.as_nanos());
+        let dir = std::env::temp_dir().join(format!("omp-{tag}-{}-{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    /// KNOWN-BAD, the whole reason this detector exists: the heal STARTED and
+    /// then died (rch refused, the worker was full, the build broke). Every
+    /// later commit used to print `heal=queued` forever while the installed
+    /// hook never changed -- a permanently inert gate behind a reassuring
+    /// message, strictly worse than the loud refusal it replaced.
+    ///
+    /// The STATE STRING and the MESSAGE it lands in are pinned together: a
+    /// mutation that keeps the enum arm but drops it from the reported line
+    /// still reddens here.
+    #[test]
+    fn a_heal_that_started_and_died_reports_stalled_not_queued() {
+        let progress = heal_progress(
+            "HEAL_REQUESTED 1757600000\n\
+             HEAL_FAILED 2026-09-11T04:00:00Z\n\
+             HEAL_REQUESTED 1757603600\n",
+        );
+        assert_eq!(
+            progress,
+            HealProgress::Stalled {
+                since: "1757600000".to_owned(),
+                attempts: 2,
+            }
+        );
+        let outcome = HealOutcome::Requested {
+            spawned: true,
+            detail: String::new(),
+        };
+        assert_eq!(outcome.state(), "queued", "the spawn itself did succeed");
+        let state = heal_state(&progress, &outcome);
+        assert_eq!(state, "stalled since=1757600000 attempts=2");
+        let line = stale_healing_line(
+            Path::new("/repo/.git/hooks/pre-commit"),
+            "changed=crates/no-shell-gate/src/lib.rs",
+            &state,
+            Path::new("/repo"),
+        );
+        assert!(line.contains("hook_freshness: STALE_HEALING"), "{line}");
+        assert!(line.contains("heal=stalled since=1757600000 attempts=2"), "{line}");
+        assert!(
+            !line.contains("heal=queued"),
+            "a heal that never installed must not read as queued: {line}"
+        );
+        assert!(
+            line.contains("build_log=/repo/.git/hook-heal.build.log"),
+            "the reader chasing a stall needs the build transcript: {line}"
+        );
+        // STILL AN OBSERVATION. The stall is named in the observed line; no
+        // refusal string appears anywhere in it.
+        assert!(!line.contains("REFUSED"), "{line}");
+    }
+
+    /// KNOWN-GOOD. Without this leg an over-broad detector reports `stalled`
+    /// forever and the fleet routes around the message.
+    #[test]
+    fn a_ledger_whose_newest_milestone_is_an_install_reads_queued() {
+        let progress = heal_progress(
+            "HEAL_REQUESTED 1757600000\n\
+             HEAL_INSTALLED 2026-09-11T04:10:00Z\n",
+        );
+        assert_eq!(
+            progress,
+            HealProgress::Installed {
+                at: "2026-09-11T04:10:00Z".to_owned(),
+            }
+        );
+        let queued = HealOutcome::Requested {
+            spawned: true,
+            detail: String::new(),
+        };
+        assert_eq!(heal_state(&progress, &queued), "queued");
+        let line = stale_healing_line(
+            Path::new("/repo/.git/hooks/pre-commit"),
+            "changed=crates/no-shell-gate/src/lib.rs",
+            &heal_state(&progress, &queued),
+            Path::new("/repo"),
+        );
+        assert!(line.contains("heal=queued"), "{line}");
+        assert!(!line.contains("stalled"), "a working heal loop is not a stall: {line}");
+        // A healthy ledger does not mask the other two request outcomes.
+        assert_eq!(heal_state(&progress, &HealOutcome::AlreadyRunning), "already_running");
+        assert_eq!(
+            heal_state(
+                &progress,
+                &HealOutcome::Requested {
+                    spawned: false,
+                    detail: "spawn:no such file".to_owned(),
+                }
+            ),
+            "spawn_failed_observed"
+        );
+    }
+
+    /// ANTI-VACUITY. A ledger this gate cannot measure is UNKNOWN, named, and
+    /// never folded into health. The last block is the instrument's negative
+    /// control: a real ledger read through the SAME reader returns a verdict,
+    /// so the two `Err` arms are not just "everything is unknown".
+    #[test]
+    fn an_unmeasurable_ledger_is_a_named_unknown_never_a_pass() {
+        assert_eq!(
+            heal_progress(""),
+            HealProgress::Unknown {
+                reason: "unknown_empty_log"
+            }
+        );
+        assert_eq!(
+            heal_progress("  \n\n"),
+            HealProgress::Unknown {
+                reason: "unknown_empty_log"
+            }
+        );
+        assert_eq!(
+            heal_progress("error: could not compile\n"),
+            HealProgress::Unknown {
+                reason: "unknown_no_request_marker"
+            }
+        );
+
+        let dir = scratch_dir("heal-unknown");
+        assert_eq!(
+            read_heal_progress(&dir.join("hook-heal.log")),
+            HealProgress::Unknown {
+                reason: "unknown_no_log"
+            }
+        );
+        // A directory in the ledger's place has readable metadata and
+        // unreadable BYTES: the instrument failed, not the subject.
+        let unreadable = dir.join("unreadable.log");
+        fs::create_dir_all(&unreadable).expect("scratch dir");
+        assert_eq!(
+            read_heal_progress(&unreadable),
+            HealProgress::Unknown {
+                reason: "unknown_unreadable_log"
+            }
+        );
+        let good = dir.join("good.log");
+        fs::write(&good, "HEAL_REQUESTED 1\nHEAL_INSTALLED 2\n").expect("write ledger");
+        assert_eq!(
+            read_heal_progress(&good),
+            HealProgress::Installed { at: "2".to_owned() }
+        );
+
+        // Every unknown reaches the report as its own state, not as `queued`.
+        for reason in ["unknown_no_log", "unknown_unreadable_log", "unknown_empty_log"] {
+            assert_eq!(
+                heal_state(
+                    &HealProgress::Unknown { reason },
+                    &HealOutcome::Requested {
+                        spawned: true,
+                        detail: String::new(),
+                    }
+                ),
+                reason
+            );
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The ledger is bounded, and trimming keeps the TAIL: a trim can only
+    /// ever make the verdict less rosy, never invent an install.
+    #[test]
+    fn trimming_the_ledger_keeps_the_newest_milestones() {
+        let dir = scratch_dir("heal-trim");
+        let path = dir.join("hook-heal.log");
+        let mut text = String::new();
+        for n in 0..(HEAL_LOG_MAX_LINES + 50) {
+            text.push_str(&format!("HEAL_REQUESTED {n}\n"));
+        }
+        text.push_str("HEAL_INSTALLED 2026-09-11T05:00:00Z\n");
+        fs::write(&path, &text).expect("write ledger");
+        trim_heal_log(&path);
+        let trimmed = fs::read_to_string(&path).expect("read ledger");
+        assert_eq!(trimmed.lines().count(), HEAL_LOG_MAX_LINES);
+        assert_eq!(
+            read_heal_progress(&path),
+            HealProgress::Installed {
+                at: "2026-09-11T05:00:00Z".to_owned(),
+            }
+        );
+        fs::remove_dir_all(&dir).ok();
     }
     /// THE DRIFT DECISION TABLE. Row 2 is the zzg2x row: drift without a
     /// staged census OBSERVES, because refusing it would block the fleet on a
