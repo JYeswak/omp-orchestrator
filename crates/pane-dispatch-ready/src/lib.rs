@@ -508,6 +508,96 @@ pub fn capture_snapshot(captured_at_secs: u64, text: &str) -> CaptureSnapshot {
     )
 }
 
+/// WHAT THE RATE-LIMIT CENSUS CONTRIBUTED TO ONE PANE'S VERDICT — three-valued, because the
+/// census is.
+///
+/// ⛔ THE SHAPE THIS REPLACES WAS A `BTreeMap<String, bool>` READ WITH `.unwrap_or(false)`, and
+/// that single call collapsed THREE distinct facts into one `false`:
+///   1. the verb answered and this pane is NOT rate-limited   (a measurement)
+///   2. the verb answered and never NAMED this pane           (silence)
+///   3. the verb refused, timed out, or shipped no payload    (no coverage at all)
+/// Only (1) is evidence. (2) and (3) became "not rate-limited" and the pane was admitted.
+///
+/// ⭐ (2) IS NOT HYPOTHETICAL AND IT IS LIVE RIGHT NOW. Measured 2026-09-12T01:05Z on this
+/// session: `tmux list-panes` reports FOUR panes (`0 %25 zsh`, `1 %33`, `2 %45`, `3 %26`) and an
+/// UNSOLICITED `--robot-agent-health` names THREE (`"1","2","3"`) — it drops the non-agent pane
+/// with no skipped list. This crate takes its denominator from tmux, correctly, and then looked
+/// up pane `0` in the three-pane map and read the miss as a measured `false`. A bare `zsh` was
+/// being admitted as rate-limit-clear by a census that had deliberately declined to describe it.
+///
+/// ⛔ AND THE SAME VERB CONTRADICTS ITSELF ON THAT PANE DEPENDING ON WHETHER YOU ASK. Solicited
+/// (`--panes=0`) it answers for the bare shell with `agent_type:"cc"`, `health_grade:"A"`,
+/// `safe_to_dispatch:true`, `recommendation:"HEALTHY"`. Unsolicited it omits the pane entirely.
+/// The two answers are irreconcilable and the solicited one is the dangerous direction, which is
+/// a second reason this layer must never turn the census's SILENCE into a positive finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RateLimitCoverage {
+    /// The census measured this pane and it IS rate-limited.
+    MeasuredLimited,
+    /// The census measured this pane and it is NOT rate-limited. The only positive evidence.
+    MeasuredFree,
+    /// The census did not measure this pane: it refused, or it answered without naming it.
+    Unmeasured,
+}
+
+impl RateLimitCoverage {
+    /// Project `RateLimitCensus::is_rate_limited`'s three-valued answer without flattening it.
+    #[must_use]
+    pub fn of(answer: Option<bool>) -> Self {
+        match answer {
+            Some(true) => Self::MeasuredLimited,
+            Some(false) => Self::MeasuredFree,
+            None => Self::Unmeasured,
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MeasuredLimited => "measured_limited",
+            Self::MeasuredFree => "measured_free",
+            Self::Unmeasured => "unmeasured",
+        }
+    }
+
+    /// The boolean handed to [`rate_limit_refusal`].
+    ///
+    /// ⛔ `Unmeasured` YIELDS `false`, AND THAT IS A NAMED FAIL-OPEN RATHER THAN AN ACCIDENT —
+    /// the whole reason this function exists instead of an inline `.unwrap_or(false)`.
+    ///
+    /// THE DIRECTION IS RULED HERE AND IT IS THE OPPOSITE OF `fleet-monitor`'s, ON PURPOSE.
+    /// `fleet-monitor` is a DISPATCHER: withholding one unmeasured pane costs it a tick and the
+    /// next live census recovers it. THIS CRATE IS THE ORACLE the dispatchers read
+    /// (`refill-idle-panes` joins it against `--robot-activity`; `fast-dispatch` selects on its
+    /// `state`). If an unreachable `ntm` made this layer emit `QUOTA_BLOCKED` for every pane, the
+    /// whole fleet's capacity would read zero from a source none of them can cross-check — a
+    /// fleet-wide false zero at maximum blast radius, which is the failure class this repo has
+    /// already paid for twice.
+    ///
+    /// ⭐ SO THE COVERAGE IS PUBLISHED INSTEAD OF THE REFUSAL. The verdict is left exactly as
+    /// `classify` produced it, and [`Self::as_str`] rides on the row so a consumer that WANTS to
+    /// fail closed can: `refill-idle-panes` already withholds `Observation::Unknown`
+    /// (`resolve(Idle, Unknown) => Unconfirmed`, never dispatched), so an unmeasured row gives it
+    /// everything it needs to hold the pane WITHOUT this layer zeroing the fleet on its behalf.
+    /// An undisclosed fail-open is the defect; a disclosed one is a bounded choice a reader can
+    /// audit and a consumer can override.
+    #[must_use]
+    pub fn refusal_input(self) -> bool {
+        matches!(self, Self::MeasuredLimited)
+    }
+
+    /// Whether a `FREE` verdict on this pane was confirmed against the rate-limit dimension.
+    ///
+    /// `false` for `Unmeasured`: the composer/liveness oracle is BLIND to rate limiting by
+    /// construction — measured 2026-09-11, three panes held a clean empty prompt under a live
+    /// ~5014-minute limit — so an unmeasured FREE is unconfirmed in exactly the dimension the
+    /// census exists to cover.
+    #[must_use]
+    pub fn confirms_free(self) -> bool {
+        matches!(self, Self::MeasuredFree)
+    }
+}
+
 /// A composer-free pane whose AGENT cannot work is dispatchable-but-useless.
 ///
 /// # Why this is an ADDITIONAL refusal and not a replacement oracle

@@ -29,48 +29,43 @@ fn completed(label: &str, outcome: BoundedOutcome) -> Option<Output> {
     }
 }
 
-/// Per-pane `local_state.is_rate_limited`, keyed by pane index, from `ntm --robot-agent-health`.
+/// THE PER-PANE RATE-LIMIT CENSUS, FROM `ntm --robot-agent-health`, THROUGH THE ONE KERNEL THAT
+/// OWNS THE PARSE.
 ///
-/// ⛔ BRANCH ON `success` FIRST. A not-found payload from these verbs still carries populated,
-/// ZEROED objects, so a consumer reading a field without checking the envelope gets a plausible
-/// answer from a call that failed. Measured on two verbs, 2026-09-11.
+/// ⛔ THIS FUNCTION USED TO BE A SECOND IMPLEMENTATION OF THAT PARSE, and it returned
+/// `BTreeMap<String, bool>` — a TWO-VALUED shape for a THREE-VALUED fact. Its own doc said
+/// "Unreachable, unparsable or unsuccessful -> EMPTY MAP", and the call site read that map with
+/// `.unwrap_or(false)`, so a refusing verb, a verb that never named the pane, and a measured
+/// "not limited" were ONE answer. `ntm_kernel::RateLimitCensus` exists precisely to keep ABSENCE
+/// OF EVIDENCE distinct from EVIDENCE OF ABSENCE; this crate was the second consumer and it had
+/// its own copy, which is how two consumers become two policies that drift where no monitor
+/// looks.
 ///
-/// ⛔ AND NEVER `local_state.safe_to_dispatch`: measured the same day, it is TRUE on two panes
-/// the same payload concurrently flags rate-limited and which are dead for ~83 hours. ANDing
-/// with it would inherit the exact defect this refusal exists to fix.
+/// ⛔ BRANCH ON EXIT STATUS FIRST — enforced by the TYPE now, not by this comment. A not-found
+/// answer carries populated, ZEROED objects. Measured live 2026-09-12T01:05Z:
+/// `--panes=99` exits **1** with `success:false`, `error_code:"PANE_NOT_FOUND"`, `panes:{}` and
+/// `fleet_health:{total_panes:0, …, overall_grade:""}`. A consumer that parsed before branching
+/// would read a zero-pane fleet in perfect health. `NtmOutcome::payload()` returns `None` for
+/// every non-`Answered` outcome, so there is no field to misread.
 ///
-/// Unreachable, unparsable or unsuccessful -> EMPTY MAP, i.e. no additional refusal. This layer
-/// only ever SUBTRACTS from dispatchability; when it cannot ask, it leaves `classify`'s verdict
-/// exactly as it found it rather than inventing a refusal it cannot support.
-fn rate_limited_panes(session: &str) -> std::collections::BTreeMap<String, bool> {
-    // The invocation, the exit-first branch and the zeroed-payload refusal all
-    // belong to `ntm-kernel`. This call site no longer re-learns them: a
-    // non-Answered outcome has NO payload to read, so the "branch on success
-    // first" rule is enforced by the type rather than by this comment.
-    let outcome = ntm_kernel::invoke_bounded(
-        &ntm_kernel::NtmCall::on_session(ntm_kernel::NtmVerb::AgentHealth, session)
-            .arg("--no-caut"),
-        Duration::from_secs(30),
-    );
-    let Some(document) = outcome.payload() else {
+/// ⛔ AND NEVER KEY ON `error_code`: the same condition is `PANE_NOT_FOUND` here and
+/// `INVALID_FLAG` from `--robot-dialogs`. The kernel keys on the exit status and on the payload's
+/// own `success`, never on the spelling.
+///
+/// ⛔ AND NEVER TAKE A PANE DENOMINATOR FROM `fleet_health.total_panes`: it is the AGENT count.
+/// Measured on the same live session in the same minute — tmux enumerates FOUR panes, an
+/// unsolicited call names THREE and reports `total_panes: 3`, silently dropping the bare `zsh`
+/// with no skipped list. The denominator below stays `tmux list-panes`; the census only ever
+/// answers ABOUT panes tmux already named.
+fn rate_limit_census(session: &str) -> ntm_kernel::RateLimitCensus {
+    let census = ntm_kernel::rate_limited_panes(session, Duration::from_secs(30));
+    if matches!(census, ntm_kernel::RateLimitCensus::Unknown(_)) {
         eprintln!(
-            "pane-dispatch-ready: ntm agent-health {} — no additional refusal",
-            outcome.state()
+            "pane-dispatch-ready: rate-limit census {} — rows will disclose `unmeasured`",
+            census.bound()
         );
-        return std::collections::BTreeMap::new();
-    };
-    let Some(panes) = document.get("panes").and_then(serde_json::Value::as_object) else {
-        return std::collections::BTreeMap::new();
-    };
-    panes
-        .iter()
-        .filter_map(|(index, pane)| {
-            pane.get("local_state")?
-                .get("is_rate_limited")?
-                .as_bool()
-                .map(|limited| (index.clone(), limited))
-        })
-        .collect()
+    }
+    census
 }
 fn unix_seconds() -> u64 {
     SystemTime::now()
@@ -358,7 +353,9 @@ fn run_live(
     for s in &sess_list {
         let mut cmd = Command::new(tick_monitor::TMUX);
         // ONE agent-health call per session, not per pane: the payload is keyed by pane index.
-        let rate_limited = rate_limited_panes(s);
+        // THE DENOMINATOR BELOW IS tmux's, NEVER the census's: the census answers ABOUT panes,
+        // it does not enumerate them.
+        let census = rate_limit_census(s);
         cmd.args(["list-panes", "-t", s, "-F", "#{pane_index}"]);
         let panes = completed("tmux panes", spawn_timeout(cmd, Duration::from_secs(15)))
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -416,11 +413,16 @@ fn run_live(
             // on FREE, and a pane whose AGENT cannot work is subtracted from that set. Measured
             // 2026-09-11: three panes of this session held a clean empty prompt under a live
             // ~5014-minute rate limit, so FREE was true and dispatch would have parked 83 hours.
+            //
+            // THE CENSUS'S SILENCE IS CARRIED, NOT FLATTENED. `RateLimitCoverage` names which of
+            // the three answers produced this row and rides on the output, so a consumer that
+            // wants to fail closed on `unmeasured` can — without this layer emitting a
+            // fleet-wide QUOTA_BLOCKED it cannot support.
+            let coverage = pane_dispatch_ready::RateLimitCoverage::of(census.is_rate_limited(pane));
             if v.state == PaneDispatchReadyState::Free {
-                if let Some(reason) = pane_dispatch_ready::rate_limit_refusal(
-                    rate_limited.get(pane).copied().unwrap_or(false),
-                    &txt,
-                ) {
+                if let Some(reason) =
+                    pane_dispatch_ready::rate_limit_refusal(coverage.refusal_input(), &txt)
+                {
                     v = pane_dispatch_ready::PaneDispatchReadyVerdict {
                         state: PaneDispatchReadyState::QuotaBlocked,
                         reason,
@@ -440,14 +442,17 @@ fn run_live(
                     "pane": pane,
                     "state": v.state.as_str(),
                     "reason": v.reason,
+                    "rate_limit": coverage.as_str(),
+                    "rate_limit_bound": census.bound(),
                 });
                 print!("{rec}");
             } else {
                 rows.push(format!(
-                    "  {:<22} pane {:<3} {:<9} {}",
+                    "  {:<22} pane {:<3} {:<9} {:<16} {}",
                     s,
                     pane,
                     v.state.as_str(),
+                    coverage.as_str(),
                     v.reason
                 ));
             }
