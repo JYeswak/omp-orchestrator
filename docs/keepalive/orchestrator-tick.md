@@ -123,9 +123,22 @@ RESIDUAL: ALIGN_ORPHAN_DECLARATION daemon_process:omp ps declared_by=ompo-doctor
 the post-send scraper in main.rs; --robot-is-working (5c0fb65 + 15b8272) sources OMP pane state in
 pane-truth and PROVED absent != idle -- a nonexistent pane returns PANE_NOT_FOUND exit=1 rather
 than is_working=false, which is the collapse that let a wedged pane read as dispatchable. A missing
-NTM observation is UNPROVEN. FIVE remain at zero: inspect-pane, dialogs, answer-dialog, interrupt,
-agent-health -- against 115 spinner-regex sites across 11 crates, tracked as qg6or. Both landed ONE
-verb at a time and each bounded its scraper-removal claim to the file it touched.
+NTM observation is UNPROVEN. Both landed ONE verb at a time and each bounded its scraper-removal
+claim to the file it touched.
+⭐ **CORRECTED 2026-09-12 — THE ZERO-SET IS THREE, AND "THREE REMAIN" IS TRUE AND MISLEADING.**
+`agent-health` IS consumed (two sites, reached through `ntm-kernel rate_limited_panes()` — the
+kernel-only shape, where consumers name the HELPER and a verb-string search returns a FALSE ZERO).
+`dialogs` IS consumed at `fast-dispatch:420`, needles stripped=0 — deleted, not left beside. The
+zero-set is `answer-dialog`, `interrupt`, `inspect-pane`.
+⛔ **AND `h5rr6` PROVED THE REMAINDER IS NOT ADOPTION-WITH-DELETION ACTIONABLE** (`ABSENT`, with
+POSCTRL `tick-monitor/src/kernel.rs:13` proving the search CAN find a scraper, and NEGCTRL=0).
+Nine live pane-text readers were enumerated and NONE asks a question `inspect-pane` answers typed
+such that its scraper could be deleted in the same commit; every overlapping slice is already served
+by `is-working` / `agent-health` / `dialogs`. **So adopting the three now would ADD a caller and
+DELETE nothing — BUILT-not-WIRED in the other direction.** Option (A) is closer to EXHAUSTED than to
+3/7 incomplete, and the residual scraping is what option (B) exists to address. **Nobody dispatches
+one of these three without first naming the site whose scraper it deletes.** Spinner counts, if you
+need them, carry their regex: `[Ss]pinner` over `crates/*/src` = 77 raw / 16 files / 11 crates.
 Option (B), the pane-side RPC bridge is DEFERRED as the typed endgame, so **`fphs buz1 uvps jw9z djte` stay
 blocked on purpose — do not force them.** (C) filed upstream.
 
@@ -158,14 +171,35 @@ and the cited `CONTRACT.md:82-113` predicates have MOVED (approval is at `:337`)
 `draft` → `converged` to make a gate pass — that is gate self-weakening.**
 
 **THE RESIDUAL R10 REVEALED, which is NOT S1 debt. ✅ SETTLED AND ENUMERATED —
-`docs/plan/flow/S1-GATE-RESIDUAL.md` NAMES ALL 20 NON-PASS CRATES. Read the doc, not this block.**
+`docs/plan/flow/S1-GATE-RESIDUAL.md` ENUMERATES EVERY NON-PASS CRATE AND CARRIES THE AUTHORITATIVE
+RUN. Read that doc; it is maintained. This block deliberately no longer states a count.**
+
+⛔ **THE FIGURES THAT USED TO SIT HERE ARE GONE ON PURPOSE — THIS BLOCK WENT STALE FOUR TIMES AND
+TWICE NAMED A SUPERSEDED RUN "AUTHORITATIVE", THE SECOND TIME BY THE CONDUCTOR WHO HAD JUST FIXED
+THE FIRST.** A block that CONTAINS a number is wrong the moment the number moves, and this one moved
+`fail=16 → 3 → 2` inside a day. **Run the producing command instead:**
 
 ```
-AUTHORITATIVE  run 34549975939  cb9d3941  2026-09-11  pass=68 fail=16 unmeasurable=4  sum 88
-SUPERSEDED     run 34289493517  475c702   2026-09-08  pass=72 fail=12 unmeasurable=4
-SUPERSEDED     run 34171417882  666ec909  2026-09-07  pass=70 fail=16 unmeasurable=2
-fsu7's bank    sha=c5fcf898…                          PASS 59 FAIL 17 UNMEASURABLE 12
+gh run list --limit 14 --workflow=gate --json databaseId,conclusion,headSha \
+  | python3 -c 'import json,sys; [print(r["databaseId"],r["conclusion"],r["headSha"][:8]) for r in json.load(sys.stdin) if r["conclusion"] in ("success","failure")]'
+gh run view <ID> --log | grep -aoE "GATE_RUNNER_(FAILING|UNMEASURABLE) count=[0-9]+ names=[^ ]*|pass=[0-9]+ fail=[0-9]+ unmeasurable=[0-9]+|GATE_RUNNER_PLAN crates=[0-9]+"
 ```
+
+⛔ **AND THE `PLAN crates=N` LINE IS THE PART THAT MATTERS, NOT THE FAILURE COUNT.** A FALLING
+failure count is exactly what a COVERAGE COLLAPSE looks like, so `pass + fail + unmeasurable` MUST
+reconcile against `GATE_RUNNER_PLAN crates=N` or the reading is worthless.
+
+⛔ **AND THE CLAUSE THAT USED TO END THIS PARAGRAPH WAS FALSIFIED WITHIN MINUTES OF BEING WRITTEN,
+BY THE CONDUCTOR WHO WROTE IT — INSIDE THE BLOCK WHOSE WHOLE POINT IS THAT FIGURES GO STALE.**
+It read *"the denominator GREW 88 → 94 while failures FELL 16 → 2."* Both halves were true of the
+run measured, and the very next verdict-bearing run read **`pass=87 fail=3`** with
+`path-literal-guard` ENTERING the failing set. **The failure count does not fall monotonically; it
+moves in BOTH directions, run to run, and a trend stated from two samples is a figure wearing a
+narrative.** What survives is the RULE: the denominator is `PLAN crates=N`, and a count without it
+cannot distinguish a repair from a gate that stopped looking. Read the newest run; never a trend.
+
+Historical rows are preserved in `S1-GATE-RESIDUAL.md` as SUPERSEDED, with `fsu7`'s local bank kept
+on purpose because R10 was closed against it.
 
 **THE ORACLE IS "NEWEST run whose CONCLUSION is `success|failure`", NOT "newest completed"** —
 of the 8 most recent runs, **SIX are `cancelled`**, so the lazy oracle selects a run with no
