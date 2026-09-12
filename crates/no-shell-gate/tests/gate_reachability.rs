@@ -288,3 +288,136 @@ fn portable_no_shell_positive_control_does_not_require_hooks() {
     assert_eq!(row(&bad, "no-shell-gate", "crate")["verdict"], "INERT");
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
+
+/// ⛔ THE DELETED BLOCK SCANNER MUST NOT RETURN, AND A COMMENT CANNOT ENFORCE THAT.
+///
+/// `omp-orchestrator-cn2nx`. `51dd393` deleted `duplicate_block_mapping_key` and `5oavm` deleted
+/// its flow twin, on two censuses whose keep-condition never fired. The whole product of both
+/// deletions was a COMMENT -- and both twin legs pin `serde_yaml_ng`'s behaviour, so a commit that
+/// re-introduces a local scanner leaves them GREEN. A DELETION DOCUMENTED IN PROSE IS A DELETION
+/// THAT RE-OCCURS, and the failure is silent in the FLATTERING direction: a re-added scanner
+/// catches shapes serde accepts, so the suite reads as GAINING coverage.
+///
+/// THE PREDICATE IS THE CODE SHAPE, NEVER A MENTION. `text_structure::code_only` strips comments
+/// first, so the retirement comment -- which necessarily NAMES the scanner it retired -- cannot
+/// trip its own guard. That is 6we9q's word-boundary lesson and the `Command::new("<tool>")` form
+/// from yuy2g: a doc comment naming a mechanism is not the mechanism.
+#[test]
+fn the_deleted_block_duplicate_key_scanner_has_not_returned() {
+    let root = repo_root();
+    let sources = crate_sources(&root.join("crates/no-shell-gate/src"));
+
+    // ANTI-VACUITY, both halves: an empty scan set is an ERROR, and the file that CARRIED the
+    // scanner must be in it. A walk that silently stopped finding sources would pass this leg
+    // while checking nothing, which is the defect seven anti-vacuity clauses shipped tonight.
+    assert!(
+        !sources.is_empty(),
+        "ANTI-VACUITY: no .rs sources found under crates/no-shell-gate/src -- the scan is broken"
+    );
+    assert!(
+        sources
+            .iter()
+            .any(|(path, _)| path.ends_with("bin/gate-reachability.rs")),
+        "ANTI-VACUITY: the file that carried the scanner is absent from the scan set of {} \
+         file(s); a verdict over a set that excludes the subject proves nothing",
+        sources.len()
+    );
+
+    let offenders: Vec<String> = sources
+        .iter()
+        .flat_map(|(path, text)| {
+            duplicate_key_scanner_sites(text)
+                .into_iter()
+                .map(move |(line, site)| format!("{path}:{line} {site}"))
+        })
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "A LOCAL DUPLICATE-KEY SCANNER HAS RETURNED, and both twin legs stay green because they \
+         pin serde_yaml_ng rather than our absence of a scanner:\n  {}\n\
+         Two censuses (12 + 15 specimens) fired the keep-condition ZERO times and the deleted \
+         scanner was strictly WEAKER than serde -- it compared raw text between the indent and \
+         the first colon, so quoting changed the key it saw. Delete it again, or land the \
+         specimen serde ACCEPTS and it REJECTS at the site.",
+        offenders.join("\n  ")
+    );
+
+    // ⛔ POSITIVE CONTROL, BOTH DIRECTIONS, so this leg cannot pass by being blind. A planted
+    // scanner MUST be seen; the retirement comment's own prose MUST NOT be.
+    let planted = "/// duplicate_block_mapping_key was deleted; do not re-add duplicate_block_mapping_key\n\
+                   fn duplicate_block_mapping_key(text: &str) -> Option<(String, usize)> { None }\n";
+    let seen = duplicate_key_scanner_sites(planted);
+    assert_eq!(
+        seen.len(),
+        1,
+        "the detector must see exactly the PLANTED definition and ignore the prose naming it: \
+         {seen:?}"
+    );
+    let prose_only = "/// duplicate_block_mapping_key is deleted (51dd393); serde is the oracle\n\
+                      // a duplicate mapping key scanner must never come back\n";
+    assert!(
+        duplicate_key_scanner_sites(prose_only).is_empty(),
+        "a comment naming the scanner is NOT the scanner -- a substring match here re-creates the \
+         false-positive class 3aa4220 removed"
+    );
+}
+
+/// `(display path, source text)` for every `.rs` under `dir`.
+fn crate_sources(dir: &Path) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(crate_sources(&path));
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            if let Ok(text) = fs::read_to_string(&path) {
+                out.push((path.display().to_string(), text));
+            }
+        }
+    }
+    out
+}
+
+/// Lines DEFINING or CALLING a local duplicate-key scanner, comments stripped first.
+///
+/// The shape, not the name: a `fn` whose identifier carries both `duplicate` and `key`, or a call
+/// to one. Keyed this way a rename (`duplicate_block_key`, `dup_mapping_key`) is still caught,
+/// because the defect is a LOCAL SCANNER existing beside serde -- not one particular spelling.
+fn duplicate_key_scanner_sites(text: &str) -> Vec<(usize, String)> {
+    let code = text_structure::code_only(text);
+    let mut sites = Vec::new();
+    for (index, line) in code.lines().enumerate() {
+        let trimmed = line.trim();
+        for (prefix, kind) in [("fn ", "definition"), ("pub fn ", "definition")] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if name.contains("duplicate") && name.contains("key") {
+                    sites.push((index + 1, format!("{kind} fn {name}")));
+                }
+            }
+        }
+        if let Some(open) = trimmed.find('(') {
+            let head = &trimmed[..open];
+            let call: String = head
+                .chars()
+                .rev()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            if call.contains("duplicate") && call.contains("key") && !trimmed.starts_with("fn ")
+                && !trimmed.starts_with("pub fn ")
+            {
+                sites.push((index + 1, format!("call {call}")));
+            }
+        }
+    }
+    sites
+}

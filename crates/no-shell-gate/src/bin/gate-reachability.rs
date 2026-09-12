@@ -203,11 +203,28 @@ fn strict_workflow_parse(path: &Path, text: &str) -> Result<(), String> {
     // It compared raw text between the indent and the first colon, so quoting changed the key
     // it thought it saw, and its `-`/`{` skips stepped over exactly the shapes serde catches.
     // Keeping it would have implied coverage it did not have.
-    //
     // Three specimens are ACCEPTED BY BOTH and must stay accepted: anchor/alias reuse, a merge
     // key (`<<: *base` beside its own `k:`), and the same key name at different nesting levels.
     // None is a duplicate key, and a scanner that refused them would be the over-strict gate
     // this repo routes around.
+    //
+    // ⛔ EVERY FIGURE ABOVE HAS AN OWNER, because a number with no owner inside a comment telling
+    // the reader NOT to act is the transcribed-value defect in the artifact meant to prevent one
+    // (`omp-orchestrator-cn2nx` acceptance 4). THREE INDEPENDENT CENSUSES, never one total:
+    //     17 flow specimens   -- `5oavm`, the flow twin's deletion
+    //     12 block specimens  -- `aposg`'s author, run against serde_yaml_ng directly
+    //     15 block specimens  -- `aposg`'s grader, a DIFFERENT set (explicit `? a` keys, unicode
+    //                            escapes, `on:` vs `"on":`, nested flow, null-vs-tilde)
+    //     12 block specimens  -- `cn2nx`'s author, with the DELETED SCANNER RESURRECTED from
+    //                            51dd393^ so both oracles ran side by side: keep-condition 0,
+    //                            scanner-weaker 5
+    // Do NOT add these into one figure: they are separate measurements by separate panes, and
+    // summing them is how "27 specimens" became arithmetic nobody had re-derived.
+    //
+    // ⛔ AND THIS COMMENT IS NOT THE ENFORCEMENT. `gate_reachability.rs`'s
+    // `the_deleted_block_duplicate_key_scanner_has_not_returned` is: it reddens if any local
+    // duplicate-key scanner reappears in this crate's `src/`, keyed on the CODE SHAPE with
+    // comments stripped, so the prose above cannot trip its own guard.
     serde_yaml_ng::from_str::<YamlValue>(text)
         .map(|_| ())
         .map_err(|error| format!("STRICT_YAML_PARSE path={} detail={error}", path.display()))
