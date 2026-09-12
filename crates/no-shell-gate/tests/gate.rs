@@ -288,12 +288,18 @@ fn missing_git_metadata_fails_closed() {
 #[test]
 fn this_repo_is_clean() {
     let root = repo_root();
-    // A BOX THAT CANNOT NAME A COMMIT CANNOT SAY THIS REPOSITORY IS CLEAN
-    // (`omp-orchestrator-typed-unreadable-roster-tihld`). `rch` strips `.git/`, so on the
-    // lane `check_repo` returned `GitFailed("fatal: not a git repository")` and this leg
-    // reported the REPOSITORY dirty when what was missing was the repository. The verdict
-    // below is UNCHANGED on any box that can read: a tracked `.sh` still fails here.
-    let Some(_) = common::paths_or_unmeasured(&root, "this_repo_is_clean", "crates") else {
+    // A BOX THAT CANNOT READ THE INDEX CANNOT SAY THIS REPOSITORY IS CLEAN
+    // (`omp-orchestrator-typed-unreadable-roster-tihld`, completed by the
+    // consumer-surface fix). `rch` strips `.git/`, so on the lane `check_repo` returned
+    // `GitFailed("fatal: not a git repository")` and this leg reported the REPOSITORY
+    // dirty when what was missing was the repository.
+    //
+    // THE SURFACE IS THE CONSUMER'S, NOT A GENERIC "CAN GIT ANSWER". `check_repo` reads
+    // `git ls-files`, so the guard reads the INDEX too. Gating on the COMMIT read here
+    // looked correct on every box we have -- `contabo-3` fails both surfaces together --
+    // and would have admitted a tree whose HEAD resolves while its index does not,
+    // leaving the leg red for the environment it was meant to excuse.
+    let Some(_) = common::index_or_unmeasured(&root, "this_repo_is_clean", "crates") else {
         return;
     };
     assert_eq!(
@@ -399,12 +405,13 @@ fn the_scan_set_is_this_repository_and_not_a_fragment_of_one() {
 /// exit 0 while the tree is clean.
 #[test]
 fn binary_is_green_on_this_repo() {
-    // Same discriminator as `this_repo_is_clean`: with no repository to read, the binary
-    // exits 2 with `git ls-files failed: fatal: not a git repository`, and asserting 0
-    // there measures the box. On a readable tree this leg is unchanged -- exit 0 and
-    // `ok:` are still required, and a planted `.sh` still reddens
-    // `binary_exits_1_on_planted_shell` beside it.
-    let Some(_) = common::paths_or_unmeasured(&repo_root(), "binary_is_green_on_this_repo", "crates")
+    // Same discriminator as `this_repo_is_clean`, and on the SAME SURFACE: the binary's
+    // own read is `git ls-files`, so with no readable index it exits 2 with
+    // `git ls-files failed: fatal: not a git repository` and asserting 0 there measures
+    // the box. On a readable index this leg is unchanged -- exit 0 and `ok:` are still
+    // required, and a planted `.sh` still reddens `binary_exits_1_on_planted_shell`
+    // beside it.
+    let Some(_) = common::index_or_unmeasured(&repo_root(), "binary_is_green_on_this_repo", "crates")
     else {
         return;
     };
@@ -598,4 +605,104 @@ fn the_typed_roster_reads_the_commit_and_names_a_tree_that_has_none() {
     for path in [dir, bare, unborn, empty] {
         fs::remove_dir_all(path).expect("fixture cleanup");
     }
+}
+
+/// THE DIVERGENT SHAPE, FIXTURED: `rev-parse` SUCCEEDS and `ls-files` FAILS.
+///
+/// `omp-orchestrator-typed-unreadable-roster-tihld`, the consumer-surface completion.
+///
+/// # Why this must be fixtured and cannot be measured
+///
+/// Two git surfaces backed the guard and the consumer, and on every box the fleet has
+/// they FAIL TOGETHER -- `contabo-3` has no `.git` at all, so a guard on either surface
+/// looks correct there. That is the correlated-oracle trap inverted: two oracles that
+/// agree on every observed sample and are guaranteed to diverge on the unobserved one.
+/// The unobserved one is a repository whose HEAD resolves while its INDEX cannot be read
+/// -- the FOSSIL/UNBORN middle shapes measured at 85/333/86 tracked against 1136+ local.
+/// Unreachable on the lane, so it is built here: a real commit, then a corrupted
+/// `.git/index`.
+///
+/// The property: a leg must be excused by ITS CONSUMER'S surface, never by the other one.
+#[test]
+fn a_readable_head_does_not_excuse_an_unreadable_index() {
+    let dir = fresh_git_tree("surface-divergence");
+    stage(&dir, "crates/committed-crate/Cargo.toml", "[package]\n");
+    run_git(
+        &dir,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "fixture baseline [test]",
+        ],
+        "commit fixture baseline",
+    );
+
+    // POSITIVE CONTROL: both surfaces read, so the divergence below is the corruption's
+    // doing and not a broken fixture.
+    assert!(
+        common::committed_paths(&dir, "crates").is_ok(),
+        "the fixture's HEAD must resolve before it is corrupted"
+    );
+    assert!(
+        common::index_paths(&dir, "crates").is_ok(),
+        "the fixture's index must read before it is corrupted"
+    );
+
+    // THE CORRUPTION: the index only. HEAD is untouched, so `rev-parse` keeps answering.
+    fs::write(dir.join(".git/index"), b"NOT AN INDEX\n").expect("corrupt the index");
+
+    let committed = common::committed_paths(&dir, "crates");
+    assert!(
+        committed.is_ok(),
+        "HEAD must still resolve -- if it does not, this fixture is not the divergent shape"
+    );
+    match common::index_paths(&dir, "crates") {
+        Err(source) => {
+            let reason = source.blocked_reason().unwrap_or_default().to_owned();
+            assert!(
+                reason.contains("ls-files"),
+                "an unreadable index must name the command that failed: {reason}"
+            );
+        }
+        Ok((paths, _)) => panic!("a corrupted index must not yield a listing: {paths:?}"),
+    }
+
+    // AND THE CONSUMER AGREES WITH THE GUARD, which is the whole property: `check_repo`
+    // reads the index, so it fails here -- and the INDEX guard declines while the COMMIT
+    // guard would have admitted and left the leg red for the environment.
+    assert!(
+        check_repo(&dir).is_err(),
+        "the consumer reads the index, so a corrupted index must deny it a verdict"
+    );
+    assert!(
+        common::index_or_unmeasured(&dir, "fixture-divergence", "crates").is_none(),
+        "the INDEX guard must decline exactly where the consumer cannot answer"
+    );
+    assert!(
+        common::paths_or_unmeasured(&dir, "fixture-divergence-commit", "crates").is_some(),
+        "the COMMIT guard ADMITS here -- that is the gap this leg exists to pin, and why a \
+         leg must be gated on its own consumer's surface"
+    );
+
+    // ANTI-SHRUG, carried forward: with the index readable again, a real violation still
+    // REFUSES. Restore by re-reading the tree into a fresh index.
+    run_git(&dir, &["read-tree", "HEAD"], "rebuild the index from HEAD");
+    stage(&dir, "tool.sh", "#!/bin/sh\necho no\n");
+    assert!(
+        common::index_or_unmeasured(&dir, "fixture-restored", "crates").is_some(),
+        "the restored index must read, or the verdict below proves nothing"
+    );
+    match check_repo(&dir).expect("a readable index must render a verdict") {
+        Verdict::Violations(found) => assert!(
+            found.iter().any(|violation: &Violation| violation.path.ends_with("tool.sh")),
+            "a readable index must still name the planted shell: {found:?}"
+        ),
+        Verdict::Clean => panic!("a tracked .sh on a READABLE index must FAIL, never be excused"),
+    }
+
+    fs::remove_dir_all(dir).expect("fixture cleanup");
 }

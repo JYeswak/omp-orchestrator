@@ -134,6 +134,82 @@ pub fn paths_or_unmeasured(root: &Path, leg: &str, pathspec: &str) -> Option<(Ve
     }
 }
 
+/// The INDEX listing under `pathspec`, typed the same way.
+///
+/// # Why a second surface rather than one "can git answer" probe
+///
+/// THE CONSUMER'S SURFACE IS THE ONLY ONE THAT CAN EXCUSE THE CONSUMER. `check_repo`
+/// reads `git ls-files`; the commit read above reads `rev-parse` + `ls-tree`. On the boxes
+/// measured so far both fail together -- `contabo-3` has no `.git` at all -- which is
+/// exactly why a guard on the WRONG surface looked correct: two oracles that agree on
+/// every observed sample and are guaranteed to diverge on the unobserved one (a
+/// repository whose HEAD resolves and whose INDEX is unreadable: the FOSSIL/UNBORN middle
+/// shapes, measured at 85/333/86 tracked against 1136+ local). There a commit-surface
+/// guard ADMITS and the leg still fails FOR THE ENVIRONMENT.
+///
+/// The revision is reported as `index` rather than a sha: the index has no revision, and
+/// inventing one would be the fabricated-provenance class.
+pub fn index_paths(root: &Path, pathspec: &str) -> Result<(Vec<String>, String), CensusSource> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-files", "--", pathspec])
+        .output()
+        .map_err(|error| CensusSource::Worktree {
+            reason: format!("cannot run `git ls-files -- {pathspec}`: {error}"),
+        })?;
+    if !out.status.success() {
+        return Err(CensusSource::Worktree {
+            reason: format!(
+                "`git ls-files -- {pathspec}` failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ),
+        });
+    }
+    let mut paths: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+    paths.sort();
+    paths.dedup();
+    if paths.is_empty() {
+        return Err(CensusSource::Worktree {
+            reason: format!(
+                "the index lists nothing under {pathspec} -- an empty listing is an ERROR, \
+                 never a clean bill"
+            ),
+        });
+    }
+    Ok((paths, "index".to_owned()))
+}
+
+/// [`index_paths`], or a NAMED UNKNOWN -- for legs whose consumer reads the INDEX.
+pub fn index_or_unmeasured(root: &Path, leg: &str, pathspec: &str) -> Option<(Vec<String>, String)> {
+    match index_paths(root, pathspec) {
+        Ok(listing) => Some(listing),
+        Err(source) => {
+            let reason = source
+                .blocked_reason()
+                .expect("a failed listing carries its reason")
+                .to_owned();
+            assert!(
+                binding_environment().is_none(),
+                "{} is the oracle for {leg} and it could not read the index: {reason} \
+                 -- fix the checkout, never the assertion",
+                binding_environment().unwrap_or_default()
+            );
+            eprintln!(
+                "GATE_RUNNER_UNMEASURABLE names={leg}:INDEX_UNREADABLE reason={reason} \
+                 pathspec={pathspec} -- this leg's consumer reads the INDEX, and this box \
+                 cannot deliver one"
+            );
+            None
+        }
+    }
+}
+
 /// Crate names from the committed manifests, for suites that want the roster itself.
 ///
 /// Fixture manifests nested under a crate's own `tests/` are not workspace members and
