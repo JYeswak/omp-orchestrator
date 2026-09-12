@@ -41,6 +41,10 @@ pub fn run(repo_root: &Path, staged: &[String], deletions: &[String]) -> CommitR
     census_membership(repo_root, staged, &mut report);
     hook_freshness(repo_root, staged, &mut report);
     omp_drift(repo_root, staged, &mut report);
+    // ⛔ RESTORED (l6hsl item A). The work-in-progress DELETED this line while adding a leg
+    // that calls `armed_gates` DIRECTLY on its own report -- so the watcher was fully unwired,
+    // the crate still compiled, and the suite got GREENER by one leg. The production path is
+    // run(); a leg that constructs its own report never enters it.
     armed_gates(&mut report);
     let _ = deletions;
     report
@@ -56,9 +60,10 @@ fn armed_gates(report: &mut CommitRatchetReport) {
     match crate::armed_gates::check_armed(&|key| std::env::var(key).ok(), crate::armed_gates::ARMED_GATES) {
         Ok(findings) => {
             if findings.is_empty() {
-                report.observations.push(
-                    "armed_gates: DISARMED_ALL gates=3 detail=no env-disarmable gate is armed".to_owned(),
-                );
+                report.observations.push(format!(
+                    "armed_gates: DISARMED_ALL gates={} detail=no env-disarmable gate is armed",
+                    crate::armed_gates::ARMED_GATES.len()
+                ));
             } else {
                 report.observations.extend(findings.into_iter().map(|finding| {
                     format!("armed_gates: {finding}")
@@ -1458,6 +1463,76 @@ mod tests {
             DriftCommitDecision::UnknownObserved {
                 reason: "installed_unknown:no usable installed version".to_owned()
             }
+        );
+    }
+
+    /// ITEM A (l6hsl fix): the production adapter must EMIT an armed_gates
+    /// row. Deleting the `armed_gates(&mut report)` call from `run()` leaves
+    /// every watcher leg green (they inject their own reader and slice), so
+    /// only this leg reddens on exactly that deletion -- proven by mutation
+    /// before landing (BackstopFix's method). Env scrubbed with RAII restore
+    /// so the row shape is deterministic without poisoning parallel tests;
+    /// edition 2021 keeps remove_var/set_var safe fns.
+    #[test]
+    fn production_adapter_emits_armed_gates_row() {
+        struct EnvScrub {
+            saved: Vec<(String, Option<String>)>,
+        }
+        impl EnvScrub {
+            fn scrub(keys: &[&str]) -> Self {
+                let saved = keys
+                    .iter()
+                    .map(|key| ((*key).to_owned(), std::env::var(key).ok()))
+                    .collect::<Vec<_>>();
+                for (key, _) in &saved {
+                    std::env::remove_var(key);
+                }
+                Self { saved }
+            }
+        }
+        impl Drop for EnvScrub {
+            fn drop(&mut self) {
+                for (key, value) in &self.saved {
+                    match value {
+                        Some(value) => std::env::set_var(key, value),
+                        None => std::env::remove_var(key),
+                    }
+                }
+            }
+        }
+        let _guard = EnvScrub::scrub(&[
+            "OMP_STAGED_BUILD_GATE",
+            "OMP_CRATE_ATOM_GATE",
+            "OMP_R1_BREADTH_GATE",
+        ]);
+        // ⛔ THROUGH `run()`, NOT `armed_gates()` DIRECTLY (l6hsl item A). The version this
+        // replaces built its own report and called the adapter itself, so it stayed GREEN while
+        // the production call site was DELETED from run() -- the watcher fully unwired and the
+        // suite one leg greener. A leg that constructs its own report proves the adapter works;
+        // only a leg that enters the production path proves it is WIRED.
+        //
+        // `run()` needs a repo root and a staged set: an empty staged set is fine because this
+        // adapter reads the environment, not the diff, and the other four ratchets emit their
+        // own rows which the filter below ignores by prefix.
+        let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("crates/<name> has a workspace root two levels up")
+            .to_path_buf();
+        let report = run(&repo_root, &[], &[]);
+        let rows: Vec<&String> = report
+            .observations
+            .iter()
+            .filter(|line| line.starts_with("armed_gates:"))
+            .collect();
+        assert_eq!(rows.len(), 1, "the adapter must emit exactly one row: {rows:?}");
+        assert!(
+            rows[0].contains("DISARMED_ALL"),
+            "scrubbed env must read disarmed: {rows:?}"
+        );
+        assert!(
+            rows[0].contains(&format!("gates={}", crate::armed_gates::ARMED_GATES.len())),
+            "denominator derived from the registry, never a literal (item B): {rows:?}"
         );
     }
 }
