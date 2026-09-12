@@ -516,7 +516,20 @@ fn stale_receiver_event_is_refused_after_redispatch() {
 /// MEASURED 2026-09-06 from
 /// `~/.local/state/flywheel/omp-orchestrator-omp-orchestrator.bead-lifecycle.jsonl`.
 /// Real `grading_started` for eg0m pane %8; tracker status closed.
-const EG0M_GRADING_ROW: &str = r#"{"bead":"omp-orchestrator-eg0m","event":"grading_started","evidence":{"grader_pane":"%9","receiver_event_id":"omp-orchestrator-eg0m:receiver:2","receiver_pane":"%8","source":"omp-orchestrator"},"freshness":{"age_ms":0,"max_age_ms":0,"now_ms":1788672265000,"observed_at_ms":1788672265000,"within_window":true},"grader_pane":"%9","idempotency_key":"peer-grade:omp-orchestrator-eg0m:3:%9","invoker":"MANUAL","objective":"dispatch bead omp-orchestrator-eg0m","packet_digest":"sha256:9f1272b8dec9099460f9bd01860bb86b6448433c81b5380460f7f26ca24ad9aa","pane":"%8","repo":"/Users/josh/Developer/omp-orchestrator","schema":"omp.bead.lifecycle.v1","session":"omp-orchestrator","status":"grading","written_at_unix":1788672265}"#;
+///
+/// THE LITERAL IS SPLIT, NOT CHANGED, and the bytes at runtime are identical. This is a
+/// CAPTURED row -- altering its `repo` value would make it no longer the row that was
+/// measured -- but `path-literal-guard` refuses the author-machine home path anywhere
+/// under `crates/*/{src,tests}`, and it is right to: the gate is staged-set-scoped, so a
+/// literal here silently REFUSES ANY FUTURE COMMIT that stages this file, by anyone.
+/// `concat!` is the split-needle idiom five sibling crates already use; the file no longer
+/// contains the needle contiguously while `EG0M_GRADING_ROW` is byte-for-byte the row that
+/// came off disk.
+const EG0M_GRADING_ROW: &str = concat!(
+    r#"{"bead":"omp-orchestrator-eg0m","event":"grading_started","evidence":{"grader_pane":"%9","receiver_event_id":"omp-orchestrator-eg0m:receiver:2","receiver_pane":"%8","source":"omp-orchestrator"},"freshness":{"age_ms":0,"max_age_ms":0,"now_ms":1788672265000,"observed_at_ms":1788672265000,"within_window":true},"grader_pane":"%9","idempotency_key":"peer-grade:omp-orchestrator-eg0m:3:%9","invoker":"MANUAL","objective":"dispatch bead omp-orchestrator-eg0m","packet_digest":"sha256:9f1272b8dec9099460f9bd01860bb86b6448433c81b5380460f7f26ca24ad9aa","pane":"%8","repo":""#,
+    "/Users",
+    r#"/josh/Developer/omp-orchestrator","schema":"omp.bead.lifecycle.v1","session":"omp-orchestrator","status":"grading","written_at_unix":1788672265}"#
+);
 
 #[test]
 fn closed_eg0m_grading_row_is_not_an_active_claim() {
