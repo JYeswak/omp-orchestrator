@@ -662,6 +662,18 @@ pub fn untriaged_amnesty_rows() -> Vec<&'static str> {
 /// `s1-coverage` — the two crates a workflow names while this host supplies no git remote) and
 /// 0 is the value on any host that HAS a remote. LOWER IT WHEN THE INPUT BECOMES AVAILABLE;
 /// raising it is how an unmeasured census becomes a passing one.
+///
+/// ⛔ AN ABSOLUTE COUNT, AND THAT IS A DELIBERATE EXCEPTION TO THE RULE AGAINST THEM. A ratchet
+/// keyed on an absolute count normally cannot tell growth from regression and goes red by
+/// construction the next time the counted thing legitimately changes. It is accepted HERE
+/// because the correct value is ZERO wherever the input exists, and because the bounded
+/// quantity is THE POPULATION RELEASED FROM BOTH OBLIGATION LEGS — which must not grow with
+/// the workspace. It grows only when a genuinely new host-shaped crate appears, and that is
+/// precisely the event a human should review rather than absorb.
+///
+/// DIES WHEN: the census runs on a host that supplies a git remote, where the only admissible
+/// value is 0. At that point delete this constant and the ceiling clause with it — the leg's
+/// strict-subset and positive-control assertions stand on their own.
 pub const UNDETERMINED_CEILING: usize = 2;
 
 /// Compatibility projection from the single ratchet anchor.
