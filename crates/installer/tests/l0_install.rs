@@ -1,10 +1,10 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
-    git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks,
-    parse_cosign_version, path_collision_hits, publish_atomic, publish_atomic_durable, refuse_path_collisions,
-    resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
+    git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks, catalog_artifact_dir,
+    parse_cosign_version, publish_atomic, publish_atomic_durable, refuse_path_collisions,
+    resolve_platform_triple, resolve_repo_ownership, seal_install_report, select_fallback_artifact, stage_artifact_stream,
     probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_policy,
-    AgentOutcome, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookBackup, HookWrite,
+    AgentOutcome, ArtifactEntry, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite,
     IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
     SigstoreTrust, COSIGN_CVE_FLOOR, COSIGN_CVE_ID,
 };
@@ -654,6 +654,123 @@ fn platform_triple_resolver() {
         .expect_err("unsupported tuple must refuse");
     assert!(matches!(error, InstallError::PlatformTripleUnsupported { .. }));
     assert_eq!(error.to_string().split_whitespace().next(), Some("L0-PLATFORM-TRIPLE"));
+}
+
+#[test]
+fn musl_fallback_requires_gnu_artifact() {
+    // Bead mauc: linux/x86_64/musl takes the gnu artifact ONLY when the
+    // catalog proves a nonempty existing file for it. resolve_platform_triple
+    // stays pure selection; this composes selection with the catalog before
+    // any staging.
+    let dir = TempDir::new("musl-fallback");
+    let gnu = dir.path().join("ompo");
+    fs::write(&gnu, b"gnu-artifact").expect("gnu artifact");
+    let gnu_triple = "x86_64-unknown-linux-gnu";
+    let musl =
+        resolve_platform_triple("linux", "x86_64", Some("musl")).expect("musl tuple");
+    assert_eq!(musl.fallback, Some("musl-to-gnu"));
+    // KNOWN-GOOD: the catalog names the gnu artifact, present and nonempty.
+    let catalog = vec![ArtifactEntry {
+        triple: gnu_triple.to_owned(),
+        binary: "ompo".to_owned(),
+        path: gnu.clone(),
+    }];
+    let selected =
+        select_fallback_artifact(&musl, &catalog, "ompo").expect("gnu fallback present");
+    assert_eq!(selected, gnu);
+    // WITHOUT it the fallback refuses with the typed error, never a blind join.
+    let error =
+        select_fallback_artifact(&musl, &[], "ompo").expect_err("absent gnu must refuse");
+    assert!(
+        matches!(error, InstallError::ArtifactUnavailable { .. }),
+        "wrong refusal: {error:?}"
+    );
+    assert_eq!(error.to_string().split_whitespace().next(), Some("L0-PLATFORM-TRIPLE"));
+}
+
+#[test]
+fn fallback_artifact_refuses_absent_wrong_unreadable_empty() {
+    // Each catalog defect refuses typed while the others stay green: absent
+    // row, wrong arch/triple, unreadable file, empty file.
+    // KNOWN-BAD LEG (unreadable): deleting the metadata existence check
+    // forwards a missing file and this leg goes RED.
+    let dir = TempDir::new("fallback-defects");
+    let gnu_triple = "x86_64-unknown-linux-gnu";
+    let musl =
+        resolve_platform_triple("linux", "x86_64", Some("musl")).expect("musl tuple");
+    let present = dir.path().join("ompo");
+    fs::write(&present, b"bytes").expect("present artifact");
+    let hollow_file = dir.path().join("hollow-blob");
+    fs::write(&hollow_file, b"").expect("empty blob");
+    let wrong = ArtifactEntry {
+        triple: "aarch64-apple-darwin".to_owned(),
+        binary: "ompo".to_owned(),
+        path: present.clone(),
+    };
+    let unreadable = ArtifactEntry {
+        triple: gnu_triple.to_owned(),
+        binary: "ompo".to_owned(),
+        path: dir.path().join("pane-truth"),
+    };
+    let hollow = ArtifactEntry {
+        triple: gnu_triple.to_owned(),
+        binary: "ompo".to_owned(),
+        path: hollow_file,
+    };
+    for (name, catalog) in [
+        ("absent-row", Vec::new()),
+        ("wrong-arch-triple", vec![wrong]),
+        ("unreadable-file", vec![unreadable]),
+        ("empty-file", vec![hollow]),
+    ] {
+        let error = match select_fallback_artifact(&musl, &catalog, "ompo") {
+            Err(error) => error,
+            Ok(_) => panic!("{name} must refuse"),
+        };
+        assert!(
+            matches!(error, InstallError::ArtifactUnavailable { .. }),
+            "{name} wrong refusal: {error:?}"
+        );
+        assert_eq!(
+            error.to_string().split_whitespace().next(),
+            Some("L0-PLATFORM-TRIPLE"),
+            "{name}"
+        );
+    }
+    // The empty arm refuses for emptiness, not mere absence: re-run it alone
+    // and pin the detail word.
+    let hollow_alone = ArtifactEntry {
+        triple: gnu_triple.to_owned(),
+        binary: "ompo".to_owned(),
+        path: dir.path().join("hollow-blob"),
+    };
+    let error = select_fallback_artifact(&musl, &[hollow_alone], "ompo")
+        .expect_err("empty file must refuse");
+    assert!(error.to_string().contains("is empty"), "{error}");
+}
+
+#[test]
+fn catalog_scan_tags_files_with_resolved_triple() {
+    // The directory scan tags every regular file with the resolved triple
+    // and skips subdirectories; an unreadable directory is a typed error.
+    let dir = TempDir::new("catalog-scan");
+    fs::write(dir.path().join("ompo"), b"a").expect("artifact a");
+    fs::write(dir.path().join("tick-monitor"), b"b").expect("artifact b");
+    fs::create_dir(dir.path().join("nested")).expect("subdir");
+    let catalog =
+        catalog_artifact_dir(dir.path(), "x86_64-unknown-linux-gnu").expect("scan");
+    assert_eq!(catalog.len(), 2);
+    for row in &catalog {
+        assert_eq!(row.triple, "x86_64-unknown-linux-gnu");
+    }
+    let names: Vec<&str> = catalog.iter().map(|row| row.binary.as_str()).collect();
+    assert!(names.contains(&"ompo") && names.contains(&"tick-monitor"));
+    let error = catalog_artifact_dir(&dir.path().join("absent"), "x86_64-unknown-linux-gnu")
+        .expect_err("unreadable catalog must refuse");
+    assert!(
+        matches!(error, InstallError::ArtifactUnavailable { .. }),
+        "wrong refusal: {error:?}"
+    );
 }
 #[test]
 fn zero_agents_is_error_not_clean() {

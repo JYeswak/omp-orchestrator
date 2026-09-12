@@ -279,7 +279,27 @@ fn run_install(
         eprintln!("INSTALLER BUILD REFUSED: {error}");
         return ExitCode::from(2);
     }
-    let source = repo_root.join("target/release").join(binary_name);
+    // L0-PLATFORM-TRIPLE composition: the build output directory is read as
+    // an explicit artifact catalog and the resolved triple selects from it.
+    // A musl host takes the gnu artifact only when the catalog proves a
+    // nonempty existing file for it; the blind target/release/<binary> join
+    // assumed existence instead. main -> run_install -> resolver ->
+    // catalog_artifact_dir -> select_fallback_artifact -> install_binary.
+    let release_dir = repo_root.join("target/release");
+    let catalog = match installer::catalog_artifact_dir(&release_dir, platform.artifact_triple) {
+        Ok(catalog) => catalog,
+        Err(error) => {
+            eprintln!("INSTALLER ERROR: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let source = match installer::select_fallback_artifact(&platform, &catalog, binary_name) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("INSTALLER ERROR: {error}");
+            return ExitCode::from(1);
+        }
+    };
     match installer::verify_sha256_before_install(&source, expected_sha256, || {
         installer::install_binary(&source, bin_dir, &head, &ownership)
     }) {

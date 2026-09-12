@@ -106,6 +106,12 @@ pub enum InstallError {
         arch: String,
         libc: Option<String>,
     },
+    /// L0-PLATFORM-TRIPLE composition. The resolved artifact is absent from
+    /// the catalog, built for another arch/triple, unreadable, or empty.
+    ArtifactUnavailable {
+        triple: String,
+        detail: String,
+    },
     /// The install path is already occupied by a runnable artifact this
     /// installer did not publish. Refused BEFORE anything is staged or renamed.
     DestinationNotOurs {
@@ -207,6 +213,10 @@ impl fmt::Display for InstallError {
             Self::PlatformTripleUnsupported { os, arch, libc } => write!(
                 formatter,
                 "L0-PLATFORM-TRIPLE unsupported os={os} arch={arch} libc={libc:?}"
+            ),
+            Self::ArtifactUnavailable { triple, detail } => write!(
+                formatter,
+                "L0-PLATFORM-TRIPLE artifact unavailable for {triple}: {detail}"
             ),
             Self::DestinationNotOurs { path, detail } => write!(
                 formatter,
@@ -388,7 +398,95 @@ pub fn current_platform_triple() -> Result<PlatformResolution, InstallError> {
     };
     resolve_platform_triple(std::env::consts::OS, std::env::consts::ARCH, libc)
 }
+/// One cataloged build artifact: which triple it was built for, which binary
+/// it is, and where it lives. A catalog is caller-provided — a directory
+/// scan tagged with the resolved triple, or an explicit list. It is never
+/// inferred from target/release/<binary>: that join assumes the artifact
+/// exists instead of proving it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactEntry {
+    pub triple: String,
+    pub binary: String,
+    pub path: PathBuf,
+}
 
+/// Read an artifact directory as an explicit catalog. Every regular file
+/// becomes a row tagged with the triple the resolver selected; the triple
+/// comes from the resolver, never from filenames. An unreadable directory
+/// is a typed error; an empty directory is a valid empty catalog whose
+/// selection refuses downstream.
+pub fn catalog_artifact_dir(dir: &Path, triple: &str) -> Result<Vec<ArtifactEntry>, InstallError> {
+    let entries = std::fs::read_dir(dir).map_err(|error| InstallError::ArtifactUnavailable {
+        triple: triple.to_owned(),
+        detail: format!("artifact catalog {} unreadable: {error}", dir.display()),
+    })?;
+    let mut catalog = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| InstallError::ArtifactUnavailable {
+            triple: triple.to_owned(),
+            detail: format!("artifact catalog {} entry unreadable: {error}", dir.display()),
+        })?;
+        if !entry.file_type().map(|kind| kind.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        catalog.push(ArtifactEntry {
+            triple: triple.to_owned(),
+            binary: name,
+            path: entry.path(),
+        });
+    }
+    Ok(catalog)
+}
+
+/// L0-PLATFORM-TRIPLE composition. resolve_platform_triple stays pure
+/// selection; this proves the selected artifact EXISTS before staging. A
+/// musl→gnu fallback (and every other resolution) requires a catalog row
+/// naming a NONEMPTY EXISTING file whose triple and binary match. Absent
+/// row, wrong arch/triple, unreadable file, and empty file are typed
+/// L0-PLATFORM-TRIPLE errors. resolve_platform_triple's own vocabulary is
+/// untouched.
+pub fn select_fallback_artifact(
+    resolution: &PlatformResolution,
+    catalog: &[ArtifactEntry],
+    binary_name: &str,
+) -> Result<PathBuf, InstallError> {
+    let triple = resolution.artifact_triple;
+    let row = catalog
+        .iter()
+        .find(|entry| entry.triple == triple && entry.binary == binary_name);
+    let row = match row {
+        Some(row) => row,
+        None => {
+            let mut have: Vec<String> = catalog
+                .iter()
+                .map(|entry| format!("{}:{}", entry.triple, entry.binary))
+                .collect();
+            have.sort();
+            have.dedup();
+            return Err(InstallError::ArtifactUnavailable {
+                triple: triple.to_owned(),
+                detail: if have.is_empty() {
+                    format!("empty catalog names no {binary_name}")
+                } else {
+                    format!("catalog names no {triple} {binary_name}; have {}", have.join(" "))
+                },
+            });
+        }
+    };
+    let bytes = std::fs::metadata(&row.path).map(|meta| meta.len());
+    match bytes {
+        Err(error) => Err(InstallError::ArtifactUnavailable {
+            triple: triple.to_owned(),
+            detail: format!("artifact {} unreadable: {error}", row.path.display()),
+        }),
+        Ok(0) => Err(InstallError::ArtifactUnavailable {
+            triple: triple.to_owned(),
+            detail: format!("artifact {} is empty", row.path.display()),
+        }),
+        Ok(_) => Ok(row.path.clone()),
+    }
+}
 /// L0-VERIFY-MINISIGN. Required signatures are checked, never warned away.
 pub fn verify_minisign_policy(
     minisig_present: bool,
