@@ -78,8 +78,27 @@ AUTHORITATIVE  run 34683511926   headSha 08fa2bbb   conclusion=failure
      leg diff across 181ca20c -> 08fa2bbb returns "19 -> 19, ENTERED resident, LEFT the hook leg",
      which reads as ONE CRATE TRADING ONE LEG FOR ANOTHER. Scoped per crate it is TWO SEPARATE
      EVENTS IN TWO CRATES:
-       no-shell-gate     19 -> 18   ENTERED none      LEFT installed_hook_...
-       omp-orchestrator   0 ->  1   ENTERED resident  LEFT none
+       no-shell-gate     19 -> 18   ENTERED none   LEFT installed_hook_...
+       omp-orchestrator   0 ->  3   ENTERED three grade_assign legs   LEFT none
+
+     ⛔⛔ AND THE "1" ABOVE WAS WRONG WHEN FIRST COMMITTED -- A REGEX DEFECT IN THE CONDUCTOR'S OWN
+     EXTRACTOR, CORRECTED HERE. `test=[A-Za-z0-9_]+` DOES NOT MATCH `:`, so every Rust UNIT-test
+     path `resident::tests::X` truncated to `resident` and three distinct legs collapsed into one.
+     The correct needle is `test=[A-Za-z0-9_:]+`.
+     no-shell-gate's counts are UNAFFECTED (19 and 18 under both regexes) because its failing legs
+     are INTEGRATION tests whose names carry no `::`. That is why the defect was invisible: it
+     bites only the crate whose legs are unit tests, and the first crate measured had none.
+     ⭐ THE RULE: A LEG-NAME NEEDLE MUST ADMIT `::`, OR IT SILENTLY COLLAPSES A MODULE'S ENTIRE
+     FAILING SET TO ONE ROW NAMED AFTER THE MODULE. Same family as grouping by crate: the data was
+     complete and the extractor threw it away.
+
+     THE THREE, in full:
+       resident::tests::grade_assign_records_the_claim_before_it_renders_the_packet
+       resident::tests::grade_assign_refuses_a_packet_before_the_assignment_write
+       resident::tests::grade_assign_renders_a_packet_for_a_working_observer
+     ⛔ ALL THREE ARE THE GRADE-ASSIGNMENT PATH -- the code that records a claim before rendering a
+     grading packet, and that refuses a packet written before the assignment lands. That is the
+     IMPL -> GRADING transition this fleet has been exercising by hand all session. Unowned; filed.
      The conductor produced the wrong version first and caught it before publishing. Same class as
      counting cause-NAMES as TARGETS earlier the same day: the field was there and was not used.
 
