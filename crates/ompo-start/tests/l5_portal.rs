@@ -745,3 +745,71 @@ fn cursor_field_number_or_null_with_reason() {
         "refusal must be typed, got {refused}"
     );
 }
+
+/// L5-ARTIFACT (vocw): after the write lands, the artifact exists and
+/// readback of the required keys succeeds. A zero-byte write and a missing
+/// file both FAIL readback — neither is an empty success.
+#[test]
+fn artifact_readback_required_keys() {
+    use ompo_start::inception::read_inception;
+
+    // KNOWN-GOOD control: a complete artifact reads back with its keys.
+    let dir = tempfile::tempdir().expect("fixture directory");
+    let destination = dir.path().join("inception.json");
+    let complete = br#"{
+        "schema_version": "inception.v1",
+        "project_id": "vocw-fixture",
+        "repo_identity": {
+            "canonical_path": "/tmp/vocw",
+            "git_marker": ".git",
+            "source_revision": "vocw0",
+            "host_identity": "vocw-host"
+        },
+        "control_files": {
+            "AGENTS.md": true, "CLAUDE.md": true, "README.md": true,
+            "Cargo.toml": true, "SCHEMAS.toml": true, "docs/decisions.jsonl": true
+        },
+        "host_capabilities": {"os": "linux", "arch": "x86_64", "filesystem": "ext4"},
+        "required_tools": ["git", "cargo", "br", "bv", "ntm", "am", "jq"],
+        "trust_status": {
+            "status": "trusted", "reason_code": "vocw",
+            "control_files_complete": true
+        }
+    }"#;
+    write_atomic_observed(&destination, complete).expect("bytes land");
+    assert!(
+        destination.exists(),
+        "the artifact must exist after the write"
+    );
+    let readback = read_inception(&destination).expect("complete artifact reads back");
+    assert_eq!(readback.project_id, "vocw-fixture");
+    assert!(
+        readback.control_files_complete,
+        "control_files_complete must be true"
+    );
+    println!(
+        "L5_ARTIFACT_OK project={} complete={}",
+        readback.project_id, readback.control_files_complete
+    );
+
+    // ZERO-BYTE write FAILS readback: empty bytes are not an empty success.
+    let zero_path = dir.path().join("zero.json");
+    write_atomic_observed(&zero_path, b"").expect("zero bytes land");
+    let error = read_inception(&zero_path).expect_err(
+        "a zero-byte artifact must FAIL readback, not succeed",
+    );
+    println!("L5_ARTIFACT_ZERO refusal={error}");
+
+    // MISSING file FAILS readback: absence is not a row either.
+    let missing = dir.path().join("never-written.json");
+    assert!(!missing.exists());
+    let error = read_inception(&missing).expect_err(
+        "a missing artifact must FAIL readback, not succeed",
+    );
+    let detail = error.to_string();
+    println!("L5_ARTIFACT_MISSING refusal={detail}");
+    assert!(
+        detail.contains("never-written.json"),
+        "the refusal must name the missing path, got {detail}"
+    );
+}
