@@ -291,3 +291,102 @@ fn the_streamed_row_is_byte_identical_to_the_reported_row() {
         );
     }
 }
+
+/// ⛔ THE SKIP ROW IS EMITTED BY THE REAL BINARY, NOT JUST PLANNED BY A PURE FUNCTION.
+///
+/// `omp-orchestrator-fence-ci-non-verdict-16l` item A. `Grade16l` ran the control the author did
+/// not: it REVERTED the wiring in `main.rs` so the check executes after a skipped setup -- the
+/// exact defect -- and the suite stayed at 42 passed, exit=0. `CHECK_SKIPPED_SETUP_DEPENDENT` was
+/// asserted by NO test in the tree, so the whole fix was unguarded. A mutation that does not bite
+/// is the most valuable result available and it said precisely that.
+///
+/// The guard that existed was on `plan_check_phase`, a pure function over a declaration slice. It
+/// cannot see whether `main.rs` CALLS it. This leg spawns the binary and reads the row.
+///
+/// THE FIXTURE IS THE REAL SHAPE: two phases on the SAME bin, the first declared `setup`, which is
+/// `commit-build-fence`'s own stanza. No cargo build is needed to reach the assertion, because a
+/// skipped phase is decided from the declaration before anything is spawned.
+#[test]
+fn the_run_pass_emits_a_setup_dependent_skip_row_from_the_real_binary() {
+    let fx = Fixture::new("skipdep", &["alpha"]);
+    // Give `alpha` the two-phase same-bin stanza. `{repo}` is the runner's own placeholder.
+    let manifest = fx.root.join("crates/alpha/Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).expect("fixture manifest");
+    std::fs::write(
+        &manifest,
+        format!(
+            "{text}\n[package.metadata.gate]\nchecks = [\n  \
+             {{ bin = \"alpha\", args = [\"init\", \"--repo\", \"{{repo}}\"], setup = true }},\n  \
+             {{ bin = \"alpha\", args = [\"check\", \"--repo\", \"{{repo}}\"] }},\n]\n"
+        ),
+    )
+    .expect("stanza");
+
+    let out = Command::new(runner())
+        .args(["--run"])
+        .current_dir(&fx.root)
+        .env("GATE_RUNNER_BANK", fx.bank())
+        .env_remove("CARGO")
+        .output()
+        .expect("the runner must be spawnable");
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+
+    // ⛔ ANTI-VACUITY, AND IT IS THE WHOLE POINT OF THIS BEAD IN MINIATURE: "the row was not
+    // emitted" and "I did not look for it" MUST NOT SHARE A VERDICT. If the run produced no
+    // CHECK_ rows at all, the fixture never reached the check pass and this leg has measured
+    // NOTHING -- that is an ERROR, not a pass, and it is reported as a different sentence.
+    let check_rows: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.starts_with("CHECK_"))
+        .collect();
+    assert!(
+        !check_rows.is_empty(),
+        "ANTI-VACUITY: the run emitted ZERO CHECK_ rows, so the check pass was never reached and \
+         this leg proves nothing -- distinct from the row being absent.\nstdout={stdout}\nstderr={stderr}"
+    );
+
+    // The setup phase itself is skipped, and says why.
+    assert!(
+        stdout.contains("CHECK_SKIPPED_SETUP crate=alpha phase=0"),
+        "phase 0 is declared setup and must be skipped as such: {check_rows:?}"
+    );
+    // THE SUBJECT: the later same-bin phase is skipped as SETUP-DEPENDENT, naming the phase it
+    // depends on -- not Unmeasurable, which would say the environment failed, and not Passed.
+    assert!(
+        stdout.contains("CHECK_SKIPPED_SETUP_DEPENDENT crate=alpha phase=1 setup_phase=0"),
+        "the check after a skipped setup must emit the SETUP_DEPENDENT row naming its setup \
+         phase; reverting the wiring in main.rs left the suite green before this leg existed: \
+         {check_rows:?}"
+    );
+    // AND IT MUST NOT BE LAUNDERED INTO A PASS. This is the direction the defect took.
+    assert!(
+        !stdout.contains("CHECK_PASS crate=alpha phase=1"),
+        "a phase that never ran must never report CHECK_PASS: {check_rows:?}"
+    );
+}
+
+/// KNOWN-GOOD CONTROL for the leg above: a crate with NO gate stanza emits no CHECK_ rows at all.
+///
+/// Without this, the skip assertions could be satisfied by a runner that emitted skip rows for
+/// everything -- which would be a different defect wearing the same green.
+#[test]
+fn a_crate_without_a_gate_stanza_emits_no_check_rows() {
+    let fx = Fixture::new("nostanza", &["alpha"]);
+    let out = Command::new(runner())
+        .args(["--run"])
+        .current_dir(&fx.root)
+        .env("GATE_RUNNER_BANK", fx.bank())
+        .env_remove("CARGO")
+        .output()
+        .expect("the runner must be spawnable");
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let check_rows: Vec<&str> = stdout
+        .lines()
+        .filter(|line| line.starts_with("CHECK_"))
+        .collect();
+    assert!(
+        check_rows.is_empty(),
+        "a crate declaring no checks must produce no CHECK_ rows: {check_rows:?}"
+    );
+}

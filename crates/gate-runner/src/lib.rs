@@ -1346,6 +1346,37 @@ pub fn subsumption(
             ),
         };
     }
+    // ⛔ DECLARED IS NOT EXECUTED, AND CLAIMING COVERAGE THROUGH A PHASE THAT NEVER RUNS IS THE
+    // GATE-SELF-WEAKENING SHAPE (omp-orchestrator-fence-ci-non-verdict-16l, item B).
+    //
+    // `commit-build-fence` declares `init` (setup=true) then `check` on the SAME bin. The run
+    // half applies `plan_check_phase`, which skips a setup phase and then skips every later
+    // same-bin phase as SETUP-DEPENDENT -- so in CI the check is skipped UNCONDITIONALLY,
+    // INCLUDING ON A GENUINELY FENCED TREE. The declaration is real; the verdict is not.
+    //
+    // Reporting that as `Covered { checks: true }` is the same defect this enum was built to
+    // prevent one layer up: 13 crates were once graded covered by a chain nothing called, and
+    // the field named `checks` carried the value `declared`. A skip is a defensible TERMINAL
+    // STATE for a gate whose setup mutates -- but it must be NAMED as not-subsumed, never
+    // laundered into coverage. The remedy for the underlying execution model is a separate
+    // decision and deliberately NOT taken here.
+    if ran_binary && declared {
+        let executable = checks
+            .iter()
+            .filter(|c| c.crate_name == job_crate)
+            .any(|c| {
+                (0..c.phases.len())
+                    .any(|index| plan_check_phase(&c.phases, index) == CheckRunPlan::Execute)
+            });
+        if !executable {
+            return Subsumption::NotSubsumed {
+                reason: format!(
+                    "{job_crate} declares checks but NONE is executable on a check pass — every \
+                     phase is setup or setup-dependent, so the run half is SKIPPED, not covered"
+                ),
+            };
+        }
+    }
     Subsumption::Covered {
         tests,
         checks: declared,

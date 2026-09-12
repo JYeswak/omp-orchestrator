@@ -751,6 +751,106 @@ fn subsumption_of(
     gate_runner::subsumption(job_crate, ran_binary, roster, checks)
 }
 
+/// ⛔ COVERAGE MUST NOT BE CLAIMED THROUGH A PHASE THAT NEVER RUNS.
+///
+/// `omp-orchestrator-fence-ci-non-verdict-16l` item B. `commit-build-fence` declares `init`
+/// (`setup = true`) and then `check` ON THE SAME BIN. `plan_check_phase` skips a setup phase and
+/// then skips every later same-bin phase as SETUP-DEPENDENT, so on a check pass NOTHING of that
+/// crate executes -- INCLUDING ON A GENUINELY FENCED TREE.
+///
+/// Reporting that as `Covered { checks: true }` is the exact defect this enum exists to prevent
+/// one layer up: 13 crates were once graded covered by a chain nothing called, and the field
+/// named `checks` carried the value `declared`. A skip is a defensible TERMINAL STATE for a gate
+/// whose setup mutates -- but it must be NAMED, not laundered into coverage.
+///
+/// KNOWN-GOOD IS IN THE SAME LEG, because "declared and skipped" and "declared and executable"
+/// differ by ONE FIELD and a leg that only saw the bad case could not tell them apart.
+#[test]
+fn a_declared_check_that_can_never_execute_is_not_coverage() {
+    let md = metadata(&[("fence", &["f"])]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let same_bin_after_setup = vec![gate_runner::CheckInvocation {
+        crate_name: "fence".to_owned(),
+        phases: vec![
+            gate_runner::CheckPhase {
+                bin: Some("fence".to_owned()),
+                args: vec!["init".to_owned()],
+                setup: true,
+                takes_no_args: false,
+            },
+            gate_runner::CheckPhase {
+                bin: Some("fence".to_owned()),
+                args: vec!["check".to_owned()],
+                setup: false,
+                takes_no_args: false,
+            },
+        ],
+    }];
+    match subsumption_of("fence", true, &roster, &same_bin_after_setup) {
+        Subsumption::NotSubsumed { reason } => {
+            assert!(reason.contains("fence"), "the row must name the crate: {reason}");
+            assert!(
+                reason.contains("NONE is executable"),
+                "the reason must say the checks cannot RUN, not that they are undeclared -- \
+                 those are different remedies: {reason}"
+            );
+        }
+        other => panic!(
+            "a crate whose every declared phase is setup or setup-dependent is NOT covered; \
+             got {other:?}"
+        ),
+    }
+
+    // KNOWN-GOOD: the SAME declaration with the setup flag cleared is genuinely executable, so it
+    // is covered. One field apart, opposite verdicts.
+    let executable = vec![gate_runner::CheckInvocation {
+        crate_name: "fence".to_owned(),
+        phases: vec![gate_runner::CheckPhase {
+            bin: Some("fence".to_owned()),
+            args: vec!["check".to_owned()],
+            setup: false,
+            takes_no_args: false,
+        }],
+    }];
+    assert_eq!(
+        subsumption_of("fence", true, &roster, &executable),
+        Subsumption::Covered {
+            tests: true,
+            checks: true
+        },
+        "an executable declared check IS coverage; this leg must not redden the healthy case"
+    );
+
+    // AND A DISTINCT BIN IS A FAN-OUT, NOT A DEPENDENT: it still executes after a skipped setup,
+    // so it must stay covered. Without this the leg would pass by treating any setup phase as
+    // poisoning the crate.
+    let distinct_bin = vec![gate_runner::CheckInvocation {
+        crate_name: "fence".to_owned(),
+        phases: vec![
+            gate_runner::CheckPhase {
+                bin: Some("fence".to_owned()),
+                args: vec!["init".to_owned()],
+                setup: true,
+                takes_no_args: false,
+            },
+            gate_runner::CheckPhase {
+                bin: Some("other-bin".to_owned()),
+                args: vec!["check".to_owned()],
+                setup: false,
+                takes_no_args: false,
+            },
+        ],
+    }];
+    assert_eq!(
+        subsumption_of("fence", true, &roster, &distinct_bin),
+        Subsumption::Covered {
+            tests: true,
+            checks: true
+        },
+        "a DIFFERENT bin after a skipped setup is a fan-out and still executes"
+    );
+}
+
 /// REGRESSION: `--only` narrows what is RUN, never the workspace the ledger is compared against.
 ///
 /// # The defect this pins, found by the anti-vacuity leg
