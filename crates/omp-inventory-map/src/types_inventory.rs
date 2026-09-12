@@ -341,6 +341,38 @@ pub const ALLOWED_COLLISIONS: &[(&str, &str, &str)] = &[
          the moment it arrives -- at which point the ceiling falls to 41 in the SAME \
          edit that deletes this row.",
     ),
+    (
+        "Authority",
+        "agent-mail-native+ompo-start",
+
+        "owner=omp-orchestrator-f5otl. Both are PROVENANCE enums -- 'which source said this' -- \
+         over disjoint domains, and the variant sets are the falsifier: \
+         agent-mail-native/src/packet.rs:131 is Daemon | Cli | PaneObservation | Tracker, the four \
+         surfaces a MAIL PACKET can come from; ompo-start/src/hd0009.rs:38 is LedgerDecided | \
+         LedgerUndecided | FlagOverride | LedgerAbsent{path} | LedgerUnreadable{path, detail}, the \
+         five ways an HD-0009 STARTUP DECISION can be sourced. ZERO shared variants, no shared \
+         caller, and no payload in common. The shared idea is only the English word: unifying them \
+         would mean one enum whose variants are `Cli` and `LedgerUnreadable`, which describes \
+         nothing. A rename is the better durable fix and is not mine to make in either crate. \
+         dies_when= omp-types owns a provenance vocabulary and either crate re-exports it, or \
+         either declaration is renamed -- at which point delete this row and lower the ceiling in \
+         the same edit.",
+    ),
+    (
+        "Resolution",
+        "ompo-start+refill-idle-panes",
+        "owner=omp-orchestrator-f5otl. NOT THE SAME KIND OF ITEM, which is a stronger disjointness \
+         than differing variants: ompo-start/src/hd0009.rs:92 is a STRUCT `{ decided: bool, \
+         authority: Authority }` carrying the outcome of one startup question; \
+         refill-idle-panes/src/lib.rs:449 is an ENUM `Dispatch | Hold | Conflict | Unconfirmed | \
+         Unknowable`, the five-valued verdict of a TWO-SURFACE pane admission where Conflict and \
+         Unknowable exist precisely so a disagreement is never collapsed into a boolean. A struct \
+         holding a bool and a five-valued enum that refuses to collapse to a bool cannot be \
+         unified without destroying the property the enum was built for -- the honest resolution \
+         is a rename, exactly as the DispatchIntent row above says for the same arity mismatch. \
+         dies_when= either declaration is renamed, or ompo-start's struct gains its own name \
+         (Hd0009Resolution) -- delete this row and lower the ceiling in the same edit.",
+    ),
 ];
 
 /// Anchor for the unallowed-collision ratchet (bead zhr29).
@@ -426,9 +458,19 @@ pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeiling
     // contabo-reclaim/src/model.rs:328 + omp-host-tool-guard/src/lib.rs:135. One adjudication
     // moves it to 42, which IS the ceiling, so the `live <= CEILING <= live + 0` band closes to
     // equality with no slack banked. The next adjudication lowers this to 41 in the same edit.
-    ceiling: 42,
-    ceiling_at_recording: 42,
-    recorded_at_unix: 1_789_144_925,
+    //
+    // 42 -> 40 on 2026-09-12, A LOWERING, and it is the paired half of two adjudications made in
+    // the same edit: `Authority` (agent-mail-native+ompo-start) and `Resolution`
+    // (ompo-start+refill-idle-panes), both rows above, both carrying the variant sets or the
+    // KIND mismatch that falsifies them. They were adjudicated because no-shell-gate's
+    // `no_public_type_name_collisions_across_crates` demanded it and because a SECOND census of
+    // the same population had been pardoning them by TYPE NAME ALONE -- a weaker rule than this
+    // table's crate-pair scoping, which is why they were invisible there and refused here.
+    // 43 committed - GuardDecision - Authority - Resolution = 40, and the band closes to
+    // equality again. Lowering is the only direction this bound moves and it moves as a pair.
+    ceiling: 40,
+    ceiling_at_recording: 40,
+    recorded_at_unix: 1_789_186_800,
 };
 
 /// Live bound projection from the single ratchet anchor.
@@ -1302,6 +1344,14 @@ impl TypeInventory {
                     ));
                 }
             }
+        }
+
+        // Typed dies_when referents (bead omp-orchestrator-poumg.3): every
+        // allowance row's live pair must still hold the name in these very
+        // records. Same authority gate as STALE above -- a scratch tree
+        // cannot convict a row.
+        if self.adjudicable() {
+            errors.extend(crate::allowance_referents::check_referents(self));
         }
 
         // Stale vocabulary-split row: same anti-drift discipline as the

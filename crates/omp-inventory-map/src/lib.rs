@@ -12,6 +12,7 @@
 
 pub mod alignment;
 pub mod types_inventory;
+pub mod allowance_referents;
 pub mod census_invariants;
 pub mod addressable;
 pub mod count_twins;
