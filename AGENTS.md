@@ -707,6 +707,37 @@ match `join(…)` / path-literal forms before concluding a doc is inert.**
 **NO EDIT WAS MADE.** The proof refuted the change, which is a successful outcome of the gate and not
 a failure to deliver one.
 
+### ✅ `hook_freshness: STALE_HEALING … covered_sources=30` IS EXPECTED, ONCE, AND IS NOT A DEFECT
+
+Landed `e73709e` 2026-09-12: the hook's source manifest widened **24 → 30 covered sources**, adding
+`pre-delete-citation-check`, `text-structure`, `subprocess-contract`, `doctrine-retirement-gate`.
+**Every installed hook recomputes against the new manifest and prints `STALE_HEALING` on its next
+commit, then heals. NO COMMIT IS REFUSED** — `7h8kr` made stale a heal.
+
+**Escalate only two things:** a `REFUSED`, or a `STALE_HEALING` that **REPEATS on a second commit.**
+A single heal after a stamp change is the mechanism working.
+
+⭐ **THE ANTI-VACUITY LEG IS THE ONLY REASON THAT COMMIT IS PROVABLE, and its shape is the lesson:**
+every other leg in `tests/hook_freshness.rs` passes just as well over 24 files as over 30, **so a
+no-op widening would have been INVISIBLE BEHIND A GREEN.** It pins the denominator as a **FLOOR
+(`> 24`), deliberately NOT `== 30`** — *"a bare integer trains people to bump the number without
+reading it"* — asserts each promoted crate CONTRIBUTES a covered source, **and asserts the five
+held-back crates are STILL ABSENT so a widening cannot quietly overshoot its own ruling.** That is
+rule 10 satisfied in both directions at once.
+
+⛔ **AND THE RESIDUAL IS NAMED RATHER THAN CLOSED: `DEFECT B` IS NOT ELIMINATED.** Five crates remain
+uncovered **by deliberate ruling**; editing one still changes the artifact and leaves the manifest
+identical. **What changed is that each is now refused BY NAME with a revisit condition in the row** —
+`omp-inventory-map` (below ~5 commits/7d, or an isolable subset), the two DISARMED gates (the day
+they are armed), `preregistration-gate` (*"records ignorance, not innocence — promote the moment a
+co-commit appears"*), and `crate-atom-gate` (zero library references, reached ONLY by spawning an
+external binary, its freshness a real question about a DIFFERENT artifact under `9yf5s`).
+
+⛔ **Selection was by CHURN, not influence alone.** `omp-inventory-map` **qualifies on influence
+(`c26cd3e`) and fails on economics** — 11 files, 34 commits/7d, more than doubling the heal rate by
+itself. **Every commit to a covered source is one fleet-wide heal**, so the denominator has a cost
+and on influence alone the full set would have gone in.
+
 ## ⛔ RECLAIM THE BOXES YOURSELF. THIS IS A STANDING DEMAND, NOT A PERMISSION. (Joshua, 2026-09-08)
 
 Joshua, verbatim: **"agents are declaring contabos not usable because why - because we're not
