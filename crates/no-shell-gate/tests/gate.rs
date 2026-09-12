@@ -333,6 +333,68 @@ fn this_repo_is_clean() {
 /// fossil-index discriminator and the provenance assertion, so the two cannot disagree.
 const SENTINELS: &[&str] = &["AGENTS.md", "Cargo.toml", "crates/no-shell-gate/src/lib.rs"];
 
+/// What a sentinel missing from the INDEX actually licenses us to say.
+///
+/// Three values, because the middle one is a real state this leg used to convict on: the index
+/// lacks a sentinel AND no surface can corroborate that the file belongs to this tree.
+#[derive(Debug, PartialEq, Eq)]
+enum SentinelVerdict {
+    /// Every sentinel is in the index, or the disagreement is not attributable to the tree.
+    Authoritative,
+    /// HEAD carries what the index lacks: the two surfaces disagree and HEAD wins.
+    FossilIndex { in_head: Vec<String> },
+    /// The index lacks a sentinel and the commit cannot be read: nothing here can testify.
+    NoAuthoritativeSurface {
+        missing: Vec<String>,
+        reasons: Vec<String>,
+    },
+}
+
+/// Classify the sentinel absences of `tracked` against the COMMIT.
+///
+/// Pure over two real git surfaces and NOTHING else, so the fixtured leg
+/// [`the_sentinel_classifier_separates_a_fossil_index_from_a_partial_one`] can drive all three
+/// arms on any box. The arms this repository cannot reach on demand -- a live fossil index, an
+/// unborn HEAD -- are exactly why it is a function and not an inline `if`: the box that exhibited
+/// them at 05:49 had stopped exhibiting them by 06:01, so a mutation over the real tree is
+/// INCONCLUSIVE by construction and a fixture is the only honest proof.
+fn classify_missing_sentinels(root: &Path, tracked: &[String]) -> SentinelVerdict {
+    let missing: Vec<String> = SENTINELS
+        .iter()
+        .copied()
+        .filter(|sentinel| !tracked.iter().any(|path| path == sentinel))
+        .map(str::to_owned)
+        .collect();
+    if missing.is_empty() {
+        return SentinelVerdict::Authoritative;
+    }
+    // ONE READ OF THE WHOLE COMMIT, not one per sentinel. Per-sentinel reads cannot tell
+    // "the commit could not be read" from "the commit was read and does not carry this path":
+    // both arrive as an Err, and my own pinned-wrong-answer arm caught the misclassification --
+    // a readable HEAD that genuinely lacks a sentinel was being EXCUSED as an environment, which
+    // is precisely the suppression this whole unit exists to avoid.
+    match common::committed_paths(root, ".") {
+        Ok((head_paths, _rev)) => {
+            let in_head: Vec<String> = missing
+                .iter()
+                .filter(|sentinel| head_paths.iter().any(|path| path == *sentinel))
+                .cloned()
+                .collect();
+            if in_head.is_empty() {
+                // Readable HEAD that also lacks them: the tree genuinely does not carry the
+                // sentinel, so the assertion downstream must be allowed to fire.
+                SentinelVerdict::Authoritative
+            } else {
+                SentinelVerdict::FossilIndex { in_head }
+            }
+        }
+        Err(source) => SentinelVerdict::NoAuthoritativeSurface {
+            missing,
+            reasons: vec![source.blocked_reason().unwrap_or_default().to_owned()],
+        },
+    }
+}
+
 /// PROVENANCE OF THE SCAN SET, which `this_repo_is_clean` above cannot check.
 ///
 /// # The hole this closes (bead omp-orchestrator-7img8)
@@ -415,30 +477,12 @@ fn the_scan_set_is_this_repository_and_not_a_fragment_of_one() {
     // HARD FAILURE inside the oracle and becomes UNMEASURABLE only outside it. Declining here
     // where CI still refuses is the difference between an honest non-verdict and a suppression:
     // the leg keeps all of its force on the only box whose index is authoritative.
-    let missing_from_index: Vec<&str> = SENTINELS
-        .iter()
-        .copied()
-        .filter(|sentinel| !tracked.iter().any(|path| path == sentinel))
-        .collect();
-    if !missing_from_index.is_empty() {
-        // THREE ANSWERS, and the middle one is the box this leg was failing on. A sentinel the
-        // INDEX lacks is a PARTIAL INDEX only if some AUTHORITATIVE surface says the file belongs
-        // to this tree. Measured on contabo-1: the index is a fossil of 85 paths AND `rev-parse`
-        // cannot name a commit, so NEITHER surface is authoritative and the leg was convicting the
-        // repository on the word of an instrument that had already failed twice.
-        let mut in_head: Vec<&str> = Vec::new();
-        let mut uncorroboratable: Vec<String> = Vec::new();
-        for sentinel in missing_from_index.iter().copied() {
-            match common::committed_paths(&root, sentinel) {
-                Ok(_) => in_head.push(sentinel),
-                Err(source) => uncorroboratable
-                    .push(source.blocked_reason().unwrap_or_default().to_owned()),
-            }
-        }
-        if !in_head.is_empty() {
-            // CORROBORATED DIVERGENCE: HEAD carries what the index lacks. In a clean checkout
-            // that is the real defect, so inside the oracle it stays a HARD FAILURE; outside it,
-            // the index was never this repository's.
+    match classify_missing_sentinels(&root, &tracked) {
+        SentinelVerdict::Authoritative => {}
+        // CORROBORATED DIVERGENCE: HEAD carries what the index lacks. In a clean checkout that is
+        // the real defect, so inside the oracle it stays a HARD FAILURE; outside it, the index was
+        // never this repository's.
+        SentinelVerdict::FossilIndex { in_head } => {
             assert!(
                 common::binding_environment().is_none(),
                 "{} is the oracle: HEAD carries {in_head:?} and the index of {} paths does not, \
@@ -456,22 +500,22 @@ fn the_scan_set_is_this_repository_and_not_a_fragment_of_one() {
             );
             return;
         }
-        if !uncorroboratable.is_empty() {
-            // NEITHER SURFACE CAN TESTIFY. Not a pass and not a conviction: the leg says which
-            // instruments failed. Still FATAL in the oracle, where a commit is always nameable.
+        // NEITHER SURFACE CAN TESTIFY. Not a pass and not a conviction: the leg names which
+        // instruments failed. Still FATAL in the oracle, where a commit is always nameable.
+        SentinelVerdict::NoAuthoritativeSurface { missing, reasons } => {
             assert!(
                 common::binding_environment().is_none(),
                 "{} is the oracle and neither surface could testify: index {} paths missing \
-                 {missing_from_index:?}, and the commit read failed ({uncorroboratable:?}) \
-                 -- fix the checkout, never the assertion",
+                 {missing:?}, and the commit read failed ({reasons:?}) -- fix the checkout, never \
+                 the assertion",
                 common::binding_environment().unwrap_or_default(),
                 tracked.len()
             );
             println!(
                 "GATE_RUNNER_UNMEASURABLE names=the_scan_set_is_this_repository_and_not_a_fragment_of_one:NO_AUTHORITATIVE_SURFACE \
-                 index_paths={} missing={missing_from_index:?} commit_read={uncorroboratable:?} \
-                 detail=the index lacks a sentinel AND the commit cannot be read, so nothing here \
-                 can say whether this is a partial index or a tree that was never delivered",
+                 index_paths={} missing={missing:?} commit_read={reasons:?} detail=the index lacks \
+                 a sentinel AND the commit cannot be read, so nothing here can say whether this is \
+                 a partial index or a tree that was never delivered",
                 tracked.len()
             );
             return;
@@ -805,4 +849,93 @@ fn a_readable_head_does_not_excuse_an_unreadable_index() {
     }
 
     fs::remove_dir_all(dir).expect("fixture cleanup");
+}
+
+/// THE THREE ARMS OF THE SENTINEL CLASSIFIER, FIXTURED -- because the box cannot be asked twice.
+///
+/// Measured tonight, and it is the reason this leg exists rather than a mutation over the real
+/// tree: contabo-1 exhibited a fossil 85-path index AND an unborn HEAD at 05:49, and by 06:01 the
+/// same box no longer did. A known-bad that depends on a transient environment is INCONCLUSIVE by
+/// construction, so all three arms are manufactured here.
+#[test]
+fn the_sentinel_classifier_separates_a_fossil_index_from_a_partial_one() {
+    // ARM 1 -- FOSSIL INDEX: HEAD carries the sentinels, the "index" listing does not.
+    let fossil = fresh_git_tree("sentinel-fossil");
+    for sentinel in SENTINELS {
+        stage(&fossil, sentinel, "fixture content\n");
+    }
+    run_git(
+        &fossil,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "sentinels committed [test]",
+        ],
+        "commit the sentinels",
+    );
+    let verdict = classify_missing_sentinels(&fossil, &["README.md".to_owned()]);
+    match &verdict {
+        SentinelVerdict::FossilIndex { in_head } => assert_eq!(
+            in_head.len(),
+            SENTINELS.len(),
+            "every sentinel HEAD carries must be named: {verdict:?}"
+        ),
+        other => panic!("HEAD carries the sentinels, so this is a FOSSIL index: {other:?}"),
+    }
+
+    // ARM 2 -- AUTHORITATIVE: the same tree, an index that carries them.
+    assert_eq!(
+        classify_missing_sentinels(
+            &fossil,
+            &SENTINELS.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>()
+        ),
+        SentinelVerdict::Authoritative,
+        "a listing that carries every sentinel is authoritative"
+    );
+
+    // ARM 3 -- NO AUTHORITATIVE SURFACE: an UNBORN HEAD, so the commit cannot corroborate. This is
+    // the contabo-1 shape, and the arm the leg used to convict the repository on.
+    let unborn = fresh_git_tree("sentinel-unborn");
+    match classify_missing_sentinels(&unborn, &["README.md".to_owned()]) {
+        SentinelVerdict::NoAuthoritativeSurface { missing, reasons } => {
+            assert_eq!(missing.len(), SENTINELS.len(), "every missing sentinel is named");
+            assert!(
+                reasons.iter().any(|reason| reason.contains("rev-parse")),
+                "the reason must name the command that could not answer: {reasons:?}"
+            );
+        }
+        other => panic!("an unborn HEAD cannot corroborate anything: {other:?}"),
+    }
+
+    // ⛔ PIN THE WRONG ANSWER TOO: a tree whose HEAD is READABLE and genuinely lacks the sentinels
+    // must NOT be excused -- that is a real partial index and the assertion downstream must fire.
+    let genuine = fresh_git_tree("sentinel-genuine");
+    stage(&genuine, "README.md", "no sentinels here\n");
+    run_git(
+        &genuine,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "no sentinels [test]",
+        ],
+        "commit a sentinel-free tree",
+    );
+    assert_eq!(
+        classify_missing_sentinels(&genuine, &["README.md".to_owned()]),
+        SentinelVerdict::Authoritative,
+        "a readable HEAD that also lacks the sentinels is NOT an environment excuse -- the \
+         downstream assertion must be allowed to fire"
+    );
+
+    for path in [fossil, unborn, genuine] {
+        fs::remove_dir_all(path).expect("fixture cleanup");
+    }
 }
