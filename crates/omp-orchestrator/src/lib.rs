@@ -407,10 +407,10 @@ pub const POSITIVE_CONTROL_FAILED_UNWIRED: &str =
 ///
 /// Without leg 3, advisory-first is indistinguishable from permanent silence.
 pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
-    ("crate-soundness-verify", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
+    ("crate-soundness-verify", "STILL-LIVE oracle=census_gates: bin, 0 manifest callers, no [package.metadata.gate], no workflow -p. Entered 2026-09-02 derived membership. Dies when census_gates classifies it Reachable"),
+    ("extraction-roster", "STILL-LIVE oracle=census_gates: bin, 0 manifest callers, no [package.metadata.gate], no workflow -p. Entered 2026-09-02 derived membership. Dies when census_gates classifies it Reachable"),
+    ("refill-idle-panes", "STILL-LIVE oracle=census_gates: Unreachable (crontab comments are stripped; scheduler arm never sees a commented row). wired_lanes UNWIRED_LANE_ALLOWANCE claims cron via fast-dispatch; that probe does not consume this row. Dies when census_gates sees a live uncommented crontab or launchd executor named refill-idle-panes"),
+    ("response-envelope-check", "STILL-LIVE oracle=census_gates: library, 0 manifest callers. Entered 2026-09-02 derived membership. Dies when census_gates classifies it Reachable"),
     // ⛔ 2026-09-12 (73w7w / 83cb804): s1-coverage row DELETED. CI run 34666855450
     // classified it REACHABLE (`gate.yml` `-p s1-coverage`). Acknowledgement is NOT
     // owed: `advisory_gates()` is `!is_reachable()`, so a Reachable crate cannot
@@ -418,8 +418,8 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     // wherever `git remote` is non-empty. A host with no remote (rch worker) still
     // classifies it Unreachable -- `workflow_invokes && has_remote`, a HOST question
     // about a REPO trigger, not a missing `Dies when`. Do not restore to silence rch.
-    ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
-    ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
+    ("silent-success-census", "STILL-LIVE oracle=census_gates: bin, 0 manifest callers, no [package.metadata.gate], no workflow -p. Entered 2026-09-02 derived membership. Dies when census_gates classifies it Reachable"),
+    ("tick-dispatch", "STILL-LIVE oracle=census_gates: Unreachable (crontab comments stripped). wired_lanes UNWIRED_LANE_ALLOWANCE claims cron via controller-tick; that probe does not consume this row. Dies when census_gates sees a live uncommented crontab or launchd executor named tick-dispatch"),
     ("m2-grading-lane", "instrument limitation: source caller scan cannot see its launchd trigger; owner=pane=%19; dies_when=reachability consumes launchd metadata or the crate gains an in-tree source caller"),
     ("named-test-filter-gate", "instrument limitation: source caller scan cannot see its gate-runner manifest check; owner=pane=%19; dies_when=reachability consumes gate metadata or the crate gains an in-tree source caller"),
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
@@ -443,7 +443,7 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("oracle-pane-state-differential", "on-demand tribunal (shells to tmux/ntm itself); operator-fired on suspected drift, never scheduled, by design. Dies when a supervisor schedules it (not desired)."),
     ("pane-oracle-diff", "on-demand tribunal like oracle-pane-state-differential; fired by hand, never scheduled, by design. Dies when a supervisor schedules it (not desired)."),
     ("reap-finished-panes", "invoked every tick by resident supervisor via config string (resident.rs:847-848 default, :5380 invoke); source scan cannot see config-string indirection. Dies when a probe reads config spawns."),
-    ("s2-gate", "legitimate never-wire: S2 dropped by Joshua ruling; policy-dead by decision (OMP-SURFACE-MAP omp_surface none), not by missing code."),
+    ("s2-gate", "STILL-LIVE oracle=census_gates: legitimate never-wire, S2 dropped by Joshua ruling (OMP-SURFACE-MAP omp_surface none). Unreachable is the policy, not a missing caller. Dies when the S2 freeze is lifted and census_gates classifies it Reachable"),
     ("verify-dispatch", "built reporter, zero invocations; binary exits 0 for VERIFIED and NO-EVIDENCE alike, so a gate stanza would be decorative. Dies when it gains a caller needing a real verdict."),
     ("wired-but-inert-guard", "advisory scanner nothing invokes (06-gates clause 3 exclusion); gate-runner names it only as fixture exemption. Dies when a lane needs the guard."),
     ("kernel-only-gate", "INERT: complete source-half gate (scan_source/scan_paths/scan_tree, 7 passing legs) with no bin and no caller; tracked 2026-09-11 so CI can compile it at all. The remedy is WIRE, not amnesty -- bead omp-orchestrator-kernel-only-gate-wr2 demands an installable commit-path gate. Dies when the pre-commit binary or gate-runner invokes it."),
@@ -579,9 +579,9 @@ impl AdvisoryRatchetAnchor {
 /// advisory crate must be NAMED in the allowance, and an unnamed one is reported BY NAME
 /// rather than as arithmetic.
 pub const ADVISORY_RATCHET: AdvisoryRatchetAnchor = AdvisoryRatchetAnchor {
-    ceiling: 7,
-    ceiling_at_recording: 7,
-    recorded_at_unix: 1_789_142_400,
+    ceiling: 0,
+    ceiling_at_recording: 0,
+    recorded_at_unix: 1_789_188_452,
 };
 
 /// True when an allowance reason states no death condition, i.e. the row is UNTRIAGED amnesty.

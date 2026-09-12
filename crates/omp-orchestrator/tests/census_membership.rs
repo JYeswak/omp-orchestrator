@@ -478,13 +478,16 @@ fn overdue_is_false_at_the_moment_of_recording_and_true_past_the_deadline() {
     // Direction 3: past the deadline but the count DECREASED. Not overdue — the
     // falsifier is about a stalled ratchet, not elapsed time. Without this the
     // verdict would nag forever after 5 hours no matter how much work landed.
+    // ⛔ Do NOT use `ADVISORY_CEILING - 1`: the live ceiling is now 0 (all amnesty
+    // rows triaged) and usize underflow is not a decrease. The pair (live=0,
+    // recorded=1) is the decrease the function must recognise.
     assert!(!advisory_ratchet_overdue(
         at + 10_000_000,
         at,
         90,
         deadline,
-        ADVISORY_CEILING - 1,
-        ADVISORY_CEILING
+        0,
+        1
     ));
 
     // A zero interval must not divide by zero: the supervisor's interval is
