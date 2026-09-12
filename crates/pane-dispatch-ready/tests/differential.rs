@@ -119,8 +119,8 @@ fn state_of(line: &str) -> &str {
 /// shell gain the same clause or that the divergence be declared here with a reason. The
 /// shell cannot gain it: `bin/` no longer exists in this repository (deleted at `control-plane@45c613d`)
 /// and `AGENTS.md`'s first rule forbids re-adding a `.sh` file, so there is no oracle to
-/// extend. Every differential test above therefore ALREADY skips loudly with
-/// `reason=missing_script` and compares 0 cases.
+/// extend. The two oracle-dependent legs below are therefore `#[ignore]`d: libtest reports
+/// them IGNORED, never `ok`, so a summary line cannot read 0 cases compared as a pass.
 ///
 /// A declaration that nothing checks is paperwork, so `declared_divergences_are_real` runs
 /// each row through the Rust binary and asserts the declared state. That half needs no
@@ -181,12 +181,28 @@ fn declared_divergences_are_real() {
     }
 }
 
+/// A LOUD SKIP THAT EXITS 0 IS STILL A PASS IN EVERY SUMMARY LINE ANYONE READS, which is
+/// gate rule 4 (an empty scan set is an ERROR, never a pass) applied to a test rather than
+/// a gate. `announce_skip` printed "0 cases compared. This is NOT a passing differential."
+/// and then returned, and libtest wrote `ok`. The two oracle-dependent legs are now
+/// `#[ignore]`: libtest reports them as IGNORED, which is a typed non-pass in its own
+/// vocabulary and cannot be mistaken for a comparison that ran. The oracle cannot exist in
+/// THIS repository -- `bin/` was deleted at `control-plane@45c613d`, a revision that does
+/// not resolve here, and AGENTS.md's first rule forbids re-adding a `.sh` -- so a hard
+/// failure would be an unsatisfiable gate, the shape this repo has removed three times.
+/// `cargo test -- --ignored` on a tree that HAS the oracle runs them, and there the absent
+/// oracle is a PANIC, not an announcement: an explicit request to compare must not
+/// silently compare nothing.
 #[test]
+#[ignore = "reason=missing_script: bin/pane-dispatch-ready.sh does not exist in this repository; run with --ignored where an oracle exists"]
 fn comparator_sees_manufactured_disagreement() {
     let status = oracle_status();
     let OracleStatus::Ready = status else {
         announce_skip("comparator_sees_manufactured_disagreement", &status);
-        return;
+        panic!(
+            "explicitly requested with --ignored but no oracle is present ({status:?}); \
+             0 cases compared is NOT a pass"
+        );
     };
     let input =
         "Opus 5 (1M context) │ bypass permissions\n• Working (38m 29s • esc to interrupt)\n❯ ";
@@ -215,11 +231,15 @@ fn comparator_sees_manufactured_disagreement() {
 }
 
 #[test]
+#[ignore = "reason=missing_script: bin/pane-dispatch-ready.sh does not exist in this repository; run with --ignored where an oracle exists"]
 fn rust_matches_shell_classify_on_nonempty_case_set() {
     let status = oracle_status();
     let OracleStatus::Ready = status else {
         announce_skip("rust_matches_shell_classify_on_nonempty_case_set", &status);
-        return;
+        panic!(
+            "explicitly requested with --ignored but no oracle is present ({status:?}); \
+             0 cases compared is NOT a pass"
+        );
     };
     let esc = "\u{1b}";
     let dim = format!("{esc}[2m");
