@@ -40,7 +40,7 @@ pub const CONTROL_COMMAND_BOUND_SECS: u64 = 15;
 pub const CONTROL_COMMAND_BOUND: Duration = Duration::from_secs(CONTROL_COMMAND_BOUND_SECS);
 
 /// Opaque outer safety bound, pinned to owner wire v1. It exceeds the
-/// owner-published worst case (15 + 4*345 + 15 = 1410s) with margin for one
+/// owner-published worst case (15 + 4*390 + 15 = 1590s) with margin for one
 /// durable cancel plus status recovery. This is the ONLY bound the consumer
 /// owns: no worker count, no per-worker formula, no roster, no thresholds.
 /// Revisit if the owner version changes.
@@ -55,11 +55,11 @@ pub const CONSUMER_OUTER_BOUND: Duration = Duration::from_secs(CONSUMER_OUTER_BO
 /// owner response on any verb.
 pub const MAX_OWNER_OUTPUT_BYTES: usize = 17 * 1024 * 1024;
 
-/// RUN deadline: the owner-published worst case (15 + 4*345 + 15 = 1410s).
+/// RUN deadline: the owner-published worst case (15 + 4*390 + 15 = 1590s).
 /// The initial owner wait races only to here; recovery (durable cancel,
 /// drain, status) runs under the outer deadline reserved alongside it. Both
 /// are computed upfront so a long RUN cannot starve recovery to zero.
-pub const RUN_DEADLINE_SECS: u64 = 1410;
+pub const RUN_DEADLINE_SECS: u64 = 1590;
 /// Duration form of the RUN deadline.
 pub const RUN_DEADLINE: Duration = Duration::from_secs(RUN_DEADLINE_SECS);
 const STREAM_CAP_PLUS_ONE: u64 = MAX_OWNER_OUTPUT_BYTES as u64 + 1;
@@ -1978,9 +1978,9 @@ mod tests {
 
     #[test]
     fn run_deadline_is_the_owner_worst_case_and_outer_covers_recovery() {
-        // Owner wire v1 worst case: 15 + 4*345 + 15 = 1410s bounds the RUN;
+        // Owner wire v1 worst case: 15 + 4*390 + 15 = 1590s bounds the RUN;
         // the outer 1800s reserves recovery (cancel, drain, status) beyond it.
-        assert_eq!(RUN_DEADLINE_SECS, 1410);
+        assert_eq!(RUN_DEADLINE_SECS, 1590);
         assert_eq!(RUN_DEADLINE.as_secs(), RUN_DEADLINE_SECS);
         assert!(CONSUMER_OUTER_BOUND_SECS > RUN_DEADLINE_SECS);
     }

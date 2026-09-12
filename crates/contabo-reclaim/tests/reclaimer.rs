@@ -347,10 +347,10 @@ fn exact_owner_contract_constants_are_stable() {
 
 #[test]
 fn outer_bound_is_the_only_owned_bound_and_covers_the_owner_worst_case() {
-    // Pinned to owner wire v1: worst case 15 + 4*345 + 15 = 1410s. No worker
+    // Pinned to owner wire v1: worst case 15 + 4*390 + 15 = 1590s. No worker
     // count, roster, threshold, or per-worker formula lives here.
     assert_eq!(CONSUMER_OUTER_BOUND.as_secs(), 1800);
-    assert!(CONSUMER_OUTER_BOUND.as_secs() > 1410);
+    assert!(CONSUMER_OUTER_BOUND.as_secs() > 1590);
     assert_eq!(
         MAX_OWNER_OUTPUT_BYTES,
         17 * 1024 * 1024,
