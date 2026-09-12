@@ -3137,6 +3137,54 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    pins the unguarded form's false `IDENTICAL` as a POSITIVE CONTROL** — if that control ever stops
    reproducing, the leg is measuring nothing and says so.
 
+   ⛔ **FOURTH CLAUSE — ATTRIBUTION. A READBACK PROVES CONTENT REACHED THE TREE. IT SAYS NOTHING
+   ABOUT WHOSE COMMIT CARRIED IT.** Measured twice on 2026-09-12, from opposite sides, and **this
+   one is invisible to the three clauses above because EVERY OPERAND IS CORRECT.**
+
+   Side one (`250db103`): a path-scoped commit by a peer swept an agent's staged hunks into *its*
+   commit. The agent's readback was flawless — worktree blob == `HEAD:` blob, needle present,
+   `porcelain` clean — **and the inference "therefore my commit landed" was false.** Content in the
+   tree, credit on someone else's sha.
+
+   Side two (`990c8ea`): an agent's commit did not land at all, its `git push` **pushed a peer's
+   commit**, and it caught this because it asserted **IDENTITY AGAINST HEAD** rather than PRESENCE
+   IN THE TREE. A "needle present" check would have shipped a claim about another agent's sha.
+
+   **SO PRESENCE IS NOT PROOF OF AUTHORSHIP, AND THE STRONGER CHECK COSTS TWO COMMANDS:**
+
+   ```sh
+   git rev-parse HEAD                 # MUST equal the sha you are about to report
+   git show --stat --format= HEAD     # MUST be YOUR file set, no peer's paths riding along
+   ```
+
+   **Assert both, and report the sha you READ BACK — never the one you expected.** The failure is
+   silent in both directions: your work can land under a peer's name, and a peer's work can land
+   under yours. Neither is caught by comparing blobs, because the blobs are right.
+
+   **AND THE SHAPE THAT PRODUCES IT IS `HEAD MOVED UNDER YOU`** — between your `git add` and your
+   `git commit`, or between two measurements taken minutes apart. Same mechanism defeats a staged
+   diff: `git diff --cached` compares INDEX vs HEAD, so when HEAD advances past an abandoned index
+   entry **the output GROWS and reads as a large pending deletion authored by a peer.** An `MM`
+   file whose worktree equals HEAD is an **ABANDONED STALE INDEX ENTRY, not a person** — and
+   committing from that index reverts whatever HEAD gained. Enforced by
+   `crates/no-shell-gate/tests/readback_guard.rs`.
+
+   ⭐ **ALL FOUR MEMBERS ARE ONE BUG WITH ONE DEFENCE: NEVER LET A COMPARISON SPAN A BOUNDARY YOU
+   DID NOT RE-MEASURE.** In every case an operand moved between capture and use — a shell variable
+   lost across tool calls, a directory reaped under the hash, a stream discarded by the transport,
+   a HEAD or an index entry that advanced. **Compute both operands in ONE call, and when the
+   subject is not immutable, RE-MEASURE IT AT THE END AS WELL AS THE START.** A git sha gives you
+   that for free; **an untracked script, a shell variable, and an index entry do not — and that is
+   exactly the set that produced all four failures.**
+
+   ⛔ **RELATED, AND NOT A READBACK FAILURE, SO IT SITS BESIDE THE CLAUSE RATHER THAN INSIDE IT:
+   `A head ON A LISTING IS A COUNT OF THE HEAD.`** Three instances on 2026-09-12 — `head -5` over
+   one file's hits reported "five sites, NOT ONE in `main.rs`" when `main.rs:52` was live; `head -4`
+   undercounted `lib.rs` occurrences as four when there were five; `head -20` over filtered `rch`
+   output produced an "empty" verdict that was **neither empty nor caused by the `head`** — the
+   25-attempt control showed the transport was the variable. **Never take a COUNT or an ABSENCE
+   from a truncated listing.**
+
 8w. **`grep -c` AND `grep -o | wc -l` ANSWER DIFFERENT QUESTIONS, SO TWO HONEST AGENTS CAN
    "DISAGREE" ABOUT A FILE THEY BOTH MEASURED CORRECTLY.** Measured 2026-09-12 on
    `crates/no-shell-gate/tests/hook_freshness.rs` at one tree (`e098ad7^`): `modified|mtime` is

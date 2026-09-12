@@ -147,3 +147,53 @@ fn the_canonical_guarded_readback_is_prescribed_in_agents_md() {
         );
     }
 }
+
+/// THE FOURTH CLAUSE IS THE ONE THE GUARDED IDIOM CANNOT CATCH, SO IT NEEDS ITS OWN ENFORCEMENT.
+///
+/// Clauses 1-3 are all defeated by an EMPTY operand and all rescued by a non-empty guard. The
+/// attribution failure has NO empty operand: the worktree blob is right, the `HEAD:` blob is right,
+/// they genuinely match, and the conclusion "therefore MY commit landed" is still false because a
+/// peer's path-scoped commit carried the content. Measured from both sides on 2026-09-12 --
+/// `250db103` (an agent's hunks landed under a peer's sha) and `990c8ea` (an agent's `git push`
+/// pushed a peer's commit while its own never landed).
+///
+/// There is nothing to assert non-empty here, so the only defence is a DIFFERENT QUESTION:
+/// identity against HEAD instead of presence in the tree. This leg requires the doctrine to ask it.
+#[test]
+fn the_attribution_clause_and_its_two_commands_are_prescribed_in_agents_md() {
+    let doctrine = std::fs::read_to_string(repo_root().join("AGENTS.md"))
+        .unwrap_or_else(|error| panic!("AGENTS.md must be readable: {error}"));
+    assert!(
+        !doctrine.trim().is_empty(),
+        "ANTI-VACUITY: an empty AGENTS.md would make every needle below trivially absent"
+    );
+    for needle in [
+        // The claim itself, so a reader meets it before the commands.
+        "IT SAYS NOTHING",
+        // The two commands, verbatim, because a clause without its procedure gets re-derived
+        // and the re-derivation is what produced "needle present" in the first place.
+        "git rev-parse HEAD",
+        "git show --stat --format= HEAD",
+    ] {
+        assert!(
+            doctrine.contains(needle),
+            "the attribution clause must carry its own procedure VERBATIM; missing: {needle}"
+        );
+    }
+}
+
+/// A COUNT OR AN ABSENCE TAKEN FROM A TRUNCATED LISTING IS A PROPERTY OF THE TRUNCATION.
+///
+/// Three instances on 2026-09-12, two of them by agents who then had to retract a published figure.
+/// This is NOT a readback failure -- no comparison is involved -- which is exactly why it must be
+/// pinned separately rather than folded into `8x`'s clauses, where it would be looked for only by
+/// someone already debugging a readback.
+#[test]
+fn the_truncated_listing_hazard_is_recorded_beside_the_clause() {
+    let doctrine = std::fs::read_to_string(repo_root().join("AGENTS.md"))
+        .unwrap_or_else(|error| panic!("AGENTS.md must be readable: {error}"));
+    assert!(
+        doctrine.contains("A head ON A LISTING IS A COUNT OF THE HEAD."),
+        "the truncated-listing hazard must be stated in the doctrine, not only in a callback"
+    );
+}
