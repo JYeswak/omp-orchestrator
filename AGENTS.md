@@ -857,13 +857,22 @@ Posture: local-only (0 admissible)  ->  remote-ready (ALL WORKERS HEALTHY)
 **Where it hides.** The lane replicates the Mac path layout on the Linux workers, so the disk is
 under **`/Users/josh/Developer`** — 57.5 G of it on one box. `du -sh /root` returns ~11 G and looks
 innocent. **A guessed directory list will miss it; enumerate `/*` instead.** Per-project the
-consumers are `.rch-target-<worker>-pool-<hash>` (one was **24 G alone**), `.rch-tmp`, `.rch-target`,
+consumers are `.rch-target-<worker>-pool-<hash>` (one was **24 G alone**), `.rch-target`,
 plus orphaned `*-mut` mutation worktrees and `grade-*` scratch trees that outlive the grade.
 
 ### THE SAFETY CONTRACT — non-negotiable, and it already fired
 
-- **Deletes ONLY:** `.rch-target*`, `.rch-tmp`, `*-mut`, `grade-*`, `.grade-*`. Every path is checked
+- **Deletes ONLY:** `.rch-target*`, `*-mut`, `grade-*`, `.grade-*`. Every path is checked
   against the whitelist AND against being under the base dir before deletion.
+  ⛔ **CORRECTED 2026-09-12 (`01tzb`). `.rch-tmp` WAS REMOVED FROM THE SCRIPT ON 2026-09-11
+  and MUST NOT be put back wholesale.** It holds `rch-cargo-cache-<worker>` (the vendored
+  asupersync git checkout). Reaping it mid-resolve is a spurious GitHub network error and
+  a re-clone of every queued build. Following this list as it stood would destroy the
+  canonical cargo cache. One copy is a speed optimisation; 30-32 copies inside git-archive
+  export dirs are duplication (hardlink census: `du -sxc` == sum, 20/20 registry files
+  DIFF inodes). The scratch reclaimer may delete `$BASE/<export-shaped>/.rch-tmp` only when
+  the parent name is ABSENT on the operator Mac. `omp-orchestrator/.rch-tmp` cannot match
+  that predicate.
 - **NEVER touches** source: `crates/`, `docs/`, `src/`, `.beads/`, `.git/`, `Cargo.toml`.
 - **REFUSES to run on a host with a live `cargo`/`rustc`.** This is not decoration — on 2026-09-08 it
   **SKIPPED contabo-3** because a peer's build was executing, and that box was reclaimed on a second
