@@ -1,6 +1,17 @@
 # omp-orchestrator-fsu7 gate roster ledger.
 #
-# DERIVED, never hand-maintained: regenerate with `gate-runner --plan`.
+# INTENDED DERIVED, and the regenerate path DOES NOT EXIST YET -- omp-orchestrator-gotdk.
+# This line read "DERIVED, never hand-maintained: regenerate with `gate-runner --plan`" and that
+# instruction is NOT EXECUTABLE. Measured 2026-09-12: crates/gate-runner/src/main.rs:50 declares
+# LEDGER_PATH and :189 only READS it (`fs::read_to_string`); the crate's three writes are
+# `write_aggregate` at :603 (the citation line) and two test fixtures. There is no roster writer,
+# so following the old instruction produces no change and reads as success -- the same
+# self-refuting-instruction shape as a doc comment whose own probe disproves it.
+# UNTIL THE WRITER LANDS, ROWS ARE ADDED BY HAND against this derivation, which is the ONLY
+# authority -- never a hand-kept list, never this file read back into itself:
+#   cargo metadata --no-deps --format-version 1 --offline | jq -r '.packages[].name' | sort
+# When the writer lands it MUST be an explicit flag and MUST NOT run inside `--plan` or in CI:
+# a roster regenerated automatically can never detect the deletion this file exists to catch.
 # Its ONLY job is to make DELETION detectable. A derived roster that simply loses a crate
 # reports a smaller pass, which is exactly the silent halving gate.yml suffered when a job
 # key went missing. A row here with no crate in the workspace is an ERROR naming the crate.
@@ -33,6 +44,7 @@ fast-dispatch
 finding
 finding-dispatch
 fleet-composite
+fleet-idle-monitor
 fleet-monitor
 fleet-reconcile
 fleet-truth
@@ -43,6 +55,7 @@ inbox-monitor
 input-manifest
 installer
 kernel-bypass-gate
+kernel-only-gate
 kernel-only-operator-hook
 lifecycle-event
 lifecycle-monitor
@@ -55,6 +68,8 @@ m2-grading-lane
 named-test-filter-gate
 no-shell-gate
 ntm-fleet-monitor
+ntm-kernel
+omp-host-tool-guard
 omp-inventory-map
 omp-orchestrator
 omp-rpc-session
