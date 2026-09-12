@@ -264,46 +264,56 @@ pub const ALLOWED_COLLISIONS: &[(&str, &str, &str)] = &[
     (
         "Finding",
         "finding+state-wildcard-lint",
-        "finding::Finding is an issue record for dispatch; \
-         state-wildcard-lint::Finding is a lint scan result. Distinct \
-         semantics today. Dies when finding-dispatch adopts a shared finding \
-         type or when the zero-caller `finding` crate is retired — whichever \
-         lands first.",
+        "owner=omp-orchestrator-poumg.3. finding::Finding (finding/src/lib.rs:131) is a \
+         STRUCT {what, why, acceptance} — an issue record for dispatch. \
+         state-wildcard-lint::Finding (state-wildcard-lint/src/lib.rs:33) is a STRUCT \
+         {file, match_line, wildcard_line} — a lint scan result. Distinct shapes, no \
+         shared caller. A reader falsifies this by opening both structs. \
+         dies_when= either named declaration disappears (STALE ALLOWANCE fires) or \
+         finding-dispatch adopts a shared Finding both re-export.",
     ),
     (
         "LintReport",
         "state-wildcard-lint+undrained-pipe-lint",
-        "Both report the same SHAPE (findings + scanned count) over \
-         different finding types. Dies when a generic LintReport<T> lands in \
-         a shared gate-support crate.",
+        "owner=omp-orchestrator-poumg.3. Both are STRUCTs carrying findings + scanned \
+         count over different finding types: state-wildcard-lint/src/lib.rs:284 vs \
+         undrained-pipe-lint/src/lib.rs:60. A reader falsifies this by opening both. \
+         dies_when= either named declaration disappears (STALE ALLOWANCE fires). \
+         PERMANENT-EXEMPTION-WEARING-A-REASON: \"a generic LintReport<T> in a shared \
+         gate-support crate\" names a crate that does not exist, so that clause cannot fire.",
     ),
     (
         "Violation",
         "no-shell-gate+undrained-pipe-lint",
-        "no-shell-gate::Violation (extension + path) and \
-         undrained-pipe-lint::Violation (pipe-drain site) are unrelated \
-         shapes. Dies with a shared Violation trait in a gate-common crate; \
-         until then the collision is cosmetic, both are crate-gated at use \
-         sites.",
+        "owner=omp-orchestrator-poumg.3. no-shell-gate::Violation (lib.rs:62, extension + \
+         path) and undrained-pipe-lint::Violation (lib.rs:38, pipe-drain site) are \
+         unrelated shapes. A reader falsifies this by opening both structs. \
+         dies_when= either named declaration disappears (STALE ALLOWANCE fires). \
+         PERMANENT-EXEMPTION-WEARING-A-REASON: \"a shared Violation trait in a \
+         gate-common crate\" names a crate that does not exist, so that clause cannot fire.",
     ),
     (
         "DispatchIntent",
         "ack-spine+dispatch-claim-fence",
-        "ack-spine::DispatchIntent is a STRUCT (bead_id/pane_id/session) naming one \
-         concrete pane-targeted dispatch for the ledger; dispatch-claim-fence's is an \
-         ENUM (Bead/Broadcast/Correction) naming the KIND of dispatch authorized. \
-         Different arities, no shared caller. The enum is a kind, not an intent, so \
-         the honest resolution is a rename rather than a unification. Dies when \
-         omp-types provides the shared dispatch vocabulary.",
+        "owner=omp-orchestrator-poumg.3. ack-spine::DispatchIntent (spine.rs:29) is a \
+         STRUCT {bead_id, pane_id, session} naming one pane-targeted dispatch; \
+         dispatch-claim-fence's (lib.rs:394) is an ENUM {Bead, Broadcast, Correction} \
+         naming the KIND of dispatch authorized. Different arities, no shared caller. \
+         A reader falsifies this by opening both types. \
+         dies_when= either named declaration disappears or is renamed (STALE ALLOWANCE \
+         fires) or omp-types provides the shared dispatch vocabulary both re-export.",
     ),
     (
         "GateError",
         "no-shell-gate+porting-gate",
-        "no-shell-gate::GateError carries GitFailed and the empty-scan anti-vacuity \
-         case for a FILE-EXTENSION scan; porting-gate::GateError carries \
-         EmptyCandidates/InvalidCandidate/Io/Metadata for a CRATE-ARRIVAL check. \
-         Disjoint domains, no shared caller. Dies when a workspace error trait exists; \
-         unifying them earlier would couple two gates sharing only a suffix.",
+        "owner=omp-orchestrator-poumg.3. no-shell-gate::GateError (lib.rs:78) carries \
+         GitFailed and empty-scan anti-vacuity for a FILE-EXTENSION scan; \
+         porting-gate::GateError (lib.rs:69) carries EmptyCandidates/InvalidCandidate/Io \
+         for a CRATE-ARRIVAL check. Disjoint variant sets, no shared caller. A reader \
+         falsifies this by opening both enums. \
+         dies_when= either named declaration disappears (STALE ALLOWANCE fires). \
+         PERMANENT-EXEMPTION-WEARING-A-REASON: \"a workspace error trait exists\" names \
+         a trait that does not exist, so that clause cannot fire.",
     ),
     (
         "GuardDecision",
@@ -1565,6 +1575,40 @@ mod tests {
         assert!(
             !ALLOWED_COLLISIONS.is_empty(),
             "allowance table must not be silently empty"
+        );
+    }
+
+    #[test]
+    fn every_allowed_collision_row_carries_owner_and_dies_when() {
+        for (name, pair, reason) in ALLOWED_COLLISIONS {
+            assert!(
+                reason.contains("owner="),
+                "allowance row {name} ({pair}) missing owner=: {reason}"
+            );
+            assert!(
+                reason.contains("dies_when="),
+                "allowance row {name} ({pair}) missing dies_when=: {reason}"
+            );
+            let owner = reason
+                .split("owner=")
+                .nth(1)
+                .unwrap_or("")
+                .split_whitespace()
+                .next()
+                .unwrap_or("");
+            let dies = reason.split("dies_when=").nth(1).unwrap_or("").trim();
+            assert!(
+                !owner.is_empty() && owner != "owner=",
+                "allowance row {name} has empty owner= value"
+            );
+            assert!(
+                !dies.is_empty(),
+                "allowance row {name} has empty dies_when= value"
+            );
+        }
+        assert!(
+            !ALLOWED_COLLISIONS.is_empty(),
+            "zero allowance rows is an ERROR, never a pass — anti-vacuity"
         );
     }
 
