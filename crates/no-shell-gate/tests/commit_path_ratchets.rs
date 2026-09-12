@@ -264,8 +264,25 @@ fn real_hook_refuses_new_crate_without_census_row() {
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
 
+/// RE-BASELINED to the HEAL contract (`omp-orchestrator-ic5xr`, after
+/// `omp-orchestrator-7h8kr`'s supersession landed at 0dca236).
+///
+/// The OLD leg asserted `exit=1` + `hook_freshness: REFUSED reason=STALE_HOOK`.
+/// That refusal no longer exists: a stale hook now HEALS and never refuses, so
+/// the old assertion pinned a contract the product had stopped performing and
+/// this leg was RED in CI (gate.yml 34652659103: "stale hook must refuse:
+/// left: Some(0) right: Some(1)").
+///
+/// What survives, and is what this leg now proves, is the DETECTION: a touched
+/// covered source must be SEEN and NAMED with a heal state. Asserting `exit=0`
+/// alone would pass on a gate that noticed nothing at all -- which is the hole
+/// the old leg existed to close -- so the STATE is asserted, not the exit code
+/// alone, and `CLEAN`/`REFUSED`/`GATE_NOT_APPLICABLE` are all excluded.
+///
+/// The heal lock is pre-created so `ensure_heal` reports `already_running` and
+/// no background cross-build is spawned from a synthetic fixture repo.
 #[test]
-fn real_hook_refuses_touched_hook_source_until_reinstalled() {
+fn real_hook_heals_touched_hook_source_and_never_refuses() {
     let root = fresh_repo("hook-freshness");
     let source = "fn pre_commit_fixture() {}\n";
     stage(
@@ -279,6 +296,7 @@ fn real_hook_refuses_touched_hook_source_until_reinstalled() {
         "commit hook source baseline",
     );
     let hook = install_hook(&root);
+    fs::create_dir_all(root.join(".git/hook-heal.lock")).expect("pre-hold the heal lock");
     std::thread::sleep(Duration::from_millis(20));
     let before = fs::read(&root.join("crates/no-shell-gate/src/bin/pre-commit-gate.rs"))
         .expect("read hook source");
@@ -289,23 +307,48 @@ fn real_hook_refuses_touched_hook_source_until_reinstalled() {
     )
     .expect("touch hook source without changing bytes");
     stage(&root, "README.md", b"hook freshness probe\n");
-    let refused = commit(&root, "feat: stale hook fixture [test]");
-    let error = stderr(&refused);
-    assert_eq!(refused.status.code(), Some(1), "stale hook must refuse: {error}");
+    let healed = commit(&root, "feat: stale hook fixture [test]");
+    let error = stderr(&healed);
+    assert_eq!(
+        healed.status.code(),
+        Some(0),
+        "a stale hook heals and never refuses an unrelated commit: {error}"
+    );
+    // ANTI-VACUITY: the row must EXIST and must not have opted out. A fixture
+    // whose covered-source scan set is empty prints GATE_NOT_APPLICABLE, and a
+    // leg that accepted that would be measuring nothing.
     assert!(
-        error.contains("hook_freshness: REFUSED")
-            && error.contains("reason=STALE_HOOK")
+        error.contains("hook_freshness:") && !error.contains("hook_freshness: GATE_NOT_APPLICABLE"),
+        "the freshness row must be present and applicable in this fixture: {error}"
+    );
+    assert!(
+        error.contains("hook_freshness: STALE_HEALING")
+            // The heal state is asserted, not just the exit code: a leg that
+            // only checked exit=0 would pass on a gate that noticed NOTHING.
+            // In this fixture the lock is held (nothing spawns) and no ledger
+            // exists, so the honest state is `unknown_no_log` -- the ledger
+            // override, not the request outcome.
+            && error.contains("heal=unknown_no_log")
+            && error.contains("changed=crates/no-shell-gate/src/bin/pre-commit-gate.rs")
             && error.contains("pre-commit"),
-        "refusal must name hook freshness and stale hook: {error}"
+        "a touched hook source must be detected, named, and carry a heal state: {error}"
+    );
+    assert!(
+        !error.contains("hook_freshness: CLEAN") && !error.contains("hook_freshness: REFUSED"),
+        "a touched hook source may be neither clean nor refused: {error}"
     );
     println!(
-        "YQUN_HOOK_REFUSAL exit={:?} refusal={}",
-        refused.status.code(),
-        refusal_line(&error, "hook_freshness: REFUSED")
+        "YQUN_HOOK_HEALING exit={:?} observation={}",
+        healed.status.code(),
+        refusal_line(&error, "hook_freshness: STALE_HEALING")
     );
     fs::copy(env!("CARGO_BIN_EXE_pre-commit-gate"), &hook).expect("reinstall fresh hook");
     #[cfg(unix)]
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("restore hook mode");
+    // The first commit CONSUMED the staged README (it landed rather than being
+    // refused), so the post-reinstall commit needs its own staged content:
+    // an empty index is a different gate's refusal and not what this leg measures.
+    stage(&root, "docs/plan/00-brief.md", b"safe plan text\n");
     let restored = commit(&root, "chore: reinstall fresh hook [test]");
     assert!(
         restored.status.success(),
@@ -322,6 +365,63 @@ fn real_hook_refuses_touched_hook_source_until_reinstalled() {
     println!(
         "YQUN_HOOK_RESTORE sha_before={before_hash} sha_after={restored_hash} equal={}",
         before_hash == restored_hash
+    );
+    fs::remove_dir_all(root).expect("fixture cleanup");
+}
+
+/// THE INVARIANT `ic5xr` OWNS, PROVEN TO SURVIVE THE SUPERSESSION: a touched
+/// covered source is NEVER SILENTLY CLEAN.
+///
+/// Distinct from the leg above in the arm it exercises: there the staged set is
+/// UNRELATED (README only), here the staged set IS the covered hook source --
+/// the gate author's own commit, the exact arm the deleted
+/// `staged_touches_covered_source` discriminator used to separate. Both arms
+/// must report STALE_HEALING and neither may report CLEAN, which is what makes
+/// the discriminator's removal a scoping change rather than a blind spot.
+#[test]
+fn a_touched_hook_source_is_never_silently_clean() {
+    let root = fresh_repo("hook-never-clean");
+    stage(
+        &root,
+        "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
+        b"fn pre_commit_fixture() {}\n",
+    );
+    run_git(
+        &root,
+        &["commit", "-qm", "chore: hook source baseline [test]"],
+        "commit hook source baseline",
+    );
+    install_hook(&root);
+    fs::create_dir_all(root.join(".git/hook-heal.lock")).expect("pre-hold the heal lock");
+    // The gate's OWN source is what this commit changes.
+    stage(
+        &root,
+        "crates/no-shell-gate/src/bin/pre-commit-gate.rs",
+        b"fn pre_commit_fixture() { /* edited by the gate author */ }\n",
+    );
+    let landed = commit(&root, "feat: author edits the gate itself [test]");
+    let error = stderr(&landed);
+    assert!(
+        error.contains("hook_freshness:") && !error.contains("hook_freshness: GATE_NOT_APPLICABLE"),
+        "the freshness row must be present and applicable in this fixture: {error}"
+    );
+    assert!(
+        !error.contains("hook_freshness: CLEAN"),
+        "a commit that edits a covered hook source must never read CLEAN: {error}"
+    );
+    assert!(
+        error.contains("hook_freshness: STALE_HEALING") && error.contains("heal="),
+        "the touched source must be reported stale with a heal state: {error}"
+    );
+    assert_eq!(
+        landed.status.code(),
+        Some(0),
+        "detection is an observation, not a refusal: {error}"
+    );
+    println!(
+        "YQUN_HOOK_NEVER_CLEAN exit={:?} observation={}",
+        landed.status.code(),
+        refusal_line(&error, "hook_freshness: STALE_HEALING")
     );
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
