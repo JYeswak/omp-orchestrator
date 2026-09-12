@@ -610,11 +610,6 @@ pub fn check_staged_close_reason_policy(
     }
     Ok(report)
 }
-/// True when the given repo-root path is inside a git repository with at least one commit.
-pub fn is_git_repo(path: &Path) -> bool {
-    path.join(".git").exists()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

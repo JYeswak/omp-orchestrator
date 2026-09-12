@@ -168,6 +168,28 @@ fn the_real_repository_mirror_carries_comments() {
         .join("..");
     let worktree_copy = beads_mirror_path(&repo_root);
 
+    // ARM ONE, AND IT IS A REGRESSION REPAIR OF MY OWN UNIT. 222fe88 re-keyed this leg to
+    // the index and dropped the original `.git`-existence decline; the lane fleet turned
+    // out to be HETEROGENEOUS and two runs on two workers hid it. Measured 2026-09-11:
+    //   contabo-1/4  .git present, `ls-files --stage -- <mirror>` EMPTY -> NotInIndex, decline
+    //   a third worker  no .git at all -> ls-files exits 128 -> Err -> PANIC (this failure)
+    // "Not a checkout" is the UNMEASURABLE environment, not a defect of the subject, so it
+    // must decline here and never reach the index read. Checked with the WEAK predicate on
+    // purpose: `.git` existence cannot tell a real checkout from a synced copy, and it does
+    // not have to -- the synced-copy-WITH-.git case is what arm two catches, typed. Chaining
+    // a weak decline in front of a strong one covers both without prose-matching git's
+    // locale-dependent "not a git repository" text.
+    if !repo_root.join(".git").exists() {
+        println!(
+            "UNMEASURED reason=not_a_repo_checkout root={} worktree_copy_present={} -- rch \
+             syncs source without .git, so the production oracle is unobservable here. This \
+             is not a pass for the subject.",
+            repo_root.display(),
+            worktree_copy.exists()
+        );
+        return;
+    }
+
     let staged = match read_index_mirror(&repo_root) {
         Ok(IndexMirror::Staged(text)) => text,
         Ok(IndexMirror::NotInIndex) => {
