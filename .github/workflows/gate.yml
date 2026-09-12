@@ -184,13 +184,32 @@ jobs:
           chmod +x .git/hooks/pre-commit
           ls -l .git/hooks/pre-commit
       - name: S1 coverage provenance
+        # MEASURED 2026-09-12, omp-orchestrator-fyizd: the three steps here are the ONLY
+        # producers of a per-crate verdict, and an UNRELATED earlier step can abort the job
+        # before any of them runs. On run 34660437871 the hook-install step above failed to
+        # compile (error[E0599] in no-shell-gate) and this job emitted ZERO GATE_RUNNER lines
+        # across FIVE consecutive commits -- so "the gates are red" and "the gates never ran"
+        # were the IDENTICAL external observation. That is not an unpopular verdict; it is a
+        # verdict that was never PRODUCED, and the two have different remedies.
+        #
+        # `gate-runner` does not depend on `no-shell-gate` -- its deps are input-manifest,
+        # serde and subprocess-contract -- so the census was buildable the whole time and was
+        # blocked only by a sibling step's build.
+        #
+        # `if: always()` RELAXES NOTHING. The job still FAILS (the step above still failed and
+        # is still required), every gate still runs, and a genuinely broken crate now appears
+        # as its own FAIL row instead of as silence. What it removes is the case where an
+        # unrelated compile error buys total blindness.
+        if: always()
         run: cargo run --quiet -p s1-coverage -- --repo . --head HEAD --json
       - name: Gate roster is not vacuous
+        if: always()
         # An empty roster is an ERROR with its own exit code, never a pass. Runs BEFORE
         # the gates so a filtered or unreadable workspace is named as such rather than
         # reported as "all gates green".
         run: cargo run --quiet -p gate-runner -- --plan
       - name: Every gate, one entry point
+        if: always()
         run: cargo run --quiet -p gate-runner -- --run
       # THE CITATION, AND WHY IT NO LONGER ASKS GITHUB — omp-orchestrator-pxhmd.
       #
