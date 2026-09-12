@@ -858,13 +858,21 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
-    /// ITEM 5 AT THE SECOND SITE. `k0h1e` widened the GATE's floor to `{src,tests}`, and the
-    /// repo-wide walker still reads `src` alone -- deliberately, because eight files under
-    /// `crates/*/tests` carry a literal today. That is a legitimate narrowing and an ILLEGITIMATE
-    /// advertisement: before this leg the repo-wide line printed `crates/*/{src,tests}/**.rs`
-    /// while the walker never opened a `tests/` directory. A label describing a predicate its
-    /// command never evaluates -- the same shape as a message naming orphans while its condition
-    /// counts entry points.
+    /// ITEM 5 AT THE SECOND SITE, RE-BASELINED 2026-09-12 (64wxc grade). `k0h1e` widened the
+    /// GATE's floor to `{src,tests}` while the repo-wide walker still read `src` alone, so the
+    /// repo-wide line ADVERTISED `crates/*/{src,tests}/**.rs` for a walker that never opened a
+    /// `tests/` directory -- a label describing a predicate its command never evaluates.
+    ///
+    /// ⛔ `1a436be` RETIRED THAT DEFERRAL IN THE PRODUCT AND LEFT THIS LEG PINNING IT. With
+    /// `REPO_WIDE_SUBDIRS = {src,tests}` the deferred set is EMPTY, so both loops below iterate
+    /// NOTHING, while the old `scanned.len() == 1` still asserted a one-file sweep. The fixture
+    /// carries one file per walked subdir, so the sweep correctly read 2 and the leg correctly
+    /// reddened: the fix was right and this assertion was stale.
+    ///
+    /// The property that SURVIVES the retirement is narrower than the original: **the advertised
+    /// line never claims a subdir the walker does not open.** It is asserted here in both
+    /// directions -- see the rule-11 pin at the end, which fails if a NON-walked subdir ever
+    /// appears in `scanned` -- so this leg cannot go vacuous again when the floors next diverge.
     #[test]
     fn the_repo_wide_line_never_advertises_a_subdir_the_sweep_defers() {
         let deferred = repo_wide_deferred_subdirs();
@@ -877,6 +885,20 @@ mod tests {
             );
         }
 
+        // ⛔ THE EMPTY CASE IS THE LIVE CASE, AND A LOOP OVER AN EMPTY SET IS NOT AN ASSERTION.
+        // Post-1a436be the deferred set is empty, so the loop above iterates nothing. Assert the
+        // EQUALITY explicitly instead: with no deferral the advertised scope must name every
+        // walked subdir. Without this branch the leg is silent exactly when the floors agree.
+        if deferred.is_empty() {
+            for subdir in REPO_WIDE_SUBDIRS {
+                assert!(
+                    described.contains(subdir),
+                    "no subdir is deferred, so the advertised scope must name every walked \
+                     subdir: {subdir} missing from {described}"
+                );
+            }
+        }
+
         // The narrowing must be DECLARED, not silent: the runtime line names every deferred
         // subdir, so a reader learns the sweep is narrower than the gate from the verdict itself.
         let root = std::env::temp_dir().join(format!("plg-sweepfloor-{}", std::process::id()));
@@ -886,6 +908,13 @@ mod tests {
         fs::write(root.join("crates/example/src/lib.rs"), "fn main() {}\n").expect("clean file");
         let planted = format!("const P: &str = \"{}\";\n", USER_HOME_LITERAL);
         fs::write(root.join("crates/example/tests/it.rs"), &planted).expect("planted file");
+        // The rule-11 pin below needs a file the walker must NOT open, or it passes vacuously --
+        // which is the same defect this leg was re-baselined to remove. `benches` is outside
+        // REPO_WIDE_SUBDIRS, and this file carries the literal so a walker that opened it would
+        // both widen `scanned` AND change the verdict.
+        fs::create_dir_all(root.join("crates/example/benches"))
+            .expect("create fixture benches");
+        fs::write(root.join("crates/example/benches/b.rs"), &planted).expect("unwalked file");
 
         let report = scan(&root);
         let line = report.declared_scope_line();
@@ -906,7 +935,30 @@ mod tests {
             Verdict::Violation,
             "the gate's floor must still refuse the literal the sweep defers"
         );
-        assert_eq!(report.scanned.len(), 1, "the sweep read only the src file");
+        // DERIVED, NEVER HARD-CODED: the fixture plants exactly one file per WALKED subdir, so the
+        // expected count is a function of REPO_WIDE_SUBDIRS. A literal here is what made this leg
+        // pin a retired contract, and a literal would do it again on the next floor change.
+        assert_eq!(
+            report.scanned.len(),
+            REPO_WIDE_SUBDIRS.len(),
+            "the sweep reads exactly one file per walked subdir, derived from \
+             {REPO_WIDE_SUBDIRS:?}, not a frozen count: {:?}",
+            report.scanned
+        );
+
+        // ⛔ RULE 11 -- PIN THE WRONG ANSWER TOO. Asserting only that the walked subdirs ARE read
+        // proves a STATE; also asserting that a NON-walked subdir is NOT read proves the
+        // DISTINCTION between the advertisement and the walker, which is this leg's whole subject.
+        // Without it, a walker that opened everything would pass every assertion above.
+        assert!(
+            !report
+                .scanned
+                .iter()
+                .any(|path| path.components().any(|c| c.as_os_str() == "benches")),
+            "a file under a subdir OUTSIDE {REPO_WIDE_SUBDIRS:?} must never appear in the sweep, \
+             or the advertised floor understates what the walker opens: {:?}",
+            report.scanned
+        );
 
         let _ = fs::remove_dir_all(&root);
     }
