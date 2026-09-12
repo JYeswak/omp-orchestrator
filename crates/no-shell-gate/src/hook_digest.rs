@@ -65,7 +65,18 @@ pub const HOOK_SOURCE_CRATES: &[&str] = &[
 /// its own inputs must refuse rather than report freshness it did not measure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DigestError {
-    /// The covered set resolved to no files at all - the scan broke, or the crates moved.
+    /// NONE of the declared crates exist as directories: this is not the repo the hook guards.
+    ///
+    /// ⛔ THIS IS NOT A REFUSAL AND CONFLATING IT WITH ONE BROKE TWELVE LEGS. Every integration
+    /// test that runs the real hook builds a SYNTHETIC git repo, where no covered crate exists --
+    /// so an anti-vacuity error there refuses a commit whose freshness is not even a question.
+    /// Measured in CI on 2026-09-11: `no-shell-gate` red with `empty_staged: CLEAN staged_files=1`
+    /// printed beside exit 1, the refusal coming from a gate about a tree the test never had.
+    ///
+    /// The discriminator is DIRECTORY PRESENCE: no crates at all means a foreign tree; crates
+    /// present with no `.rs` under them means the scan broke, which is the real corruption.
+    NoCoveredCratesPresent,
+    /// The crates ARE present and yielded no `.rs` at all - the scan broke, or the files moved.
     EmptySourceSet,
     /// A covered file exists and cannot be read. Absence of bytes is not agreement.
     Unreadable { path: String, detail: String },
@@ -74,6 +85,10 @@ pub enum DigestError {
 impl std::fmt::Display for DigestError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::NoCoveredCratesPresent => formatter.write_str(
+                "NO_COVERED_CRATES_PRESENT: none of the declared hook source crates exist here, \
+                 so this is not the repo the hook guards and its freshness is not a question",
+            ),
             Self::EmptySourceSet => formatter.write_str(
                 "EMPTY_COVERED_SET: no .rs found under any declared hook source crate; \
                  an empty scan set is an ERROR, not a pass",
@@ -123,7 +138,18 @@ pub fn hook_source_files(repo_root: &Path) -> Vec<PathBuf> {
 pub fn hook_source_manifest(repo_root: &Path) -> Result<String, DigestError> {
     let files = hook_source_files(repo_root);
     if files.is_empty() {
-        return Err(DigestError::EmptySourceSet);
+        // DIRECTORY PRESENCE is the discriminator between "wrong repo" and "broken scan".
+        // Checked per crate against `<repo>/crates/<name>/src`, which is exactly the root the
+        // collector walks -- asking a different question than the scan would reintroduce the
+        // conflation this replaces.
+        let any_crate_present = HOOK_SOURCE_CRATES.iter().any(|crate_name| {
+            repo_root.join("crates").join(crate_name).join("src").is_dir()
+        });
+        return Err(if any_crate_present {
+            DigestError::EmptySourceSet
+        } else {
+            DigestError::NoCoveredCratesPresent
+        });
     }
 
     let mut manifest = String::new();
