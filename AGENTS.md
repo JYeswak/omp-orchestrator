@@ -650,6 +650,35 @@ only) is CORRECT and has **no disposal clause** — tracked as `4ftow`. **Optimi
 is rounding error; the pools are the whole problem**, and `rch gc`'s 12-hour idle window means an
 active fleet never self-reclaims them.
 
+⛔ **AND THE EXPORT MUST CARRY *HEAD CONTENT*, NOT YOUR WORKTREE — OVERLAY ONLY THE FILES YOU
+AUTHORED.** Measured 2026-09-12: an export died with `cannot find allowance_referents in crate`
+because it carried a WORKTREE copy of a shared file that held a peer's **half-written call site**.
+**In a five-worker checkout, "export the worktree" imports every peer's in-flight breakage and
+reports it as YOUR failure** — and the report is indistinguishable from a real defect in your own
+change. That is the worktree-vs-tree rule aimed at the export step itself: **the export exists to
+isolate you from the shared checkout, and copying the worktree defeats its only purpose.**
+
+⭐ **AND THE PATTERN BEHIND FIVE OF TONIGHT'S REPAIRS, which is worth more than any one of them:**
+
+```
+gate-roster.txt            90 vs 94 members
+crate_contract_inventory   72 vs 94  -- and the DOCUMENT claimed a generation nothing performed
+HOOK_SOURCE_CRATES          5 vs 17 path deps
+wired_lanes type census     the LENIENT copy: ONE non-recursive read_dir, name-only pardons
+SPAWN_TOKENS                attempted INSIDE the leg built to catch this class, refused by 4 fixtures
+```
+
+**FIVE hand-maintained registries beside derivable sources, in ONE session. Every one drifted toward
+a SMALLER, GREENER population that reads as MORE health.** ⛔ **And the instrument-level version is
+the same shape:** `line.contains` counting a fixture description as a caller · `grep -c` counting
+lines where the question was occurrences · a verb-name census over an API whose consumers reach it
+through a helper · `grep -c ompo` → 62 substrings against a true 0. **Each returns a number that is
+smaller and more reassuring than the truth.**
+
+**So the rule is not "check your registries." It is: A HAND-KEPT LIST AND A TEXT COUNT FAIL IN THE
+SAME DIRECTION, and that direction is the one nobody investigates.** Derive it, or carry a leg that
+fails when the hand-kept copy and the derivable source disagree.
+
 ⛔ **AND THE MAC SIDE IS NOT THE LEAK — the conductor filed that premise and it was wrong within two
 minutes.** Mac-side export trees are **16 dirs × 40 MB = 320 MB, against 178 GB free.** The
 multi-GB figure is the WORKER's compiled pool; the reclaim log's leading `/Users/josh/Developer/...`
