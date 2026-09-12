@@ -41,7 +41,30 @@ SUPERSEDED     run 34670418396   headSha 83cb804e   conclusion=failure
      crate fails on a DIFFERENT leg -- a strict-YAML duplicate-key assertion in
      gate_reachability.rs, which is the crate that reads AGENTS.md/README.md/CLAUDE.md.
 
-AUTHORITATIVE  run 34683511926   headSha 08fa2bbb   conclusion=failure
+⛔⛔⛔ READ THIS BEFORE ANY ROW BELOW: THE GATE PRODUCED TWO DIFFERENT FAILING SETS FOR
+BYTE-IDENTICAL CODE. Filed as `omp-orchestrator-chz3b`, P0.
+    git diff --name-only 08fa2bb 92efc35 -> ONE file, docs/plan/flow/S1-GATE-RESIDUAL.md
+    non-docs files changed ............... ZERO
+    08fa2bbb  pass=89 fail=2 unmeasurable=3   FAILING: no-shell-gate, omp-orchestrator
+    92efc352  pass=88 fail=3 unmeasurable=3   FAILING: + ompo-start
+    ENTERED: crate=ompo-start test=l2_write_claimed_without_a_reprobe_is_refused_not_believed
+92efc352 IS THIS FILE'S OWN DOCS-ONLY COMMIT, so it was an unintended EXACT CONTROLLED RE-RUN -- and
+it disagreed. Either the gate is flaky or that leg depends on state outside the tree; for a reader
+the consequence is identical.
+⛔ SO EVERY SINGLE-RUN ROW IN THIS FILE IS "ONE SAMPLE", NOT "THE STATE". That includes every
+AUTHORITATIVE block ever written here, all six supersessions, and the entry below that called three
+consecutive identical runs "THE FIRST STABLE READING THIS FILE HAS EVER CARRIED" -- THREE IDENTICAL
+SAMPLES OF A DISTRIBUTION ARE NOT PROOF OF STABILITY. The name-list rule that accompanied it stays
+correct and insufficient: it catches a membership swap; it cannot make one observation repeatable.
+⭐ WHAT SURVIVES UNQUALIFIED, because its evidence is of a different KIND: 620b991's
+loop-queue-filter departure is ATTRIBUTABLE BY CONSTRUCTION (the only change from aaab351f was that
+deletion, and exactly one crate moved -- flake does not explain a crate leaving on the commit that
+deleted its blocker); the three named `resident::tests::grade_assign_*` legs are a real population,
+present in resident.rs at 620b991; and EVERY MUTATION RESULT, because a mutation is a PAIRED
+observation on one box minutes apart, which is the only design in use here with a built-in control.
+⛔ UNTIL chz3b DELIVERS A CITATION RULE, every row here is labelled SINGLE RUN, UNREPLICATED.
+
+SUPERSEDED     run 34683511926   headSha 08fa2bbb   conclusion=failure
   pass=89 fail=2 unmeasurable=3   against GATE_RUNNER_PLAN crates=94  (89+2+3 = 94)
   GATE_RUNNER_FAILING      count=2  no-shell-gate, omp-orchestrator
   GATE_RUNNER_UNMEASURABLE count=3  admission-reason:POLICY_UNAVAILABLE,
