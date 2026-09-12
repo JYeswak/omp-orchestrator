@@ -299,6 +299,7 @@ fn every_other_verb_still_takes_the_panes_spelling() {
         NtmVerb::AnswerDialog,
         NtmVerb::Interrupt,
         NtmVerb::FleetHealth,
+        NtmVerb::IsWorking,
     ] {
         let argv = NtmCall::on_session(verb, "omp-orchestrator")
             .panes("%7")
@@ -327,8 +328,9 @@ fn the_selector_is_declared_for_every_verb() {
         NtmVerb::InspectPane,
         NtmVerb::FleetHealth,
         NtmVerb::Assign,
+        NtmVerb::IsWorking,
     ];
-    assert_eq!(verbs.len(), 7, "a verb was added without a selector decision");
+    assert_eq!(verbs.len(), 8, "a verb was added without a selector decision");
     for verb in verbs {
         let flag = verb.pane_selector_flag();
         assert!(
@@ -337,6 +339,18 @@ fn the_selector_is_declared_for_every_verb() {
         );
         assert!(flag.starts_with("--"), "{verb:?} selector must be a flag: {flag}");
     }
+}
+
+/// The pane-truth migration (qg6or): is-working assembles EXACTLY the argv the
+/// handroll spelled, through the kernel. A drift in either half fails here
+/// rather than forking a second spelling.
+#[test]
+fn is_working_emits_the_handroll_argv_through_the_kernel() {
+    let call = NtmCall::on_session(NtmVerb::IsWorking, "omp-orchestrator").panes("4");
+    assert_eq!(
+        call.argv(),
+        vec!["--robot-is-working=omp-orchestrator", "--panes=4"]
+    );
 }
 
 // ---------------------------------------------------------------------------

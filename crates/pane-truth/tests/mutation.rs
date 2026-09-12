@@ -20,5 +20,9 @@ fn mutations_are_named_and_visible() {
         text.contains("MUTATION RED awaiting_input"),
         "input-prompt mutation leg was not exercised"
     );
+    assert!(
+        text.contains("MUTATION RED exit_first"),
+        "exit-first mutation leg was not exercised"
+    );
     println!("{text}");
 }

@@ -40,6 +40,12 @@ pub enum NtmVerb {
     InspectPane,
     FleetHealth,
     Assign,
+    /// `--robot-is-working`: per-pane working state. Selector is `--panes=`
+    /// (verified live 2026-09-12: `--panes=1` answers pane 1, `--panes=99`
+    /// exits 1 with typed `PANE_NOT_FOUND`). Added for the pane-truth
+    /// migration (bead omp-orchestrator-qg6or), which hand-spelled this
+    /// literal in `query_ntm_is_working`.
+    IsWorking,
 }
 
 impl NtmVerb {
@@ -53,6 +59,7 @@ impl NtmVerb {
             Self::Interrupt => "--robot-interrupt",
             Self::InspectPane => "--robot-inspect-pane",
             Self::FleetHealth => "--robot-fleet-health",
+            Self::IsWorking => "--robot-is-working",
             Self::Assign => "--assign",
         }
     }
@@ -74,6 +81,7 @@ impl NtmVerb {
             | Self::AnswerDialog
             | Self::Interrupt
             | Self::FleetHealth
+            | Self::IsWorking
             | Self::Assign => "--panes",
         }
     }

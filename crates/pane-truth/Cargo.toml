@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 subprocess-contract = { path = "../subprocess-contract" }
 tick-monitor = { path = "../tick-monitor" }
+ntm-kernel = { path = "../ntm-kernel" }
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }

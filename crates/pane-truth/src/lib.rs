@@ -203,21 +203,36 @@ fn parse_ntm_is_working(
     })
 }
 
+/// Query `--robot-is-working` through the ONE kernel that owns the verb
+/// literal, the bounded spawn, and the exit-first branch (bead
+/// omp-orchestrator-qg6or). This replaces a hand-spelled
+/// `Command::new("ntm --robot-is-working=… --panes=…")` plus a hand-rolled
+/// deadline in this file.
+///
+/// DELIBERATE DEVIATION, stated so a reviewer does not "fix" it: this uses
+/// `run_bounded`, not `invoke_bounded`. `invoke_bounded` drops the stdout
+/// JSON on any nonzero exit, and the preserved contract REQUIRES the
+/// payload's `error_code` string (`PANE_NOT_FOUND`) in the refusal message --
+/// a leg below pins it. `run_bounded` is the kernel's sanctioned raw-stream
+/// API over the identical bounded spawn; the exit-first branch still lives in
+/// `parse_ntm_is_working`, which is unchanged.
+///
+/// The retired `PANE_TRUTH_NTM_BIN` override is gone with the handroll: no
+/// in-repo caller ever set it (verified by grep before deletion), and a
+/// kernel-hardcoded `ntm` is the KERNEL-ONLY rule working as intended.
 fn query_ntm_is_working(session: &str, selector: &str) -> Result<NtmPaneObservation, String> {
-    let binary = std::env::var("PANE_TRUTH_NTM_BIN").unwrap_or_else(|_| "ntm".to_owned());
-    let mut command = Command::new(binary);
-    command.args([
-        format!("--robot-is-working={session}"),
-        format!("--panes={selector}"),
-    ]);
-    let output = run_external(command, CHILD_DEADLINE)?;
-    if output.timed_out {
-        return Err(
-            "NTM_IS_WORKING_FAILED exit=timeout error_code=TIMED_OUT message=robot_is_working_deadline stderr="
-                .to_owned(),
-        );
+    let call = ntm_kernel::NtmCall::on_session(ntm_kernel::NtmVerb::IsWorking, session)
+        .panes(selector);
+    match ntm_kernel::run_bounded(&call, CHILD_DEADLINE) {
+        Ok(run) => parse_ntm_is_working(run.exit_code, &run.stdout, &run.stderr, selector),
+        // No exit code exists on this path (timeout kills the group;
+        // unspawned never ran), so `exit=unanswered` -- never a fabricated
+        // code, and never `timeout` for a binary that never executed.
+        Err(outcome) => Err(format!(
+            "NTM_IS_WORKING_FAILED exit=unanswered error_code={} message=robot_is_working_unanswerable stderr=",
+            outcome.state(),
+        )),
     }
-    parse_ntm_is_working(output.status, &output.stdout, &output.stderr, selector)
 }
 
 fn apply_ntm_observation(
@@ -970,6 +985,26 @@ pub fn selftest(rules: &PaneTruthRules) -> i32 {
         );
         return 1;
     }
+    // ── qg6or exit-first mutation: the branch MUST key on the process exit,
+    // never on the payload's error_code. Forcing status 0 on a PANE_NOT_FOUND
+    // payload must CHANGE the outcome (FAILED -> UNKNOWN-on-success-false),
+    // proving the live branch reads the exit first.
+    let not_found = r#"{"success":false,"error":"pane selector \"999\" not found","error_code":"PANE_NOT_FOUND"}"#;
+    let baseline_err = parse_ntm_is_working(Some(1), not_found, "", "999")
+        .expect_err("exit=1 on not-found must refuse");
+    let mutated = parse_ntm_is_working(Some(0), not_found, "", "999");
+    if baseline_err.starts_with("NTM_IS_WORKING_FAILED") && mutated.is_err() {
+        let mutated_err = mutated.expect_err("checked above");
+        if mutated_err.starts_with("NTM_IS_WORKING_UNKNOWN") {
+            println!("MUTATION RED exit_first: forcing exit 0 on a PANE_NOT_FOUND payload turns {baseline_err} into {mutated_err}");
+        } else {
+            println!("SELFTEST FAIL exit_first mutation landed in an unexpected arm: {mutated_err}");
+            return 1;
+        }
+    } else {
+        println!("SELFTEST FAIL exit_first baseline must refuse with FAILED");
+        return 1;
+    }
     // The token and the code leave this function as ONE decision, so the emitted verdict and
     // the exit status cannot drift apart (gate rule 7, bead omp-orchestrator-e4wp).
     let (token, code) = selftest_report(0);
@@ -1082,6 +1117,63 @@ mod tests {
             "exact daemon message: {error}"
         );
         assert!(!error.contains("is_working=false"));
+    }
+    /// LEG 2 (qg6or): the branch keys on EXIT, never on error_code. The same
+    /// refusal shape with INVALID_FLAG (the dialogs spelling) must refuse
+    /// identically to PANE_NOT_FOUND (the is-working spelling) -- a leg that
+    /// only ever fed one code would stay green under a mutation that matches
+    /// on the string.
+    #[test]
+    fn refusal_keys_on_exit_not_on_error_code_spelling() {
+        let raw = r#"{"success":false,"error":"bad flag","error_code":"INVALID_FLAG"}"#;
+        let error = parse_ntm_is_working(Some(1), raw, "", "4")
+            .expect_err("exit!=0 must refuse whatever the code string says");
+        assert!(
+            error.starts_with("NTM_IS_WORKING_FAILED"),
+            "refusal prefix, not UNKNOWN: {error}"
+        );
+        assert!(error.contains("exit=1"), "exit code pinned: {error}");
+        assert!(
+            error.contains("error_code=INVALID_FLAG"),
+            "code carried, not keyed: {error}"
+        );
+    }
+
+    /// LEG 3 (qg6or): total_panes is the AGENT count and silently drops
+    /// non-agent panes, so the verdict must never derive from it. A payload
+    /// carrying a disagreeing total_panes still classifies from the pane
+    /// entry alone.
+    #[test]
+    fn total_panes_never_enters_the_verdict() {
+        let raw = r#"{"success":true,"total_panes":7,"panes":{"4":{"agent_type":"omp-claude","is_working":true}}}"#;
+        let observation = parse_ntm_is_working(Some(0), raw, "", "4")
+            .expect("one pane entry decides");
+        assert!(observation.is_working);
+        assert_eq!(observation.agent_type, "omp-claude");
+    }
+    /// MIGRATION LEG (qg6or): the verb literal lives in ntm-kernel, never
+    /// here. This asserts the absence structurally over CODE lines (comments
+    /// stripped first, per the self-referential-checker rule -- a bare file
+    /// substring would match its own documentation, which is exactly what the
+    /// first version of this leg did).
+    #[test]
+    fn no_hand_spelled_verb_literal_in_this_crate() {
+        let code: String = include_str!("lib.rs")
+            .lines()
+            .filter(|line| {
+                let trimmed = line.trim_start();
+                !(trimmed.starts_with("///") || trimmed.starts_with("//"))
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        // The needle is assembled from parts so this very assertion cannot
+        // contain it (the ack_spine precedent in AGENTS.md rule 5: a checker
+        // whose input contains the needle matches itself).
+        let needle = concat!("--robot-is-", "working=");
+        assert!(
+            !code.contains(needle),
+            "the verb spelling belongs to ntm_kernel::NtmVerb::IsWorking"
+        );
     }
 
     #[test]
