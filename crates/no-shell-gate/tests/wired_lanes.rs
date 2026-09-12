@@ -105,7 +105,7 @@ const GATE_IDENTIFIER_REFERENTS: &[GateIdentifier] = &[
     GateIdentifier { id: "GATE-011", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/no-shell-gate/tests/gate.rs::planted_shell_is_red_then_green_after_delete"), known_good: Some("crates/no-shell-gate/tests/gate.rs::clean_list_passes"), anti_vacuity: Some("crates/no-shell-gate/tests/gate.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-012", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/omp-inventory-map/tests/inventory.rs::surface_map_ghost_is_unknown"), known_good: Some("crates/omp-inventory-map/tests/inventory.rs::subprocess_and_no_shell_positive_controls_are_visible"), anti_vacuity: Some("crates/omp-inventory-map/tests/inventory.rs::empty_metadata_is_a_hard_error"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-013", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_bad_both_pipes_try_wait_poll_is_flagged"), known_good: Some("crates/undrained-pipe-lint/tests/specimens.rs::known_good_stdout_only_passes"), anti_vacuity: Some("crates/undrained-pipe-lint/tests/specimens.rs::empty_scan_set_is_an_error_not_a_pass"), owner: None, dies_when: None },
-    GateIdentifier { id: "GATE-014", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/commit-build-fence/tests/hook.rs::real_hook_refuses_active_registration_with_actionable_identity"), known_good: Some("crates/commit-build-fence/tests/hook.rs::real_hook_allows_commit_with_valid_empty_store"), anti_vacuity: Some("crates/commit-build-fence/tests/hook.rs::real_hook_treats_missing_store_as_error"), owner: None, dies_when: None },
+    GateIdentifier { id: "GATE-014", status: GateIdentifierStatus::DeclaredNotWired, referent: None, known_bad: None, known_good: None, anti_vacuity: None, owner: Some("commit-build-fence conductor owner"), dies_when: Some("Dies when commit-build-fence is invoked by an uncommented CI workflow step") },
     GateIdentifier { id: "GATE-015", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/state-wildcard-lint/tests/specimens.rs::known_bad_state_wildcard_is_flagged"), known_good: Some("crates/state-wildcard-lint/tests/specimens.rs::wildcard_on_integer_and_string_passes"), anti_vacuity: Some("crates/state-wildcard-lint/tests/specimens.rs::empty_or_unreadable_workspace_is_an_error"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-016", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::known_bad_raw_send_keys_outside_kernel_is_flagged"), known_good: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::kernel_own_call_site_is_allowlisted"), anti_vacuity: Some("crates/kernel-bypass-gate/tests/kernel_bypass.rs::real_workspace_ledger_balances"), owner: None, dies_when: None },
     GateIdentifier { id: "GATE-017", status: GateIdentifierStatus::Wired { kind: GateReferentKind::Ci }, referent: Some(".github/workflows/gate.yml::gate"), known_bad: Some("crates/pre-delete-citation-check/tests/killed_child.rs::killed_git_produces_refusal_not_success"), known_good: Some("crates/pre-delete-citation-check/tests/killed_child.rs::working_git_with_no_deletions_passes"), anti_vacuity: Some("NOT_APPLICABLE: an empty staged-deletion set is the valid clean input"), owner: None, dies_when: None },
@@ -707,17 +707,62 @@ fn assert_test_referent(root: &Path, field: &str, referent: &str) {
     );
 }
 
+fn yaml_job_key(trimmed: &str, job: &str) -> bool {
+    let key = format!("{job}:");
+    trimmed == key
+        || trimmed.starts_with(&format!("{job}: "))
+        || trimmed.starts_with(&format!("{job}:\t"))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CiJobResolution {
+    Live { line: usize },
+    Commented { line: usize },
+    Missing,
+}
+
+/// `Wired { kind: Ci }` must not treat a comment as a live job. The previous
+/// matcher was `workflow.contains("  {job}:")`, which cannot distinguish a live
+/// workflow step from a comment — GATE-014's class of false positive.
+fn resolve_ci_job(workflow: &str, job: &str) -> CiJobResolution {
+    let mut commented = None;
+    for (index, line) in workflow.lines().enumerate() {
+        let line_no = index + 1;
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('#') {
+            let after = trimmed.trim_start_matches('#').trim_start();
+            if yaml_job_key(after, job) && commented.is_none() {
+                commented = Some(line_no);
+            }
+            continue;
+        }
+        if yaml_job_key(trimmed, job) {
+            return CiJobResolution::Live { line: line_no };
+        }
+    }
+    match commented {
+        Some(line) => CiJobResolution::Commented { line },
+        None => CiJobResolution::Missing,
+    }
+}
+
 fn assert_ci_referent(root: &Path, field: &str, referent: &str) {
     let Some((path, job)) = referent.split_once("::") else {
         panic!("{field} CI referent must be workflow::job: {referent}");
     };
     let workflow = fs::read_to_string(root.join(path))
         .unwrap_or_else(|error| panic!("{field} workflow {path} unreadable: {error}"));
-    assert!(
-        workflow.contains(&format!("  {job}:")),
-        "{field} referent {referent} names no workflow job"
-    );
+    match resolve_ci_job(&workflow, job) {
+        CiJobResolution::Live { .. } => {}
+        CiJobResolution::Commented { line } => panic!(
+            "{field} referent {referent} resolves to a COMMENT at {path}:{line} — Wired {{ kind: Ci }} cannot distinguish a live workflow step from a comment"
+        ),
+        CiJobResolution::Missing => panic!(
+            "{field} referent {referent} names no uncommented workflow job in {path}"
+        ),
+    }
 }
+
 
 fn assert_leg_referent(root: &Path, field: &str, referent: &str) {
     if referent.starts_with("NOT_APPLICABLE:") {
@@ -794,9 +839,60 @@ fn every_plan_gate_identifier_has_a_referent_or_dies_when() {
             }
         }
     }
-    assert_eq!(wired, 14, "technical/property identifiers wired");
-    assert_eq!(declared, 10, "future business identifiers declared, not wired");
+    assert_eq!(wired, 13, "technical/property identifiers wired (GATE-014 is DeclaredNotWired)");
+    assert_eq!(declared, 11, "future business identifiers declared, not wired");
+    let ci = GATE_IDENTIFIER_REFERENTS
+        .iter()
+        .filter(|gate| {
+            matches!(
+                gate.status,
+                GateIdentifierStatus::Wired {
+                    kind: GateReferentKind::Ci
+                }
+            )
+        })
+        .count();
+    assert!(
+        ci > 0,
+        "zero Wired{{Ci}} declarations is an ERROR, never a pass — the comment-strip validator would have nothing to check"
+    );
 }
+
+#[test]
+fn ci_referent_live_job_is_uncommented() {
+    let workflow = "jobs:\n  gate:\n    runs-on: ubuntu-latest\n";
+    assert_eq!(
+        resolve_ci_job(workflow, "gate"),
+        CiJobResolution::Live { line: 2 }
+    );
+}
+
+#[test]
+fn ci_referent_commented_job_is_red_and_names_file_line() {
+    // Wired { kind: Ci } cannot distinguish a live workflow step from a comment.
+    let workflow = "#  planted-ci-job:\n  other:\n    runs-on: ubuntu-latest\n";
+    assert_eq!(
+        resolve_ci_job(workflow, "planted-ci-job"),
+        CiJobResolution::Commented { line: 1 }
+    );
+    let err = match resolve_ci_job(workflow, "planted-ci-job") {
+        CiJobResolution::Commented { line } => {
+            format!("fixture.yml:{line} — Wired {{ kind: Ci }} cannot distinguish a live workflow step from a comment")
+        }
+        other => panic!("commented job must be Commented, got {other:?}"),
+    };
+    assert!(err.contains("fixture.yml:1"), "{err}");
+}
+
+#[test]
+fn ci_referent_live_job_wins_over_a_commented_twin() {
+    let workflow = "#  gate:\n  gate:\n    runs-on: ubuntu-latest\n";
+    assert_eq!(
+        resolve_ci_job(workflow, "gate"),
+        CiJobResolution::Live { line: 2 }
+    );
+}
+
 
 #[test]
 fn every_declared_lane_has_a_production_caller() {
