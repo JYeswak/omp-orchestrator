@@ -5,7 +5,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -273,14 +273,27 @@ fn real_hook_refuses_new_crate_without_census_row() {
 /// this leg was RED in CI (gate.yml 34652659103: "stale hook must refuse:
 /// left: Some(0) right: Some(1)").
 ///
-/// What survives, and is what this leg now proves, is the DETECTION: a touched
-/// covered source must be SEEN and NAMED with a heal state. Asserting `exit=0`
-/// alone would pass on a gate that noticed nothing at all -- which is the hole
-/// the old leg existed to close -- so the STATE is asserted, not the exit code
-/// alone, and `CLEAN`/`REFUSED`/`GATE_NOT_APPLICABLE` are all excluded.
+/// What survives, and is what this leg proves, is the DETECTION: a covered
+/// source that DIFFERS from the stamp must be SEEN and NAMED with a heal state.
+/// Asserting `exit=0` alone would pass on a gate that noticed nothing at all --
+/// which is the hole the old leg existed to close -- so the STATE is asserted,
+/// not the exit code alone, and `CLEAN`/`REFUSED`/`GATE_NOT_APPLICABLE` are all
+/// excluded.
 ///
-/// The heal lock is pre-created so `ensure_heal` reports `already_running` and
-/// no background cross-build is spawned from a synthetic fixture repo.
+/// # The no-op `fs::write` was DELETED because it was proven non-load-bearing
+///
+/// `InvMapRed` grading `tfdki` removed the byte-identical rewrite ("touch") from
+/// this leg and the target stayed green -- `5 passed; 0 failed`, exit=0. The
+/// reason is structural and is worth stating so nobody re-adds it: a synthetic
+/// fixture's covered source can NEVER match a manifest stamped from the real
+/// repo, so this leg reports `STALE_HEALING` whether anything is touched or not.
+/// Keeping the write implied coverage of "a touch alone does not go stale", which
+/// this leg cannot have. That property is mtime-vs-content and is proven where it
+/// can be: `a_byte_identical_rewrite_is_not_a_content_difference` below drives
+/// `hook_digest::diff_manifests` directly.
+///
+/// The heal lock is pre-created so `ensure_heal` finds a live lock and no
+/// background cross-build is spawned from a synthetic fixture repo.
 #[test]
 fn real_hook_heals_touched_hook_source_and_never_refuses() {
     let root = fresh_repo("hook-freshness");
@@ -297,15 +310,9 @@ fn real_hook_heals_touched_hook_source_and_never_refuses() {
     );
     let hook = install_hook(&root);
     fs::create_dir_all(root.join(".git/hook-heal.lock")).expect("pre-hold the heal lock");
-    std::thread::sleep(Duration::from_millis(20));
     let before = fs::read(&root.join("crates/no-shell-gate/src/bin/pre-commit-gate.rs"))
         .expect("read hook source");
     let before_hash = sha256(&root.join("crates/no-shell-gate/src/bin/pre-commit-gate.rs"));
-    fs::write(
-        root.join("crates/no-shell-gate/src/bin/pre-commit-gate.rs"),
-        &before,
-    )
-    .expect("touch hook source without changing bytes");
     stage(&root, "README.md", b"hook freshness probe\n");
     let healed = commit(&root, "feat: stale hook fixture [test]");
     let error = stderr(&healed);
@@ -342,6 +349,12 @@ fn real_hook_heals_touched_hook_source_and_never_refuses() {
         healed.status.code(),
         refusal_line(&error, "hook_freshness: STALE_HEALING")
     );
+    // UNLINK BEFORE COPY. Overwriting the binary that just executed raises
+    // ETXTBSY ("Text file busy") -- measured on contabo-1 the moment the
+    // incidental 20ms sleep came out with the vacuous touch. A fresh inode is the
+    // real fix; a sleep only makes the race rarer, which is the flake shape this
+    // repo refuses.
+    fs::remove_file(&hook).expect("unlink the executed hook before reinstalling");
     fs::copy(env!("CARGO_BIN_EXE_pre-commit-gate"), &hook).expect("reinstall fresh hook");
     #[cfg(unix)]
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).expect("restore hook mode");
@@ -472,4 +485,71 @@ fn installed_hook_has_clean_staged_and_empty_index_bands() {
         refusal_line(&empty_error, "empty_staged: NOTHING_TO_CHECK")
     );
     fs::remove_dir_all(empty_root).expect("empty fixture cleanup");
+}
+
+/// THE PROPERTY THE DELETED `fs::write` PRETENDED TO COVER, proven where it can
+/// actually be measured: the freshness oracle is CONTENT, not mtime.
+///
+/// A byte-identical rewrite moves the file's mtime and must NOT register as a
+/// difference -- that inversion is the measured 2026-09-11 fleet block, where a
+/// content-neutral bump refused every commit in the tree. The converse is the
+/// other half and is asserted in the same leg: one changed byte must register
+/// AND the summary must NAME the file, because a diff that only says MISMATCH is
+/// a red nobody can act on.
+///
+/// This drives `hook_digest` directly rather than the hook binary, which is the
+/// only surface where the question is answerable: a synthetic repo's covered
+/// source can never match a stamp taken from the real repo, so the binary
+/// reports STALE either way.
+#[test]
+fn a_byte_identical_rewrite_is_not_a_content_difference() {
+    let root = fresh_repo("digest-content-oracle");
+    let covered = root
+        .join("crates")
+        .join(no_shell_gate::hook_digest::HOOK_SOURCE_CRATES[0])
+        .join("src/oracle_fixture.rs");
+    fs::create_dir_all(covered.parent().expect("covered parent")).expect("create covered dir");
+    let bytes = b"pub fn covered() {}\n";
+    fs::write(&covered, bytes).expect("write covered source");
+
+    let stamped = no_shell_gate::hook_digest::hook_source_manifest(&root)
+        .expect("the fixture carries a covered source, so the manifest must exist");
+    // ANTI-VACUITY: an empty manifest would make every comparison below trivially
+    // equal, which is the shape this whole oracle replaced.
+    assert!(
+        !no_shell_gate::hook_digest::manifest_rows(&stamped).is_empty(),
+        "the manifest must carry at least one row, or the diff proves nothing"
+    );
+    let first_mtime = fs::metadata(&covered).and_then(|meta| meta.modified()).expect("mtime");
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    fs::write(&covered, bytes).expect("byte-identical rewrite");
+    let touched_mtime = fs::metadata(&covered).and_then(|meta| meta.modified()).expect("mtime");
+    assert!(
+        touched_mtime > first_mtime,
+        "the fixture must really have been touched, or the mtime leg below is vacuous"
+    );
+    let after_touch = no_shell_gate::hook_digest::hook_source_manifest(&root)
+        .expect("manifest after touch");
+    let touch_diff = no_shell_gate::hook_digest::diff_manifests(&stamped, &after_touch);
+    assert!(
+        touch_diff.is_empty(),
+        "a byte-identical rewrite must not read as a content difference: {}",
+        touch_diff.summary()
+    );
+
+    fs::write(&covered, b"pub fn covered() { /* one byte more */ }\n").expect("edit covered");
+    let after_edit = no_shell_gate::hook_digest::hook_source_manifest(&root)
+        .expect("manifest after edit");
+    let edit_diff = no_shell_gate::hook_digest::diff_manifests(&stamped, &after_edit);
+    assert!(
+        !edit_diff.is_empty(),
+        "a changed byte must register as a difference"
+    );
+    assert!(
+        edit_diff.summary().contains("oracle_fixture.rs"),
+        "the diff must NAME the file that differs, not merely report a mismatch: {}",
+        edit_diff.summary()
+    );
+    fs::remove_dir_all(root).expect("fixture cleanup");
 }
