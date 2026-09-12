@@ -41,7 +41,68 @@ SUPERSEDED     run 34670418396   headSha 83cb804e   conclusion=failure
      crate fails on a DIFFERENT leg -- a strict-YAML duplicate-key assertion in
      gate_reachability.rs, which is the crate that reads AGENTS.md/README.md/CLAUDE.md.
 
-AUTHORITATIVE  THREE CONSECUTIVE VERDICT-BEARING RUNS, IDENTICAL NUMBERS, THREE DIFFERENT TREES
+AUTHORITATIVE  run 34682177097   headSha 181ca20c   conclusion=failure
+  pass=89 fail=1 unmeasurable=4   against GATE_RUNNER_PLAN crates=94  (89+1+4 = 94)
+  GATE_RUNNER_FAILING      count=1  no-shell-gate
+  GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
+                                    finding:MISSING_EXECUTABLE,
+                                    loop-driver:POLICY_UNAVAILABLE,
+                                    omp-orchestrator:POLICY_UNAVAILABLE
+  non-PASS = 5.
+
+  ⛔⛔ THE SAME TRIPLE, A DIFFERENT SET -- AND THIS IS THE MOST IMPORTANT ROW IN THIS FILE.
+     `pass=89 fail=1 unmeasurable=4` ALSO holds for the three runs immediately below, whose
+     unmeasurable set carries `loop-queue-filter` INSTEAD of `omp-orchestrator`. Identical
+     counts. Identical sum control. DIFFERENT MEMBERSHIP.
+     loop-queue-filter LEFT (620b991, a real repair -- 73 legs entered measurement and passed)
+     and omp-orchestrator TOOK ITS SLOT. A reader tracking only the triple sees a FLAT LINE
+     ACROSS A REPAIR AND A REGRESSION IN THE SAME WINDOW.
+
+  ⭐ SO THE REPO'S RECONCILIATION RULE IS TRUE AND INSUFFICIENT. "pass + fail + unmeasurable MUST
+     reconcile against PLAN crates=N or the reading is worthless" -- it reconciled to 94 on BOTH
+     sides of the swap. RECONCILIATION VALIDATES THE TALLY; ONLY THE NAMES IDENTIFY THE SET.
+     Every entry in this file that cites a count without its name list is inadmissible, and the
+     entry below survives ONLY because it pinned "identical NAME LISTS" rather than counts.
+
+  ⛔ omp-orchestrator:POLICY_UNAVAILABLE IS ITS **THIRD DISTINCT STATE TODAY**, not a flap:
+       ALL_TESTS_SKIPPED (3c70915e)  ->  PASS (481f6afd, 98c2d491, aaab351f, 620b9910)
+       ->  POLICY_UNAVAILABLE (181ca20c)
+     Nobody reads this as AdmissionFix's 4fe7452 failing: that fix addressed a COMPILE BREAK and
+     this is a POLICY LOOKUP, the same code admission-reason and loop-driver carry. Three reasons
+     under one crate in one day is a fresh specimen for xy8oo, whose whole subject is a residual
+     label covering multiple causes.
+
+  no-shell-gate's FAILING LEGS, DIFFED BY NAME against 620b9910: 18 -> 19.
+     ENTERED: installed_hook_has_clean_staged_and_empty_index_bands
+     LEFT:    none
+     ⛔ 181ca20c's tree carries 1cc52ac, the commit that pointed a leg at the production path, and
+       the entering leg concerns the installed hook's staged/index bands. CANDIDATE CONNECTION,
+       NOT A CLAIM -- the leg was not read and nothing is attributed. Recorded as a datum for
+       whoever owns that area.
+     ⭐ AND THE HEAL SPAWN DID NOT FIRE: grep for hook-heal / rch exec / ensure_heal across the
+       full run log -> ZERO. The hazard stays source-derived and unobserved in CI.
+
+SUPERSEDED     run 34681145274   headSha 620b9910   conclusion=failure
+  pass=90 fail=1 unmeasurable=3   against GATE_RUNNER_PLAN crates=94  (90+1+3 = 94)
+  GATE_RUNNER_FAILING      count=1  no-shell-gate
+  GATE_RUNNER_UNMEASURABLE count=3  admission-reason:POLICY_UNAVAILABLE,
+                                    finding:MISSING_EXECUTABLE,
+                                    loop-driver:POLICY_UNAVAILABLE
+  non-PASS = 4 -- THE LOWEST THIS FILE HAS EVER RECORDED, and it lasted exactly one run.
+
+  ⭐ THE loop-queue-filter DELETION'S FIRST CI MEASUREMENT, AND IT WORKED. 620b991 removed a FALSE
+     precondition -- 73 measurable legs were being declined for a tool that suite never needs,
+     its own legs fixturing a 0o755 bv at selector_unavailable.rs:51-55. The crate LEFT the
+     unmeasurable set and JOINED the pass set: 89 -> 90, unmeasurable 4 -> 3, denominator HELD.
+  ⭐ ATTRIBUTABLE BY CONSTRUCTION: the only change between aaab351f and 620b9910 is that deletion,
+     and exactly one crate moved. That is the cleanest attribution in this file -- compare the
+     two undated departures recorded further down, where nobody could say which of 137 commits
+     did it.
+  ⭐ AND ITS AUTHOR'S NO-CLAIM CALLED THE ONE RISK EXACTLY: "if the crate carries a pre-existing
+     failure this makes it VISIBLE, which is coverage returning rather than a regression." It
+     carried none. 73 legs entered CI measurement for the first time and PASSED.
+
+SUPERSEDED     THREE CONSECUTIVE VERDICT-BEARING RUNS, IDENTICAL NUMBERS, THREE DIFFERENT TREES
   34680036272  481f6afd  failure  |  34680337115  98c2d491  failure  |  34680728807  aaab351f  failure
   ALL THREE:  pass=89 fail=1 unmeasurable=4   against GATE_RUNNER_PLAN crates=94  (89+1+4 = 94)
   GATE_RUNNER_FAILING      count=1  no-shell-gate
