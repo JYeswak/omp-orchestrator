@@ -17,8 +17,8 @@ use agent_mail_native::MailClient;
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::Cx;
 use refill_idle_panes::{
-    actuation_refusal, authorize_plan_line, conflict_verdict, decide, decide_capacity,
-    measurability_refusal,
+    actuation_refusal, authorize_plan_line, conflict_verdict, coverage_inertia_notice, decide,
+    decide_capacity, measurability_refusal,
     measurability_verdict, packet_is_sendable, pane_index_map, parse_activity_view,
     parse_oracle_view, parse_pane_table, parse_ready_fallback, parse_recommendations_with_skips,
     plan, plan_line, reconciliation_failure, resolve_exclusions, roster_readability, run_outcome,
@@ -835,6 +835,13 @@ fn run(invocation: &Invocation) -> ExitCode {
         );
         return ExitCode::from(2);
     };
+
+    // AN INERT GUARD ANNOUNCES ITSELF. Printed BEFORE the verdict and on stderr so it cannot
+    // be mistaken for part of the decision: it does not change dispatchability, it says the
+    // rate-limit withholding could not have applied to any pane in this run.
+    if let Some(notice) = coverage_inertia_notice(&oracle_view) {
+        eprintln!("{notice}");
+    }
 
     // THE ORCHESTRATOR PANE LEAVES CAPACITY HERE, in the same call that classifies. One
     // call, because two is how the exclusion set came to be resolved and printed while

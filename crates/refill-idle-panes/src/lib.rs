@@ -157,6 +157,18 @@ impl Observation {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SurfaceView {
     pub panes: BTreeMap<String, Observation>,
+    /// ORACLE ONLY: rows whose `rate_limit` field was ABSENT — an oracle binary predating
+    /// 8557c07. Always `0` for the activity surface, which has no such field.
+    ///
+    /// ⛔ THIS COUNTER EXISTS BECAUSE THE GUARD IT MEASURES CAN BE SILENTLY INERT. `a3464e5`
+    /// deliberately treats an absent field as the old behaviour so a deployment lag cannot
+    /// zero the fleet — which means a stale installed `~/.local/bin/pane-dispatch-ready`
+    /// disables the rate-limit withholding entirely AND NOTHING SAYS SO. That is
+    /// BUILT-not-DEPLOYED, the twin of the BUILT-not-WIRED defect `a3464e5` fixed, one layer
+    /// down: the code is correct, the call happens, and the guard never fires. Counting the
+    /// absences is what lets an inert guard ANNOUNCE ITSELF instead of waiting for someone to
+    /// remember to check a binary's version.
+    pub coverage_not_spoken: usize,
 }
 
 impl SurfaceView {
@@ -195,7 +207,11 @@ pub fn parse_activity_view(text: &str) -> Option<SurfaceView> {
         };
         panes.insert(pane, activity_observation(agent));
     }
-    Some(SurfaceView { panes })
+    // The activity surface has no coverage field to be absent; 0 is a fact, not a default.
+    Some(SurfaceView {
+        panes,
+        coverage_not_spoken: 0,
+    })
 }
 
 /// Is this row's evidence a LIVE, FRESH capture?
@@ -356,24 +372,66 @@ pub fn parse_oracle_view(text: &str) -> Option<SurfaceView> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
     let entries = value.get("panes")?.as_array()?;
     let mut panes = BTreeMap::new();
+    let mut coverage_not_spoken = 0usize;
     for entry in entries {
         let Some(pane) = pane_id(entry.get("pane")) else {
             continue;
         };
+        // COUNTED ON EVERY ROW, NOT JUST `FREE`. A stale oracle omits the field everywhere,
+        // so counting only the rows where it would have CHANGED something would make the
+        // inertness signal depend on the fleet happening to be idle.
+        let confirmation =
+            free_confirmation(entry.get("rate_limit").and_then(serde_json::Value::as_str));
+        if confirmation == FreeConfirmation::NotSpoken {
+            coverage_not_spoken += 1;
+        }
         let observation = match entry.get("state").and_then(serde_json::Value::as_str) {
-            Some("FREE") => {
-                match free_confirmation(entry.get("rate_limit").and_then(serde_json::Value::as_str))
-                {
-                    FreeConfirmation::Measured | FreeConfirmation::NotSpoken => Observation::Idle,
-                    FreeConfirmation::Unmeasured => Observation::Unknown,
-                }
-            }
+            Some("FREE") => match confirmation {
+                FreeConfirmation::Measured | FreeConfirmation::NotSpoken => Observation::Idle,
+                FreeConfirmation::Unmeasured => Observation::Unknown,
+            },
             Some("BUSY" | "NO_AGENT") => Observation::Busy,
             _ => Observation::Unknown,
         };
         panes.insert(pane, observation);
     }
-    Some(SurfaceView { panes })
+    Some(SurfaceView {
+        panes,
+        coverage_not_spoken,
+    })
+}
+
+/// THE INERT GUARD ANNOUNCES ITSELF, or says nothing.
+///
+/// `Some(line)` exactly when the oracle enumerated rows and NOT ONE of them carried a
+/// `rate_limit` field — i.e. the installed `pane-dispatch-ready` predates 8557c07, so the
+/// rate-limit withholding in [`parse_oracle_view`] CANNOT FIRE on any pane, and every `FREE`
+/// this run dispatches is unconfirmed on that axis.
+///
+/// ⛔ ALL-OR-NOTHING, NOT "ANY". One oracle binary produces one schema, so a MIXED set proves
+/// the field IS spoken and the absences are per-row facts rather than an inert guard.
+/// Announcing on "any" would fire on a single odd row and train the reader to ignore the line
+/// — an alarm that cries wolf is worse than no alarm, because it consumes the attention the
+/// real case needs.
+///
+/// ⛔ AND AN EMPTY ROSTER IS NOT AN INERT GUARD. Zero rows announces NOTHING: "the oracle
+/// enumerated no panes" is a measurability failure this crate already refuses on elsewhere
+/// (`empty_oracle_is_error`), and reporting it here as a deployment problem would misname it.
+/// Vacuous input must never manufacture a finding.
+#[must_use]
+pub fn coverage_inertia_notice(oracle: &SurfaceView) -> Option<String> {
+    let rows = oracle.panes.len();
+    if rows == 0 || oracle.coverage_not_spoken != rows {
+        return None;
+    }
+    Some(format!(
+        "refill: GUARD_INERT detector=rate_limit_coverage rows={rows} not_spoken={rows} \
+         why=no oracle row carried `rate_limit`, so the installed pane-dispatch-ready predates \
+         8557c07 and the rate-limit withholding fired on nothing \
+         probe=`pane-dispatch-ready <session> --json | head -c 400` \
+         remedy=reinstall pane-dispatch-ready; until then every FREE above is unconfirmed on \
+         the rate-limit axis"
+    ))
 }
 
 /// Pane ids arrive as either `"2"` or `2` depending on the surface. Accept both rather
@@ -1478,6 +1536,96 @@ mod tests {
                 "RULE coverage_scope: {state} stays a confident refusal whatever the coverage says"
             );
         }
+    }
+
+    // ── THE INERT GUARD ANNOUNCES ITSELF (BUILT-not-DEPLOYED) ─────────────────────────
+    fn oracle_payload(rows: &[(&str, &str, Option<&str>)]) -> SurfaceView {
+        let body: Vec<String> = rows
+            .iter()
+            .map(|(p, s, c)| match c {
+                Some(c) => format!(r#"{{"pane":"{p}","state":"{s}","rate_limit":"{c}"}}"#),
+                None => format!(r#"{{"pane":"{p}","state":"{s}"}}"#),
+            })
+            .collect();
+        parse_oracle_view(&format!(r#"{{"panes":[{}]}}"#, body.join(","))).expect("fixture parses")
+    }
+
+    #[test]
+    fn rule_an_all_absent_oracle_announces_the_guard_is_inert() {
+        // A binary older than 8557c07: no row carries the field, so the withholding added by
+        // a3464e5 fired on nothing and NOTHING ELSE IN THE RUN WOULD SAY SO.
+        let stale = oracle_payload(&[("1", "FREE", None), ("2", "BUSY", None), ("3", "FREE", None)]);
+        assert_eq!(
+            stale.coverage_not_spoken, 3,
+            "RULE inertia_counted_on_every_row: absences are counted on BUSY rows too, or the \
+             signal depends on the fleet happening to be idle"
+        );
+        let notice = coverage_inertia_notice(&stale)
+            .expect("RULE inertia_announced: an all-absent oracle must announce, not stay silent");
+        assert!(
+            notice.contains("GUARD_INERT") && notice.contains("rows=3") && notice.contains("not_spoken=3"),
+            "RULE inertia_announced: the notice must carry the detector and both counts, got {notice}"
+        );
+        assert!(
+            notice.contains("remedy=reinstall pane-dispatch-ready"),
+            "RULE inertia_actionable: an announcement without a remedy is a complaint, got {notice}"
+        );
+    }
+
+    #[test]
+    fn rule_a_mixed_oracle_does_not_announce() {
+        // KNOWN-GOOD. One binary produces one schema, so a mixed set proves the field IS
+        // spoken. Announcing here would cry wolf and train the reader to ignore the line.
+        let mixed = oracle_payload(&[
+            ("1", "FREE", Some("measured_free")),
+            ("2", "FREE", None),
+        ]);
+        assert_eq!(mixed.coverage_not_spoken, 1);
+        assert_eq!(
+            coverage_inertia_notice(&mixed),
+            None,
+            "RULE inertia_all_or_nothing: a mixed set is not an inert guard"
+        );
+        let current = oracle_payload(&[
+            ("1", "FREE", Some("measured_free")),
+            ("2", "FREE", Some("unmeasured")),
+        ]);
+        assert_eq!(current.coverage_not_spoken, 0);
+        assert_eq!(
+            coverage_inertia_notice(&current),
+            None,
+            "RULE inertia_all_or_nothing: a fully-speaking oracle must stay silent"
+        );
+    }
+
+    #[test]
+    fn rule_an_empty_oracle_roster_is_not_an_inert_guard() {
+        // ANTI-VACUITY. Zero rows must manufacture NO finding: an empty roster is a
+        // measurability failure this crate refuses on elsewhere, and naming it a deployment
+        // problem here would misdiagnose it.
+        let empty = oracle_payload(&[]);
+        assert_eq!(empty.panes.len(), 0);
+        assert_eq!(empty.coverage_not_spoken, 0);
+        assert_eq!(
+            coverage_inertia_notice(&empty),
+            None,
+            "RULE inertia_non_vacuous: an empty scan set must never announce an inert guard"
+        );
+    }
+
+    #[test]
+    fn rule_the_announcement_does_not_change_dispatchability() {
+        // The notice REPORTS; it must not withhold. a3464e5's whole NotSpoken ruling is that a
+        // deployment lag may not zero the fleet, and this leg pins that the announcement did
+        // not quietly reintroduce the zero it was written to avoid.
+        let activity = ntm(&[("1", "idle")]);
+        let stale = oracle_payload(&[("1", "FREE", None)]);
+        assert!(coverage_inertia_notice(&stale).is_some());
+        assert_eq!(
+            decide(&activity, &stale).dispatchable,
+            vec!["1".to_string()],
+            "RULE inertia_reports_not_withholds: announcing must not cost the fleet capacity"
+        );
     }
 
     /// THE MEASURED DEFECT. On the 03:14:55Z capture the two surfaces are BOTH confident
