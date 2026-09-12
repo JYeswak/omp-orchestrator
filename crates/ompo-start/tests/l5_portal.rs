@@ -813,3 +813,44 @@ fn artifact_readback_required_keys() {
         "the refusal must name the missing path, got {detail}"
     );
 }
+
+/// L5-DECISIONS (4tq2): `decisions_owed` is always an array of `{id,age_s}`,
+/// never omitted. Empty array is the honest zero. An unanswered HD row with
+/// a numeric `ts` is owed; an `answers` pointer with a non-empty decision
+/// settles it. A fabricated 0-age is refused by using a known `now_s`.
+#[test]
+fn decisions_owed_never_omitted() {
+    use ompo_start::portal::decisions_owed_from_repo;
+
+    let missing = tempfile::tempdir().expect("repo");
+    let empty = decisions_owed_from_repo(missing.path(), 1_000);
+    assert!(empty.is_array(), "missing ledger must still emit an array");
+    assert_eq!(empty, serde_json::json!([]));
+
+    let repo = tempfile::tempdir().expect("repo");
+    let docs = repo.path().join("docs");
+    std::fs::create_dir_all(&docs).expect("docs");
+    std::fs::write(
+        docs.join("decisions.jsonl"),
+        concat!(
+            r#"{"id":"HD-0099","ts":100,"decision":"","question":"owed?"}"#,
+            "\n",
+            r#"{"id":"HD-0100","ts":50,"decision":"done","question":"settled in-row"}"#,
+            "\n",
+            r#"{"id":"HD-0101","ts":10,"decision":"","question":"has answer pointer"}"#,
+            "\n",
+            r#"{"answers":"HD-0101","decision":"parked","ts":20}"#,
+            "\n",
+        ),
+    )
+    .expect("ledger");
+    let owed = decisions_owed_from_repo(repo.path(), 150);
+    assert_eq!(
+        owed,
+        serde_json::json!([{"id":"HD-0099","age_s":50}]),
+        "only the unanswered unpointed row is owed; age is now-ts not 0"
+    );
+    assert_ne!(owed[0]["age_s"], serde_json::json!(0));
+
+}
+

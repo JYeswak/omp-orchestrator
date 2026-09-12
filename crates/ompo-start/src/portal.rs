@@ -3,6 +3,9 @@
 //! Pure portal-row helpers. The umbrella command supplies live source data.
 
 use crate::sha256_hex;
+use std::collections::HashSet;
+use std::path::Path;
+
 
 pub const SCHEMA_ID: &str = "ompo:portal:v1";
 
@@ -95,6 +98,79 @@ pub fn cursor_envelope(
         "cursor_reason": reason,
     }))
 }
+
+/// L5-DECISIONS (4tq2): unpaid HD rows with age, NEVER omitted.
+///
+/// Empty array is the honest zero (no ledger, unreadable ledger, or nothing
+/// owed). Omitting the field is the defect: a reader cannot tell "none owed"
+/// from "the portal does not know about decisions". `age_s` is `now_s - ts`
+/// for a numeric unix `ts`; rows whose `ts` cannot be parsed are dropped
+/// rather than emitting a fabricated 0 (a 0-second age reads as "just asked").
+/// A question is owed when it has an `HD-` id, is not answered in-row, and no
+/// other row with a non-empty `decision` points at it via `answers`.
+#[must_use]
+pub fn decisions_owed(rows: &[decision_ledger::Row], now_s: u64) -> serde_json::Value {
+    let mut settled: HashSet<String> = HashSet::new();
+    for row in rows {
+        if !row.is_answered() {
+            continue;
+        }
+        if let Some(id) = row.id() {
+            settled.insert(id.to_owned());
+        }
+        for target in answer_targets(row) {
+            settled.insert(target);
+        }
+    }
+    let mut owed = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for row in rows {
+        let Some(id) = row.id() else {
+            continue;
+        };
+        if !id.starts_with("HD-") || settled.contains(id) || !seen.insert(id.to_owned()) {
+            continue;
+        }
+        let Some(asked_s) = ts_unix_s(row) else {
+            continue;
+        };
+        let age_s = now_s.saturating_sub(asked_s);
+        owed.push(serde_json::json!({ "id": id, "age_s": age_s }));
+    }
+    serde_json::Value::Array(owed)
+}
+
+/// Always an array. Missing/unreadable ledger → `[]`, never omitted.
+#[must_use]
+pub fn decisions_owed_from_repo(repo: &Path, now_s: u64) -> serde_json::Value {
+    let path = repo.join("docs").join("decisions.jsonl");
+    match decision_ledger::read_rows(&path) {
+        Ok(rows) => decisions_owed(&rows, now_s),
+        Err(_) => serde_json::json!([]),
+    }
+}
+
+fn answer_targets(row: &decision_ledger::Row) -> Vec<String> {
+    match row.value.get("answers") {
+        Some(serde_json::Value::String(target)) if !target.is_empty() => vec![target.clone()],
+        Some(serde_json::Value::Array(targets)) => targets
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .filter(|target| !target.is_empty())
+            .map(str::to_owned)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn ts_unix_s(row: &decision_ledger::Row) -> Option<u64> {
+    match row.value.get("ts") {
+        Some(serde_json::Value::Number(number)) => number.as_u64(),
+        Some(serde_json::Value::String(text)) => text.parse().ok(),
+        _ => None,
+    }
+}
+
 
 /// Queue depth read from the JSONL mirror, never from a subprocess.
 ///
