@@ -5,7 +5,7 @@
 # it. easy ways to liven it up and enter the 'portal'. is swarm already live or not - if not it needs
 # to ask what types agents - and spawn an ntm session with appropriate agents and context packs. it
 # needs to check agents.md and claude.md, check / install hooks. what hooks - every layer defined."
-# Approval state: status = "draft"; decisions HD-0009..HD-0012 in docs/decisions.jsonl gate the pin.
+# Approval state: status = "draft"; decisions HD-0009..HD-0012 in docs/decisions.jsonl gate the pin. CORRECTED 2026-09-12 (cz67, non-author integration): Joshua ANSWERED all four 2026-09-03T20:24:55Z (385/1187/780/1092 chars); the ledger carries dual rows (empty ASK + answered). The pin is gated on dual-row resolution (cbp4), not on emptiness.
 
 [[box]]
 id = "S1"
@@ -246,7 +246,7 @@ branches = [
   "L5 decision owed -> HUMAN HALT S9",
   "L5 else write inception.json required fields AND append FOUNDATION.jsonl stage=S1 AND jq readback, then S2",
 ]
-no_claim = "HD-0009..0012 still empty. L1-L5 crates unbuilt. command -v ompo identity is the target contract; installer today verifies a supplied absolute path (WildStone). omp-rpc-session Command::new(omp) and GetState exist; L0 installer still does not speak OMP. subprocess-contract is the L0/L4 Cx path to adopt, not yet called from installer. S1's REFUSAL TYPE IS UNRESOLVED: the diagram's Code::Refused has 0 call sites and there is no `enum Code` anywhere in crates/*/src (owner re-ran 2026-09-03T16:0xZ), so it replaced one unregistered name (OutcomeClass::Refusal, WildMountain wave 2) with another. loop-coverage/src/lib.rs:131 says verbatim 'Do not fork OutcomeClass / PaneLiveness' and :233 names controller-tick as owner, but :581 records controller-tick as pending-extraction and this workspace has 0 definitions of it — while 31 files under crates/*/src already declare their own Refusal/Outcome/Verdict enum. S1 must name an existing type and a SCHEMAS.toml row, not coin a third."
+no_claim = "HD-0009..0012 ANSWERED 2026-09-03T20:24:55Z (dual rows; corrected cz67). L1-L5 crates unbuilt. command -v ompo identity is the target contract; installer today verifies a supplied absolute path (WildStone). omp-rpc-session Command::new(omp) and GetState exist; L0 installer still does not speak OMP. subprocess-contract is the L0/L4 Cx path to adopt, not yet called from installer. S1's REFUSAL TYPE IS UNRESOLVED: the diagram's Code::Refused has 0 call sites and there is no `enum Code` anywhere in crates/*/src (owner re-ran 2026-09-03T16:0xZ), so it replaced one unregistered name (OutcomeClass::Refusal, WildMountain wave 2) with another. loop-coverage/src/lib.rs:131 says verbatim 'Do not fork OutcomeClass / PaneLiveness' and :233 names controller-tick as owner, but :581 records controller-tick as pending-extraction and this workspace has 0 definitions of it — while 31 files under crates/*/src already declare their own Refusal/Outcome/Verdict enum. S1 must name an existing type and a SCHEMAS.toml row, not coin a third."
 
 # ---- Wave 1 sections (were 0/4; QuietRidge, SilverWolf, BlueLantern filed that as blocker) ----
 [[box.measurement]]
@@ -280,11 +280,11 @@ value = "DCG install.sh 4494 lines (skill text said 2116; drifted); RCH install.
 measured_at = "2026-09-03T14:35Z"
 by = "pane-4"
 [[box.measurement]]
-claim = "HD-0009..0012 are recorded and undecided"
+claim = "HD-0009..0012 are recorded and ANSWERED (dual rows; corrected cz67 2026-09-12)"
 command = "python3 -c \"import json; [print(r['id'], repr(r.get('decision',''))) for r in map(json.loads, open('docs/decisions.jsonl')) if r['id'] in ('HD-0009','HD-0010','HD-0011','HD-0012')]\""
-value = "all four decision=''"
-measured_at = "2026-09-03T14:15Z"
-by = "pane-4"
+value = "4 ASK rows decision='' (ts 1788412259) + 4 ANSWER rows decider=Joshua 2026-09-03T20:24:55Z, decisions 385/1187/780/1092 chars"
+measured_at = "2026-09-12"
+by = "pane-%49 (cz67 non-author integration; prior reading pane-4 2026-09-03 was correct for its tree)"
 
 [[box.gap]]
 what = "L1-L5 crates do not exist (ompo doctor/init/start/portal)"
@@ -335,8 +335,8 @@ open_disagreements = 0                # DERIVED, ALL WAVES, widened from wave=2 
 rows = 63                             # HEAD-DERIVED 2026-09-11 by pane 1, independently re-deriving S1Sweeper's measurement rather than transcribing it. kwmu's premise is DEAD: `git status --porcelain docs/plan/flow/waves/` is EMPTY and all four files it named as untracked are tracked at HEAD, along with 7 more -- 11 wave-2 .toml files total. PRODUCING COMMAND, tree not worktree: `for f in $(git ls-tree -r HEAD --name-only -- docs/plan/flow/waves/wave-2/ | grep '\.toml$'); do git show HEAD:$f | grep -c '^box = "S1"'; done`. POSITIVE CONTROL in the same pass: `^evidence = ` returns 72 lines, so the field-anchored patterns can fire and 0s are demonstrated absence. PER FILE: WildStone-S1 25 - pane1-S1 14 - WildMountain-S1 11 - pane4-jt1i-citations 6 - pane4-41li-cross 3 - pane4-qibn-hook-count 2 - pane4-wbu2-idle-oracle 2 - and four files with zero box=S1 rows. The retired figure was 62 WORKTREE-ONLY against a tree-visible 17; both are now superseded by one number measured the same way twice.
 rejections = 17                       # HEAD-DERIVED, same command with `^reviewer_says = "REJECTED`. WildStone-S1 13 - pane1-S1 2 - pane4-41li-cross 1 - pane4-wbu2-idle-oracle 1. Retired figure was 25 WORKTREE-ONLY against a tree-visible 4. NOT AUDITED FOR SOUNDNESS: this counts rows whose reviewer_says BEGINS with REJECTED; whether each rejection is individually justified is unmeasured, and the predicate keys on a TEXT convention rather than a typed field -- a reviewer writing "Rejected" or putting the verdict in `severity` would be INVISIBLE to it. Checked: zero such variants in wave-2 at HEAD, so the count is exact for this corpus and the instrument is still a floor.
 refutations = 6                       # HEAD-DERIVED, same command with `^resolution = "refuted`. pane4-41li-cross 2 - pane4-wbu2-idle-oracle 2 - WildStone-S1 1 - pane4-qibn-hook-count 1. Retired figure was 3 with a tree-visible 2. THE INPUT TO CLAUSE (b) BELOW HAS MOVED AND NOBODY HAS RE-READ IT: :338 records the reversal as resting partly on "refutations = 0", and from HEAD the machine-readable predicate CONTRACT.md:106 requires now sees SIX, in four different files. THIS IS NOT A CONVERGENCE CLAIM AND MUST NOT BE READ AS ONE -- the FUNCTIONAL FLOOR at :41,49,57,65,72 is the other clause and it is untouched by this. Flipping `status` on the strength of a moved counter would be exactly the gate self-weakening Joshua reversed. What changed is that clause (b) is now worth re-reading; who re-reads it, and against what functional evidence, is unresolved. The prose-only refutation :337 previously recorded (docs/contracts/s1_l0_install.md:158) is STILL invisible to the counter, so 6 excludes it and remains a FLOOR.
-status = "draft"                      # REVERTED FROM "converged" BY JOSHUA, 2026-09-03: "s1 is not converged - you can't claim converged when s1 is still missing massive functionality" and "converged wrongly is worse than no convergence". Both new clauses fail: (b) refutations = 0, and the FUNCTIONAL FLOOR -- S1.toml:41,49,57,65,72 read exists = "none" for L1, L2, L3, L4's wrapper and L5. The prior flip (a9ea672) certified agreement about a MAP as if it were working software. It was wrong and it is retracted.
-approval = ""                         # BLOCKED ON JOSHUA regardless: approval is an HD row id and HD-0009..HD-0012 all carry decision="". Build S1 fully in waves and prove it across the lifecycle BEFORE S2 (Joshua, 2026-09-03).
+status = "draft"                      # REVERTED FROM "converged" BY JOSHUA, 2026-09-03: "s1 is not converged - you can't claim converged when s1 is still missing massive functionality" and "converged wrongly is worse than no convergence". The refutations clause is RETIRED (see :337: six at HEAD; a counter is not a convergence claim -- corrected cz67). The FUNCTIONAL FLOOR holds for L2, L3, L4's wrapper and L5 (S1.toml:49,57,65,72 still read none; L1 now reads implemented at :41). The prior flip (a9ea672) certified agreement about a MAP as if it were working software. It was wrong and it is retracted.
+approval = ""                         # STILL JOSHUA alone to fill (corrected cz67): no longer blocked on HD emptiness -- HD-0009..HD-0012 ANSWERED 2026-09-03T20:24:55Z, dual rows. Approval remains an HD row id; status above stays draft on the functional floor. Build S1 fully in waves and prove it across the lifecycle BEFORE S2 (Joshua, 2026-09-03).
 
 [box.diagram]
 mmd = "docs/plan/flow/diagrams/S1.mmd"
