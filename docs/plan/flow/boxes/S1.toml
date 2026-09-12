@@ -120,15 +120,15 @@ id = "S1-HOOK-CLAUDE-PRE"
 event = "claude PreToolUse"
 matcher = "9 matchers: Bash x6, Write|Edit|MultiEdit x3, Skill, Edit|Write|MultiEdit|NotebookEdit"
 class = "gate"
-fail_mode = "mixed and UNAUDITED per hook -- a denial reads as UNKNOWN, never as a negative result"
+fail_mode = "per-binary, pane-1 re-ran 2026-09-12 (ebq5): 3 deny-on-malformed OBSERVED (rch-lane-bind, zestgraph-danger-gate, slb-guard-fail-closed); kernel-only-operator-hook fail_mode=closed SELF-DECLARED via --capabilities; skill-tracker bash capture-only; rch-alias-reconcile ABSENT; dcg/rch/zestgraph-accretive-write-gate/zestgraph-reservation-conflict-gate/zestgraph-recall UNKNOWN on --help. A denial is UNKNOWN never a negative."
 binary = "11 live: dcg, rch-lane-bind, zestgraph-danger-gate, zestgraph-accretive-write-gate, zestgraph-reservation-conflict-gate, slb-guard-fail-closed, rch-alias-reconcile, rch, zestgraph-recall, skill-tracker, kernel-only-operator-hook"
 policy_file = ""
 source_commit = ""
-language = "mixed/UNMEASURED"
+language = "rust Mach-O arm64 x9; bash shim x1 (skill-tracker); absent x1 (rch-alias-reconcile) — measured command -v + file, pane-1 2026-09-12"
 stage = "live"
 certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a tool call"
-measured = "9 matchers / 11 hooks. Prior row named THREE binaries; the live table has eleven."
+measured = "ebq5: command -v + file + --help on all 11 names from binary=; kernel-only-operator-hook --capabilities. Independent re-run pane-1. 10 found, 1 absent. Zero inferred fail_mode rows."
 note = "dcg denied two pane-1 commands today (an env grep, a git checkout). AGENTS.md's rule applies: a denied probe is UNKNOWN, never a negative result."
 
 [[box.hook]]
