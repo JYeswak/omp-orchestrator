@@ -3,9 +3,17 @@
 //! bin/omp-idle-dispatch.sh — deleted by the Rust port, restored here from git
 //! (45c613d^, lines 25-27) — exported, in order:
 //!
-//!   PATH="/opt/homebrew/bin:/Users/josh/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-//!   TMUX_TMPDIR="${TMUX_TMPDIR:-/Users/josh/.tmux-sockets}"
+//!   PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+//!   TMUX_TMPDIR="${TMUX_TMPDIR:-$HOME/.tmux-sockets}"
 //!   LC_ALL="${LC_ALL:-C.UTF-8}"  # cron gives NO locale; tmux -F rewrites TAB to '_' without it
+//!
+//! QUOTATION NORMALIZED, and it is marked because a silently altered quote is worse than
+//! a blocked file: the deleted script spelled those two paths with the author's ABSOLUTE
+//! home directory, which `path-literal-guard` refuses anywhere under `crates/*/{src,tests}`.
+//! `$HOME/` above stands for that literal prefix. The gate is right and was not weakened:
+//! a hardcoded checkout compiles fine after a move and then reads the WRONG machine, and
+//! the port's own behaviour here is HOME-DERIVED, so the normalized form is also the
+//! accurate description of what the Rust side does.
 //!
 //! The Rust port dropped all three. Under cron — which supplies NO environment — tmux
 //! attached to its private default socket and rewrote tab delimiters, so the dispatcher
@@ -160,9 +168,10 @@ fn complete_environment_passes_startup() {
 fn contract_record_matches_the_deleted_shell_exports() {
     assert!(CONTRACT_SOURCE.contains("omp-idle-dispatch.sh"));
     // Re-derived from git (45c613d^ lines 25-27):
-    //   export PATH="/opt/homebrew/bin:/Users/josh/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    //   export TMUX_TMPDIR="${TMUX_TMPDIR:-/Users/josh/.tmux-sockets}"
+    //   export PATH="/opt/homebrew/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    //   export TMUX_TMPDIR="${TMUX_TMPDIR:-$HOME/.tmux-sockets}"
     //   export LC_ALL="${LC_ALL:-C.UTF-8}"  # cron gives NO locale; tmux -F rewrites TAB to '_'
+    // (`$HOME/` normalizes the author's absolute home prefix -- see the module header.)
     // The Rust port reproduces TMUX_TMPDIR set-if-unset with a $HOME-derived default
     // (missing/unusable = loud), LC_ALL defaulted internally to C.UTF-8, and PATH
     // inherited from the ambient environment.
