@@ -7,6 +7,8 @@ publish = false
 description = "Build gate: refuse tracked .sh/.py files; the exemption list is empty by design"
 
 [dependencies]
+agent-mail-native = { path = "../agent-mail-native" }
+asupersync = { workspace = true }
 finding = { path = "../finding" }
 crate-atom-gate = { path = "../crate-atom-gate" }
 convergence-stamp = { path = "../convergence-stamp" }

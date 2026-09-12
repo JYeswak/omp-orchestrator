@@ -89,6 +89,7 @@
 //! }
 //! ```
 
+pub mod close_lease;
 pub mod client;
 pub mod cursor;
 pub mod endpoint;

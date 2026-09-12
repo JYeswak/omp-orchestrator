@@ -137,6 +137,14 @@ pub enum MailError {
     /// the surface, it has failed to. Reporting that as success lets a broken
     /// daemon and a healthy one produce the same green result.
     EmptyCatalogue,
+    /// The daemon advertises no list-all-leases tool, so no caller can
+    /// enumerate every live exclusive lease (bead `omp-orchestrator-3w9l`).
+    /// A per-path empty conflict set is not a global "nothing held".
+    /// Probed over the live 45-tool catalogue 2026-09-12: zero matches.
+    NoLeaseEnumeration {
+        /// How many tools the catalogue held when probed.
+        catalogue_tools: usize,
+    },
 }
 
 impl MailError {
@@ -200,6 +208,7 @@ impl MailError {
             | Self::Rpc { .. }
             | Self::Codec { .. }
             | Self::EmptyCatalogue
+            | Self::NoLeaseEnumeration { .. }
             | Self::CursorExpired { .. }
             | Self::CursorAhead { .. }
             | Self::ToolRefused { .. } => true,
@@ -272,6 +281,11 @@ impl fmt::Display for MailError {
                 "EMPTY_CATALOGUE the daemon advertised zero tools \
                  (surface NOT verified; this is a failure, not a pass)",
             ),
+            Self::NoLeaseEnumeration { catalogue_tools } => write!(
+                formatter,
+                "NO_LEASE_ENUMERATION catalogue_tools={catalogue_tools} \
+                 (no list-all-leases tool; a per-path empty set is NOT a global clear)"
+            ),
         }
     }
 }
@@ -299,6 +313,7 @@ mod tests {
             },
             MailError::Cancelled(CancelKind::User),
             MailError::EmptyCatalogue,
+            MailError::NoLeaseEnumeration { catalogue_tools: 45 },
         ];
         for case in cases {
             assert!(

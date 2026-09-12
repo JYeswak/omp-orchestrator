@@ -91,6 +91,10 @@ pub const HOOK_SOURCE_CRATES: &[&str] = &[
     "text-structure",
     "subprocess-contract",
     "doctrine-retirement-gate",
+    // 3w9l: the close-lease-guard arm (pre-commit-gate.rs GATE 6b) calls
+    // close_lease/journey/client/error directly -- an edit here moves the
+    // hook's verdict, so it is watched, not exempted.
+    "agent-mail-native",
 ];
 
 /// Path deps LINKED INTO the hook binary that are deliberately NOT covered by the digest, each

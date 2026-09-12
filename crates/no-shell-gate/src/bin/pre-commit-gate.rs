@@ -2,7 +2,7 @@
 //!
 //! GATES: mode-gate, no-shell-gate, path-literal-guard, undrained-pipe-lint,
 //! orchestration-tick-gate, state-wildcard-lint, close-reason-policy,
-//! pre-delete-citation-check, and staged-build-gate.
+//! close-lease-guard, pre-delete-citation-check, and staged-build-gate.
 //!
 //! EXIT CODES: 0 = clean, 1 = violation/refusal, 2 = operational error,
 //! 3 = nothing to check.
@@ -571,6 +571,7 @@ fn main() -> ExitCode {
     // The mirror is checked only when this commit stages the tracker input; direct
     // br close remains a prior event and this gate detects it, never prevents it.
     validate_staged_close_reason_policy(&repo_root, &staged, &mut refusals);
+    validate_staged_close_leases(&repo_root, &staged, &mut refusals);
     validate_staged_tick_ledger(&repo_root, &mut refusals);
 
     // ── GATE 7: staged-build-gate (929j) ────────────────────────────────
@@ -1140,6 +1141,204 @@ fn validate_staged_close_reason_policy(
     for unpinned in report.grade_unpinned {
         refusals.push(format!("close-reason-policy: state=REFUSED {unpinned}"));
     }
+}
+
+/// GATE 6b: close-lease-guard (bead `omp-orchestrator-3w9l`).
+///
+/// A file reservation outlives the bead it was taken for: measured 2026-09-06,
+/// exclusive leases survived their bead's close while the listing showed
+/// nothing. `br close` is external and stays unwrapped; the COMMIT of the
+/// staged mirror close is what refuses here.
+///
+/// The bead carries its own lease record (`LEASE bead=… holder=… [ack=…]
+/// paths=…` in the close reason or a comment — the only bead text the staged
+/// mirror carries). Rows without a record for their own id are CLEAN (the
+/// known-good, item 5). Rows WITH one are verified against the authoritative
+/// conflict endpoint as a pinned gate identity that is never a recorded
+/// holder (the endpoint reports OTHER agents' leases, so querying as the
+/// holder would hide the lease under test behind the own-lease partition).
+///
+/// Daemon unreachable on this path is a typed ERROR for THAT commit, never a
+/// pass — fail-closed for the mirror commit, not a freeze of tracker closes.
+/// The gate never releases: a pre-commit hook dropping another agent's lease
+/// would be the destructive half of this guard. The refusal names the mail
+/// holder, the ACK name, and the paths, which is the release path.
+const LEASE_GATE_AGENT_DEFAULT: &str = "QuietDraft";
+const LEASE_GATE_AGENT_ENV: &str = "OMP_LEASE_GATE_AGENT";
+
+fn validate_staged_close_leases(
+    repo_root: &Path,
+    staged: &[String],
+    refusals: &mut Vec<String>,
+) {
+    const MIRROR: &str = ".beads/issues.jsonl";
+    if !staged.iter().any(|path| path == MIRROR) {
+        return;
+    }
+    let error = |detail: &str| {
+        format!("lease-guard: state=ERROR staged_mirror={MIRROR} reason={detail}")
+    };
+    let staged_bytes = match staged_blob(repo_root, MIRROR) {
+        Ok(bytes) => bytes,
+        Err(detail) => {
+            refusals.push(error(&format!("staged_blob_unreadable detail={detail}")));
+            return;
+        }
+    };
+    let staged_text = match String::from_utf8(staged_bytes) {
+        Ok(text) => text,
+        Err(detail) => {
+            refusals.push(error(&format!("not_utf8 detail={detail}")));
+            return;
+        }
+    };
+    let staged_closed =
+        match pre_delete_citation_check::parse_closed_beads_jsonl_checked(&staged_text) {
+            Ok(rows) => rows,
+            Err(detail) => {
+                refusals.push(error(&format!("staged_mirror_unparsable detail={detail}")));
+                return;
+            }
+        };
+    // Newly closed = staged-closed ids absent from HEAD's closed set. Absent
+    // from HEAD = a first mirror commit, baseline empty (same rule as the
+    // sibling close-reason arm).
+    let head_ids: std::collections::BTreeSet<String> = match bounded_git_text(
+        repo_root,
+        &["show", &format!("HEAD:{MIRROR}")],
+    ) {
+        Ok(text) => {
+            match pre_delete_citation_check::parse_closed_beads_jsonl_checked(&text) {
+                Ok(rows) => rows.into_iter().map(|row| row.id).collect(),
+                Err(detail) if detail.starts_with("PRE_DELETE_BEADS_EMPTY") => {
+                    std::collections::BTreeSet::new()
+                }
+                Err(detail) => {
+                    refusals.push(error(&format!(
+                        "head_mirror_unparsable detail={detail}"
+                    )));
+                    return;
+                }
+            }
+        }
+        Err(_) => std::collections::BTreeSet::new(),
+    };
+    // Collect this close's own lease records. A malformed LEASE line in a
+    // newly closing row is an ERROR, never a skip: a typo'd record that
+    // silently passed would be a close the guard claimed to check and did not.
+    // Records naming another bead are that bead's close to evaluate, not this one.
+    let mut records = Vec::new();
+    for row in staged_closed
+        .iter()
+        .filter(|row| !head_ids.contains(&row.id))
+    {
+        let mut row_text = row.close_reason.clone();
+        for comment in &row.comments {
+            row_text.push('\n');
+            row_text.push_str(comment);
+        }
+        match agent_mail_native::close_lease::parse_lease_records(&row_text) {
+            Ok(parsed) => records
+                .extend(parsed.into_iter().filter(|record| record.bead_id == row.id)),
+            Err(detail) => refusals.push(error(&format!(
+                "lease_record_invalid bead={} detail={detail}",
+                row.id
+            ))),
+        }
+    }
+    if records.is_empty() {
+        let has_error = refusals.iter().any(|refusal| refusal.starts_with("lease-guard: state=ERROR"));
+        let _ = writeln!(
+            io::stderr(),
+            "lease-guard: state={} staged_mirror={MIRROR} newly_closed={} recorded=0",
+            if has_error { "ERROR" } else { "CLEAN" },
+            staged_closed.len(),
+        );
+        return;
+    }
+    let project = match repo_root.canonicalize() {
+        Ok(absolute) => agent_mail_native::journey::ProjectKey::new(
+            absolute.to_string_lossy().into_owned(),
+        ),
+        Err(detail) => {
+            refusals.push(error(&format!("repo_root_not_absolute detail={detail}")));
+            return;
+        }
+    };
+    let gate_agent = agent_mail_native::journey::AgentName::new(
+        std::env::var(LEASE_GATE_AGENT_ENV)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| LEASE_GATE_AGENT_DEFAULT.to_owned()),
+    );
+    let client = agent_mail_native::MailClient::discover()
+        .with_request_timeout(std::time::Duration::from_secs(20));
+    let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(detail) => {
+            refusals.push(error(&format!("runtime_unavailable detail={detail:?}")));
+            return;
+        }
+    };
+    let mut held_count = 0usize;
+    let mut released_count = 0usize;
+    runtime.block_on(async {
+        let cx = match asupersync::Cx::current() {
+            Some(cx) => cx,
+            None => {
+                refusals.push(error("context_unavailable detail=no_cx_in_hook_process"));
+                return;
+            }
+        };
+        for record in &records {
+            match agent_mail_native::close_lease::verify_close_lease(
+                &cx,
+                &client,
+                &project,
+                &gate_agent,
+                record,
+            )
+            .await
+            {
+                agent_mail_native::close_lease::CloseLeaseVerdict::Released { checked_paths } => {
+                    released_count += 1;
+                    let _ = writeln!(
+                        io::stderr(),
+                        "lease-guard: bead={} RELEASED checked_paths={}",
+                        record.bead_id, checked_paths,
+                    );
+                }
+                agent_mail_native::close_lease::CloseLeaseVerdict::StillHeld { held } => {
+                    held_count += held.len();
+                    match agent_mail_native::close_lease::lease_refusal_text(
+                        &record.bead_id,
+                        &held,
+                    ) {
+                        Some(text) => refusals.push(text),
+                        None => refusals.push(error(&format!(
+                            "refusal_render_empty bead={}",
+                            record.bead_id
+                        ))),
+                    }
+                }
+                agent_mail_native::close_lease::CloseLeaseVerdict::DaemonError { detail } => {
+                    refusals.push(error(&format!("daemon_unreachable detail={detail}")));
+                }
+            }
+        }
+    });
+    let _ = writeln!(
+        io::stderr(),
+        "lease-guard: state={} staged_mirror={MIRROR} recorded={} released={} still_held={}",
+        if held_count > 0 || refusals.iter().any(|refusal| refusal.starts_with("lease-guard: state=ERROR")) {
+            "REFUSED"
+        } else {
+            "CLEAN"
+        },
+        records.len(),
+        released_count,
+        held_count,
+    );
 }
 fn validate_staged_preregistration(repo_root: &Path, staged: &[String]) -> Result<(), String> {
     let base_revision = bounded_git_text(repo_root, &["rev-parse", "HEAD"])?
