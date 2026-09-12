@@ -419,6 +419,159 @@ pub fn classify_close_reason_with_external_authority(
     CloseReasonVerdict::PolicyRefused { leading }
 }
 
+/// What a grade citation establishes about the tree its figures ran on.
+///
+/// A grade is a `Reason` or comment citing a commit sha AND cargo figures
+/// (`passed`/`failed`, `test result`, `rc=`). Anything less is not a grade
+/// claim and this classifier has nothing to say about it ([`GradePin::NotAGrade`]).
+/// A grade must pin three things in text: the porcelain state (`porcelain
+/// empty`, or a `TREE_DIRTY` disclosure), the merge-base ancestry, and the
+/// cargo-figure tree (`HEAD`, `sha` or `worktree` named beside `tree`). The
+/// pins live in text because reasons and comments are the only surfaces that
+/// survive a close; there is no side channel to consult.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GradePin {
+    /// The grade carries all three tree pins.
+    Clean,
+    /// A grade is cited but no tree pinning is present at all.
+    TreeUnpinned,
+    /// The text carries dirty markers with no `TREE_DIRTY` disclosure.
+    TreeDirtyUndisclosed,
+    /// No sha and no cargo figure: not a grade claim, never a refusal.
+    NotAGrade,
+    /// A grade is cited but the comment set is empty: error, never a pass.
+    NoComments,
+}
+
+impl GradePin {
+    /// A stable label for logs and ledger rows.
+    #[must_use]
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Clean => "GRADE_PIN_CLEAN",
+            Self::TreeUnpinned => "GRADE_TREE_UNPINNED",
+            Self::TreeDirtyUndisclosed => "GRADE_TREE_DIRTY_UNDISCLOSED",
+            Self::NotAGrade => "NOT_A_GRADE",
+            Self::NoComments => "GRADE_NO_COMMENTS",
+        }
+    }
+
+    /// True for `Clean` and for `NotAGrade` (nothing claimed, nothing owed).
+    /// False for every refusal, including `NoComments`.
+    #[must_use]
+    pub const fn is_accepted(&self) -> bool {
+        matches!(self, Self::Clean | Self::NotAGrade)
+    }
+}
+
+impl fmt::Display for GradePin {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Clean => write!(formatter, "GRADE_PIN_CLEAN -- grade pins its tree"),
+            Self::TreeUnpinned => write!(
+                formatter,
+                "GRADE_TREE_UNPINNED -- a grade cites a sha and cargo figures with no \
+                 porcelain state, no merge-base ancestry, and no named tree; cite \
+                 `porcelain empty` (or a TREE_DIRTY disclosure), the merge-base, and HEAD|sha|worktree"
+            ),
+            Self::TreeDirtyUndisclosed => write!(
+                formatter,
+                "GRADE_TREE_DIRTY_UNDISCLOSED -- the text carries dirty markers with no \
+                 TREE_DIRTY disclosure; a dirty tree with a silent grade reads as clean"
+            ),
+            Self::NotAGrade => write!(
+                formatter,
+                "NOT_A_GRADE -- no sha and no cargo figure cited; nothing to pin"
+            ),
+            Self::NoComments => write!(
+                formatter,
+                "GRADE_NO_COMMENTS -- a grade is cited but the comment set is empty; \
+                 tree pins live in comments, so there is nowhere for them to be"
+            ),
+        }
+    }
+}
+
+/// Word tokens of a text, lowercased, split on non-alphanumerics.
+fn grade_words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(|word| word.to_lowercase())
+        .collect()
+}
+
+/// A hex token of sha length carrying at least one digit. The digit clause
+/// excludes English words that happen to be hex (`deadbee`); a digitless
+/// 7-plus hex run is rarer than the false positive it would admit.
+fn has_sha(text: &str) -> bool {
+    text.split(|c: char| !c.is_alphanumeric()).any(|token| {
+        let len = token.len();
+        (7..=40).contains(&len)
+            && token.chars().all(|c| c.is_ascii_hexdigit())
+            && token.chars().any(|c| c.is_ascii_digit())
+    })
+}
+
+/// A cargo-figure claim: passed/failed counts, a test-result line, or an rc= code.
+fn has_grade_figure(text: &str) -> bool {
+    let words = grade_words(text);
+    words.iter().any(|word| word == "passed" || word == "failed")
+        || text.to_lowercase().contains("test result")
+        || text
+            .split_whitespace()
+            .any(|raw| raw.trim_matches(|c: char| !c.is_alphanumeric() && c != '=' && c != ':').starts_with("rc="))
+}
+
+/// A git-status porcelain line: two status columns, a space, a path. Only
+/// the verbatim pasted form counts; prose about dirt does not.
+fn has_porcelain_lines(text: &str) -> bool {
+    const CODES: &[char] = &['M', 'A', 'D', 'R', 'C', 'U', '?', '!', ' '];
+    text.lines().any(|line| {
+        let mut chars = line.chars();
+        matches!((chars.next(), chars.next(), chars.next()), (Some(a), Some(b), Some(' ')) if CODES.contains(&a) && CODES.contains(&b))
+            && chars.as_str().split_whitespace().next().is_some_and(|path| !path.is_empty())
+    })
+}
+
+/// Classify a close's grade evidence: the reason plus every comment.
+///
+/// The `comments` slice is load-bearing, not decorative: porcelain state,
+/// merge-base ancestry and the tree label live in comment evidence, so a
+/// grade cited with an empty comment set is an error, never a pass.
+#[must_use]
+pub fn classify_grade_pin(reason: Option<&str>, comments: &[String]) -> GradePin {
+    let mut corpus = reason.unwrap_or_default().to_owned();
+    for comment in comments {
+        corpus.push('\n');
+        corpus.push_str(comment);
+    }
+    let lowered = corpus.to_lowercase();
+    let grade = has_sha(&corpus) && has_grade_figure(&corpus);
+    if !grade {
+        return GradePin::NotAGrade;
+    }
+    if comments.is_empty() {
+        return GradePin::NoComments;
+    }
+    let words = grade_words(&corpus);
+    let has_word = |word: &str| words.iter().any(|w| w == word);
+    let tree_dirty = corpus.contains("TREE_DIRTY");
+    if has_porcelain_lines(&corpus) && !tree_dirty {
+        return GradePin::TreeDirtyUndisclosed;
+    }
+    if lowered.contains("dirty") && !tree_dirty && !lowered.contains("porcelain empty") {
+        return GradePin::TreeDirtyUndisclosed;
+    }
+    let porcelain = lowered.contains("porcelain empty") || tree_dirty;
+    let ancestry = lowered.contains("merge-base") || has_word("ancestor");
+    let tree = (has_word("tree") || has_word("worktree"))
+        && (has_word("head") || has_word("worktree") || has_word("sha"));
+    if !(porcelain && ancestry && tree) {
+        return GradePin::TreeUnpinned;
+    }
+    GradePin::Clean
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

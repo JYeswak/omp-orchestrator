@@ -533,6 +533,14 @@ pub struct StagedCloseReasonReport {
     /// the token existed cannot appear here by construction rather than by an allowlist. An
     /// exception list would need its own ratchet to stay honest; a structural scope does not.
     pub actor_unrecorded: Vec<String>,
+    /// Newly closed rows whose grade evidence fails tree pinning, one entry per row
+    /// as `bead=<id> <GradePin display>`.
+    ///
+    /// SEPARATE FROM `violations` ON THE SAME PRINCIPLE AS `actor_unrecorded`: an
+    /// unpinned grade and a bad prefix are two causes with two remedies, and the
+    /// historical scope rule applies identically -- only rows whose close is NEW
+    /// in the staged mirror can appear here.
+    pub grade_unpinned: Vec<String>,
 }
 
 /// Check the staged mirror's closed rows against the canonical close-reason policy.
@@ -577,6 +585,7 @@ pub fn check_staged_close_reason_policy(
         violations: Vec::new(),
         legacy_unrecoverable: Vec::new(),
         actor_unrecorded: Vec::new(),
+        grade_unpinned: Vec::new(),
     };
     for bead in staged_closed {
         // The execution authority may live in the row's COMMENTS rather than its
@@ -615,6 +624,19 @@ pub fn check_staged_close_reason_policy(
             report
                 .actor_unrecorded
                 .push(format!("bead={} {actor}", bead.id));
+        }
+        // THE THIRD AXIS: a grade citation without tree pins. Evaluated for
+        // every newly closed row, independently of the actor and prefix axes
+        // above -- a row can fail one, two, or all three, and each list names
+        // only its own cause.
+        let grade_pin = ack_spine::close_reason::classify_grade_pin(
+            Some(&bead.close_reason),
+            &bead.comments,
+        );
+        if !grade_pin.is_accepted() {
+            report
+                .grade_unpinned
+                .push(format!("bead={} {grade_pin}", bead.id));
         }
         let verdict = ack_spine::close_reason::classify_close_reason_with_external_authority(
             Some(&bead.close_reason),
@@ -865,6 +887,54 @@ mod tests {
             report.actor_unrecorded[0].contains("CLOSE_ACTOR_MALFORMED"),
             "a name must be MALFORMED, not merely missing: {:?}",
             report.actor_unrecorded
+        );
+    }
+
+    /// THE THIRD AXIS REACHES THE REPORT: a newly closed row citing a grade
+    /// without tree pins lands in `grade_unpinned`, not in `violations`.
+    /// The reason carries a sanctioned prefix, so the prefix axis stays
+    /// silent -- proving the refusal comes from the grade axis alone.
+    #[test]
+    fn an_unpinned_grade_populates_its_own_list() {
+        let rows = [bead(
+            "omp-orchestrator-p0fw",
+            "DONE. Graded 9f2c41d: suite 12 passed 3 failed.",
+            &["re-ran the suite, all green."],
+        )];
+        let report = check_staged_close_reason_policy(None, &rows).expect("baseline");
+        assert_eq!(report.newly_closed, 1);
+        assert!(
+            report.violations.is_empty(),
+            "the prefix is sanctioned; only the grade axis may fire: {:?}",
+            report.violations
+        );
+        assert_eq!(report.grade_unpinned.len(), 1);
+        assert!(
+            report.grade_unpinned[0].contains("GRADE_TREE_UNPINNED")
+                && report.grade_unpinned[0].contains("omp-orchestrator-p0fw"),
+            "the entry must name its cause and its row: {:?}",
+            report.grade_unpinned
+        );
+    }
+
+    /// And a pinned grade leaves that list empty.
+    #[test]
+    fn a_pinned_grade_leaves_the_third_axis_empty() {
+        let rows = [bead(
+            "omp-orchestrator-1p0u",
+            "DONE. Graded a1b2c3d: suite 20 passed 0 failed.",
+            &[
+                "porcelain empty",
+                "merge-base --is-ancestor: yes",
+                "tree: HEAD",
+            ],
+        )];
+        let report = check_staged_close_reason_policy(None, &rows).expect("baseline");
+        assert_eq!(report.newly_closed, 1);
+        assert!(
+            report.grade_unpinned.is_empty(),
+            "a pinned grade must not appear: {:?}",
+            report.grade_unpinned
         );
     }
 }

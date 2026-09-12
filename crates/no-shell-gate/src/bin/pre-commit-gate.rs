@@ -1137,6 +1137,9 @@ fn validate_staged_close_reason_policy(
     for violation in report.violations {
         refusals.push(format!("close-reason-policy: state=REFUSED {}", violation.reason));
     }
+    for unpinned in report.grade_unpinned {
+        refusals.push(format!("close-reason-policy: state=REFUSED {unpinned}"));
+    }
 }
 fn validate_staged_preregistration(repo_root: &Path, staged: &[String]) -> Result<(), String> {
     let base_revision = bounded_git_text(repo_root, &["rev-parse", "HEAD"])?

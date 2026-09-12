@@ -189,3 +189,107 @@ fn live_closed_prefix_census_is_non_vacuous_and_only_known_legacy_empty_remains(
         "the legacy null/empty close remains visible as refused and is not retroactively reopened"
     );
 }
+
+use ack_spine::close_reason::{classify_grade_pin, GradePin};
+
+/// KNOWN-BAD p0fw: a grade citing a sha and figures with no tree pinning of
+/// any kind refuses as UNPINNED. Crafted to carry no pin substring at all --
+/// no porcelain, merge-base, ancestor, tree, head, worktree, sha-word, dirt,
+/// or status line -- so the verdict rests on absence, not on a decoy.
+#[test]
+fn grade_without_tree_pins_is_unpinned() {
+    let reason = "DONE. Graded 9f2c41d: suite 12 passed 3 failed.";
+    let comments = vec!["re-ran the suite, all green.".to_owned()];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::TreeUnpinned);
+    assert_eq!(verdict.label(), "GRADE_TREE_UNPINNED");
+    assert!(
+        verdict.to_string().contains("GRADE_TREE_UNPINNED"),
+        "message must name the code, got {verdict}"
+    );
+    assert!(!verdict.is_accepted());
+}
+
+/// KNOWN-GOOD 1p0u: sha + figures + porcelain empty + merge-base ancestry +
+/// named tree reads CLEAN.
+#[test]
+fn grade_with_all_three_pins_is_clean() {
+    let reason = "DONE. Graded a1b2c3d: suite 20 passed 0 failed.";
+    let comments = vec![
+        "porcelain empty".to_owned(),
+        "merge-base --is-ancestor: yes".to_owned(),
+        "tree: HEAD".to_owned(),
+    ];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::Clean);
+    assert_eq!(verdict.label(), "GRADE_PIN_CLEAN");
+    assert!(verdict.is_accepted());
+}
+
+/// Stripping the porcelain line from the clean fixture REDDENs: the pins are
+/// a conjunction, and ancestry + tree alone do not satisfy it.
+#[test]
+fn grade_missing_one_pin_is_unpinned() {
+    let reason = "DONE. Graded a1b2c3d: suite 20 passed 0 failed.";
+    let comments = vec![
+        "merge-base --is-ancestor: yes".to_owned(),
+        "tree: HEAD".to_owned(),
+    ];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::TreeUnpinned);
+    assert!(!verdict.is_accepted());
+}
+
+/// Dirty markers without a TREE_DIRTY disclosure refuse distinctly: the
+/// defect is silence about dirt, not absence of pins.
+#[test]
+fn grade_with_undisclosed_dirt_is_dirty_undisclosed() {
+    let reason = "DONE. Graded a1b2c3d: suite 20 passed 0 failed.";
+    let comments = vec![
+        " M crates/x.rs".to_owned(),
+        "merge-base --is-ancestor: yes".to_owned(),
+        "tree: HEAD".to_owned(),
+    ];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::TreeDirtyUndisclosed);
+    assert_eq!(verdict.label(), "GRADE_TREE_DIRTY_UNDISCLOSED");
+    assert!(!verdict.is_accepted());
+}
+
+/// The same dirt WITH the disclosure satisfies: disclosure is the remedy.
+#[test]
+fn grade_with_disclosed_dirt_is_clean() {
+    let reason = "DONE. Graded a1b2c3d: suite 20 passed 0 failed.";
+    let comments = vec![
+        " M crates/x.rs".to_owned(),
+        "TREE_DIRTY: peer file in closure".to_owned(),
+        "merge-base --is-ancestor: yes".to_owned(),
+        "tree: HEAD".to_owned(),
+    ];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::Clean);
+    assert!(verdict.is_accepted());
+}
+
+/// A grade cited with an empty comment set is an error, never a pass: tree
+/// pins live in comments, so there is nowhere for them to be.
+#[test]
+fn grade_with_empty_comments_is_an_error() {
+    let reason = "DONE. Graded a1b2c3d: suite 20 passed 0 failed.";
+    let comments: Vec<String> = vec![];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::NoComments);
+    assert_eq!(verdict.label(), "GRADE_NO_COMMENTS");
+    assert!(!verdict.is_accepted());
+}
+
+/// Prose with no sha and no figure is not a grade claim and is never refused.
+#[test]
+fn prose_without_sha_or_figure_is_not_a_grade() {
+    let reason = "DONE. Looks good, shipping.";
+    let comments = vec!["nice work".to_owned(), "agreed".to_owned()];
+    let verdict = classify_grade_pin(Some(reason), &comments);
+    assert_eq!(verdict, GradePin::NotAGrade);
+    assert_eq!(verdict.label(), "NOT_A_GRADE");
+    assert!(verdict.is_accepted());
+}
