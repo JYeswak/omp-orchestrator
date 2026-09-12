@@ -1,11 +1,11 @@
-# ORCHESTRATOR TICK — every 5 minutes. Automated. Not a human message. DO NOT REPLY TO IT.
+# ORCHESTRATOR TICK — every 20 minutes. Automated. Not a human message. DO NOT REPLY TO IT.
 
 **You are pane 1, the conductor. Joshua's standing order: he cannot afford this project to stop, and
 without this tick it stops the moment you go quiet. On 2026-09-08 the fleet sat IDLE 8h02m beside
 481 ready beads and 102 P0s because the CONDUCTOR went silent, not the workers.**
 
 **NO AUTO-DISPATCH EXISTS AND NONE IS PERMITTED. You send project-aware dispatches by hand. This
-tick only guarantees you are ASKED every 5 minutes.**
+tick only guarantees you are ASKED every 20 minutes.**
 
 ## RUN THESE FIVE, IN ORDER, EVERY TICK
 
