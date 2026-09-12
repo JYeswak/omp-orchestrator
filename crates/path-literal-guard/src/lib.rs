@@ -387,16 +387,12 @@ pub fn scan_scope_description() -> String {
 /// The subdirectories the REPO-WIDE sweep actually walks, and a DECLARED subset of the
 /// staged floor rather than a second opinion about it.
 ///
-/// `omp-orchestrator-k0h1e` widened the GATE (staged mode, which is what refuses a commit) to
-/// `{src,tests}`. The sweep is a separate claim with a separate cost: measured 2026-09-11,
-/// EIGHT files under `crates/*/tests` carry a forbidden literal today (`crates/*/src`: zero),
-/// so walking the wider floor here would turn `cargo test -p path-literal-guard` red on
-/// pre-existing content this unit does not repair.
-///
-/// THE HOLE IS DECLARED, NOT HIDDEN, AND IT IS PINNED: `the_repo_wide_narrowing_is_load_bearing`
-/// proves the deferred subdirs still hold hits, so the day they are cleaned the leg reddens and
-/// says WIDEN instead of leaving a narrowing nobody re-examines. A subset that cannot go stale.
-pub const REPO_WIDE_SUBDIRS: &[&str] = &["src"];
+/// `omp-orchestrator-k0h1e` widened the GATE (staged mode) to `{src,tests}` and left the
+/// sweep on `src` because eight `crates/*/tests` files then carried literals. CI run
+/// 34667870386 (`c6ebdd9b`) and a worktree re-run (worker=contabo-3) both classified
+/// `crates/*/tests` CLEAN -- `the_repo_wide_narrowing_is_load_bearing` reddened and said
+/// WIDEN. The deferral expired as designed. `omp-orchestrator-64wxc`.
+pub const REPO_WIDE_SUBDIRS: &[&str] = &["src", "tests"];
 
 /// The printed repo-wide scope, derived from the floor the walker uses — never from the staged
 /// one. Advertising `{src,tests}` while reading only `src` is an advertisement not pinned to its

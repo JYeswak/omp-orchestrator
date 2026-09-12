@@ -291,11 +291,11 @@ fn the_guards_own_source_is_clean_without_an_exclusion() {
 
 /// THE SWEEP'S NARROWING IS MEASURED, NOT ASSUMED — and it cannot go stale in silence.
 ///
-/// `omp-orchestrator-k0h1e` widened the GATE (staged mode) to `{src,tests}` and left the sweep
-/// reading `src` alone, because files under `crates/*/tests` carry literals this unit does not
-/// repair. A narrowing nobody re-examines is how a declared hole becomes a permanent one, so this
-/// leg pins the REASON rather than the decision: every deferred subdir must still hold at least
-/// one violation. The day the deferred tree is clean, this leg REDDENS and says WIDEN.
+/// `omp-orchestrator-k0h1e` left the sweep on `src` while staged mode walked `{src,tests}`.
+/// Every deferred subdir had to still hold a violation. CI 34667870386 and 64wxc found
+/// `crates/*/tests` CLEAN; the deferral expired; `REPO_WIDE_SUBDIRS` now equals the floor.
+/// The empty-deferred arm asserts that equality. Restoring `&["src"]` while tests stay
+/// clean reddens this leg (known-bad).
 ///
 /// KNOWN-GOOD / over-strictness control in the same run: the walked floor is clean (the sweep
 /// leg above), so this cannot pass for a scanner that flags everything.
