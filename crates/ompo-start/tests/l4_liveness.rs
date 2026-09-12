@@ -745,3 +745,60 @@ fn the_row_writer_and_the_verdict_share_one_silence_predicate() {
     // ANTI-VACUITY: an empty matrix would satisfy every assertion above.
     assert_eq!(checked, 16, "the matrix must actually have been walked");
 }
+
+/// LAW-L4-NO-TMUX-RAW: `LiveVerdict` has no bool `tmux has-session` constructor.
+///
+/// `tmux has-session` is a bool with no `age_ms`. Feeding that shape as a
+/// required source must be `NOT_LIVE` / silent, never `Live`. Construction is
+/// `classify(Vec<SourceVerdict>)` only — there is no `from_tmux_bool`.
+#[test]
+fn no_bool_tmux_source() {
+    let live = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(live.status(), "LIVE", "control must be LIVE");
+
+    // has-session shape: available + claimed-fresh, no age. Cannot be Live.
+    let has_session_bool = SourceVerdict {
+        name: "agent-mail".to_owned(),
+        available: true,
+        fresh: true,
+        reason_code: String::new(),
+        age_ms: None,
+        panes: vec!["%7".to_owned()],
+    };
+    let verdict = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        has_session_bool,
+    ])
+    .expect("complete source set");
+    println!(
+        "NO_BOOL_TMUX status={} reason_code={}",
+        verdict.status(),
+        verdict.reason_code()
+    );
+    assert!(
+        matches!(verdict, LiveVerdict::NotLive { .. }),
+        "a bool has-session source (no age_ms) must not be Live"
+    );
+    assert_eq!(verdict.status(), "NOT_LIVE");
+    assert!(
+        verdict.reason_code().contains("agent-mail"),
+        "silent source must be named, got {}",
+        verdict.reason_code()
+    );
+
+    let empty = classify(Vec::new());
+    assert!(
+        empty.is_err(),
+        "empty source set is an error, never a vacuous Live"
+    );
+    assert!(
+        empty.unwrap_err().contains("L4_EMPTY_SOURCE_SET"),
+        "empty-set error must be typed"
+    );
+}
