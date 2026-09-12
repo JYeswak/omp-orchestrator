@@ -2944,6 +2944,27 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    retraction says the method was wrong; staleness says the tree moved. The 28 is now dead for the
    second reason (39/50 at HEAD), not the first.
 
+   ⭐ **SECOND INSTANCE, SAME RULE, SAME NIGHT — AND THE BLIND MATCHER WAS THE CONDUCTOR'S.** Two of
+   my own censuses disagreed about whether `OMP_R1_BREADTH_GATE` exists. I handed the contradiction
+   to a worker rather than picking a side, and it found the cause:
+
+   ```
+   OMP_[A-Z_]*GATE      -> 4 distinct    <- CANNOT SEE DIGITS
+   OMP_[A-Z0-9_]*GATE   -> 5 distinct    <- OMP_R1_BREADTH_GATE contains a `1`
+   ```
+
+   **Neither search was wrong ABOUT THE TREE. One could not see digits.** ⛔ **A character class is a
+   silent filter: `[A-Z_]` excludes `0-9` without ever reporting that it skipped anything**, so the
+   smaller answer arrives looking complete — the same direction of failure as every hand-kept
+   registry tonight. **Write the class to admit what the identifier grammar admits, and when two of
+   your own searches disagree, suspect the PATTERN before the tree.**
+
+   ⭐ **And the worker's narrowing mattered more than the corrected count: of the five names, only
+   THREE are arm-guards** (`== Ok("1")` at `pre-commit-gate` `R1:228`, `STAGED:616`, `ATOM:632`);
+   `OMP_GATE_FIRING_LEDGER` and `OMP_UDS_TARGET_GATE_REGISTRY` are path/config overrides. **A watcher
+   keyed on "names matching `OMP_*GATE`" would have watched five things and been wrong about two —
+   so the fix for a blind matcher is not a wider matcher, it is a matcher plus a PREDICATE.**
+
 8x. **A PATTERN MATCHING BOTH TEST ROWS AND SUMMARY ROWS MEASURES THE CLOCK.** Measured 2026-09-12:
    `^test .* FAILED` swept in `test result: FAILED … finished in 0.28s`, which **carries a timing
    and therefore differs every run**, fabricating **11 newly-red and 11 newly-green** out of an
