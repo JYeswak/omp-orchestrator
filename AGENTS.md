@@ -870,9 +870,22 @@ plus orphaned `*-mut` mutation worktrees and `grade-*` scratch trees that outliv
   a re-clone of every queued build. Following this list as it stood would destroy the
   canonical cargo cache. One copy is a speed optimisation; 30-32 copies inside git-archive
   export dirs are duplication (hardlink census: `du -sxc` == sum, 20/20 registry files
-  DIFF inodes). The scratch reclaimer may delete `$BASE/<export-shaped>/.rch-tmp` only when
-  the parent name is ABSENT on the operator Mac. `omp-orchestrator/.rch-tmp` cannot match
-  that predicate.
+  DIFF inodes).
+  ⛔ **SUPERSEDED 2026-09-12 (`8y5de`), AT THIS LINE BECAUSE THE OLD SENTENCE IS STILL THE
+  ONE A READER ACTS ON.** The sentence here used to read "may delete
+  `$BASE/<export-shaped>/.rch-tmp`". THE NAME-SHAPE GATE IS DELETED. It matched only
+  `*export*|*grade*|_grade-*` and it ran FIRST, returning KEEP before Mac-absence -- the
+  sound discriminator -- was ever consulted. Measured across all four boxes: 90 caches, 22
+  name-shaped, so 68 were invisible; on contabo-3, 16 of 17 unmatched caches were ABSENT on
+  the Mac and therefore provably abandoned. A WIDER NAME LIST WOULD BE THE SAME DEFECT
+  SPELLED LONGER.
+  THE PREDICATE IS NOW: delete `$BASE/<any>/.rch-tmp` when the parent is NOT a canonical
+  checkout (`omp-orchestrator`, `franken-harvest`, `uds`) AND is ABSENT on the operator Mac.
+  Absence is strictly safer than any name: a cache whose Mac-side source no longer exists
+  cannot be serving a live grade, whatever it is called -- and it is SELF-HEALING, because a
+  grader that reaps its own export releases its worker caches in the same moment.
+  `omp-orchestrator/.rch-tmp` cannot match: it is refused twice, by the canonical list and by
+  being present on the Mac. Verified on the live run -- canonical PRESENT on every swept box.
 - **NEVER touches** source: `crates/`, `docs/`, `src/`, `.beads/`, `.git/`, `Cargo.toml`.
 - **REFUSES to run on a host with a live `cargo`/`rustc`.** This is not decoration — on 2026-09-08 it
   **SKIPPED contabo-3** because a peer's build was executing, and that box was reclaimed on a second
@@ -2363,6 +2376,57 @@ Load `/asupersync-mega-skill` before touching spawn, cancellation, or scheduling
    pane-state channels that derive from the same capture and therefore agree when wrong. **Two
    probes sharing a subject are one probe.** Ask what each mutation is allowed to touch, and check
    that the sets differ before calling them independent.
+
+   ⛔⛔ **AMENDED 2026-09-12 BY `GradePairAdm`, WHICH CORRECTED THE CONDUCTOR'S OWN RECONCILIATION:
+   THE RULE ABOVE IS NECESSARY AND NOT SUFFICIENT, BECAUSE A *SWAP* CANNOT SATISFY IT NO MATTER HOW
+   INDEPENDENT THE LEGS ARE.** Two graders ran what both called "mutation B" on `sc0h5` and got
+   different answers — one disjoint, one overlapping — and neither was wrong:
+
+   ```
+   RESURRECT / ADD the stale row alongside the new one  ->  +1 leg   DISJOINT
+   REPLACE   / SWAP the new row for the stale one       ->  +2 legs  OVERLAP BY CONSTRUCTION
+   ```
+
+   **A REPLACE IS TWO EDITS IN ONE**: it deletes the new row *and* adds the stale one, so it fires
+   the undeclared-site leg *and* the orphaned-row leg together. **Its overlap is a property of the
+   mutation and carries ZERO information about the legs.**
+
+   ⭐ **SO THE TWO FORMS ARE NOT SYMMETRIC RIVALS AND THE VERDICT IS NOT CONDITIONAL.** The
+   conductor first wrote *"independence is TRUE under ADD and UNPROVEN under REPLACE"*, which reads
+   as two defensible readings of one question. `GradePairAdm` rejected that wording: **independence
+   is PROVEN by the single-edit pair and UNTESTABLE by a swap.** *Unproven* says the evidence is
+   missing; *untestable* says the instrument cannot answer. **Minimal single-edit mutation is the
+   correct design; REPLACE is a defective instrument.**
+
+   ⭐⭐ **AND THERE IS A CHEAP MECHANICAL DISCRIMINATOR, WHICH IS THE PART THAT BINDS — nobody has to
+   describe the form in prose, because the numbers show it.** From the same grade:
+
+   ```
+   BASELINE  blob 388a0e2a  rows=20    (new row present, stale absent)
+   MUT A     blob d3abc425  rows=19  = 20 - 1   DELETE only
+   MUT B     blob 5468c88b  rows=21  = 20 + 1   ADD only
+   RESTORED  blob 388a0e2a  rows=20    md5 8d3cc17f both sides
+   ```
+
+   Each mutation is **exactly one row off baseline in a named direction**. A REPLACE would have held
+   `rows=20` at a **DIFFERENT blob** — same cardinality, different content. Therefore:
+
+   > **A MUTATION THAT PRESERVES THE POPULATION SIZE IS A SWAP, AND A SWAP IS TWO EDITS.**
+
+   **THE BINDING FORM:** two mutations prove independence only if their failure sets are disjoint
+   **AND each mutation is a single edit**. **State the form and the population size before/after
+   beside the blob hash** — a size-preserving mutation is a swap, which bundles two edits and cannot
+   yield a disjoint set by construction.
+
+   **This is the same family as rule 7's two failure directions**: pinning one half of a pair leaves
+   the other undefended. Here the undefended half is the mutation's *arity*, and a cardinality count
+   costs nothing and makes it self-evident.
+
+   **NO-CLAIM.** The cardinality check proves a mutation is *not a swap*. It does NOT prove the edit
+   is minimal in any deeper sense — a single ADD can still touch a row that several legs read, so
+   disjointness must still be measured rather than inferred from arity. And it applies to registries
+   and other enumerable populations; a mutation to a code path has no row count, so the form must be
+   stated in prose there and the discriminator does not exist.
 
 7c. ⛔ **A MUTATION LEG'S *POSITIVE* ARM CAN BE VACUOUS: A SECOND MECHANISM CAN RESTORE THE
    EXPECTED STATE AFTER THE MUTATION REMOVES THE FIRST, SO THE LEG STAYS GREEN ON THE EXACT
