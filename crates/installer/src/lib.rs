@@ -91,6 +91,9 @@ pub enum InstallError {
     HookMergeFailed {
         backups: Vec<String>,
     },
+    /// Empty hook write set. Merging nothing is ERROR, never a vacuous
+    /// backup set.
+    EmptyHookWrites,
     /// Zero detected agent families. An empty scan is ERROR, never clean.
     EmptyAgentScan,
     /// L0-REPORT missing a detected agent, digest, or identity.
@@ -187,6 +190,10 @@ impl fmt::Display for InstallError {
                 formatter,
                 "L0_HOOK_MERGE: restored from backups {}",
                 backups.join(" ")
+            ),
+            Self::EmptyHookWrites => write!(
+                formatter,
+                "L0_HOOK_MERGE_EMPTY: zero hook writes is ERROR, never a vacuous backup set"
             ),
             Self::EmptyAgentScan => write!(
                 formatter,
@@ -652,6 +659,18 @@ pub struct HookWrite {
     pub merged: Vec<u8>,
 }
 
+/// Backup record for one mutated path. Backup coverage is one-to-one with
+/// mutation coverage: `path` names the mutated file, `backup` the
+/// timestamped file holding its prior bytes, and `existed` whether the path
+/// existed before the merge. A path that did not exist has no prior bytes,
+/// so no backup file is created for it — only the record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookBackup {
+    pub path: PathBuf,
+    pub backup: PathBuf,
+    pub existed: bool,
+}
+
 fn timestamped_backup_path(path: &Path) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -664,40 +683,72 @@ fn timestamped_backup_path(path: &Path) -> PathBuf {
     path.with_file_name(format!("{name}.bak.{nanos}"))
 }
 
-/// L0-HOOK-MERGE. Backup every file first, then write. Injected failure after
-/// `fail_after` writes restores pre-merge bytes from those backups.
+/// Roll back the first `upto` writes: existing paths regain their prior
+/// bytes from their backup files, and paths that did not exist before the
+/// merge are deleted. A new path is residue, never restored as empty bytes —
+/// an empty-byte write would fake a restore while leaving litter. Best
+/// effort throughout: the failure is already decided; leftovers are named
+/// by the returned backup list.
+fn rollback_hook_writes(writes: &[HookWrite], backups: &[HookBackup], upto: usize) {
+    for (write, backup) in writes.iter().zip(backups.iter()).take(upto) {
+        if backup.existed {
+            let _ = std::fs::copy(&backup.backup, &write.path);
+        } else {
+            let _ = std::fs::remove_file(&write.path);
+        }
+    }
+}
+
+/// L0-HOOK-MERGE. Backup every file first, then write. An empty write set is
+/// a typed error, never a vacuous backup set. Injected failure after
+/// `fail_after` writes rolls back the writes that already landed: existing
+/// paths regain pre-merge bytes, new paths are deleted.
 pub fn merge_hooks(
     writes: &[HookWrite],
     fail_after: Option<usize>,
-) -> Result<Vec<PathBuf>, InstallError> {
+) -> Result<Vec<HookBackup>, InstallError> {
+    if writes.is_empty() {
+        return Err(InstallError::EmptyHookWrites);
+    }
     let mut backups = Vec::new();
-    let mut originals = Vec::new();
     for write in writes {
-        let original = std::fs::read(&write.path).unwrap_or_default();
+        // Prior presence is the path's own dir entry, not a read: a missing
+        // path reads as empty bytes, and that conflation is exactly what
+        // produced empty-byte fake restores.
+        let existed = std::fs::symlink_metadata(&write.path).is_ok();
         let backup = timestamped_backup_path(&write.path);
-        std::fs::write(&backup, &original).map_err(|error| InstallError::IoError {
-            path: backup.display().to_string(),
-            detail: format!("hook backup failed: {error}"),
-        })?;
-        backups.push(backup);
-        originals.push(original);
+        if existed {
+            let original = std::fs::read(&write.path).map_err(|error| {
+                InstallError::IoError {
+                    path: write.path.display().to_string(),
+                    detail: format!("hook read failed: {error}"),
+                }
+            })?;
+            std::fs::write(&backup, &original).map_err(|error| {
+                InstallError::IoError {
+                    path: backup.display().to_string(),
+                    detail: format!("hook backup failed: {error}"),
+                }
+            })?;
+        }
+        backups.push(HookBackup {
+            path: write.path.clone(),
+            backup,
+            existed,
+        });
     }
     for (index, write) in writes.iter().enumerate() {
         if Some(index) == fail_after {
-            for (path, bytes) in writes.iter().map(|w| &w.path).zip(originals.iter()) {
-                let _ = std::fs::write(path, bytes);
-            }
+            rollback_hook_writes(writes, &backups, index);
             return Err(InstallError::HookMergeFailed {
                 backups: backups
                     .iter()
-                    .map(|p| p.display().to_string())
+                    .map(|record| record.backup.display().to_string())
                     .collect(),
             });
         }
         if let Err(error) = std::fs::write(&write.path, &write.merged) {
-            for (path, bytes) in writes.iter().map(|w| &w.path).zip(originals.iter()) {
-                let _ = std::fs::write(path, bytes);
-            }
+            rollback_hook_writes(writes, &backups, index);
             return Err(InstallError::IoError {
                 path: write.path.display().to_string(),
                 detail: format!("hook write failed: {error}"),

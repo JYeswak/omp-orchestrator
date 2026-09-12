@@ -4,7 +4,7 @@ use installer::{
     parse_cosign_version, publish_atomic, publish_atomic_durable, refuse_path_collisions,
     resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
     probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_policy,
-    AgentOutcome, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite,
+    AgentOutcome, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookBackup, HookWrite,
     IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
     SigstoreTrust, COSIGN_CVE_FLOOR, COSIGN_CVE_ID,
 };
@@ -454,8 +454,10 @@ fn hook_merge_backups_before_write() {
     )
     .expect("merge");
     assert_eq!(backups.len(), 1);
-    assert!(backups[0].file_name().unwrap().to_string_lossy().contains(".bak."));
-    assert_eq!(fs::read(&backups[0]).expect("backup"), b"pre-merge");
+    assert!(backups[0].backup.file_name().unwrap().to_string_lossy().contains(".bak."));
+    assert_eq!(backups[0].path, hook);
+    assert!(backups[0].existed);
+    assert_eq!(fs::read(&backups[0].backup).expect("backup"), b"pre-merge");
     assert_eq!(fs::read(&hook).expect("hook"), b"post-merge");
 }
 
@@ -494,6 +496,100 @@ fn hook_merge_injected_failure_restores_pre_merge_bytes() {
     }
     assert_eq!(fs::read(&first).expect("first"), b"first-orig");
     assert_eq!(fs::read(&second).expect("second"), b"second-orig");
+}
+
+#[test]
+fn hook_merge_backup_records_prior_presence() {
+    // Backup coverage is one-to-one with mutation coverage: each record
+    // names its mutated path, and prior presence travels on the record —
+    // never inferred from bytes afterward. A new path gets a record with
+    // existed=false and no backup file (there are no prior bytes to keep).
+    let dir = TempDir::new("hook-merge-presence");
+    let existing = dir.path().join("pre-commit");
+    let new = dir.path().join("post-commit");
+    fs::write(&existing, b"orig").expect("seed");
+    assert!(!new.exists());
+    let backups = merge_hooks(
+        &[
+            HookWrite {
+                path: existing.clone(),
+                merged: b"new-orig".to_vec(),
+            },
+            HookWrite {
+                path: new.clone(),
+                merged: b"new-file".to_vec(),
+            },
+        ],
+        None,
+    )
+    .expect("merge");
+    assert_eq!(backups.len(), 2);
+    assert_eq!(backups[0].path, existing);
+    assert!(backups[0].existed);
+    assert_eq!(fs::read(&backups[0].backup).expect("backup"), b"orig");
+    assert_eq!(backups[1].path, new);
+    assert!(!backups[1].existed);
+    assert!(
+        !backups[1].backup.exists(),
+        "no backup file for a path with no prior bytes"
+    );
+    assert_eq!(fs::read(&new).expect("new hook"), b"new-file");
+}
+
+#[test]
+fn hook_merge_rollback_deletes_new_path_residue() {
+    // KNOWN-BAD LEG: deleting the remove_file arm (restoring original bytes
+    // for every row, including new paths) leaves the new path behind as an
+    // empty file and this leg goes RED. Rollback restores existing bytes and
+    // deletes new residue; it never empty-byte fake-restores. Three writes so
+    // the injected failure lands after both the restore arm and the delete
+    // arm have fired (fail_after fires at loop top, so it must name a live
+    // index: with two writes Some(2) never fires and the merge returns Ok).
+    let dir = TempDir::new("hook-merge-rollback-new");
+    let existing = dir.path().join("pre-commit");
+    let new = dir.path().join("post-commit");
+    let later = dir.path().join("post-receive");
+    fs::write(&existing, b"keep-me").expect("seed");
+    fs::write(&later, b"untouched").expect("seed later");
+    let error = merge_hooks(
+        &[
+            HookWrite {
+                path: existing.clone(),
+                merged: b"changed".to_vec(),
+            },
+            HookWrite {
+                path: new.clone(),
+                merged: b"residue".to_vec(),
+            },
+            HookWrite {
+                path: later.clone(),
+                merged: b"never-written".to_vec(),
+            },
+        ],
+        Some(2),
+    )
+    .expect_err("injected failure after both arms fired");
+    match error {
+        InstallError::HookMergeFailed { backups } => assert_eq!(backups.len(), 3),
+        other => panic!("expected HookMergeFailed, got {other:?}"),
+    }
+    assert_eq!(fs::read(&existing).expect("existing"), b"keep-me");
+    assert!(
+        !new.exists(),
+        "rolled-back new path must be absent, not an empty file"
+    );
+    assert_eq!(fs::read(&later).expect("later"), b"untouched");
+}
+
+#[test]
+fn hook_merge_empty_writes_is_typed_error() {
+    // Merging nothing is a typed error, never a vacuous Ok with zero backups.
+    match merge_hooks(&[], None).expect_err("empty write set must refuse") {
+        InstallError::EmptyHookWrites => {}
+        other => panic!("expected EmptyHookWrites, got {other:?}"),
+    }
+    let text = InstallError::EmptyHookWrites.to_string();
+    assert!(text.starts_with("L0_HOOK_MERGE_EMPTY"), "{text}");
 }
 
 #[test]
