@@ -2986,6 +2986,51 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    **The tell is two instruments disagreeing**, which is why `%20` caught it and a single grep would
    not have. **Same family as `8o`:** a text count answering a different question than the one asked.
 
+8x. **A READBACK THAT COMPARES NOTHING TO NOTHING REPORTS AGREEMENT.** Measured 2026-09-12 by
+   `AdmissionFix` (`omp-orchestrator-czrvd`), both directions demonstrated, not argued.
+
+   **Shell variables DO NOT SURVIVE BETWEEN SEPARATE TOOL CALLS.** Pin in call N, compare in call
+   N+1, and the pin is EMPTY:
+
+   ```
+   call N     a=$(git hash-object <path>)
+   call N+1   b=$(git show HEAD:<path> | git hash-object --stdin)
+              [ "$a" = "$b" ] && echo IDENTICAL || echo DIVERGED
+              ->  [ "" = "b8fd876…" ]  ->  DIVERGED, against a tree that is IDENTICAL
+   ```
+
+   That direction is BENIGN: an empty operand compares unequal to everything, so it can only raise
+   a FALSE ALARM, and the author investigates. **The inverse is one character away and is SILENT:**
+   with BOTH captures failing — a mistyped path, a deleted file, a tool writing to stderr while
+   stdout stays empty — the test is `[ "" = "" ]` and **prints IDENTICAL**. Every commit in this
+   repo is validated by that idiom, and **a green from it is indistinguishable from a green over
+   two empty strings.**
+
+   **THE THREE CLAUSES, all cheap, all mandatory:**
+   1. **Compute BOTH operands in ONE call.** Never carry a readback operand across a tool-call
+      boundary in a shell variable; recompute it, or carry it in a FILE.
+   2. **REFUSE EMPTY OPERANDS BEFORE COMPARING.** This is the anti-vacuity rule this repo applies
+      to every scan set — *an empty set is an ERROR, never a pass* — applied at last to **the
+      instrument that validates the scans**.
+   3. **CORROBORATE WITH A SECOND ORACLE.** `git status --porcelain -- <path>` is independent of
+      the hash comparison and **cannot be fooled by an unset variable**.
+
+   **THE CANONICAL GUARDED READBACK — copy this, do not re-derive it:**
+
+   ```sh
+   a=$(git hash-object "$p"); b=$(git show "HEAD:$p" | git hash-object --stdin)
+   if [ -z "$a" ] || [ -z "$b" ]; then echo READBACK_UNMEASURABLE
+   elif [ "$a" = "$b" ]; then echo IDENTICAL
+   else echo DIVERGED; fi
+   ```
+
+   **`READBACK_UNMEASURABLE` IS NOT A PASS AND NOT A FAILURE — it is the third state**, and
+   collapsing it into either is the whole defect. Same family as `8q`: a readback that confirms
+   something other than the thing asked. **Enforced by
+   `crates/no-shell-gate/tests/readback_guard.rs`, which executes both idioms as real shell and
+   pins the unguarded form's false `IDENTICAL` as a POSITIVE CONTROL** — if that control ever stops
+   reproducing, the leg is measuring nothing and says so.
+
 8w. **`grep -c` AND `grep -o | wc -l` ANSWER DIFFERENT QUESTIONS, SO TWO HONEST AGENTS CAN
    "DISAGREE" ABOUT A FILE THEY BOTH MEASURED CORRECTLY.** Measured 2026-09-12 on
    `crates/no-shell-gate/tests/hook_freshness.rs` at one tree (`e098ad7^`): `modified|mtime` is
