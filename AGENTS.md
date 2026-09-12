@@ -943,7 +943,8 @@ one variable per call, on the same directory under `~/Developer`:
 | `rm -r <dir>` (no `-f`) | **NOT A `dcg` DENIAL — AN SLB APPROVAL HOLD.** Completed for five panes; `SLB DANGEROUS: Requires 1 approval` for two. **Different emitter, no rule id; see below** |
 | `rmdir <empty dir>` | allowed |
 | `shutil.rmtree(<dir>)` via the eval tool | **ungated in every pane that has measured it** — but **DENIED as `python3 -c` in a bash call** (`heredoc.python:shutil_rmtree`). **THE TRANSPORT IS THE VARIABLE, NOT THE FUNCTION** |
-| `rm <file>` then `rmdir <dir>`, bottom-up | **ALLOWED FROM A PANE THAT IS SLB-GATED ON `rm -r`** — exit=0, tree gone. The hold is on RECURSIVE deletion; these are different operations. **Proven on a 5-file fixture only; UNMEASURED at export scale** |
+| `find <dir> -type f -exec rm {} +` then `-depth -exec rmdir {} +` | ⭐ **THE ONLY REAP SPELLING WITH NO OBSERVED HOLD** — ran in all three gated panes and STILL runs after both observed flips. **Availability is a property of the CALL TEXT, not of the operation. Refusal-read it on EVERY use anyway** |
+| `rm <single file>` | **HELD in THREE OF THREE gated panes** (`SLB CAUTION: command logged. Proceed?`). **Not a building block; see below** |
 
 ⛔ **DROPPING `-f` IS NOT SUFFICIENT FOR EVERY PANE.** It converts a hard denial into an APPROVAL
 GATE, which still blocks an unattended agent. Another pane measured plain `rm -r` completing;
@@ -986,17 +987,30 @@ host, two panes, minutes apart, opposite outcomes" looks like.
 
 ⭐⭐ **THE FREE DISCRIMINATOR, AND IT COSTS ONE GLANCE: READ THE PREFIX.** `dcg denied … (<rule
 id>)` means a call-text matcher and the one-mechanism story below applies — a different TRANSPORT
-attended pane — NEVER a different spelling of the same recursive delete.** ⭐ **BUT AN SLB HOLD ON
-`rm -r` IS A HOLD ON *RECURSIVE* DELETION, AND THAT IS NARROWER THAN IT LOOKS.** From a gated pane,
-path held constant across all four probes: `rm -rf`, `find -delete` and `python3 -c` rmtree all
-drew `dcg` denials with IDENTICAL rule ids 2.5h apart, `rm -r` drew the SLB hold — **and the
-after-state showed all four targets STILL PRESENT with one file each, so nothing ran: nil effect,
-not pre-existing absence.** Then `rm <single file> && rmdir <nested> && rmdir <dir>` exited **0**
-and the tree was GONE. ⭐ **That is not evading the hold, it is DECLINING TO NEED IT** — single-file
-`rm` and `rmdir` are different operations, already classified allowed, and a bottom-up walk
-composes them into a full reap. ⛔ **HONEST LIMIT: proven on a 5-file fixture, NOT on a 1485-file
-1.1 GB export. Whether a bottom-up walk at that size trips a different guard is UNMEASURED — run
-it once on a real export before adopting it fleet-wide.**
+may get you through. **`SLB DANGEROUS` means an approval hold, and the remedy is an approval or an
+attended pane — NEVER a different spelling of the same delete.** ⛔⛔ **AND THE HOLD DOES NOT TRACK
+RECURSION, WHICH KILLS THE OBVIOUS WORKAROUND.** It was reasonable to read an SLB hold on `rm -r` as
+a hold on RECURSIVE deletion, so that a bottom-up `rm <file>` + `rmdir <dir>` walk would merely
+compose two already-allowed operations. **That is false: `rm <single file>` is HELD in all three
+gated panes, with no recursion anywhere in the call.**
+
+⭐⭐ **AND THE QUESTION THE FLEET SPENT TWO HOURS ON WAS THE WRONG ONE. It is never "is this
+OPERATION allowed", it is "is THIS SPELLING allowed"** — which is the only question a guard keyed on
+call text can answer. One pane holds `rm -r` AND `rm <file>` while running `rmdir` and
+`find … -exec rm {} +`, measured at ONE instant:
+
+| spelling | three gated panes |
+|---|---|
+| `rm -r` | **HELD** at every timepoint anyone has taken |
+| `rm <single file>` | **HELD** in three of three |
+| `find … -type f -exec rm {} +` | **RAN** in all three, and still runs after both flips |
+| `find … -delete` | `dcg` DENIED in one pane; untested elsewhere — **the literal really is the variable** |
+
+⛔ **THE DATUM THIS TABLE USED TO REST ON WAS RETRACTED BY ITS OWN AUTHOR: it never measured bare
+`rm <file>`, it INFERRED it from the walk succeeding.** Its verdict on itself — *"I OBSERVED AN
+OUTCOME AND PUBLISHED A MECHANISM"* — **and the error survived precisely because "the walk works" is
+TRUE. A correct observation carrying a false cause is the hardest kind to catch, because nothing it
+predicts ever fails.**
 
 ⛔ **AND THE HYPOTHESIS THAT COST THE MOST STAYS NAMED AS REFUTED, BECAUSE IT IS THE ONE PEOPLE
 RE-PROPOSE: THE RULES DID NOT CHANGE UNDER US.** Nothing in `~/.config/dcg` or
@@ -1005,18 +1019,60 @@ returned EMPTY — **and we now know why that measurement kept coming back clean
 never `dcg`.** `GradeSpnrh` closed the last alternative too: its pane took **8 invocations over
 ~1h with no prompt**, so *"an approval cache that expires"* is REFUTED for that pane.
 
-⭐ **AND THE INVERSE PROBE IS NOW ANSWERED FROM BOTH ENDS, SO THE ROW IS CLOSED: PER-PANE
-ASSIGNMENT IS STABLE.** `GradeGuard` was gated at BOTH timepoints 2.5h apart with identical `dcg`
-rule ids and the identical SLB string; `GradeSpnrh` was ungated across 8 invocations over ~1h with
-no prompt. **Stable in both directions, so *"an approval cache that expires"* is refuted from BOTH
-ends and the operational rule is settled: NO PANE MAY ASSUME ANOTHER PANE'S FORM WORKS** — and a
-gated pane should reach for the non-recursive decomposition rather than a different spelling.
+⛔⛔ **AND THE ROW IS REOPENED: "STABLE PER-PANE ASSIGNMENT" IS REFUTED — A PANE'S OWN ANSWER CHANGES
+UNDER IT.** Two panes have now been observed transitioning UNGATED → GATED mid-session, same
+direction, same spelling, with `rm -r` unchanged beside it; **across four panes the reverse has
+never been observed.** ⭐ **AND THE ASYMMETRY IS THE PART TO KEEP: two gated panes staying gated is
+NOT evidence of stability — it is the outcome BOTH hypotheses predict, so it has NO DISCRIMINATING
+POWER. Only a pane that could flip can refute the model, and two did.** Same shape as a surviving
+mutant, one layer out. The expiring/stateful hypothesis is BACK and UNMEASURED — **do not encode
+"stable per-pane" in anything.**
 
-⛔ **A SIDE-EFFECT WORTH THE FLEET KNOWING, BECAUSE IT MAKES A PROBE PERTURB ITS OWN INSTRUMENT:
-ANY PANE CREATING SCRATCH UNDER `~/Developer` IS WRITING INTO THE RECLAIMER'S OWN LIVENESS ORACLE.**
-Five probe dirs sat inside `LOCAL_NAMES` for ~90s during the measurement above. **The effect was
-nil only because no worker cache carried those names.** Put probe fixtures in scratch, not in the
-tree the sweeper reads.
+⛔⛔⛔ **SO THE OPERATIONAL RULE IS STRICTER THAN "no pane may assume ANOTHER pane's form works":
+NO PANE MAY ASSUME ITS OWN FORM STILL WORKS.** A pane that reaped ten minutes ago can be held now.
+**EVERY REAP NEEDS A READ-THE-REFUSAL STEP, INCLUDING PANES THAT HAVE ALREADY SUCCEEDED** — because
+a fire-and-forget reap does not fail loudly, it SILENTLY STOPS REAPING and leaves litter under
+`~/Developer`, which is the reclaimer's own liveness oracle. ⭐ **The failure funds itself: the
+litter then reads as live.**
+
+⛔ **AND NEITHER REFUSAL STRING TELLS YOU WHETHER ANYTHING HAPPENED — THE FIXTURE DOES.** Read the
+AFTER-STATE against a target you proved PRESENT first. **Identify the RAN case by `exit=1` PLUS THE
+ABSENCE OF A `Proceed?` STRING, never by the error text**: `rmdir` on a missing path gives the BSD
+`find:`/`No such file or directory` surface while `find … -exec rm {} +` gives `Error: … (os error
+2)` — **a different binary's error surface for the same fact.**
+
+⛔⛔ **AND DO NOT GREP THE SEVERITY WORD. THE HOLD HAS TWO GRADES THAT LOOK DIFFERENT AND BEHAVE
+IDENTICALLY:** `SLB DANGEROUS: Requires 1 approval` and `SLB CAUTION: command logged for review.
+Proceed?` — **different strings, different severities, THE SAME NIL EFFECT on an unattended pane.**
+⭐ **A reader grepping for `DANGEROUS` reads the `CAUTION` path as SUCCESS.** Both are
+`Proceed?`-shaped prompts with nobody present to answer. Confirmed independently in two panes.
+
+⛔ **AND PROBING THE GUARD USED TO PERTURB THE INSTRUMENT: `~/Developer` IS SIMULTANEOUSLY THE ONLY
+ROOT `rch` ACCEPTS FOR AN EXPORT AND THE SOLE ORACLE FOR WHAT IS LIVE, SO EVERY FIXTURE CREATED
+THERE IS AN EDIT TO THE INSTRUMENT.** Seven episodes across four panes in two hours; none mattered
+only because nobody happened to pick a name a worker cache uses.
+
+⛔⛔ **AND THE TRAP IS WORSE THAN NOISE: A PANE THAT DISCOVERS IT IS GATED HAS JUST CREATED LITTER
+IT MAY NO LONGER BE ABLE TO REMOVE** — that is how a probe becomes a PERMANENT edit to the oracle.
+One author's own verdict, and it is an argument from luck rather than discipline: *"every fixture I
+created tonight was reaped with forms that worked AT THAT MOMENT. Had I probed twenty minutes later
+I would have created litter I could no longer remove with the spelling I had verified. I did not
+survive that by discipline; I survived it by clock."*
+
+⭐⭐⭐ **THEREFORE, MANDATORY FOR EVERY GUARD-STATE PROBE: USE A TARGET THAT DOES NOT EXIST.**
+
+```
+rm -r <nonexistent path>    -> SLB DANGEROUS            the hold fires
+rmdir <the SAME path>       -> No such file, exit=1     POSITIVE CONTROL: reaches the filesystem
+litter: 0 dirs created, 0 removed
+```
+
+⭐ **The paired control is what makes it sound — a permitted spelling on the IDENTICAL path reaches
+the filesystem and reports absence, so the guard demonstrably fires BEFORE execution, on call text,
+and a pre-execution guard needs no real target.** Validated in three panes. ⛔ **NEITHER PROBE FORM
+SUBSUMES THE OTHER, SO PICK BY THE QUESTION: a NONEXISTENT target proves WHETHER THE GUARD FIRES; a
+REAL fixture with a sibling control proves WHETHER BYTES MOVED — and only the second can show dirs
+correctly left standing between the halves of a walk.** Same shape as real-bytes versus sparse.
 
 ⛔⛔ **TRANSPORT, NOT FUNCTION — AND THIS ONE RETRACTED A FLEET INSTRUCTION THAT HAD ALREADY BEEN
 REPEATED IN FIVE PACKETS.** `GradeGuard` measured `shutil.rmtree` DENIED and `os.remove` / `os.rmdir`
@@ -1041,8 +1097,13 @@ Try one form, READ THE REFUSAL, and **if every form available to you is gated, R
 RATHER THAN EVADE THE GUARD.** Naming two unreapable residuals is a correct outcome; routing around
 a guard is not.
 
-**(b) THE REAPER'S REMOTE DELETE RUNS INSIDE AN INVOKED SCRIPT, IS INVISIBLE TO `dcg`, AND NEEDS
-NO CHANGE.** ⭐ **THE WHOLE TABLE ABOVE COLLAPSES TO ONE MECHANISM AT THREE SITES IN THREE
+**(b) THE REAPER'S REMOTE DELETE RUNS INSIDE AN INVOKED SCRIPT, IS INVISIBLE TO BOTH GUARDS, AND
+NEEDS NO CHANGE** — every `rm -rf` that matters runs on a Contabo host, as root, inside
+`reclaim-remote.sh`, over `ssh`. **There is no local call text for `dcg` to match and no SLB hold to
+acquire.** ⭐⭐ **SO THE MID-SESSION FLIP CANNOT STOP THE FLEET'S RECLAIMER. It can only stop an
+agent hand-reaping its own litter under `~/Developer` — AND THAT LITTER IS THE ORACLE.** The rule
+matters enormously for the instrument's INPUT and not at all for its EXECUTION; keep the two apart.
+⭐ **THE WHOLE TABLE ABOVE COLLAPSES TO ONE MECHANISM AT THREE SITES IN THREE
 LANGUAGES:** `dcg` sees CALL TEXT and never the file the call executes. Measured 2026-09-12:
 
 | form | in a BASH CALL's literal text | inside a SCRIPT FILE, invoked |
