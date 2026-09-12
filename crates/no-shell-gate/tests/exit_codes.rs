@@ -92,6 +92,43 @@ struct NarrowingCast {
     target: String,
     file: String,
     line: usize,
+    /// The enclosing `fn` name, and the occurrence index of this (function, target)
+    /// pair within it. THE KEY IS A SHAPE, NOT A POSITION
+    /// (`omp-orchestrator-mg9ua`): a line number rots on every insertion ABOVE the
+    /// site, and the row it breaks describes a cast that never moved relative to its
+    /// own function. Measured twice in two days on ONE row (`:853 -> :1146 -> :1153`).
+    /// A shape survives an insertion above it and a rename beside it; a line number
+    /// survives neither.
+    function: String,
+    occurrence: usize,
+}
+
+/// The enclosing `fn` name for a line, from the nearest preceding `fn` at any depth.
+///
+/// Comments are stripped BEFORE the scan (`text_structure::code_only`) because this
+/// repository has measured a doc comment containing the needle it documents and
+/// defeating the mitigation it described. A doc comment naming `fn whatever` is not a
+/// function definition.
+fn enclosing_functions(code: &str) -> Vec<String> {
+    let mut current = String::new();
+    let mut out = Vec::new();
+    for line in code.lines() {
+        let trimmed = line.trim_start();
+        for prefix in ["fn ", "pub fn ", "pub(crate) fn ", "async fn ", "pub async fn "] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                    .collect();
+                if !name.is_empty() {
+                    current = name;
+                }
+                break;
+            }
+        }
+        out.push(current.clone());
+    }
+    out
 }
 
 
@@ -392,6 +429,11 @@ fn scan(root: &Path) -> Scan {
                 line: 0,
             });
         }
+        // THE SHAPE KEY'S INPUTS, computed once per file: the enclosing function per line
+        // (comments stripped first) and a per-(function,target) occurrence counter, so a row
+        // survives an insertion above its site (`omp-orchestrator-mg9ua`).
+        let functions = enclosing_functions(&code_without_literals(&text));
+        let mut seen_in_function: BTreeMap<(String, String), usize> = BTreeMap::new();
         for (n, raw_line) in text.lines().enumerate() {
             let lineno = n + 1;
             // Prose is not an emission. See `code_without_literals`.
@@ -407,11 +449,19 @@ fn scan(root: &Path) -> Scan {
                 }
                 let argument = call_argument(line, needle);
                 if let Some((expression, target)) = argument.as_deref().and_then(narrowing_cast) {
+                    let function = functions.get(n).cloned().unwrap_or_default();
+                    let counter = seen_in_function
+                        .entry((function.clone(), target.clone()))
+                        .or_insert(0);
+                    let occurrence = *counter;
+                    *counter += 1;
                     narrowing.push(NarrowingCast {
                         expression,
                         target,
                         file: rel.clone(),
                         line: lineno,
+                        function,
+                        occurrence,
                     });
                 }
                 if let Some(chain) = argument.as_deref().and_then(passthrough_chain) {
@@ -871,59 +921,130 @@ fn every_pass_through_row_declares_an_expression() {
 /// A row belongs here only when the site genuinely exists and the RECOGNISER cannot see
 /// it — not when the site is gone. If the site is gone the row must be deleted, which is
 /// what `no_declared_pass_through_row_outlives_its_site` enforces.
-/// Allowances for reviewed narrowing casts, keyed by file:line:source as target.
+/// Allowances for reviewed narrowing casts, keyed by `file::function#occurrence:source as target`.
 /// Category-three sites must either disappear or carry a reason containing DEBT.
+///
+/// ⛔ RE-KEYED 2026-09-12 (`omp-orchestrator-mg9ua`), FROM `path:LINE` TO A SHAPE. The old key
+/// rotted on edits that never touched its subject: one row was re-anchored `:853 -> :1146`
+/// (2026-09-11) and `:1146 -> :1153` (2026-09-12) while the cast never moved relative to its own
+/// function, and each shift billed TWO complaints -- one ORPHANED row and one UNDECLARED site --
+/// for one event.
+///
+/// ⛔ THE SECOND INSTANCE ORIGINALLY CITED HERE IS REFUTED, and the correction is recorded rather
+/// than quietly dropped: the `XC-PT-RESPONSE` row in §6 of the registry was NOT renamed.
+/// `git log -S'response.exit_code' --all -- '*.rs'` is EMPTY (`GradePairAdm`, 2026-09-12), so
+/// that expression never existed in any `.rs` file in this repository's history and the row was
+/// FALSE FROM BIRTH. So the measured class here is ONE: a position key rotting. The
+/// expression-key story is a fictional row, which is a DIFFERENT defect -- and the shape key
+/// happens to answer it too, because a key derived from code shape has nothing to match when the
+/// code is not there. Pinned by `a_row_for_an_expression_that_exists_nowhere_is_refused`.
+///
+/// A shape survives an insertion above it and a rename beside it; a line number survives neither.
+///
+/// WHAT THE RE-KEY COSTS AND BUYS is enumerated on `narrowing_key` and pinned by
+/// `the_shape_key_survives_an_insertion_above_the_site`,
+/// `a_rename_beside_the_site_refuses_once_and_names_both_spellings` and
+/// `the_shape_key_cannot_see_a_cast_reordered_within_its_own_function`.
+///
+/// The `omp-idle-dispatch` row's DISPOSITION is untouched here and belongs to
+/// `omp-orchestrator-t3d2c` (disk-vs-member population): that crate is excluded by
+/// `cargo metadata` and cargo never builds it, so whether the row should exist at all is that
+/// bead's question. Carried across unchanged, re-keyed only, exactly as its line-keyed
+/// predecessor stood.
 const NARROWING_ALLOWANCE: &[(&str, &str)] = &[
-    ("crates/crate-soundness-verify/src/main.rs:31:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
-    ("crates/crate-soundness-verify/src/main.rs:49:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
-    ("crates/crate-soundness-verify/src/main.rs:68:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
-    ("crates/crate-soundness-verify/src/main.rs:85:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
-    ("crates/crate-soundness-verify/src/main.rs:190:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
-    ("crates/dispatcher-deadman/src/main.rs:185:verdict.exit as u8", "ALLOWANCE CATEGORY-2: verdict.exit forwards the child/status contract under XC-PT-VERDICT; range validation remains outside this gate."),
-    ("crates/fleet-monitor/src/main.rs:457:EXIT_CANNOT_OBSERVE as u8", "ALLOWANCE CATEGORY-1: EXIT_CANNOT_OBSERVE is a named closed literal status code; its documented value is 69 and cannot wrap."),
-
-    // Re-anchored 2026-09-11: `:490` -> `:492`. The site MOVED, it did not change — the file
-    // holds exactly one `rc as u8` and it is still the `rc != 0` arm of the shell lane at
-    // `crates/fleet-monitor/src/main.rs:489-493`. Bumping the line is the whole repair; the
-    // reason below is unchanged because the reviewed fact is unchanged.
-    ("crates/fleet-monitor/src/main.rs:492:rc as u8", "ALLOWANCE CATEGORY-2: rc forwards the child/status contract under XC-PT-RC; range validation remains outside this gate."),
-    ("crates/loop-driver/src/main.rs:40:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
-    ("crates/loop-driver/src/main.rs:57:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
-    // Re-anchored 2026-09-11: `:18` -> `:282` and `:853` -> `:1146`. `:18` is now inside the
-    // `usage:` string and `:853` inside `plan_queues`, so the rows had gone ORPHANED while the
-    // casts were undeclared at their new lines — the bidirectional check caught both halves of
-    // the same drift, which is the shape it was written for. One occurrence per file each.
-    //
-    // ⛔ RE-ANCHORED AGAIN 2026-09-12: `:1146` -> `:1153`, THE SAME ROW, ONE DAY LATER. That is
-    // the finding, not the fix. THIS TABLE IS KEYED BY `path:LINE`, so ANY edit that inserts a
-    // line above a declared cast breaks its row — and breaks it TWICE, because the bidirectional
-    // check then reports one ORPHANED allowance and one UNDECLARED site for a cast that never
-    // moved relative to its own function. ONE LINE-SHIFT, TWO FAILING ROWS: the identical shape
-    // as the `XC-PT-RESPONSE` rename in §6 of the registry (`omp-orchestrator-sc0h5`), with a
-    // line number playing the part the expression played there.
-    //
-    // A LINE-KEYED REGISTRY IS A DRIFT GENERATOR: its rows rot on edits that do not touch their
-    // subject, so the gate bills honest refactors for maintenance it did not cause. Re-anchoring
-    // is the cheap repair and it is NOT the remedy — the remedy is a key that survives motion
-    // (enclosing function, or occurrence-index within the file). Filed rather than done here,
-    // because changing the key changes what the gate can prove and that is not a drive-by edit.
-    ("crates/loop-queue-filter/src/main.rs:282:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
-    ("crates/omp-idle-dispatch/src/main.rs:1153:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate. Re-anchored from `:1146` on 2026-09-12; see the note above on the line-key hazard."),
-    ("crates/pane-oracle-diff/src/main.rs:103:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
-    ("crates/pane-oracle-diff/src/main.rs:169:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:385:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:400:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:473:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:503:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:562:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:582:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:716:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/tick-dispatch/src/main.rs:736:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
-    ("crates/verify-dispatch/src/main.rs:54:out.code as u8", "ALLOWANCE CATEGORY-2: out.code forwards the child/status contract under XC-PT-OUT; range validation remains outside this gate."),
+    ("crates/crate-soundness-verify/src/main.rs::main#0:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs::main#1:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs::main#2:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs::main#3:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/crate-soundness-verify/src/main.rs::main#4:EXIT_RED as u8", "ALLOWANCE CATEGORY-1: EXIT_RED is a closed literal status code; its documented value is 1 and cannot wrap."),
+    ("crates/dispatcher-deadman/src/main.rs::main#0:verdict.exit as u8", "ALLOWANCE CATEGORY-2: verdict.exit forwards the child/status contract under XC-PT-VERDICT; range validation remains outside this gate."),
+    ("crates/fleet-monitor/src/main.rs::main#0:EXIT_CANNOT_OBSERVE as u8", "ALLOWANCE CATEGORY-1: EXIT_CANNOT_OBSERVE is a named closed literal status code; its documented value is 69 and cannot wrap."),
+    ("crates/fleet-monitor/src/main.rs::main#1:rc as u8", "ALLOWANCE CATEGORY-2: rc forwards the child/status contract under XC-PT-RC; range validation remains outside this gate."),
+    ("crates/loop-driver/src/main.rs::acquire_for_probe#0:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/loop-driver/src/main.rs::emit#0:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/loop-queue-filter/src/main.rs::main#0:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
+    ("crates/omp-idle-dispatch/src/main.rs::main#0:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate. Disposition belongs to `omp-orchestrator-t3d2c`; carried across the mg9ua re-key unchanged."),
+    ("crates/pane-oracle-diff/src/main.rs::main#0:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
+    ("crates/pane-oracle-diff/src/main.rs::run_live#0:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::eval_adm#0:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::eval_adm#1:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::pane_step#0:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::run_live#0:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::run_live#1:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::run_live#2:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::run_live#3:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/tick-dispatch/src/main.rs::run_live#4:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
+    ("crates/verify-dispatch/src/main.rs::main#0:out.code as u8", "ALLOWANCE CATEGORY-2: out.code forwards the child/status contract under XC-PT-OUT; range validation remains outside this gate."),
 ];
 
+/// THE ROW KEY: a SHAPE, not a POSITION (`omp-orchestrator-mg9ua`).
+///
+/// `file::function#occurrence:expr as target`. The LINE IS GONE from the key, because the
+/// reviewed fact in every allowance reason is the EXPRESSION and the contract it forwards --
+/// never the line it sits on. A line-keyed row rotted on any insertion ABOVE its site and
+/// rotted BIDIRECTIONALLY (one ORPHANED row plus one UNDECLARED site) for a cast that had not
+/// moved relative to its own function. Measured twice in two days on ONE row: `:853 -> :1146`
+/// (2026-09-11) and `:1146 -> :1153` (2026-09-12).
+///
+/// # WHAT THE RE-KEY COSTS THE GATE, AND WHAT IT BUYS (acceptance item 3)
+///
+/// A re-key that silently narrows coverage is gate self-weakening, so both directions are
+/// enumerated rather than asserted:
+///
+/// LOST -- what `path:LINE` could prove and `file::function#occurrence` cannot:
+/// 1. THE EXACT POSITION. A cast MOVED WITHIN its own function -- above or below a sibling
+///    statement, into or out of an `if` arm in the same body -- was previously a key change and
+///    is now invisible. Pinned deliberately by
+///    `the_shape_key_cannot_see_a_cast_reordered_within_its_own_function`, which asserts the
+///    blindness rather than leaving it undocumented.
+/// 2. THE ORDER OF TWO IDENTICAL CASTS in one function. `run_live#0..#4` are distinguished only
+///    by occurrence index, so SWAPPING two of them is invisible where the line key saw it. What
+///    the line key actually reported for such a swap was two spurious complaints about casts
+///    nothing had touched, so this loss is a loss of NOISE in every case measured -- but it is
+///    a real loss of resolution and it is stated, not waved away.
+/// 3. Nothing else. The line was never named by any allowance reason: every row reviews the
+///    EXPRESSION and the contract it forwards, and `:1153` appears in no reason text.
+///
+/// GAINED -- what the shape key proves that the line key could not:
+/// 1. A row SURVIVES AN INSERTION ABOVE ITS SITE, so an honest edit elsewhere in the file is no
+///    longer billed as two gate failures. That is the measured defect: twice in two days.
+/// 2. A CAST THAT MOVES TO A DIFFERENT FUNCTION is now a key change BY CONSTRUCTION. The line
+///    key caught that only by accident -- and would have MISSED it entirely had the move landed
+///    on the same line number.
+/// 3. A RENAME IS ONE ATTRIBUTABLE EVENT (`EXIT_NARROWING_RESPELLED`) naming both spellings,
+///    instead of an ORPHANED row and an UNDECLARED site that never mention each other. The
+///    refusal is NOT weakened: the row still fails, because the reviewed expression really did
+///    change. Only the diagnosis improves.
+/// 4. `EXIT_NARROWING_UNDECLARED` now prints `key=` -- the exact string a reviewer must paste --
+///    so the remedy stops being a hand-derived line number.
 fn narrowing_key(site: &NarrowingCast) -> String {
-    format!("{}:{}:{} as {}", site.file, site.line, site.expression, site.target)
+    format!(
+        "{}::{}#{}:{} as {}",
+        site.file, site.function, site.occurrence, site.expression, site.target
+    )
+}
+
+/// The same shape with the EXPRESSION removed: the identity of the SITE rather than of the
+/// spelling at it. Used only to turn a rename into ONE attributable complaint instead of an
+/// ORPHANED/UNDECLARED pair -- the `XC-PT-RESPONSE` shape, where a rename orphaned a
+/// declaration AND manufactured its own undeclared successor.
+fn narrowing_site_key(site: &NarrowingCast) -> String {
+    format!("{}::{}#{} as {}", site.file, site.function, site.occurrence, site.target)
+}
+
+/// `file::function#occurrence as target` for a DECLARED row's key, or `None` if the row is not
+/// in shape-key form. Parsing the row rather than storing two columns keeps the table one
+/// string per row, which is the form every reviewer already reads.
+fn declared_site_key(key: &str) -> Option<String> {
+    let (site, target) = key.rsplit_once(" as ")?;
+    let (prefix, _expression) = site.rsplit_once(':')?;
+    // The shape form, and nothing else. A legacy `path:LINE:expr` row parses to a prefix with
+    // no `#`, and must NOT be paired as a respelling -- a line-keyed row carries no site
+    // identity, so pairing it would invent one.
+    if !prefix.contains('#') || !prefix.contains("::") {
+        return None;
+    }
+    Some(format!("{prefix} as {target}"))
 }
 
 fn narrowing_complaints(scan: &Scan) -> Result<Vec<String>, String> {
@@ -950,22 +1071,69 @@ fn narrowing_complaints_with_allowance(
     }
     let occupied: BTreeSet<String> = scan.narrowing.iter().map(narrowing_key).collect();
     let declared: BTreeSet<&str> = allowances.iter().map(|(key, _)| *key).collect();
-    let mut complaints = scan
+
+    // The two unmatched sets, before pairing.
+    let stray_sites: Vec<&NarrowingCast> = scan
         .narrowing
         .iter()
         .filter(|site| !declared.contains(narrowing_key(site).as_str()))
-        .map(|site| {
-            format!(
-                "EXIT_NARROWING_UNDECLARED at {}:{} — {} as {} has no reasoned allowance row",
-                site.file, site.line, site.expression, site.target
-            )
-        })
-        .collect::<Vec<_>>();
-    complaints.extend(
-        allowances
+        .collect();
+    let stray_rows: Vec<&str> = allowances
+        .iter()
+        .map(|(key, _)| *key)
+        .filter(|key| !occupied.contains(*key))
+        .collect();
+
+    // THE RENAME ARM (acceptance 2b). A row and a site that agree on
+    // `file::function#occurrence as target` and disagree only on the EXPRESSION are ONE event: a
+    // respelling. The line-keyed table reported that event as an ORPHANED row PLUS an UNDECLARED
+    // site -- two complaints, neither naming the other, which is exactly how `XC-PT-RESPONSE`
+    // survived a rename as two unrelated-looking rows. It refuses CLEANLY: the reviewed fact (the
+    // expression and the contract it forwards) really did change, so the row must be re-reasoned,
+    // not silently carried -- but the operator is told WHAT changed and where, once.
+    let mut paired_rows: BTreeSet<&str> = BTreeSet::new();
+    let mut paired_sites: BTreeSet<String> = BTreeSet::new();
+    let mut complaints: Vec<String> = Vec::new();
+    for row in &stray_rows {
+        let Some(row_site) = declared_site_key(row) else {
+            continue;
+        };
+        let Some(site) = stray_sites
             .iter()
-            .filter(|(key, _)| !occupied.contains(*key))
-            .map(|(key, _)| format!("EXIT_NARROWING_ORPHANED allowance names no scanned site: {key}")),
+            .find(|site| narrowing_site_key(site) == row_site && !paired_sites.contains(&narrowing_key(site)))
+        else {
+            continue;
+        };
+        paired_rows.insert(row);
+        paired_sites.insert(narrowing_key(site));
+        complaints.push(format!(
+            "EXIT_NARROWING_RESPELLED at {}:{} — {} declares `{}` and the site now reads `{} as {}`; \
+             the allowance's reviewed expression changed and must be re-reasoned, not re-anchored",
+            site.file, site.line, row, site.expression, site.expression, site.target
+        ));
+    }
+
+    complaints.extend(
+        stray_sites
+            .iter()
+            .filter(|site| !paired_sites.contains(&narrowing_key(site)))
+            .map(|site| {
+                format!(
+                    "EXIT_NARROWING_UNDECLARED at {}:{} — {} as {} has no reasoned allowance row; \
+                     key={}",
+                    site.file,
+                    site.line,
+                    site.expression,
+                    site.target,
+                    narrowing_key(site)
+                )
+            }),
+    );
+    complaints.extend(
+        stray_rows
+            .iter()
+            .filter(|key| !paired_rows.contains(*key))
+            .map(|key| format!("EXIT_NARROWING_ORPHANED allowance names no scanned site: {key}")),
     );
     complaints.extend(
         allowances
@@ -1136,6 +1304,232 @@ fn a_planted_narrowing_cast_is_red_and_the_known_good_shape_is_clean() {
         good_scan.narrowing
     );
     let _ = fs::remove_dir_all(&good);
+}
+
+/// The RETIRED key, reconstructed here and NOWHERE ELSE, so the defect can be CONSTRUCTED
+/// rather than cited. This is not the old code path -- that code is deleted -- it is the old
+/// KEY FUNCTION applied by today's matcher, which is sufficient because the rot was a property
+/// of the key, not of the matcher.
+fn legacy_line_key(site: &NarrowingCast) -> String {
+    format!("{}:{}:{} as {}", site.file, site.line, site.expression, site.target)
+}
+
+fn legacy_complaints(scan: &Scan, allowances: &[(&str, &str)]) -> Vec<String> {
+    let occupied: BTreeSet<String> = scan.narrowing.iter().map(legacy_line_key).collect();
+    let declared: BTreeSet<&str> = allowances.iter().map(|(key, _)| *key).collect();
+    let mut out: Vec<String> = scan
+        .narrowing
+        .iter()
+        .filter(|site| !declared.contains(legacy_line_key(site).as_str()))
+        .map(|site| format!("EXIT_NARROWING_UNDECLARED at {}:{}", site.file, site.line))
+        .collect();
+    out.extend(
+        allowances
+            .iter()
+            .filter(|(key, _)| !occupied.contains(*key))
+            .map(|(key, _)| format!("EXIT_NARROWING_ORPHANED allowance names no scanned site: {key}")),
+    );
+    out
+}
+
+/// ACCEPTANCE 1 AND 2(a), CONSTRUCTED: ONE INSERTED LINE, TWO FAILING ROWS under the retired
+/// key -- and ZERO under the shape key.
+///
+/// The bidirectional claim was attributed, not measured, when this bead was filed. It is
+/// measured here: the SAME single edit (one line inserted ABOVE the cast) must produce BOTH
+/// `EXIT_NARROWING_UNDECLARED` and `EXIT_NARROWING_ORPHANED` from the line key. If only one
+/// fired the claim would be PREMISE-FALSE and this leg would say so by failing.
+#[test]
+fn the_shape_key_survives_an_insertion_above_the_site() {
+    let before_src = "fn main() {\n    let exit = 2i32;\n    std::process::exit(exit as i32);\n}\n";
+    // ONE inserted line, ABOVE the cast, touching nothing the allowance reviews.
+    let after_src =
+        "fn main() {\n    let unrelated = 1;\n    let exit = 2i32;\n    std::process::exit(exit as i32);\n}\n";
+
+    let before = fixture("mg9ua-insert-before", before_src);
+    let before_scan = scan(&before);
+    assert_eq!(
+        before_scan.narrowing.len(),
+        1,
+        "ANTI-VACUITY: the fixture must present exactly one cast, or nothing below measures \
+         anything: {:?}",
+        before_scan.narrowing
+    );
+    let site = &before_scan.narrowing[0];
+    let line_row = legacy_line_key(site);
+    let shape_row = narrowing_key(site);
+    assert_eq!(site.line, 3, "the fixture's cast must start where the key claims");
+    let reason = "A deliberately long allowance reason, because a row without one is silence.";
+
+    // KNOWN-GOOD, both keys: before the edit each row matches its own site.
+    assert!(
+        legacy_complaints(&before_scan, &[(line_row.as_str(), reason)]).is_empty(),
+        "the line-keyed row must be clean BEFORE the insertion, or the rot below has no premise"
+    );
+    assert!(
+        narrowing_complaints_with_allowance(&before_scan, &[(shape_row.as_str(), reason)])
+            .expect("shape scan")
+            .is_empty(),
+        "the shape-keyed row must be clean before the insertion"
+    );
+    let _ = fs::remove_dir_all(&before);
+
+    let after = fixture("mg9ua-insert-after", after_src);
+    let after_scan = scan(&after);
+    assert_eq!(after_scan.narrowing.len(), 1, "one cast after the insertion too");
+    assert_eq!(
+        after_scan.narrowing[0].line, 4,
+        "the insertion must actually have moved the line, or this measures nothing"
+    );
+
+    // THE DEFECT, CONSTRUCTED. Both halves from the one edit.
+    let rot = legacy_complaints(&after_scan, &[(line_row.as_str(), reason)]);
+    assert!(
+        rot.iter().any(|m| m.contains("EXIT_NARROWING_UNDECLARED"))
+            && rot.iter().any(|m| m.contains("EXIT_NARROWING_ORPHANED")),
+        "BIDIRECTIONAL ROT IS THE CLAIM: one inserted line above a declared cast must break the \
+         row in BOTH directions under the retired line key. If only one fired the bead's premise \
+         is FALSE. Got: {rot:?}"
+    );
+    assert_eq!(
+        rot.len(),
+        2,
+        "two complaints for one event is the whole finding: {rot:?}"
+    );
+
+    // THE REMEDY. The same edit, the shape key, nothing to report.
+    let survived = narrowing_complaints_with_allowance(&after_scan, &[(shape_row.as_str(), reason)])
+        .expect("shape scan after insertion");
+    assert!(
+        survived.is_empty(),
+        "the shape key must survive an insertion above its site: {survived:?}"
+    );
+    assert_eq!(
+        narrowing_key(&after_scan.narrowing[0]),
+        shape_row,
+        "the key itself must be byte-identical across the edit, not merely tolerated"
+    );
+    println!("MG9UA_INSERTION line_key_rot={} shape_key_complaints=0 key={shape_row}", rot.len());
+    let _ = fs::remove_dir_all(&after);
+}
+
+/// ACCEPTANCE 2(b): a RENAME BESIDE the site refuses ONCE and names both spellings.
+///
+/// The row must NOT silently carry -- the reviewed expression changed, and the reason text
+/// reviews the expression. But it must refuse CLEANLY: ONE `EXIT_NARROWING_RESPELLED` naming
+/// the old row and the new spelling, never the ORPHANED/UNDECLARED pair that made
+/// `XC-PT-RESPONSE` look like two unrelated defects.
+#[test]
+fn a_rename_beside_the_site_refuses_once_and_names_both_spellings() {
+    let renamed = fixture(
+        "mg9ua-rename",
+        "fn main() {\n    let status = 2i32;\n    std::process::exit(status as i32);\n}\n",
+    );
+    let scanned = scan(&renamed);
+    assert_eq!(scanned.narrowing.len(), 1, "one cast, or nothing is measured");
+    let reason = "A deliberately long allowance reason, because a row without one is silence.";
+    // The row as it stood BEFORE the rename: same file, same function, same occurrence, same
+    // target -- only the expression differs.
+    let old_row = "crates/planted/src/main.rs::main#0:exit as i32";
+    let messages = narrowing_complaints_with_allowance(&scanned, &[(old_row, reason)])
+        .expect("rename scan");
+    assert_eq!(
+        messages.len(),
+        1,
+        "a rename is ONE event and must cost ONE complaint: {messages:?}"
+    );
+    let only = &messages[0];
+    assert!(
+        only.contains("EXIT_NARROWING_RESPELLED")
+            && only.contains("exit as i32")
+            && only.contains("status"),
+        "the single complaint must name BOTH spellings: {only}"
+    );
+    assert!(
+        !messages.iter().any(|m| m.contains("EXIT_NARROWING_ORPHANED"))
+            && !messages.iter().any(|m| m.contains("EXIT_NARROWING_UNDECLARED")),
+        "the retired pair must not reappear beside the typed verdict: {messages:?}"
+    );
+    // AND IT IS STILL A REFUSAL. Renaming does not buy a pass.
+    assert!(
+        !messages.is_empty(),
+        "a respelled allowance must still fail; only the diagnosis improved"
+    );
+    let _ = fs::remove_dir_all(&renamed);
+}
+
+/// ACCEPTANCE 3, ASSERTED RATHER THAN CONCEDED: the cost of the re-key is that a cast moved
+/// WITHIN its own function is invisible. Pinned so a future reader cannot mistake the blindness
+/// for coverage, and so removing it becomes a visible change.
+#[test]
+fn the_shape_key_cannot_see_a_cast_reordered_within_its_own_function() {
+    let moved = fixture(
+        "mg9ua-reorder",
+        "fn main() {\n    let exit = 2i32;\n    let _pad = 0;\n    let _pad2 = 0;\n    std::process::exit(exit as i32);\n}\n",
+    );
+    let scanned = scan(&moved);
+    assert_eq!(scanned.narrowing.len(), 1, "one cast, or nothing is measured");
+    assert_eq!(
+        scanned.narrowing[0].line, 5,
+        "the cast must sit at a DIFFERENT line than the other fixtures, or this proves nothing"
+    );
+    assert_eq!(
+        narrowing_key(&scanned.narrowing[0]),
+        "crates/planted/src/main.rs::main#0:exit as i32",
+        "THIS IS THE COST: three different line numbers across this suite's fixtures all produce \
+         ONE key. The gate can no longer tell them apart, and that is the documented trade."
+    );
+    let _ = fs::remove_dir_all(&moved);
+}
+
+/// THE NEW ACCEPTANCE ITEM, MEASURED: can a row be written for an expression that exists
+/// NOWHERE? For this table the answer is NO, and this leg pins it in all three shapes a
+/// fabricated row can take, so the answer cannot quietly become yes.
+///
+/// Context (`GradePairAdm`, 2026-09-12): the EXPRESSION-keyed instance originally attributed to
+/// this bead is REFUTED -- `git log -S'response.exit_code' --all -- '*.rs'` is EMPTY, so
+/// `XC-PT-RESPONSE` was never renamed; it was false from birth. That makes "a declaration with
+/// no possible subject" the live question rather than "a declaration whose subject moved", and
+/// the shape key answers it for free: a key derived from code shape has nothing to match when
+/// the code is not there. No row can hide behind a plausible-looking string.
+#[test]
+fn a_row_for_an_expression_that_exists_nowhere_is_refused() {
+    let real = fixture(
+        "mg9ua-fiction",
+        "fn main() {\n    let exit = 2i32;\n    std::process::exit(exit as i32);\n}\n",
+    );
+    let scanned = scan(&real);
+    assert_eq!(scanned.narrowing.len(), 1, "one real cast, or nothing is measured");
+    let reason = "A deliberately long allowance reason, because a row without one is silence.";
+    let truth = narrowing_key(&scanned.narrowing[0]);
+
+    for (label, fabricated) in [
+        // A function that does not exist in the file.
+        ("absent function", "crates/planted/src/main.rs::no_such_fn#0:exit as i32"),
+        // The right function, an occurrence index nothing reaches.
+        ("absent occurrence", "crates/planted/src/main.rs::main#7:exit as i32"),
+        // The retired line-keyed form, which carries no site identity at all.
+        ("legacy line key", "crates/planted/src/main.rs:2:exit as i32"),
+    ] {
+        let messages =
+            narrowing_complaints_with_allowance(&scanned, &[(truth.as_str(), reason), (fabricated, reason)])
+                .expect("fiction scan");
+        assert!(
+            messages.iter().any(|m| m.contains("EXIT_NARROWING_ORPHANED") && m.contains(fabricated)),
+            "a row with no possible subject ({label}) must be REFUSED and NAMED: {messages:?}"
+        );
+        assert!(
+            !messages.iter().any(|m| m.contains("EXIT_NARROWING_RESPELLED")),
+            "a fabricated row must not be laundered into a respelling of the real one \
+             ({label}): {messages:?}"
+        );
+        assert!(
+            !messages.iter().any(|m| m.contains("EXIT_NARROWING_UNDECLARED")),
+            "the REAL site is declared and must stay declared beside the fiction ({label}): \
+             {messages:?}"
+        );
+    }
+    let _ = fs::remove_dir_all(&real);
 }
 
 /// A name bound to two values means a reader who learned one crate is confidently
