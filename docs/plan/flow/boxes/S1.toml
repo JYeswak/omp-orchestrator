@@ -136,15 +136,15 @@ id = "S1-HOOK-CLAUDE-POST"
 event = "claude PostToolUse"
 matcher = "Bash; Edit|Write|MultiEdit|NotebookEdit"
 class = "advisory"
-fail_mode = "UNMEASURED"
+fail_mode = "UNKNOWN both (pane-1 re-ran 2026-09-12, 39l5): --help 0 bytes rc=0; no fail_mode self-description. PostToolUse stdin not fed (capture hooks; junk ledger risk). A silent --help is UNKNOWN, never a negative."
 binary = "zestgraph-ee-capture, zestgraph-capture"
 policy_file = ""
 source_commit = ""
-language = "UNMEASURED"
+language = "rust Mach-O arm64 x2 (zestgraph-ee-capture, zestgraph-capture) — measured command -v + file, pane-1 2026-09-12"
 stage = "live"
 certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "none known; capture only"
-measured = "2 matchers / 2 hooks -- the prior row's 'partial' was directionally right"
+measured = "39l5: command -v + file + --help on both S1-HOOK-CLAUDE-POST names. Independent re-run pane-1. Both found. Zero inferred fail_mode rows."
 
 [[box.hook]]
 id = "S1-HOOK-CLAUDE-STOP"
