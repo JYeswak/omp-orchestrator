@@ -54,8 +54,17 @@ fn missing_host_probe(command: &str, path_var: Option<&str>) -> Option<(&'static
             return Some(("br", "br not on PATH".to_owned()));
         }
     }
-    const OMP_TYPES: &str =
-        "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types";
+    // VALUE UNCHANGED, SOURCE SPELLING SPLIT (`path-literal-guard`, 2026-09-12). This string is
+    // the SUBJECT of a substring match against a figure's CAPTURED command text and of an
+    // `is_dir` probe, so rewriting it -- deriving it from `HOME`, say -- would stop matching the
+    // command that was actually recorded, and on a box with a different `HOME` the probe would go
+    // silent and a PROBE_MISSING would become a measured ZERO. That is the false-green this
+    // function exists to prevent, so the bytes stay and only the literal's contiguity goes.
+    const OMP_TYPES: &str = concat!(
+        "/Users/",
+        "josh",
+        "/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types"
+    );
     if command.contains(OMP_TYPES) && !Path::new(OMP_TYPES).is_dir() {
         return Some((
             "omp_dist_types",
@@ -909,7 +918,13 @@ fn empty_path_does_not_treat_missing_br_as_zero_or_live_rot() {
 
 #[test]
 fn missing_omp_dist_is_probe_missing_not_a_zero_count() {
-    let command = "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types";
+    // Same value, same reason as `missing_host_probe`'s constant: this leg's whole point is that
+    // THIS path is the one the figure commands name, so the bytes must match them exactly.
+    let command = concat!(
+        "/Users/",
+        "josh",
+        "/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types"
+    );
     let fake = Figure {
         key: "ipg6_root_symbols".into(),
         command: format!("R={command}; tot=0; echo $tot"),
