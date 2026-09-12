@@ -647,6 +647,23 @@ pub fn untriaged_amnesty_rows() -> Vec<&'static str> {
         .collect()
 }
 
+/// The MOST rows `census_gates` may leave UNDETERMINED before the census stops being a
+/// measurement (`omp-orchestrator-tzz74`).
+///
+/// ⛔ WHY A CEILING AND NOT JUST "NOT ALL OF THEM". My first anti-vacuity leg asserted only
+/// that Undetermined was a STRICT SUBSET and that something was positively classified — and a
+/// mutation making Undetermined the residual for EVERY BIN CRATE left the suite GREEN, because
+/// library crates still classified Unreachable and kept the subset strict. THE LEG WAS
+/// NECESSARY AND INSUFFICIENT, which is the same shape as a known-bad that pins
+/// `description != caller` and fails to pin `argument == spawn`.
+///
+/// `Undetermined` releases a crate from BOTH obligation legs, so its population is the exact
+/// quantity that must not grow quietly. 2 is the measured worker value (`contabo-reclaim`,
+/// `s1-coverage` — the two crates a workflow names while this host supplies no git remote) and
+/// 0 is the value on any host that HAS a remote. LOWER IT WHEN THE INPUT BECOMES AVAILABLE;
+/// raising it is how an unmeasured census becomes a passing one.
+pub const UNDETERMINED_CEILING: usize = 2;
+
 /// Compatibility projection from the single ratchet anchor.
 pub const ADVISORY_CEILING: usize = ADVISORY_RATCHET.ceiling();
 

@@ -37,7 +37,7 @@ use omp_orchestrator::{
     census_gates, crates_on_disk, CensusDisposition, GateCensus, GateReachability,
     ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX, ADVISORY_RATCHET,
     untriaged_amnesty_rows,
-    advisory_ratchet_overdue, quoted_in_call_position, rust_line_invokes,
+    advisory_ratchet_overdue, quoted_in_call_position, rust_line_invokes, UNDETERMINED_CEILING,
     ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER, PRE_LEHT_BLOCKING_ROWS,
 };
 use std::path::PathBuf;
@@ -681,6 +681,17 @@ fn undetermined_is_a_strict_subset_and_never_the_whole_census() {
         .iter()
         .filter(|r| !r.reachability.is_determined())
         .count();
+    // ⛔ THE CLAUSE THAT ACTUALLY BITES. "Strict subset" alone is NECESSARY AND INSUFFICIENT:
+    // a mutation making Undetermined the residual for EVERY BIN CRATE left this leg green,
+    // because library crates kept the subset strict. The population released from both
+    // obligation legs is the quantity that must not grow quietly, so it is ratcheted.
+    assert!(
+        undetermined <= UNDETERMINED_CEILING,
+        "RULE undetermined_ceiling: {undetermined} rows are Undetermined, above the ceiling of \
+         {UNDETERMINED_CEILING} -- an absent input is becoming the residual for the census, \
+         which releases that many crates from BOTH obligation legs at once. Lower the ceiling \
+         when the input becomes available; never raise it to absorb a spreading unknown"
+    );
     assert!(
         undetermined < census.rows.len(),
         "RULE undetermined_bounded: ALL {} census rows are Undetermined -- an absent input has \
