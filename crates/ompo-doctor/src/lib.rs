@@ -112,6 +112,44 @@ pub const PROBES: &[ProbeSpec] = &[
     },
 ];
 
+/// L1 probe verdicts (vv9h): seven distinct states, because collapsing them
+/// into ABSENT misnames live states with different remedies. `AbsentFamily`
+/// is the whole tool family missing (no probe of that kind can run);
+/// `AbsentSpecific` is one binary missing while its family is present.
+/// `Stale` is a reading older than its freshness bound; `Paused` is an
+/// operator-held probe; `Unmeasured` is a probe that never produced a
+/// reading (timeout). Only `Ok`, `AbsentSpecific`, `Unprobeable` and
+/// `Unmeasured` have a producer in `run_probe` today — `AbsentFamily`,
+/// `Stale` and `Paused` are representable with reserved strings so the next
+/// producer adopts the vocabulary instead of minting a synonym.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProbeVerdict {
+    Ok,
+    AbsentFamily,
+    AbsentSpecific,
+    Unprobeable,
+    Stale,
+    Paused,
+    Unmeasured,
+}
+
+impl ProbeVerdict {
+    /// The stable status string a reader keys on. All seven are distinct;
+    /// in particular no variant renders as bare `"ABSENT"`.
+    #[must_use]
+    pub fn status(&self) -> &'static str {
+        match self {
+            Self::Ok => "OK",
+            Self::AbsentFamily => "ABSENT_FAMILY",
+            Self::AbsentSpecific => "ABSENT_SPECIFIC",
+            Self::Unprobeable => "UNPROBEABLE",
+            Self::Stale => "STALE",
+            Self::Paused => "PAUSED",
+            Self::Unmeasured => "UNMEASURED",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ProbeDecision {
     pub name: String,
@@ -240,16 +278,24 @@ fn run_probe(spec: &ProbeSpec) -> ProbeDecision {
             let detail = format!("exit={} {}", output.status, detail_from_output(&output));
             if presence.is_some() {
                 match version {
-                    Some(version) => ("OK", version.clone(), Some(version)),
-                    None => ("UNPROBEABLE", detail, None),
+                    Some(version) => (ProbeVerdict::Ok.status(), version.clone(), Some(version)),
+                    None => (ProbeVerdict::Unprobeable.status(), detail, None),
                 }
             } else {
-                ("ABSENT_SPECIFIC", detail, None)
+                (ProbeVerdict::AbsentSpecific.status(), detail, None)
             }
         }
-        BoundedOutcome::TimedOut => ("UNMEASURED", "probe timed out".to_owned(), None),
+        BoundedOutcome::TimedOut => (
+            ProbeVerdict::Unmeasured.status(),
+            "probe timed out".to_owned(),
+            None,
+        ),
         BoundedOutcome::Unspawned(error) => (
-            if presence.is_some() { "UNPROBEABLE" } else { "ABSENT_SPECIFIC" },
+            if presence.is_some() {
+                ProbeVerdict::Unprobeable.status()
+            } else {
+                ProbeVerdict::AbsentSpecific.status()
+            },
             error.to_string(),
             None,
         ),
@@ -1231,5 +1277,51 @@ mod tests {
         assert!(error.to_string().contains("L1_DOCTOR_EMPTY_PROBE_SET"));
         let error = doctor_exit_code(&[]).expect_err("empty exit set");
         assert!(error.to_string().contains("L1_DOCTOR_EMPTY_PROBE_SET"));
+    }
+
+    /// L1-VERDICT (vv9h): all seven probe verdicts render distinct status
+    /// strings, and none collapses into bare ABSENT. The absent family and
+    /// the absent specific binary are different states with different
+    /// remedies; STALE, PAUSED and UNMEASURED are live states, not absence.
+    #[test]
+    fn probe_verdict_names_seven_distinct_statuses() {
+        use super::ProbeVerdict;
+
+        // KNOWN-GOOD: the healthy verdict renders OK.
+        assert_eq!(ProbeVerdict::Ok.status(), "OK");
+
+        // All seven render distinctly — a collapse into one shared string
+        // (least plausibly bare "ABSENT") is the defect this pins.
+        let rendered = [
+            ProbeVerdict::Ok,
+            ProbeVerdict::AbsentFamily,
+            ProbeVerdict::AbsentSpecific,
+            ProbeVerdict::Unprobeable,
+            ProbeVerdict::Stale,
+            ProbeVerdict::Paused,
+            ProbeVerdict::Unmeasured,
+        ]
+        .map(|verdict| verdict.status());
+        let distinct: std::collections::BTreeSet<&str> =
+            rendered.iter().copied().collect();
+        assert_eq!(
+            distinct.len(),
+            7,
+            "seven variants must render seven strings, got {rendered:?}"
+        );
+        assert!(
+            !distinct.contains("ABSENT"),
+            "no verdict may render as bare ABSENT: {rendered:?}"
+        );
+        // The pair the session kept merging, pinned by name.
+        assert_ne!(
+            ProbeVerdict::AbsentFamily.status(),
+            ProbeVerdict::AbsentSpecific.status()
+        );
+        // And the wired four render exactly the strings run_probe has
+        // always emitted, so the enum changes no observed behavior.
+        assert_eq!(ProbeVerdict::AbsentSpecific.status(), "ABSENT_SPECIFIC");
+        assert_eq!(ProbeVerdict::Unprobeable.status(), "UNPROBEABLE");
+        assert_eq!(ProbeVerdict::Unmeasured.status(), "UNMEASURED");
     }
 }
