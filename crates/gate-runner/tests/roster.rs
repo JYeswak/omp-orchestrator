@@ -16,9 +16,10 @@
 
 use gate_runner::{
     build_report, check_allowance, derive_checks, derive_roster, expand, parse_ledger,
-    CrateVerdict, Invocation, NoTestsDisposition, Observed, RosterError, Subsumption,
-    UnmeasurablePrecondition,
-    EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED, EXIT_LEDGER_DRIFT, EXIT_OK, EXIT_SHORT_ROSTER,
+    parse_mode, render_roster_file, workspace_names, CrateVerdict, Invocation, Mode,
+    NoTestsDisposition, Observed, RosterError, RosterWriteError, Subsumption,
+    UnmeasurablePrecondition, EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED, EXIT_LEDGER_DRIFT, EXIT_OK,
+    EXIT_SHORT_ROSTER,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -1123,5 +1124,118 @@ fn the_new_exit_code_is_distinct_from_every_other() {
         distinct.len(),
         codes.len(),
         "exit codes must be distinct per cause: {codes:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Roster writer: `gate-runner --write-roster` (bead omp-orchestrator-gotdk)
+// ---------------------------------------------------------------------------
+
+const WRITER_HEADER: &str = "# omp-orchestrator-fsu7 gate roster ledger.\n#\n# INTENDED DERIVED, and the regenerate path DOES NOT EXIST YET -- omp-orchestrator-gotdk.\n# line two\n# When the writer lands it MUST be an explicit flag and MUST NOT run inside `--plan` or in CI:\n# a roster regenerated automatically can never detect the deletion this file exists to catch.\n# Its ONLY job is to make DELETION detectable.\n";
+
+/// KNOWN-BAD: delete a row for a live crate, run the gate -> drift naming
+/// exactly that crate, with the crate name AND exit 5 pinned together.
+#[test]
+fn a_deleted_row_reports_drift_naming_the_crate_with_code_five() {
+    let md = metadata(&[("alpha", &["contract"]), ("live-crate", &["t"])]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let full: Vec<gate_runner::RosterEntry> = roster.clone();
+    let ledger: BTreeSet<String> = ["alpha"].iter().map(|s| (*s).to_owned()).collect();
+    let report = gate_runner::build_report_scoped(&roster, &full, &BTreeMap::new(), &ledger);
+    assert_eq!(report.exit_code(), EXIT_LEDGER_DRIFT);
+    assert_eq!(report.exit_code(), 5);
+    let rendered = report.render();
+    assert!(rendered.contains("crate=live-crate"), "{rendered}");
+    assert!(rendered.contains("in_workspace_absent_from_ledger"), "{rendered}");
+}
+
+/// KNOWN-BAD on the constraint: the writer is unreachable from `--plan`.
+/// Any combination with `--write-roster` is a usage error, which is what
+/// makes plan-path invocation structurally impossible rather than refused.
+#[test]
+fn the_writer_is_unreachable_from_plan() {
+    assert_eq!(parse_mode(&["--plan".to_owned()]), Ok((Mode::Plan, None, None)));
+    assert_eq!(parse_mode(&["--write-roster".to_owned()]), Ok((Mode::WriteRoster, None, None)));
+    assert!(parse_mode(&["--plan".to_owned(), "--write-roster".to_owned()]).is_err());
+    assert!(parse_mode(&["--run".to_owned(), "--write-roster".to_owned()]).is_err());
+    assert!(parse_mode(&[]).is_err());
+    assert_eq!(
+        parse_mode(&["--write-roster".to_owned(), "--out".to_owned(), "/tmp/r.txt".to_owned()]),
+        Ok((Mode::WriteRoster, None, Some("/tmp/r.txt".to_owned())))
+    );
+    assert!(parse_mode(&["--plan".to_owned(), "--out".to_owned(), "/tmp/r.txt".to_owned()]).is_err());
+}
+
+/// KNOWN-GOOD: a workspace-EXCLUDED crate never reports drift. The workspace
+/// set comes from cargo metadata (which excludes it), never from a disk
+/// scan -- so a name on disk but in neither input cannot appear. And the
+/// converse proves the comparison reads metadata: a ledger-only name fires.
+#[test]
+fn an_excluded_crate_is_invisible_and_a_ledger_only_name_fires() {
+    let md = metadata(&[("alpha", &["t"])]);
+    let roster = derive_roster(&md, &lib_tests(&[])).expect("parses");
+    let full = roster.clone();
+    let ledger: BTreeSet<String> = ["alpha"].iter().map(|s| (*s).to_owned()).collect();
+    let report = gate_runner::build_report_scoped(&roster, &full, &BTreeMap::new(), &ledger);
+    assert!(report.workspace_only.is_empty());
+    assert!(report.ledger_only.is_empty());
+    let rendered = report.render();
+    assert!(!rendered.contains("omp-idle-dispatch"), "excluded crate must not appear: {rendered}");
+    let ledger2: BTreeSet<String> = ["alpha", "ghost-crate"].iter().map(|s| (*s).to_owned()).collect();
+    let report2 = gate_runner::build_report_scoped(&roster, &full, &BTreeMap::new(), &ledger2);
+    assert!(report2.ledger_only.contains("ghost-crate"));
+}
+
+/// KNOWN-GOOD: extras>0 refuses NAMING the crates; a clean regeneration
+/// writes rows sorted with the header preserved except the stale stanza.
+#[test]
+fn extras_refuse_naming_crates_and_clean_writes() {
+    let names = ["alpha".to_owned(), "beta".to_owned()];
+    let existing = format!("{WRITER_HEADER}alpha\nbeta\nvanished\n");
+    let error = render_roster_file(&existing, &names).expect_err("must refuse");
+    assert_eq!(error, RosterWriteError::Extras(vec!["vanished".to_owned()]));
+    assert_eq!(error.exit_code(), EXIT_LEDGER_DRIFT);
+    assert_eq!(error.exit_code(), 5);
+    let message = error.message();
+    assert!(message.contains("GATE_RUNNER_ROSTER_REFUSED"), "{message}");
+    assert!(message.contains("vanished"), "{message}");
+    let clean = render_roster_file(&format!("{WRITER_HEADER}alpha\n"), &["beta".to_owned(), "alpha".to_owned()])
+        .expect("clean write");
+    assert!(clean.contains("alpha\nbeta\n"), "rows sorted: {clean}");
+    assert!(!clean.contains("DOES NOT EXIST YET"), "stale stanza replaced");
+    assert!(clean.contains("--write-roster"), "new stanza names the flag");
+    assert!(clean.contains("# Its ONLY job is to make DELETION detectable."), "surrounding header verbatim");
+}
+
+/// ANTI-VACUITY: zero rows AND zero drift lines is an ERROR, never a pass --
+/// every empty input refuses with its own reason.
+#[test]
+fn every_empty_input_refuses_with_its_own_reason() {
+    assert_eq!(
+        render_roster_file(&format!("{WRITER_HEADER}alpha\n"), &[]),
+        Err(RosterWriteError::EmptyWorkspace)
+    );
+    assert_eq!(
+        render_roster_file(WRITER_HEADER, &["alpha".to_owned()]),
+        Err(RosterWriteError::EmptyPriorRows)
+    );
+    assert_eq!(
+        render_roster_file("", &["alpha".to_owned()]),
+        Err(RosterWriteError::EmptyHeader)
+    );
+    assert_eq!(
+        render_roster_file("# no anchors here\nalpha\n", &["alpha".to_owned()]),
+        Err(RosterWriteError::StaleAnchorsMissing)
+    );
+}
+
+/// The ONLY authority: rows derive from cargo metadata names, sorted --
+/// never from the roster read back into itself.
+#[test]
+fn rows_derive_from_metadata_names_sorted() {
+    let md = metadata(&[("zeta", &["t"]), ("alpha", &["t"])]);
+    assert_eq!(
+        workspace_names(&md),
+        Ok(vec!["alpha".to_owned(), "zeta".to_owned()])
     );
 }

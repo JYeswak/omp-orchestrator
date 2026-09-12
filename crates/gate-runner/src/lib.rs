@@ -722,6 +722,226 @@ pub fn parse_ledger(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// Roster writer: `gate-runner --write-roster` (bead omp-orchestrator-gotdk)
+// ---------------------------------------------------------------------------
+
+/// The writer is an EXPLICIT mode, never a side effect of `--plan` and never
+/// run in CI. A roster regenerated automatically can never detect the
+/// deletion the ledger exists to catch (workspace-derived vs workspace diffs
+/// to 0 through a real deletion), so generation stays a human decision with
+/// a mechanical body. `parse_mode` below makes the plan-path invocation
+/// structurally unrepresentable rather than merely refused.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Plan,
+    Run,
+    WriteRoster,
+}
+
+/// Why the requested flags name no mode. Both-or-neither and any combination
+/// with `--write-roster` are usage errors: a default would let an operator
+/// believe they had run the gates when they had only planned them, and a
+/// combined plan+write would regenerate inside the path that must never do it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModeError {
+    BothOrNeither,
+    AmbiguousWrite,
+    UnknownFlag(String),
+    MissingOnlyValue,
+}
+
+/// Parse argv (after the program name) into exactly one mode, plus the
+/// `--only` restriction (belongs to `Run` alone) and the writer's `--out`
+/// override (belongs to `WriteRoster` alone: a dry-run path for proving the
+/// writer on the real file without touching it).
+pub fn parse_mode(args: &[String]) -> Result<(Mode, Option<String>, Option<String>), ModeError> {
+    let mut plan = false;
+    let mut run = false;
+    let mut write = false;
+    let mut only: Option<String> = None;
+    let mut out: Option<String> = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--plan" => plan = true,
+            "--run" => run = true,
+            "--write-roster" => write = true,
+            "--only" => {
+                index += 1;
+                match args.get(index) {
+                    Some(value) => only = Some(value.clone()),
+                    None => return Err(ModeError::MissingOnlyValue),
+                }
+            }
+            "--out" => {
+                index += 1;
+                match args.get(index) {
+                    Some(value) => out = Some(value.clone()),
+                    None => return Err(ModeError::MissingOnlyValue),
+                }
+            }
+            "-h" | "--help" => return Err(ModeError::BothOrNeither),
+            other => return Err(ModeError::UnknownFlag(other.to_owned())),
+        }
+        index += 1;
+    }
+    if write {
+        if plan || run || only.is_some() {
+            return Err(ModeError::AmbiguousWrite);
+        }
+        return Ok((Mode::WriteRoster, None, out));
+    }
+    if out.is_some() {
+        return Err(ModeError::AmbiguousWrite);
+    }
+    if plan == run {
+        return Err(ModeError::BothOrNeither);
+    }
+    if only.is_some() && !run {
+        return Err(ModeError::BothOrNeither);
+    }
+    if plan {
+        Ok((Mode::Plan, None, None))
+    } else {
+        Ok((Mode::Run, only, None))
+    }
+}
+
+/// Crate names from `cargo metadata --no-deps`, sorted. The ONLY authority
+/// for a regenerated row: never the roster read back into itself.
+pub fn workspace_names(metadata_json: &str) -> Result<Vec<String>, RosterError> {
+    let value: serde_json::Value =
+        serde_json::from_str(metadata_json).map_err(|error| RosterError::MetadataUnreadable {
+            detail: error.to_string(),
+        })?;
+    let packages = value
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| RosterError::MetadataUnreadable {
+            detail: "no `packages` array".to_owned(),
+        })?;
+    let mut names = Vec::with_capacity(packages.len());
+    for package in packages {
+        let Some(name) = package.get("name").and_then(serde_json::Value::as_str) else {
+            return Err(RosterError::MetadataUnreadable {
+                detail: "a package has no `name`".to_owned(),
+            });
+        };
+        names.push(name.to_owned());
+    }
+    names.sort();
+    Ok(names)
+}
+
+/// Why regeneration refused. Every arm names its remedy; an extras refusal
+/// names the crates that would have been silently dropped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RosterWriteError {
+    EmptyHeader,
+    EmptyPriorRows,
+    EmptyWorkspace,
+    StaleAnchorsMissing,
+    Extras(Vec<String>),
+}
+
+impl RosterWriteError {
+    /// Machine-stable rendering, pinned by tests: the message AND the code
+    /// travel together because each is independently defeasible.
+    #[must_use]
+    pub fn message(&self) -> String {
+        match self {
+            Self::EmptyHeader => "GATE_RUNNER_ROSTER_REFUSED reason=empty_header detail=the existing file carries no comment header to preserve".to_owned(),
+            Self::EmptyPriorRows => "GATE_RUNNER_ROSTER_REFUSED reason=empty_prior_rows detail=the existing ledger names zero crates; refusing to regenerate from nothing".to_owned(),
+            Self::EmptyWorkspace => "GATE_RUNNER_ROSTER_REFUSED reason=empty_workspace detail=cargo metadata named zero packages".to_owned(),
+            Self::StaleAnchorsMissing => "GATE_RUNNER_ROSTER_REFUSED reason=stale_anchors_missing detail=the unimplemented-writer stanza is gone but no implemented stanza names the flag; refusing to guess which header lines to replace".to_owned(),
+            Self::Extras(rows) => format!(
+                "GATE_RUNNER_ROSTER_REFUSED reason=extras_would_drop rows={} detail=a row with no crate in the workspace is an ERROR naming the crate; delete the row by hand or restore the crate",
+                rows.join(",")
+            ),
+        }
+    }
+
+    /// Exit-code half of the refusal. Extras is ledger disagreement, so it
+    /// shares [`EXIT_LEDGER_DRIFT`]; unreadable inputs share the empty-roster
+    /// code because a regeneration that cannot read its inputs is vacuous.
+    #[must_use]
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Self::Extras(_) => EXIT_LEDGER_DRIFT,
+            Self::EmptyHeader | Self::EmptyPriorRows | Self::EmptyWorkspace | Self::StaleAnchorsMissing => EXIT_EMPTY_ROSTER,
+        }
+    }
+}
+
+/// Replacement stanza for the unimplemented-writer block. Short by design:
+/// it names the flag, the authority, and the constraint, and nothing else --
+/// the essay it replaces was the record of a missing feature, not doctrine.
+const WRITER_STANZA: &[&str] = &[
+    "# REGENERATED BY `gate-runner --write-roster` -- bead omp-orchestrator-gotdk.",
+    "# Rows come from `cargo metadata --no-deps` sorted; that derivation is the ONLY",
+    "# authority, never this file read back into itself. The flag is explicit and never",
+    "# runs inside `--plan` or in CI: an automatically regenerated roster can never",
+    "# detect the deletion this file exists to catch.",
+];
+
+/// Anchors of the stale block, in order. The start line is unique in the
+/// file; the end is the first line at or after start ending the constraint
+/// sentence. Absent anchors are `StaleAnchorsMissing`, never a guess.
+const STALE_START_ANCHOR: &str = "DOES NOT EXIST YET";
+const STALE_END_ANCHOR: &str = "exists to catch.";
+
+/// Render the regenerated roster file. The header is preserved VERBATIM
+/// except the stale unimplemented-writer stanza, which is replaced by
+/// [`WRITER_STANZA`]; rows are replaced wholesale by `names`, sorted.
+pub fn render_roster_file(existing: &str, names: &[String]) -> Result<String, RosterWriteError> {
+    let lines: Vec<&str> = existing.lines().collect();
+    let first_row = lines
+        .iter()
+        .position(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#'))
+        .unwrap_or(lines.len());
+    let (header, _body) = lines.split_at(first_row);
+    if header.is_empty() {
+        return Err(RosterWriteError::EmptyHeader);
+    }
+    let prior_rows: Vec<&str> = lines[first_row..]
+        .iter()
+        .filter(|line| !line.trim().is_empty() && !line.trim_start().starts_with('#'))
+        .copied()
+        .collect();
+    if prior_rows.is_empty() {
+        return Err(RosterWriteError::EmptyPriorRows);
+    }
+    if names.is_empty() {
+        return Err(RosterWriteError::EmptyWorkspace);
+    }
+    let start = header
+        .iter()
+        .position(|line| line.contains(STALE_START_ANCHOR))
+        .ok_or(RosterWriteError::StaleAnchorsMissing)?;
+    let end = header[start..]
+        .iter()
+        .position(|line| line.contains(STALE_END_ANCHOR))
+        .map(|offset| start + offset)
+        .ok_or(RosterWriteError::StaleAnchorsMissing)?;
+    let have: BTreeSet<&str> = prior_rows.into_iter().collect();
+    let want: BTreeSet<&str> = names.iter().map(String::as_str).collect();
+    let extras: Vec<String> = have.difference(&want).map(|s| (*s).to_owned()).collect();
+    if !extras.is_empty() {
+        return Err(RosterWriteError::Extras(extras));
+    }
+    let mut out: Vec<&str> = Vec::with_capacity(header.len() + names.len());
+    out.extend_from_slice(&header[..start]);
+    out.extend_from_slice(WRITER_STANZA);
+    out.extend_from_slice(&header[end + 1..]);
+    let mut rows: Vec<&str> = want.into_iter().collect();
+    rows.sort_unstable();
+    out.extend(rows);
+    let mut text = out.join("\n");
+    text.push('\n');
+    Ok(text)
+}
+
 /// How the read of the committed ledger FILE resolved.
 ///
 /// # Why this type exists

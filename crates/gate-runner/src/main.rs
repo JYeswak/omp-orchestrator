@@ -31,8 +31,9 @@
 
 mod ci_citation;
 use gate_runner::{
-    build_report_scoped, check_allowance, derive_checks, derive_roster, verdict_for, Invocation,
-    LedgerRead, Observed, UnmeasurablePrecondition, EXIT_METADATA_UNREADABLE,
+    build_report_scoped, check_allowance, derive_checks, derive_roster, parse_mode,
+    render_roster_file, verdict_for, workspace_names, Invocation, LedgerRead, Mode, Observed,
+    UnmeasurablePrecondition, EXIT_METADATA_UNREADABLE,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -51,7 +52,7 @@ const LEDGER_PATH: &str = "docs/gate-roster.txt";
 
 fn usage() -> ExitCode {
     eprintln!(
-        r#"usage: gate-runner --plan | --run [--only <crate>]
+    r#"usage: gate-runner --plan | --run [--only <crate>] | --write-roster
 
 omp-orchestrator-fsu7. Derives every workspace gate from cargo metadata and runs it
 through ONE entry point. An empty roster is an ERROR, never a pass.
@@ -77,31 +78,13 @@ fn main() -> ExitCode {
         let repo = repo_root().unwrap_or_else(|| PathBuf::from("."));
         return ci_citation::run(&args[1], &aggregate_path(&repo));
     }
-    let mut plan = false;
-    let mut run = false;
-    let mut only: Option<String> = None;
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--plan" => plan = true,
-            "--run" => run = true,
-            "--only" => {
-                index += 1;
-                match args.get(index) {
-                    Some(value) => only = Some(value.clone()),
-                    None => return usage(),
-                }
-            }
-            "-h" | "--help" => return usage(),
-            _ => return usage(),
-        }
-        index += 1;
-    }
-    if plan == run {
-        // Both or neither. A default mode here would let an operator believe they had run the
-        // gates when they had only planned them.
-        return usage();
-    }
+    // Exactly one mode. `parse_mode` is the ONLY parser: a second inline loop
+    // here would let --plan grow a writer without the unit legs seeing it.
+    // --write-roster combined with anything else is a usage error, which is
+    let (mode, only, out) = match parse_mode(&args) {
+        Ok(mode) => mode,
+        Err(_) => return usage(),
+    };
 
     let repo = match repo_root() {
         Some(root) => root,
@@ -145,6 +128,12 @@ fn main() -> ExitCode {
             return ExitCode::from(EXIT_METADATA_UNREADABLE);
         }
     };
+    // THE WRITER IS AN EXPLICIT MODE, never a --plan side effect and never in
+    // CI (grep .github/workflows for --write-roster: zero hits, asserted by
+    // the bead's wiring proof). It replaces the roster file wholesale --
+    if mode == Mode::WriteRoster {
+        return write_roster_cmd(&repo, &metadata, out.as_deref());
+    }
     // `{scratch}` is load-bearing for three declared invocations — `installer --bin-dir`,
     // `gate-reachability --out`, `head-compiles-gate --receipt` — so it must be a real directory
     // that OUTLIVES the command. Per AGENTS.md that is ZS_SCRATCH, never `mktemp`: a bare
@@ -203,7 +192,7 @@ fn main() -> ExitCode {
         return ExitCode::from(gate_runner::EXIT_LEDGER_UNREADABLE);
     };
 
-    if plan {
+    if mode == Mode::Plan {
         let mut total = 0usize;
         println!("GATE_RUNNER_PLAN crates={} (NOTHING WAS RUN)", roster.len());
         for entry in &roster {
@@ -600,6 +589,53 @@ fn aggregate_path(repo: &Path) -> PathBuf {
 /// The bank appends because an interrupted run must keep what it earned. This one must not: two
 /// aggregates in the file would make "which run measured this" a guess, and the whole point of the
 /// citation is that it is not a guess.
+
+/// Execute `--write-roster`: regenerate the ledger from cargo metadata.
+///
+/// TRUNCATES like `write_aggregate`, never appends: two rosters in the file
+/// would make "which generation measured this" a guess. Refuses (rather than
+/// writing) on extras, empty inputs, or a header whose stale anchors moved --
+/// a regeneration that cannot read its inputs is vacuous, and one that drops
+/// a row is the silent halving this file exists to catch.
+fn write_roster_cmd(repo: &Path, metadata_json: &str, out: Option<&str>) -> ExitCode {
+    let names = match workspace_names(metadata_json) {
+        Ok(names) => names,
+        Err(error) => {
+            eprintln!("GATE_RUNNER_METADATA_UNREADABLE detail={error:?}");
+            return ExitCode::from(EXIT_METADATA_UNREADABLE);
+        }
+    };
+    // `--out` overrides only the WRITE destination, never the read source:
+    // the header always comes from the committed ledger, so a dry run cannot
+    // launder a hand-written header into the proof.
+    let path: PathBuf = match out {
+        Some(dest) => PathBuf::from(dest),
+        None => repo.join(LEDGER_PATH),
+    };
+    let existing = match std::fs::read_to_string(repo.join(LEDGER_PATH)) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("GATE_RUNNER_LEDGER_UNREAD path={} reason=unreadable detail={error}", repo.join(LEDGER_PATH).display());
+            return ExitCode::from(gate_runner::EXIT_LEDGER_UNREADABLE);
+        }
+    };
+    match render_roster_file(&existing, &names) {
+        Ok(text) => match std::fs::write(&path, text) {
+            Ok(()) => {
+                println!("GATE_RUNNER_ROSTER_WRITTEN rows={} path={}", names.len(), path.display());
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("GATE_RUNNER_ROSTER_UNWRITABLE path={} detail={error}", path.display());
+                ExitCode::from(gate_runner::EXIT_LEDGER_UNREADABLE)
+            }
+        },
+        Err(error) => {
+            eprintln!("{}", error.message());
+            ExitCode::from(error.exit_code())
+        }
+    }
+}
 fn write_aggregate(path: &Path, line: &str) -> std::io::Result<()> {
     use std::io::Write;
     if let Some(parent) = path.parent() {
