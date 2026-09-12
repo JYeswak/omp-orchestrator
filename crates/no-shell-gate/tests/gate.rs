@@ -269,15 +269,32 @@ fn empty_index_is_an_error_not_a_pass() {
     ));
 }
 
-/// Fail closed: a directory with no git metadata cannot render a verdict.
+/// Fail closed: a directory with no usable git metadata cannot render a verdict.
 #[test]
 fn missing_git_metadata_fails_closed() {
     let dir = std::env::temp_dir().join(format!("no-shell-gate-{}-not-a-repo", std::process::id()));
     fs::create_dir_all(&dir).expect("create non-repo dir");
+    // THE FIXTURE MUST BE UNABLE TO INHERIT GIT METADATA, NOT MERELY LACK IT.
+    //
+    // Measured on contabo-1: this leg FAILED because git's upward discovery found a parent
+    // repository above the temp directory, so `check_repo` returned Ok on a fixture whose whole
+    // point is that it has no repository. An absent `.git` is not the same property as an
+    // unusable one, and the difference is supplied by the environment.
+    //
+    // A `.git` FILE pointing at a path that does not exist is the privilege-independent answer:
+    // git reads the gitfile, cannot resolve its target, and fails -- for every uid, unlike a
+    // `chmod`, which root ignores (the ROOT class). Discovery also stops here rather than walking
+    // up, because a `.git` entry IS present.
+    fs::write(
+        dir.join(".git"),
+        format!("gitdir: {}/absent-{}\n", dir.display(), std::process::id()),
+    )
+    .expect("plant an unresolvable gitfile");
     assert!(matches!(
         check_repo(&dir).expect_err("a non-repo must error"),
         GateError::GitFailed(_)
     ));
+    fs::remove_dir_all(&dir).expect("fixture cleanup");
 }
 
 // --------------- the standing clean leg: THIS repository, via cargo test
@@ -309,6 +326,12 @@ fn this_repo_is_clean() {
          exemption list is empty by design"
     );
 }
+
+/// Paths tracked at every revision this gate has existed at. Named rather than computed, because
+/// deriving them from the same `ls-files` output they are meant to validate is the
+/// self-referential check this repository has recorded seven times. ONE list, shared by the
+/// fossil-index discriminator and the provenance assertion, so the two cannot disagree.
+const SENTINELS: &[&str] = &["AGENTS.md", "Cargo.toml", "crates/no-shell-gate/src/lib.rs"];
 
 /// PROVENANCE OF THE SCAN SET, which `this_repo_is_clean` above cannot check.
 ///
@@ -377,10 +400,87 @@ fn the_scan_set_is_this_repository_and_not_a_fragment_of_one() {
         return;
     }
     let tracked = tracked_files(&root).expect("the index must be readable in a real checkout");
+
+    // ⛔ A FOSSIL INDEX IS NOT A PARTIAL ONE, AND THIS LEG COULD NOT TELL THEM APART.
+    //
+    // Measured on contabo-1: `ls-files` SUCCEEDED with 85 paths and AGENTS.md absent, so the
+    // `.git`-presence probe above did not fire and this leg reported PARTIAL INDEX -- a true
+    // statement about that worker's decayed index and a false one about this repository. The
+    // subject is "the set the gate rendered a verdict on is this repository's", and an index that
+    // the environment never delivered cannot answer it either way.
+    //
+    // THE DISCRIMINATOR IS THE COMMIT, and it is POSITIVE: if HEAD carries a sentinel that the
+    // INDEX does not, the two surfaces disagree. On a clean checkout they cannot -- CI checks out
+    // a commit, so index and HEAD agree by construction -- which is why the divergence stays a
+    // HARD FAILURE inside the oracle and becomes UNMEASURABLE only outside it. Declining here
+    // where CI still refuses is the difference between an honest non-verdict and a suppression:
+    // the leg keeps all of its force on the only box whose index is authoritative.
+    let missing_from_index: Vec<&str> = SENTINELS
+        .iter()
+        .copied()
+        .filter(|sentinel| !tracked.iter().any(|path| path == sentinel))
+        .collect();
+    if !missing_from_index.is_empty() {
+        // THREE ANSWERS, and the middle one is the box this leg was failing on. A sentinel the
+        // INDEX lacks is a PARTIAL INDEX only if some AUTHORITATIVE surface says the file belongs
+        // to this tree. Measured on contabo-1: the index is a fossil of 85 paths AND `rev-parse`
+        // cannot name a commit, so NEITHER surface is authoritative and the leg was convicting the
+        // repository on the word of an instrument that had already failed twice.
+        let mut in_head: Vec<&str> = Vec::new();
+        let mut uncorroboratable: Vec<String> = Vec::new();
+        for sentinel in missing_from_index.iter().copied() {
+            match common::committed_paths(&root, sentinel) {
+                Ok(_) => in_head.push(sentinel),
+                Err(source) => uncorroboratable
+                    .push(source.blocked_reason().unwrap_or_default().to_owned()),
+            }
+        }
+        if !in_head.is_empty() {
+            // CORROBORATED DIVERGENCE: HEAD carries what the index lacks. In a clean checkout
+            // that is the real defect, so inside the oracle it stays a HARD FAILURE; outside it,
+            // the index was never this repository's.
+            assert!(
+                common::binding_environment().is_none(),
+                "{} is the oracle: HEAD carries {in_head:?} and the index of {} paths does not, \
+                 which in a clean checkout is a PARTIAL INDEX and not an environment -- fix the \
+                 checkout, never the assertion",
+                common::binding_environment().unwrap_or_default(),
+                tracked.len()
+            );
+            println!(
+                "GATE_RUNNER_UNMEASURABLE names=the_scan_set_is_this_repository_and_not_a_fragment_of_one:FOSSIL_INDEX \
+                 index_paths={} head_carries={in_head:?} detail=the index and HEAD disagree, so \
+                 this box's index was never this repository's -- CI is the environment that can \
+                 answer it",
+                tracked.len()
+            );
+            return;
+        }
+        if !uncorroboratable.is_empty() {
+            // NEITHER SURFACE CAN TESTIFY. Not a pass and not a conviction: the leg says which
+            // instruments failed. Still FATAL in the oracle, where a commit is always nameable.
+            assert!(
+                common::binding_environment().is_none(),
+                "{} is the oracle and neither surface could testify: index {} paths missing \
+                 {missing_from_index:?}, and the commit read failed ({uncorroboratable:?}) \
+                 -- fix the checkout, never the assertion",
+                common::binding_environment().unwrap_or_default(),
+                tracked.len()
+            );
+            println!(
+                "GATE_RUNNER_UNMEASURABLE names=the_scan_set_is_this_repository_and_not_a_fragment_of_one:NO_AUTHORITATIVE_SURFACE \
+                 index_paths={} missing={missing_from_index:?} commit_read={uncorroboratable:?} \
+                 detail=the index lacks a sentinel AND the commit cannot be read, so nothing here \
+                 can say whether this is a partial index or a tree that was never delivered",
+                tracked.len()
+            );
+            return;
+        }
+    }
     // Sentinels: tracked at every revision this gate has existed at, and named rather than
     // computed, because deriving them from the same `ls-files` output they are meant to validate
     // is the self-referential check this repository has recorded seven times.
-    for sentinel in ["AGENTS.md", "Cargo.toml", "crates/no-shell-gate/src/lib.rs"] {
+    for sentinel in SENTINELS.iter().copied() {
         assert!(
             tracked.iter().any(|path| path == sentinel),
             "PARTIAL INDEX: {sentinel} is tracked in this repository but absent from the scan \

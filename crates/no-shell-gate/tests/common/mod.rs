@@ -45,7 +45,8 @@
 use std::path::Path;
 use std::process::Command;
 
-use omp_inventory_map::types_inventory::{binding_environment, CensusSource};
+pub use omp_inventory_map::types_inventory::binding_environment;
+use omp_inventory_map::types_inventory::CensusSource;
 
 /// Paths tracked AT THE COMMIT under `pathspec`, plus the revision they came from.
 ///
