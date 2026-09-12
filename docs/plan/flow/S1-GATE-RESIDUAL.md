@@ -41,7 +41,55 @@ SUPERSEDED     run 34670418396   headSha 83cb804e   conclusion=failure
      crate fails on a DIFFERENT leg -- a strict-YAML duplicate-key assertion in
      gate_reachability.rs, which is the crate that reads AGENTS.md/README.md/CLAUDE.md.
 
-AUTHORITATIVE  run 34682177097   headSha 181ca20c   conclusion=failure
+AUTHORITATIVE  run 34683511926   headSha 08fa2bbb   conclusion=failure
+  pass=89 fail=2 unmeasurable=3   against GATE_RUNNER_PLAN crates=94  (89+2+3 = 94)
+  GATE_RUNNER_FAILING      count=2  no-shell-gate, omp-orchestrator
+  GATE_RUNNER_UNMEASURABLE count=3  admission-reason:POLICY_UNAVAILABLE,
+                                    finding:MISSING_EXECUTABLE,
+                                    loop-driver:POLICY_UNAVAILABLE
+  non-PASS = 5.
+
+  ⚠️ FOUR RUNS WERE IN FLIGHT WHEN THIS WAS WRITTEN -- 9efd02c8, 92efc352, 456ba2db, 62518fbb.
+     THIS BLOCK WILL BE SUPERSEDED WITHIN THE HOUR AND THAT IS EXPECTED. Re-derive with the
+     command in the header; do not cite this row against a later head. Sixth supersession of this
+     file, fourth by a conductor.
+
+  ⭐⭐ omp-orchestrator MOVED UNMEASURABLE -> FAILING, AND THAT IS COVERAGE RETURNING, NOT A
+     REGRESSION. `cargo-deadline` is GONE from the POLICY_UNAVAILABLE details, so the 600s
+     deadline no longer trips: the crate now RUNS and FAILS, on one leg, `resident`.
+     FOURTH DISTINCT STATE FOR ONE CRATE IN ONE DAY:
+       ALL_TESTS_SKIPPED (3c70915e) -> PASS (four runs) -> POLICY_UNAVAILABLE/cargo-deadline
+       (181ca20c) -> FAILING (08fa2bbb)
+  ⛔ SO fail=1 -> fail=2 MUST NOT BE READ AS A REGRESSION WITHOUT THE SETS: a crate moved OUT of
+     unmeasurable INTO failing and unmeasurable fell 4 -> 3. The workspace is measuring MORE than
+     it was and the failure count rose BECAUSE of that. This is the second time in this file that
+     a count moved in the direction opposite to its meaning.
+
+  ⭐⭐ AND AN ATTRIBUTION TWO PARTIES REFUSED IS NOW SETTLED IN FAVOUR OF THE REFUSAL.
+     `installed_hook_has_clean_staged_and_empty_index_bands` LEFT no-shell-gate's failing set
+     (19 -> 18 legs) -- AND NONE OF 456ba2d, 62518fb, 4fed13a IS IN 08fa2bbb. IT LEFT WITH NO FIX
+     IN THE TREE. The conductor recorded it as a "candidate connection" to 1cc52ac and attributed
+     nothing; AdmissionFix refused the same connection in its own NO-CLAIM. Had either claimed it,
+     both would now be retracting a cause for a leg that healed on its own. The hazard fix remains
+     justified on its source-derived spawn path; this leg was never its evidence.
+
+  ⛔⛔ AND THE DURABLE RULE, WHICH DOES NOT GO STALE WITH THE FIGURES: **GROUP BY `crate=` BEFORE
+     DIFFING LEGS.** `GATE_RUNNER_FAILURE_CAUSE` carries BOTH `crate=` and `test=`. A whole-run
+     leg diff across 181ca20c -> 08fa2bbb returns "19 -> 19, ENTERED resident, LEFT the hook leg",
+     which reads as ONE CRATE TRADING ONE LEG FOR ANOTHER. Scoped per crate it is TWO SEPARATE
+     EVENTS IN TWO CRATES:
+       no-shell-gate     19 -> 18   ENTERED none      LEFT installed_hook_...
+       omp-orchestrator   0 ->  1   ENTERED resident  LEFT none
+     The conductor produced the wrong version first and caught it before publishing. Same class as
+     counting cause-NAMES as TARGETS earlier the same day: the field was there and was not used.
+
+  ⭐ AND THE TWO SURVIVING POLICY_UNAVAILABLE CAUSES ARE THE SHELL ORACLES, UNCHANGED AND
+     UNCHANGEABLE IN CI: admission-reason's `../control-plane/bin/admission-reason.sh` and
+     loop-driver's `/usr/bin/lockf`. Both present on the developer Mac, neither reachable on a
+     runner -- filed as `nuqed`. With `cargo-deadline` gone the label is again carrying ONE
+     meaning, which NARROWS `vprgd` without closing it: the label still CAN carry two, and did.
+
+SUPERSEDED     run 34682177097   headSha 181ca20c   conclusion=failure
   pass=89 fail=1 unmeasurable=4   against GATE_RUNNER_PLAN crates=94  (89+1+4 = 94)
   GATE_RUNNER_FAILING      count=1  no-shell-gate
   GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
