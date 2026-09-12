@@ -179,10 +179,67 @@ fn read_state(root: &Path) -> ReadState {
     }
 }
 
+fn duplicate_block_mapping_key(text: &str) -> Option<(String, usize)> {
+    let mut stack: Vec<(usize, BTreeSet<String>)> = Vec::new();
+    for (index, raw) in text.lines().enumerate() {
+        let code = yaml_code_only(raw);
+        let trimmed = code.trim_start();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let indent = code.chars().take_while(|c| *c == ' ').count();
+        while stack.last().is_some_and(|(seen, _)| *seen > indent) {
+            stack.pop();
+        }
+        if stack.last().map(|(seen, _)| *seen) != Some(indent) {
+            stack.push((indent, BTreeSet::new()));
+        }
+        if trimmed.starts_with('-') || trimmed.starts_with('{') {
+            continue;
+        }
+        let Some(colon) = trimmed.find(':') else {
+            continue;
+        };
+        let key = trimmed[..colon].trim();
+        if key.is_empty() {
+            continue;
+        }
+        let keys = &mut stack.last_mut().expect("indent frame").1;
+        if !keys.insert(key.to_owned()) {
+            return Some((key.to_owned(), index + 1));
+        }
+    }
+    None
+}
+
 fn strict_workflow_parse(path: &Path, text: &str) -> Result<(), String> {
+    if let Some((key, line)) = duplicate_block_mapping_key(text) {
+        return Err(format!(
+            "STRICT_YAML_PARSE path={} detail=duplicate mapping key {key:?} at line {line}",
+            path.display()
+        ));
+    }
     serde_yaml_ng::from_str::<YamlValue>(text)
         .map(|_| ())
         .map_err(|error| format!("STRICT_YAML_PARSE path={} detail={error}", path.display()))
+}
+
+fn validate_workflows(root: &Path) -> Result<(), String> {
+    let Ok(entries) = fs::read_dir(root.join(".github/workflows")) else {
+        return Ok(());
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| matches!(path.extension().and_then(|ext| ext.to_str()), Some("yml" | "yaml")))
+        .collect::<Vec<_>>();
+    files.sort();
+    for file in files {
+        let text = fs::read_to_string(&file)
+            .map_err(|error| format!("WORKFLOW_READ_FAILED path={} detail={error}", file.display()))?;
+        strict_workflow_parse(&file, &text)?;
+    }
+    Ok(())
 }
 
 fn workflow_triggers(root: &Path, package: &str) -> Result<Vec<String>, String> {
@@ -397,6 +454,7 @@ fn row(
 }
 
 fn census(root: &Path) -> Result<Census, String> {
+    validate_workflows(root)?;
     let gate_names = gate_crates(root);
     if gate_names.is_empty() {
         return Err("EMPTY_GATE_SET".to_owned());
