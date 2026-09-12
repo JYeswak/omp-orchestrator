@@ -67,6 +67,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// ONE implementation of the "which tree is this and may I adjudicate it" vocabulary,
+// borrowed rather than re-derived: `omp-inventory-map` is already a path dependency of
+// this crate, and a second copy of the doctrine is the drift defect `hook_digest` was
+// consolidated to avoid.
+use omp_inventory_map::types_inventory::{binding_environment, CensusSource};
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -182,40 +188,127 @@ fn routing_of(manifest: &str, code: &str) -> Routing {
     }
 }
 
-/// Crate roster from `git ls-files`, never a hand list.
+/// Crate roster from the COMMIT, never a hand list and never the index.
 ///
-/// A hand list is how a census went stale at 27 crates while the tree held 51. Deriving
-/// it also means an untracked scratch crate is not scanned, and that a `git` failure
-/// yields an EMPTY roster, which the anti-vacuity assertion turns into a hard error
-/// rather than a clean bill.
-fn tracked_crates(root: &Path) -> Vec<String> {
-    let Ok(out) = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .arg("ls-files")
-        .arg("--")
-        .arg("crates/*/Cargo.toml")
-        .output()
-    else {
-        return Vec::new();
+/// # Why `ls-tree HEAD` and not `ls-files`, changed 2026-09-12
+///
+/// This read `git ls-files`, which is the INDEX — a mutable local artifact that is not
+/// the thing CI sees. Measured across the four rch workers on 2026-09-11, the index is
+/// not even consistently present, let alone faithful: `.git` ABSENT on one box, PRESENT
+/// with an UNBORN `HEAD` on another, and PRESENT-but-FOSSIL on the rest — 85 / 333 / 0 /
+/// 86 tracked paths against 1136+ locally. The leg below had already recorded the
+/// symptom ("on the rch worker the same leg on the same commit reported 85/94") and
+/// attributed it to "the worker's index is not a faithful mirror"; that diagnosis was
+/// right and the instrument was never changed to match it.
+///
+/// The COMMIT is the correct surface by SUBJECT, not merely the more robust one: the
+/// question this roster answers is "which crates can CI see", and CI checks out a
+/// commit. A crate that is staged but uncommitted is genuinely invisible to CI, and a
+/// commit-derived roster says so where an index-derived one hides it.
+///
+/// A failure is TYPED, never an empty vector. An empty roster silently turns every
+/// consumer into a vacuous scan — on a gitless box `dual_surface_readers` returned an
+/// empty map and the legs over it passed while measuring nothing.
+fn committed_crates(root: &Path) -> Result<(Vec<String>, String), CensusSource> {
+    let git = |args: &[&str]| -> Result<String, String> {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .map_err(|error| format!("cannot run `git {}`: {error}", args.join(" ")))?;
+        if !out.status.success() {
+            return Err(format!(
+                "`git {}` failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     };
-    if !out.status.success() {
-        return Vec::new();
-    }
-    let mut names: Vec<String> = String::from_utf8_lossy(&out.stdout)
+
+    let rev = match git(&["rev-parse", "HEAD"]) {
+        Ok(text) => text.trim().to_owned(),
+        Err(reason) => return Err(CensusSource::Worktree { reason }),
+    };
+    let listing = match git(&["ls-tree", "-r", "--name-only", &rev, "--", "crates"]) {
+        Ok(text) => text,
+        Err(reason) => return Err(CensusSource::Worktree { reason }),
+    };
+
+    let mut names: Vec<String> = listing
         .lines()
         .filter_map(|line| line.strip_prefix("crates/"))
         .filter_map(|rest| rest.strip_suffix("/Cargo.toml"))
-        // `git ls-files crates/*/Cargo.toml` also returns fixture manifests nested
-        // under tests/ (4 on 2026-09-05). The disk census is top-level crates/*/
-        // only; nested paths are not workspace members and must not inflate the
-        // roster. Dies when git pathspec stops matching nested Cargo.toml.
+        // Fixture manifests nested under a crate's `tests/` are not workspace members
+        // and must not inflate the roster (4 of them on 2026-09-05).
         .filter(|name| !name.contains('/'))
         .map(str::to_string)
         .collect();
     names.sort();
     names.dedup();
-    names
+    if names.is_empty() {
+        return Err(CensusSource::Worktree {
+            reason: format!(
+                "commit {} lists no crates/<name>/Cargo.toml — an empty roster is an ERROR, \
+                 never a clean bill",
+                &rev[..rev.len().min(12)]
+            ),
+        });
+    }
+    Ok((names, rev))
+}
+
+/// The roster, or a NAMED UNKNOWN — the one place this file decides whether a box may
+/// speak about the repository at all.
+///
+/// # Why every consumer must ask, not just the roster leg
+///
+/// `tracked_crates` returning an empty vector made every downstream scan VACUOUS, and
+/// the anti-vacuity guards below then fired with "the scan is broken — most likely
+/// `git ls-files` failed". They were right about the mechanism and wrong about the
+/// class: on a box that cannot name a commit the scan is not broken, it is
+/// UNPERFORMED, and those two demand opposite responses. Measured 2026-09-12 on
+/// contabo-4: three legs RED with anti-vacuity messages, cause
+/// `git rev-parse HEAD -> ambiguous argument 'HEAD'`. A red that no edit to this
+/// repository can clear is the shape that gets routed around.
+///
+/// IN THE ORACLE it stays fatal. CI checks out a commit, so a CI that cannot read one
+/// is a broken checkout, and passing there is how the only box that adjudicates these
+/// legs stops adjudicating them.
+fn roster_or_unmeasured(root: &Path, leg: &str) -> Option<(Vec<String>, String)> {
+    match committed_crates(root) {
+        Ok(roster) => Some(roster),
+        Err(source) => {
+            let reason = source
+                .blocked_reason()
+                .expect("a failed roster carries its reason")
+                .to_owned();
+            assert!(
+                binding_environment().is_none(),
+                "{} is the oracle for {leg} and it could not read the commit: {reason} \
+                 -- fix the checkout, never the assertion",
+                binding_environment().unwrap_or_default()
+            );
+            eprintln!(
+                "ROSTER UNMEASURED leg={leg} reason={reason} -- the crate roster comes from \
+                 the commit and this box cannot name one, so every verdict below it would be \
+                 a statement about the environment"
+            );
+            None
+        }
+    }
+}
+
+/// The roster, or an empty one — for consumers that measure a PROPERTY OF EACH CRATE
+/// rather than the roster itself.
+///
+/// Callers MUST carry their own anti-vacuity guard; the typed cause is available from
+/// [`committed_crates`] and is what [`roster_or_unmeasured`] reports.
+fn tracked_crates(root: &Path) -> Vec<String> {
+    committed_crates(root)
+        .map(|(names, _)| names)
+        .unwrap_or_default()
 }
 
 /// Every `crates/<name>/src/**/*.rs`, sorted by path. Deliberately NOT `tests/`.
@@ -457,13 +550,22 @@ fn allowed() -> BTreeSet<&'static str> {
 #[test]
 fn every_dual_surface_reader_routes_through_oracle_compare_or_is_allowed() {
     let root = repo_root();
+    // The roster comes from the commit, so the SOURCE is settled before any count is
+    // believed: an unmeasured roster makes every scan below vacuous, and a vacuous
+    // scan must read as UNKNOWN, never as "the scan is broken".
+    let Some(_) = roster_or_unmeasured(
+        &root,
+        "every_dual_surface_reader_routes_through_oracle_compare_or_is_allowed",
+    ) else {
+        return;
+    };
     let readers = dual_surface_readers(&root);
     assert!(
         !readers.is_empty(),
-        "ANTI-VACUITY: no crate invokes both tmux and ntm. This workspace exists to \
-         reconcile those two surfaces, so a zero here means the scan is broken — most \
-         likely `git ls-files` failed and the roster came back empty. That is the \
-         silent-false-zero defect, not a clean bill."
+        "ANTI-VACUITY: no crate invokes both tmux and ntm, and the roster IS readable \
+         here — so this is the scan breaking, not an environment that cannot name a \
+         commit (that case returns above, named). That is the silent-false-zero defect, \
+         not a clean bill."
     );
     let allowed = allowed();
     let unrouted: Vec<String> = readers
@@ -499,8 +601,16 @@ fn every_dual_surface_reader_routes_through_oracle_compare_or_is_allowed() {
 #[test]
 fn no_allowance_row_outlives_the_defect_it_records() {
     let root = repo_root();
+    let Some(_) = roster_or_unmeasured(&root, "no_allowance_row_outlives_the_defect_it_records")
+    else {
+        return;
+    };
     let readers = dual_surface_readers(&root);
-    assert!(!readers.is_empty(), "ANTI-VACUITY: empty reader set");
+    assert!(
+        !readers.is_empty(),
+        "ANTI-VACUITY: empty reader set on a box whose roster IS readable — the scan is \
+         broken, which is a different finding from an unmeasurable commit"
+    );
 
     let repaired: Vec<&str> = UNROUTED_ALLOWANCE
         .iter()
@@ -572,6 +682,10 @@ fn no_allowance_row_outlives_the_defect_it_records() {
 #[test]
 fn the_crates_that_route_are_recognised_as_routing() {
     let root = repo_root();
+    let Some(_) = roster_or_unmeasured(&root, "the_crates_that_route_are_recognised_as_routing")
+    else {
+        return;
+    };
     let readers = dual_surface_readers(&root);
     let routed: Vec<&String> = readers
         .iter()
@@ -826,38 +940,162 @@ fn the_scan_does_not_include_its_own_source() {
 #[test]
 fn the_crate_roster_is_derived_from_git_and_covers_the_tree() {
     let root = repo_root();
-    let tracked: BTreeSet<String> = tracked_crates(&root).into_iter().collect();
-    assert!(
-        tracked.len() >= 40,
-        "only {} tracked crate manifests found. A hand list is how a census went stale \
-         at 27 while the tree held 51; if git is failing here the roster is a lie.",
-        tracked.len()
-    );
     let on_disk: BTreeSet<String> = std::fs::read_dir(root.join("crates"))
         .expect("crates/ exists")
         .flatten()
         .filter(|entry| entry.path().join("Cargo.toml").exists())
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .collect();
+
+    // SOURCE BEFORE COUNT, through the same helper every consumer uses. The paragraph
+    // above diagnosed an environment whose git does not mirror the worktree it was
+    // handed, and then compared the numbers anyway. A box that cannot name a commit
+    // has not measured a SMALL roster; it has measured NOTHING.
+    let Some((names, rev)) =
+        roster_or_unmeasured(&root, "the_crate_roster_is_derived_from_git_and_covers_the_tree")
+    else {
+        // The disk half is readable everywhere, so it is still held to account:
+        // an empty crates/ means neither side of this comparison exists.
+        assert!(
+            !on_disk.is_empty(),
+            "anti-vacuity: crates/ holds no crate on disk either, so neither half of \
+             this comparison exists"
+        );
+        return;
+    };
+    let tracked: BTreeSet<String> = names.into_iter().collect();
+    assert!(
+        tracked.len() >= 40,
+        "only {} crate manifests in commit {}. A hand list is how a census went stale \
+         at 27 while the tree held 51; a roster this small means the read is a lie.",
+        tracked.len(),
+        &rev[..rev.len().min(12)]
+    );
     let untracked: Vec<&String> = on_disk.difference(&tracked).collect();
     let phantom: Vec<&String> = tracked.difference(&on_disk).collect();
     assert!(
         untracked.is_empty() && phantom.is_empty(),
-        "the git-derived roster ({} crates) and the tree on disk ({} crates) name different \
-         sets.\n\
-         ON DISK BUT UNTRACKED ({}): {:?}\n\
-           -> a crate `git ls-files` cannot see is a crate this gate never scans, and it is \
-              invisible to CI while still being a workspace member through the `crates/*` glob. \
-              Track it or remove it; do NOT widen this assertion.\n\
-         TRACKED BUT ABSENT FROM DISK ({}): {:?}\n\
-           -> either a deleted crate whose manifest is still indexed, or an environment whose \
-              git index does not match the worktree it was handed. Name the environment before \
-              believing either half.",
+        "the COMMIT-derived roster ({} crates in {}) and the tree on disk ({} crates) name \
+         different sets.\n\
+         ON DISK BUT NOT IN THE COMMIT ({}): {:?}\n\
+           -> a crate the commit does not carry is a crate CI never sees, while it remains a \
+              workspace member through the `crates/*` glob and builds locally. Commit it or \
+              remove it; do NOT widen this assertion. Staged-but-uncommitted counts here, \
+              deliberately: CI checks out the commit, not your index.\n\
+         IN THE COMMIT BUT ABSENT FROM DISK ({}): {:?}\n\
+           -> a deleted crate whose manifest is still committed, or a worktree that does not \
+              match the commit it was checked out from.",
         tracked.len(),
+        &rev[..rev.len().min(12)],
         on_disk.len(),
         untracked.len(),
         untracked,
         phantom.len(),
         phantom
     );
+}
+
+/// THE ROSTER INSTRUMENT ITSELF, on a repository this test builds — because the arm
+/// that matters cannot be reached from the lane.
+///
+/// Every rch worker measured on 2026-09-11/12 fails `git rev-parse HEAD` at the repo
+/// root (`.git` absent on one box, present with an UNBORN `HEAD` on others), so on the
+/// lane the four legs above take the UNMEASURED arm and prove nothing about the
+/// adjudicating one. A suppression whose non-suppressed path is never exercised is how
+/// a gate is switched off by accident. A fixture repo is reachable everywhere, so the
+/// discriminating case is measured here rather than assumed.
+///
+/// THE DISCRIMINATOR IS `staged`: it is in the INDEX and not in the COMMIT. An
+/// `ls-files` roster contains it, an `ls-tree HEAD` roster does not, and that single
+/// crate is the whole difference between the instrument this file used to have and the
+/// one it has now. `untracked` holds the other end: a crate git cannot see at all,
+/// which the roster must still exclude, because that exclusion IS the finding the leg
+/// above exists to make (`kernel-only-gate` and `omp-host-tool-guard` were found
+/// exactly this way).
+#[test]
+fn the_roster_reads_the_commit_and_names_a_tree_that_has_none() {
+    let root = std::env::temp_dir().join(format!("oracle-routing-roster-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let plant = |name: &str| {
+        let dir = root.join("crates").join(name);
+        std::fs::create_dir_all(dir.join("src")).expect("crate dir");
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+        )
+        .expect("manifest");
+        std::fs::write(dir.join("src/lib.rs"), "pub struct Planted;\n").expect("source");
+    };
+    let git = |args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap_or_else(|e| panic!("`git {}` did not spawn: {e}", args.join(" ")));
+        assert!(
+            out.status.success(),
+            "`git {}` failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+
+    // A TREE WITH NO COMMIT is the lane's own shape, and it must be a NAMED refusal
+    // rather than an empty roster. Checked before `git init` and again after it, so
+    // both "no repository" and "repository with an unborn HEAD" are covered — the two
+    // distinct failures actually observed on contabo-3 and contabo-1/4.
+    plant("committed-crate");
+    match committed_crates(&root) {
+        Err(source) => assert!(
+            source
+                .blocked_reason()
+                .is_some_and(|reason| !reason.trim().is_empty()),
+            "a tree with no git must carry its reason: {source:?}"
+        ),
+        Ok(roster) => panic!("a tree with no git cannot yield a roster: {roster:?}"),
+    }
+    git(&["init", "--quiet", "--initial-branch=main"]);
+    match committed_crates(&root) {
+        Err(source) => assert!(
+            source
+                .blocked_reason()
+                .is_some_and(|reason| reason.contains("HEAD")),
+            "an unborn HEAD must be named as such: {source:?}"
+        ),
+        Ok(roster) => panic!("a repository with no commit cannot yield a roster: {roster:?}"),
+    }
+
+    git(&["add", "crates/committed-crate"]);
+    git(&[
+        "-c",
+        "user.name=roster fixture",
+        "-c",
+        "user.email=roster@fixture.invalid",
+        "commit",
+        "--quiet",
+        "-m",
+        "roster fixture [test]",
+    ]);
+    plant("staged-crate");
+    git(&["add", "crates/staged-crate"]);
+    plant("untracked-crate");
+
+    let (names, rev) = committed_crates(&root).expect("a committed tree yields a roster");
+    assert_eq!(rev.len(), 40, "the roster must name the commit it read: {rev}");
+    assert_eq!(
+        names,
+        vec!["committed-crate".to_owned()],
+        "the roster is the COMMIT: `staged-crate` is in the index and not in the commit, so \
+         CI cannot see it; `untracked-crate` is in neither. An `ls-files` roster would \
+         contain `staged-crate` and that is the exact defect this instrument replaced."
+    );
+
+    // And the helper every consumer calls agrees with the function under it.
+    let through_helper = roster_or_unmeasured(&root, "fixture")
+        .expect("a committed tree is adjudicable")
+        .0;
+    assert_eq!(through_helper, names, "the helper must not re-derive the roster");
+
+    std::fs::remove_dir_all(&root).expect("fixture cleanup");
 }
