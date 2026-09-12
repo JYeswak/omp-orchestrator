@@ -229,7 +229,31 @@ fn main() -> ExitCode {
         if staged.iter().any(|path| path.starts_with("crates/r1-breadth-gate/")) {
             eprintln!("r1-breadth-gate: BOOTSTRAP PASS crate is staged");
         } else if let Err(error) = r1_breadth_gate::check_repo(&repo_root) {
-            refusals.push(format!("r1-breadth-gate: {error}"));
+            // ATTRIBUTION, NOT SURFACE (ruled 2026-09-11, the r1_breadth half of nu8lc's
+            // class). The read stays REPO-WIDE because the gate's subject is the whole
+            // flow population; only the VERDICT is partitioned. A refusal for a
+            // population property nobody in this commit created is a false red against
+            // the committer, and on a tree at 75 dirty files it fires constantly.
+            //
+            // FAIL-CLOSED: an INSTRUMENT error (Io, PopulationUnpinned) refuses whatever
+            // is staged -- a gate that could not measure has not found the commit
+            // innocent. FOREIGN IS PRINTED, never folded into the pass.
+            match r1_breadth_gate::attribution_of(&error, &staged) {
+                r1_breadth_gate::Attribution::Refuse => {
+                    refusals.push(format!("r1-breadth-gate: {error}"));
+                }
+                r1_breadth_gate::Attribution::ReportForeign => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "r1-breadth-gate: FOREIGN_NOT_ATTRIBUTABLE staged_paths={} \
+                         inputs_staged=0 finding={error} -- a repo-wide finding about the \
+                         flow population, which this commit does not touch. REPORTED, not \
+                         refused; fix it in a commit that stages {} or a scored subject.",
+                        staged.len(),
+                        r1_breadth_gate::CONTRACT_PATH
+                    );
+                }
+            }
         }
     }
 

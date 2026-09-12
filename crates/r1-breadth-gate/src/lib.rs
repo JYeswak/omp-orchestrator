@@ -98,8 +98,92 @@ impl fmt::Display for CheckError {
     }
 }
 
+/// Repo-relative paths this gate READS. ONE list, so the reader and the attributor cannot
+/// drift apart on what the gate's inputs are.
+pub const CONTRACT_PATH: &str = "docs/plan/flow/CONTRACT.md";
+/// Directory holding one `<id>.toml` per pinned subject.
+pub const BOXES_DIR: &str = "docs/plan/flow/boxes/";
+/// Directory holding the numbered plan markdown this gate also scores.
+pub const PLAN_DIR: &str = "docs/plan/";
 
+/// True for a `NN-name.md` numbered plan file NAME (not a path).
+///
+/// Extracted so [`list_numbered_plan`] and [`is_gate_input`] apply the SAME predicate. Two
+/// copies of a membership rule drift, and a drifted attributor would call a staged input
+/// foreign -- which is the one direction that must never happen.
+pub fn is_numbered_plan_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    name.len() >= 6
+        && bytes[0].is_ascii_digit()
+        && bytes[1].is_ascii_digit()
+        && bytes[2] == b'-'
+        && name.ends_with(".md")
+}
 
+/// True when `path` (repo-relative, as `git diff --cached --name-only` prints it) is one of
+/// this gate's INPUTS.
+pub fn is_gate_input(path: &str) -> bool {
+    if path == CONTRACT_PATH || path.starts_with(BOXES_DIR) {
+        return true;
+    }
+    match path.strip_prefix(PLAN_DIR) {
+        // Only the numbered plan files at the TOP of docs/plan are scored; a nested
+        // docs/plan/<sub>/NN-x.md is not read by `list_numbered_plan`, which does not
+        // recurse. Saying so here keeps the attributor honest rather than generous.
+        Some(rest) if !rest.contains('/') => is_numbered_plan_name(rest),
+        _ => false,
+    }
+}
+
+/// Whether THIS COMMIT can be responsible for anything this gate finds.
+///
+/// THE DEFECT THIS CLOSES (ruled 2026-09-11, the `r1_breadth` half of the attribution
+/// class `omp-orchestrator-nu8lc` names). `check_repo` is DECLARED repo-wide and its
+/// subject -- is the flow population's breadth within one level -- is correct repo-wide:
+/// narrowing the READ would change what the gate means. But on the commit path it refused
+/// the committer for a population property nobody in this commit created. The tree carried
+/// 75 dirty files tonight; a false red trains every reader to discount the verdict, which
+/// is worse than a silent gate.
+///
+/// ATTRIBUTION, NOT SURFACE: the read stays whole-repo, and only the VERDICT is
+/// partitioned. A refusal stands when the commit stages any input the score is computed
+/// from; otherwise the caller REPORTS it, typed and named, and does not refuse.
+///
+/// FAIL-CLOSED, both clauses carried over from GATE 8 where they were invented:
+/// an INSTRUMENT error ([`CheckError::Io`], [`CheckError::PopulationUnpinned`]) refuses
+/// regardless of attribution -- a gate that could not measure has not found the commit
+/// innocent -- and an EMPTY staged set is not evidence of foreignness, it is the absence of
+/// a commit, so [`attribution_of`] leaves it to the caller's own empty-commit refusal.
+pub fn commit_touches_inputs(staged: &[String]) -> bool {
+    staged.iter().any(|path| is_gate_input(path))
+}
+
+/// What the caller should do with `error` for a commit staging `staged`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Attribution {
+    /// This commit stages an input, or the gate could not measure at all. REFUSE.
+    Refuse,
+    /// Nothing this commit stages feeds the finding. REPORT it, typed, and do not refuse.
+    ReportForeign,
+}
+
+/// Classify a refusal against the staged set. INSTRUMENT errors always [`Attribution::Refuse`].
+pub fn attribution_of(error: &CheckError, staged: &[String]) -> Attribution {
+    match error {
+        // The gate did not measure. Silence here would convert a blind instrument into a
+        // clean bill, which is the vacuous-green inversion this repository keeps removing.
+        CheckError::Io { .. } | CheckError::PopulationUnpinned => Attribution::Refuse,
+        CheckError::UnpinnedSubject { .. }
+        | CheckError::ScoreUncited { .. }
+        | CheckError::DeltaExceeded { .. } => {
+            if commit_touches_inputs(staged) {
+                Attribution::Refuse
+            } else {
+                Attribution::ReportForeign
+            }
+        }
+    }
+}
 pub fn check_repo(root: &Path) -> Result<Report, CheckError> {
     let contract = root.join("docs/plan/flow/CONTRACT.md");
     let contract_text = fs::read_to_string(&contract).map_err(|e| CheckError::Io {
@@ -209,12 +293,9 @@ fn list_numbered_plan(root: &Path) -> Result<Vec<PathBuf>, CheckError> {
     for entry in entries.flatten() {
         let path = entry.path();
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name.len() >= 6
-            && name.as_bytes()[0].is_ascii_digit()
-            && name.as_bytes()[1].is_ascii_digit()
-            && name.ends_with(".md")
-            && name.as_bytes()[2] == b'-'
-        {
+        // ONE predicate, shared with `is_gate_input`. Two copies of a membership rule
+        // drift, and a drifted attributor would call a staged input foreign.
+        if is_numbered_plan_name(name) {
             out.push(path);
         }
     }
