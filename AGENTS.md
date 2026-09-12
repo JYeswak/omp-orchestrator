@@ -592,7 +592,7 @@ evening."*
 ## PROVE IT RAN — A REFUSED BUILD EXITS 0
 
 ```
-RCH_REQUIRE_REMOTE=1 rch exec -- cargo test --color=never …   2>&1
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo test --color=never --no-fail-fast …   2>&1
 grep 'Remote command finished: exit='   AND   grep 'test result:'
 ```
 
@@ -617,6 +617,12 @@ background task reports *"completed (exit code 0)"* over a refusal. **Measured t
    OWN tracing emitter, which stays coloured — so `Remote command finished:` is itself bracketed by
    escapes. **Match MESSAGE TEXT, never structure**; any pattern reaching from a log level or target
    INTO the message crosses an escape and returns zero.
+4. **`--no-fail-fast`, and a mutation proof names TARGET + TEST FN.** Under default fail-fast a
+   lib-harness failure aborts every later integration target while the command still exits 101 —
+   so an exit-code-only "the known-bad reddened" may credit a leg that never executed (measured
+   2026-09-12, twice in one day: the named target had not run at all). Quote the per-target
+   `test result:` line carrying the named leg — which target reddened and which test fn — never
+   the exit code alone.
 
 ⭐ **`test result:` is uncoloured by ACCIDENT, not by design** — cargo simply does not colourise that
 line. The fleet's habit survived on an upstream formatting decision nobody knew they were relying

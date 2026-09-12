@@ -29,8 +29,11 @@ A refused build exits 0 and prints neither; both absent also means still running
 
 ## Check (paste, do not paraphrase)
 ```
-RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p <crate>
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 --no-fail-fast -p <crate>
 # require BOTH lines in output before any verdict:
 #   Remote command finished: exit=<N>
 #   test result: ok. <N> passed
+# and for a MUTATION proof, quote the per-target `test result:` line carrying the
+# named leg (which target reddened, which test fn) -- under fail-fast an exit 101
+# may come from a target that ran before the mutated one was reached.
 ```
