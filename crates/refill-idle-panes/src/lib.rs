@@ -290,6 +290,51 @@ pub fn roster_readability(stdout: &str) -> Option<&str> {
     }
 }
 
+/// WHETHER THE ORACLE'S `FREE` WAS CONFIRMED ON THE RATE-LIMIT AXIS.
+///
+/// `pane-dispatch-ready` 8557c07 began emitting `rate_limit` on every row —
+/// `measured_free` | `measured_limited` | `unmeasured` — because its census
+/// (`ntm --robot-agent-health`) can answer three ways and its silence used to read as
+/// "not rate-limited". THIS PARSER KEYED ON `state` ALONE, so the field landed in the
+/// payload and was DROPPED ON THE FLOOR: an `unmeasured` FREE still resolved `Idle` and
+/// still dispatched. BUILT ≠ WIRED at FIELD granularity — a produced field whose consumer
+/// runs constantly and never reads it is invisible to any crate-level wiring census.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FreeConfirmation {
+    /// The oracle measured this pane's rate-limit axis.
+    Measured,
+    /// The oracle ran and did NOT measure this pane. Its `FREE` is unconfirmed in exactly
+    /// the dimension the census exists to cover.
+    Unmeasured,
+    /// The oracle does not emit the field at all: a binary older than 8557c07.
+    NotSpoken,
+}
+
+/// Classify the oracle row's `rate_limit` token.
+///
+/// ⛔ THE THREE ANSWERS ARE NOT TWO, AND `NotSpoken` IS NOT `Unmeasured`. An installed
+/// `~/.local/bin/pane-dispatch-ready` predating 8557c07 emits no field at all. Folding that
+/// into `Unmeasured` would turn EVERY `FREE` row into `Unknown` the moment this crate is
+/// deployed ahead of the oracle — a fleet-wide capacity zero produced by DEPLOYMENT LAG
+/// rather than by any measurement, which is the false-zero class this repo has paid for.
+/// So an absent field preserves the status quo ante exactly: `FREE` stays `Idle`.
+///
+/// ⭐ AN UNRECOGNISED TOKEN IS `Unmeasured`, NOT `NotSpoken`, AND THE ASYMMETRY IS
+/// DELIBERATE. Absent is an IDENTIFIED state — the pre-8557c07 schema, which never claimed
+/// coverage. A token this parser does not know is an UNIDENTIFIED state: the oracle claimed
+/// coverage in a dialect we cannot read, and unreadable coverage is not coverage. This crate
+/// is a DISPATCHER (it plans and sends), so by the same asymmetry its own `resolve` already
+/// encodes — "a false hold costs a tick of throughput, a false dispatch interrupts a pane 28
+/// minutes into a turn" — it withholds rather than guesses.
+#[must_use]
+pub fn free_confirmation(coverage: Option<&str>) -> FreeConfirmation {
+    match coverage {
+        None => FreeConfirmation::NotSpoken,
+        Some("measured_free" | "measured_limited") => FreeConfirmation::Measured,
+        Some(_) => FreeConfirmation::Unmeasured,
+    }
+}
+
 /// Parse `pane-dispatch-ready <session> --json` into a three-valued view.
 ///
 /// The key is `state`, and that is load-bearing: a fixture written against `status`
@@ -300,6 +345,13 @@ pub fn roster_readability(stdout: &str) -> Option<&str> {
 /// cannot receive a packet, and treating it as free is one of the named-forbidden
 /// moves in `xtask check-product`. Any state this parser does not recognise is
 /// `Unknown` rather than being folded into one of the two it does.
+///
+/// ⛔ AND `FREE` ALONE IS NO LONGER ENOUGH. The oracle's own `rate_limit` field says whether
+/// its FREE was confirmed on the rate-limit axis; see [`free_confirmation`]. An `unmeasured`
+/// FREE becomes `Unknown` HERE rather than `Idle`, and the existing join does the rest with no
+/// new policy: `resolve(Idle, Unknown) => Unconfirmed`, which is reported and never dispatched.
+/// A lone positive still never dispatches — this just stops a FREE the oracle declined to
+/// confirm from counting as the second confirming read.
 pub fn parse_oracle_view(text: &str) -> Option<SurfaceView> {
     let value: serde_json::Value = serde_json::from_str(text).ok()?;
     let entries = value.get("panes")?.as_array()?;
@@ -309,7 +361,13 @@ pub fn parse_oracle_view(text: &str) -> Option<SurfaceView> {
             continue;
         };
         let observation = match entry.get("state").and_then(serde_json::Value::as_str) {
-            Some("FREE") => Observation::Idle,
+            Some("FREE") => {
+                match free_confirmation(entry.get("rate_limit").and_then(serde_json::Value::as_str))
+                {
+                    FreeConfirmation::Measured | FreeConfirmation::NotSpoken => Observation::Idle,
+                    FreeConfirmation::Unmeasured => Observation::Unknown,
+                }
+            }
             Some("BUSY" | "NO_AGENT") => Observation::Busy,
             _ => Observation::Unknown,
         };
@@ -1314,6 +1372,112 @@ mod tests {
             6,
             "every pane in the capture must be classified; a `status`-keyed fixture yields 0"
         );
+    }
+
+    // ── THE ORACLE'S RATE-LIMIT COVERAGE (BUILT ≠ WIRED, AT FIELD GRANULARITY) ─────────
+    // `pane-dispatch-ready` 8557c07 EMITS `rate_limit`; this parser keyed on `state` alone,
+    // so the field was produced on every row and read by nobody. These are the legs that
+    // make the produced field load-bearing.
+    fn oracle_row(state: &str, coverage: Option<&str>) -> SurfaceView {
+        let row = match coverage {
+            Some(c) => format!(r#"{{"pane":"2","state":"{state}","rate_limit":"{c}"}}"#),
+            None => format!(r#"{{"pane":"2","state":"{state}"}}"#),
+        };
+        parse_oracle_view(&format!(r#"{{"panes":[{row}]}}"#)).expect("fixture parses")
+    }
+
+    #[test]
+    fn rule_free_coverage_matrix_reaches_the_observation() {
+        let matrix = [
+            (Some("measured_free"), Observation::Idle),
+            (Some("unmeasured"), Observation::Unknown),
+            (None, Observation::Idle),
+        ];
+        assert!(
+            !matrix.is_empty(),
+            "RULE coverage_matrix_non_vacuous: an empty matrix must never read as a pass"
+        );
+        for (coverage, expected) in matrix {
+            assert_eq!(
+                oracle_row("FREE", coverage).get("2"),
+                expected,
+                "RULE oracle_coverage_wired: a FREE row with rate_limit={coverage:?} observes \
+                 {expected:?}; keying on `state` alone drops the field on the floor"
+            );
+        }
+    }
+
+    #[test]
+    fn rule_an_unmeasured_free_is_never_dispatched() {
+        // The join does the withholding with NO new policy: a lone positive never dispatches.
+        let activity = ntm(&[("2", "idle")]);
+        let confirmed = decide(&activity, &oracle_row("FREE", Some("measured_free")));
+        assert_eq!(
+            confirmed.dispatchable,
+            vec!["2".to_string()],
+            "RULE measured_free_still_dispatches: this must not withhold healthy capacity"
+        );
+        let unmeasured = decide(&activity, &oracle_row("FREE", Some("unmeasured")));
+        assert!(
+            unmeasured.dispatchable.is_empty(),
+            "RULE unmeasured_free_withheld: an unconfirmed FREE must never be capacity, got {:?}",
+            unmeasured.dispatchable
+        );
+        assert_eq!(
+            unmeasured.unconfirmed,
+            vec!["2".to_string()],
+            "RULE unmeasured_free_reported: it is UNCONFIRMED and reported, never a quiet skip"
+        );
+    }
+
+    #[test]
+    fn rule_an_absent_field_is_not_an_unmeasured_field() {
+        // ANTI-VACUITY IN THE OTHER DIRECTION. An oracle older than 8557c07 emits no field.
+        // Folding that into `unmeasured` would zero the fleet from DEPLOYMENT LAG rather than
+        // from any measurement.
+        assert_eq!(
+            free_confirmation(None),
+            FreeConfirmation::NotSpoken,
+            "RULE absent_is_not_unmeasured: no field is a schema fact, not a coverage fact"
+        );
+        assert_ne!(
+            free_confirmation(None),
+            free_confirmation(Some("unmeasured")),
+            "RULE absent_is_not_unmeasured: collapsing them makes a stale binary zero the fleet"
+        );
+        let activity = ntm(&[("2", "idle")]);
+        assert_eq!(
+            decide(&activity, &oracle_row("FREE", None)).dispatchable,
+            vec!["2".to_string()],
+            "RULE absent_preserves_status_quo: a pre-8557c07 oracle must behave exactly as before"
+        );
+    }
+
+    #[test]
+    fn rule_an_unreadable_coverage_token_withholds() {
+        // An UNIDENTIFIED token is not the IDENTIFIED absent case: the oracle claimed coverage
+        // in a dialect this parser cannot read, and unreadable coverage is not coverage.
+        assert_eq!(
+            free_confirmation(Some("measured_at_dawn")),
+            FreeConfirmation::Unmeasured,
+            "RULE unreadable_coverage_withholds: an unknown token must not be read as confirmation"
+        );
+        assert_eq!(
+            oracle_row("FREE", Some("measured_at_dawn")).get("2"),
+            Observation::Unknown
+        );
+    }
+
+    #[test]
+    fn rule_coverage_never_promotes_a_non_free_row() {
+        // The field narrows FREE; it must never widen anything else.
+        for state in ["BUSY", "NO_AGENT"] {
+            assert_eq!(
+                oracle_row(state, Some("measured_free")).get("2"),
+                Observation::Busy,
+                "RULE coverage_scope: {state} stays a confident refusal whatever the coverage says"
+            );
+        }
     }
 
     /// THE MEASURED DEFECT. On the 03:14:55Z capture the two surfaces are BOTH confident
