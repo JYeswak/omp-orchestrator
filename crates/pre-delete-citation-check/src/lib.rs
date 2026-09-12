@@ -2,15 +2,29 @@
 
 //! pre-delete-citation-check — refuses deleting a file that any CLOSED bead cites.
 //!
-//! THE DEFECT (measured 2026-08-31): 45c613d deleted four bin/ scripts. Two surfaced
+//! THE DEFECT, AS RECORDED 2026-08-31: `45c613d` deleted four bin/ scripts. Two surfaced
 //! HOURS later as close-evidence RED (cp-op5uu BAD_PATH bin/omp-idle-dispatch.sh,
 //! cp-3k9jq BAD_PATH bin/fleet-composite.py), with everything downstream UNRUN — a
 //! gate refusing every dispatch, far from the mistake that caused it.
 //!
-//! KEYED ON THE STAGED DELETION, not on "path missing from tree": 160 cited bin script
-//! paths existed, 9 were absent from every working tree, but only 4 were EVER PRESENT
-//! and removed (git log --diff-filter=D proves it). A gate keyed on absence would be
-//! 56% false-positive on day one.
+//! THAT INCIDENT DID NOT HAPPEN IN THIS CHECKOUT, and this header used to imply it did.
+//! Measured here 2026-09-11, all three probes negative:
+//!   git rev-parse --verify 45c613d                   -> fatal: Needed a single revision
+//!   git log --all --diff-filter=D --name-only -- 'bin/*' -> EMPTY (no bin/ deletion, any ref)
+//!   grep -c '"id":"cp-' .beads/issues.jsonl           -> 0  (this tracker's prefix is
+//!                                                            omp-orchestrator-, not cp-)
+//! The `cp-` bead ids name ANOTHER tracker, so the incident is imported from another
+//! repository and cannot be re-measured here. It is kept because it is the clearest
+//! statement of the SHAPE this gate refuses, and it is labelled because a load-bearing sha
+//! that resolves nowhere is a borrowed claim: the next reader must not cite it as local
+//! history. The gate's own justification does not rest on it -- the live premise is the
+//! index/worktree divergence measured in `read_index_mirror`.
+//!
+//! KEYED ON THE STAGED DELETION, not on "path missing from tree": in that same imported
+//! measurement, 160 cited bin script paths existed, 9 were absent from every working tree,
+//! but only 4 were EVER PRESENT and removed. A gate keyed on absence would have been 56%
+//! false-positive on day one. `git log --diff-filter=D` is the probe that settles it, and
+//! in THIS repository it returns empty, which is why the number is attributed, not asserted.
 //!
 //! SCANS close_reason AND comments: cp-3k9jq's close_reason is 104 chars with zero
 //! path citations, but its comments cite bin/fleet-composite.py in three places. A
