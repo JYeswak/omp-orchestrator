@@ -930,14 +930,49 @@ fn every_pass_through_row_declares_an_expression() {
 /// function, and each shift billed TWO complaints -- one ORPHANED row and one UNDECLARED site --
 /// for one event.
 ///
-/// ⛔ THE SECOND INSTANCE ORIGINALLY CITED HERE IS REFUTED, and the correction is recorded rather
-/// than quietly dropped: the `XC-PT-RESPONSE` row in §6 of the registry was NOT renamed.
-/// `git log -S'response.exit_code' --all -- '*.rs'` is EMPTY (`GradePairAdm`, 2026-09-12), so
-/// that expression never existed in any `.rs` file in this repository's history and the row was
-/// FALSE FROM BIRTH. So the measured class here is ONE: a position key rotting. The
-/// expression-key story is a fictional row, which is a DIFFERENT defect -- and the shape key
-/// happens to answer it too, because a key derived from code shape has nothing to match when the
-/// code is not there. Pinned by `a_row_for_an_expression_that_exists_nowhere_is_refused`.
+/// ⛔ THE SECOND INSTANCE ORIGINALLY CITED HERE WAS READ FIVE WAYS BY FOUR AGENTS IN ONE
+/// SESSION, AND THE ANSWER IS THAT THE ROW IS EARLY, NOT WRONG. The `XC-PT-RESPONSE` row in §6
+/// of the registry was not renamed (wrong direction), is not false from birth, and is not
+/// misplaced. The measured state, every operand printed:
+///
+/// ```text
+/// COMMITTED  git log -S'response.exit_code' --all -- '*.rs' \
+///              ':(exclude)crates/no-shell-gate/tests/exit_codes.rs'   -> 0 commits
+/// WORKTREE   grep -c 'response\.exit_code' crates/contabo-reclaim/src/{lib,main}.rs
+///                                                                    -> lib.rs 5 · main.rs 1
+/// THE SITE   crates/contabo-reclaim/src/main.rs:52
+///              `return ExitCode::from(response.exit_code);`   <- THE ROW'S OWN CITED LINE
+/// HEAD-side  git grep 'report.outcome.exit_code()' HEAD       -> 1, in that crate's main.rs
+///              ... and 0 in the worktree; model.rs and probe.rs DELETED, build.rs NEW
+/// ```
+///
+/// THE ROW DECLARED `response.exit_code` AT `main.rs:52` AND IT IS AT `main.rs:52` RIGHT NOW, in
+/// an uncommitted restructure. Its subject is MID-MIGRATION: correct about the code, ahead of
+/// the commit. AND AN EXPRESSION-KEYED REGISTRY CANNOT REPRESENT THAT STATE EVEN WHEN THE ROW IS
+/// RIGHT -- which is this bead's thesis arriving as a live specimen instead of an argument.
+///
+/// ⛔ FOUR INSTRUMENT RULES, ALL PAID FOR HERE, EACH BY A DIFFERENT AGENT:
+/// 1. A `git log -S` claim REQUIRES A WORKTREE CONTROL and a worktree claim requires a committed
+///    control. `-S` searches COMMITTED history: "never existed in history" is not "does not
+///    exist", and an export-pinned run -- the discipline that makes every other figure here
+///    trustworthy -- CANNOT SEE an uncommitted restructure.
+/// 2. ⭐ NAME THE TREE. The `EMPTY` and the `1 commit` readings of the SAME query were both
+///    correct: HEAD moved six commits between them, and the one commit is 473e62a ITSELF. The
+///    query form was never the variable -- the TREE was -- so a count without its tree is not a
+///    measurement. Attributing that difference to the observer was the error, and it is the
+///    `cargo`-reads-the-worktree trap in pure form.
+/// 3. A HISTORY CLAIM PUBLISHED AS A COMMENT MUST EXCLUDE ITS OWN FILE. The first version of
+///    this comment said "is EMPTY", and committing it made the query match -- one commit, two
+///    hits, both of them that sentence. The publication enters the corpus; the remedy
+///    contaminated the detector. Hence the `:(exclude)` pathspec above, which is load-bearing
+///    and not decoration.
+/// 4. AND A `head` ON A LISTING IS A COUNT OF THE HEAD. "Five sites, none in main.rs" was
+///    published from a `| head -5` over output sorted with lib.rs first. Six sites, and the
+///    sixth is the one that mattered. Pipe a count, not a window, before asserting absence.
+///
+/// The fictional-row question is a DIFFERENT defect from either, and the shape key answers it
+/// for free because a key derived from code shape has nothing to match when the code is not
+/// there. Pinned by `a_row_for_an_expression_that_exists_nowhere_is_refused`.
 ///
 /// A shape survives an insertion above it and a rename beside it; a line number survives neither.
 ///
@@ -1486,12 +1521,15 @@ fn the_shape_key_cannot_see_a_cast_reordered_within_its_own_function() {
 /// NOWHERE? For this table the answer is NO, and this leg pins it in all three shapes a
 /// fabricated row can take, so the answer cannot quietly become yes.
 ///
-/// Context (`GradePairAdm`, 2026-09-12): the EXPRESSION-keyed instance originally attributed to
-/// this bead is REFUTED -- `git log -S'response.exit_code' --all -- '*.rs'` is EMPTY, so
-/// `XC-PT-RESPONSE` was never renamed; it was false from birth. That makes "a declaration with
-/// no possible subject" the live question rather than "a declaration whose subject moved", and
-/// the shape key answers it for free: a key derived from code shape has nothing to match when
-/// the code is not there. No row can hide behind a plausible-looking string.
+/// Context: the EXPRESSION-keyed instance originally attributed to this bead turned out to be a
+/// row whose subject is MID-MIGRATION in an uncommitted restructure -- see the settled
+/// measurement on `NARROWING_ALLOWANCE`, which prints both controls and the pathspec exclusion
+/// this comment's own predecessor made necessary. It was neither renamed nor fictional, so the
+/// FICTIONAL-ROW question below is a THIRD, separate defect: can a row be written for an
+/// expression that exists nowhere at all? The shape key answers it for free -- a key derived
+/// from code shape has nothing to match when the code is not there -- but "for free" is not
+/// "for granted", which is why it is measured here rather than argued. No row can hide behind a
+/// plausible-looking string.
 #[test]
 fn a_row_for_an_expression_that_exists_nowhere_is_refused() {
     let real = fixture(
