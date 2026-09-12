@@ -2889,6 +2889,49 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    `eq_ignore_ascii_case`.** The integer is true at exactly one denominator and decays like every
    other figure in this file.
 
+   ⛔⛔ **SUPERSEDED IN ITS PREMISE 2026-09-12 BY `omp-orchestrator-fpc0w` (7e8dac8) — THE FALLBACK
+   THIS ENTIRE EXPOSURE/VICTIMS FRAMING MEASURES NO LONGER EXISTS.** Both paragraphs above are
+   correct about their corpus and their arithmetic, and their SUBJECT has been deleted. Read them
+   as a lesson about denominators, never as a live measurement.
+
+   **WHAT CHANGED.** Dispatch used to resolve acceptance as `nonempty(field)` OR ELSE
+   `section_from_description(.., "ACCEPTANCE")`, so an empty field with a heading in the
+   description was ACCEPTED — and the unparseable-heading trap could only claim a victim where a
+   row had BOTH an unparseable heading AND an empty field. That conjunction is why `victims = 0`.
+   **The description fallback is GONE.** There is now ONE resolver, `resolve_acceptance`, and two
+   DISTINCT refusals with distinct exit codes:
+
+   ```
+   empty field + no ACCEPTANCE heading  ->  PacketFieldMissing            exit 2
+   empty field + an ACCEPTANCE heading  ->  AcceptanceInDescriptionOnly   exit 4
+   ```
+
+   **SO PARSEABILITY OF THE HEADING NO LONGER GATES ANYTHING ON THIS PATH.** An empty field is
+   refused either way; the heading only selects WHICH refusal. "Exposure" was a count of rows
+   whose heading would defeat `eq_ignore_ascii_case` on the way to a fallback — and the fallback it
+   fed is deleted, so exposure has no victim path left to feed. **Anyone recomputing those figures
+   today is measuring a parser that no longer runs.**
+
+   ⭐ **AND THE REMEDY WAS THE LARGER CHANGE, CHOSEN AGAINST THE CONDUCTOR'S STATED PREFERENCE.**
+   The conductor proposed making the AT-SEND capture ALSO apply the fallback, so both readers
+   agreed. The implementer refused and gave the reason: **that makes alignment `Pass` reachable for
+   a bead whose FIELD is empty, while the GRADER — which reads the field — still has no answer.**
+   It would have made the ledger agree with dispatch and left the grader blind. Deleting the
+   fallback shrinks the dispatchable set instead, and **the corpus migrated to meet it**: 23 rows
+   lifted from description into field in one pass, plus the rest, every one readback-verified and
+   independently audited clean at 224 fields opening `ACCEPTANCE:` with **zero dropped criteria**.
+
+   ⭐ **THE TRANSFERABLE RULE, WHICH OUTLIVES BOTH FIGURES: A COUNT ABOUT A PARSER IS ONLY VALID
+   WHILE THAT PARSER IS THE ONE THAT RUNS.** `exposure` and `victims` were two honest denominators
+   over a THIRD thing — the resolution ORDER — and when the order changed, both went to zero
+   together without either number being wrong. **State the mechanism your figure depends on, or the
+   figure cannot be retired when the mechanism is.**
+
+   ⛔ **NO-CLAIM.** This supersedes the DISPATCH path only. `eq_ignore_ascii_case` on an
+   `ACCEPTANCE` heading may still be reached by other readers of a description, and none were
+   surveyed here. The two paragraphs above are preserved verbatim rather than deleted, because a
+   deleted lesson cannot be checked against the corpus that produced it.
+
    **THE MEASURED CASE.** `strings $(command -v rch) | grep -c 'E327'` → **0**, repeated across
    eleven binaries, and the conclusion *"the code does not exist"* was false. The message is one
    `format!` string stored in fragments around its placeholders — the stored bytes read
