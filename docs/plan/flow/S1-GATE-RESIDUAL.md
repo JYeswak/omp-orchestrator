@@ -1,12 +1,46 @@
 # S1 gate residual — the non-PASS crates, ENUMERATED
 
 ```
-⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 7. Superseded twice on
-   2026-09-11 by pane %33, both times against a NEWER verdict-bearing run. Old figures are
-   kept as SUPERSEDED rather than deleted, because a deleted number cannot be checked against
-   the run that produced it.
+⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 6. Superseded THREE times
+   on 2026-09-11/12, each against a NEWER verdict-bearing run. Old figures are kept as
+   SUPERSEDED rather than deleted, because a deleted number cannot be checked against the
+   run that produced it.
 
-AUTHORITATIVE  run 34601341490   headSha 4911489   conclusion=failure   2026-09-11 12:54Z
+AUTHORITATIVE  run 34666855450   headSha 5d3ef562   conclusion=failure
+  GATE_RUNNER_FAILING      count=2  no-shell-gate, omp-orchestrator
+  GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
+                                    finding:MISSING_EXECUTABLE,
+                                    loop-driver:POLICY_UNAVAILABLE,
+                                    loop-queue-filter:MISSING_EXECUTABLE
+  non-PASS = 6.
+  GATE_RUNNER_LEDGER_DRIFT — ZERO lines, from a grep whose PLAN alternative MATCHED, so the
+  zero is a measured negative rather than a pattern that could never hit.
+
+  ✅ THE SUM CONTROL IS AVAILABLE ON THIS RUN, which the entry below explicitly could not say:
+     pass=88 fail=2 unmeasurable=4 = 94, reconciled against GATE_RUNNER_PLAN crates=94.
+     The pass count here is MEASURED, not derived by subtraction.
+
+  ⭐ THE DENOMINATOR GREW WHILE THE FAILURE COUNT FELL — 88 -> 94 crates against 16 -> 2
+     failures. THAT ORDER MATTERS: a falling failure count is precisely what a coverage
+     collapse looks like, and the only thing separating the two readings is the PLAN line.
+     Every crate is measured and none was dropped, so this is a repair on a LARGER
+     population. Without PLAN crates=94 this entry would be indistinguishable from a
+     gate that quietly stopped looking.
+
+  ⭐ ONE CRATE LEFT THE FAILING SET AND THE DEPARTURE IS NOT ATTRIBUTED:
+    omp-inventory-map  left somewhere between 4911489 and 5d3ef562. That window is 137
+                       commits and NINE touch the crate: 5f749df 6fbdd42 c26cd3e 8aa76e2
+                       6f0dfbe 4d257e1 19a5c4b a14edb7 df0d4a3. Nobody has shown WHICH one
+                       moved the gate verdict, so this file names the candidates and claims
+                       none of them. The roster repair (`git ls-files` -> `ls-tree HEAD`) is
+                       the plausible single cause and is recorded as a HYPOTHESIS, not a fix
+                       credit — same bar the s1-coverage row below is held to.
+
+  CORROBORATION, not a second measurement: run 34666287039 (3fe73133) carries the IDENTICAL
+  failing and unmeasurable sets, so count=2 is not a one-run artifact. Two runs agreeing does
+  not make either of them the right oracle; the run id and headSha remain the claim.
+
+SUPERSEDED     run 34601341490   headSha 4911489   conclusion=failure   2026-09-11 12:54Z
   GATE_RUNNER_FAILING      count=3  no-shell-gate, omp-inventory-map, omp-orchestrator
   GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
                                     finding:MISSING_EXECUTABLE,
@@ -29,10 +63,11 @@ SUPERSEDED     run 34592771605   headSha 39b52fee   2026-09-11 11:11Z   non-PASS
                  FAILING 5: the three above plus ompo-doctor, s1-coverage
 SUPERSEDED     run 34587961695   headSha df49750a   2026-09-11          non-PASS 20
 
-  ⚠️ THE SUM CONTROL IS NOT AVAILABLE ON THIS RUN and its absence is stated rather than
-  papered over: the earlier entry reconciled 81 + 5 + 4 = 90 against GATE_RUNNER_PLAN
-  crates=90. No PLAN line was captured for 34601341490, so the pass count here is DERIVED by
-  subtraction rather than measured, and is deliberately not written down.
+  ⚠️ THE SUM CONTROL WAS NOT AVAILABLE ON RUN 34601341490 and its absence was stated rather
+  than papered over: an earlier entry reconciled 81 + 5 + 4 = 90 against GATE_RUNNER_PLAN
+  crates=90. No PLAN line was captured for 34601341490, so its pass count is DERIVED by
+  subtraction rather than measured, and is deliberately not written down. The authoritative
+  entry above restores the control.
 
   ⚠️ THE SUM CONTROL VALIDATES THE TALLY, NEVER THE ORACLE. This file has twice published a
   correct tally of the WRONG run, so the control above is necessary and not sufficient: it
