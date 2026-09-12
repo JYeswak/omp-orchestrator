@@ -16,6 +16,7 @@ pub mod census_invariants;
 pub mod addressable;
 pub mod count_twins;
 pub mod version_drift;
+pub mod crate_contract;
 
 use asupersync::Cx;
 use asupersync::process::{Command, Output};

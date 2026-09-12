@@ -121,12 +121,51 @@ fn inventory_document() -> String {
     fs::read_to_string(repo_root().join(INVENTORY_PATH)).expect("inventory document must exist")
 }
 
+/// The coverage leg, and — when it fails — the REPAIR.
+///
+/// This document declares that its row block "is generated from Cargo metadata"
+/// and that "package membership comes from Cargo metadata, never a hand-written
+/// roster". Measured 2026-09-12: nothing in the repository generated it.
+/// `CRATE-CONTRACT-ROWS` appeared in exactly two places — the document and this
+/// file — so the block was hand-maintained by a document that says it is not, and
+/// it had drifted to 72 rows against 94 packages. A registry beside a derivable
+/// source drifts on a known period; this one had been red long enough that its
+/// sibling leg (`planted_package_is_red_until_its_row_exists`) failed too, because
+/// that leg's known-good restore runs through the same document.
+///
+/// So the refusal now CARRIES THE REPAIRED BLOCK, derived by
+/// `omp_inventory_map::crate_contract` from each package's manifest and sources
+/// under the document's own `CRI-*` rules. Existing rows are preserved
+/// byte-for-byte — several carry prose no scan could produce, and regenerating
+/// over them would replace a human's measurement with a scanner's.
 #[test]
 fn every_metadata_package_has_exactly_one_inventory_row() {
     let packages = metadata_packages();
-    validate_inventory(&packages, &inventory_document()).unwrap_or_else(|error| {
-        panic!("R4 inventory coverage failed: {error}");
-    });
+    let document = inventory_document();
+    if let Err(error) = validate_inventory(&packages, &document) {
+        let repaired = repaired_block(&packages, &document);
+        panic!("R4 inventory coverage failed: {error}\n\nREPAIRED BLOCK (paste between the markers):\n{repaired}");
+    }
+}
+
+/// The derived block this document should contain, with every existing row kept.
+fn repaired_block(packages: &[String], document: &str) -> String {
+    let start = match document.find(ROWS_START) {
+        Some(index) => index + ROWS_START.len(),
+        None => return format!("cannot repair: missing {ROWS_START}"),
+    };
+    let end = match document[start..].find(ROWS_END) {
+        Some(offset) => start + offset,
+        None => return format!("cannot repair: missing {ROWS_END}"),
+    };
+    let set: std::collections::BTreeSet<String> = packages.iter().cloned().collect();
+    let root = repo_root();
+    match omp_inventory_map::crate_contract::merge_block(&document[start..end], &set, &|name| {
+        omp_inventory_map::crate_contract::derive_row_from_disk(&root, name)
+    }) {
+        Ok(block) => block,
+        Err(error) => format!("cannot repair: {error:?}"),
+    }
 }
 
 #[test]

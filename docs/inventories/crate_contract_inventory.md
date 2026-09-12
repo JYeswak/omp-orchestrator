@@ -23,41 +23,57 @@ This inventory records one contract row for every package emitted by `cargo meta
 
 ## Package Rows
 
-The row block is generated from Cargo metadata and is the artifact checked by the invariant suite. The table is intentionally compact so it remains a single reviewable inventory; lifecycle ownership belongs to the package descriptions and the stage-specific contracts.
+The ROW SET is derived from the workspace package set and is the artifact checked by the invariant suite; row CONTENT is curated once and then preserved. Both halves are load-bearing, and the sentence that stood here claimed the first without anything implementing it: measured 2026-09-12, nothing in the repository generated this block, `CRATE-CONTRACT-ROWS` appeared only in this file and in the invariant suite, and the table had drifted to 72 rows against 94 packages. The derivation now lives in `omp_inventory_map::crate_contract` and the coverage leg PRINTS the repaired block when a package has no row, so a missing row is a paste rather than a research task. Existing rows are never rewritten by it -- several carry prose no scan can produce, and regenerating over them would replace a human's measurement with a scanner's.
 
 | crate | inputs (argv/stdin/env/files read) | outputs (stdout/files/status; exit codes) | typed interface exposed/consumed | kernel routing or handroll |
 |---|---|---|---|---|
 <!-- CRATE-CONTRACT-ROWS-BEGIN -->
 | `ack-spine` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | AckVerdict, detect_ack, simulate_singular_trap, classify_ack_readback, SingularTrapResult | routes subprocess-contract; process request supplied to kernel; kernel-routed br |
 | `ack-stage` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | MAX_RETRY_ATTEMPTS, TransportKind, NtmRobotSendReceipt, TmuxSendKeysMeasurement, TransportReceipt | UNDECLARED route |
+| `blocker-taxonomy` | argv, stdin, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | BeadRecord, ReportedBead, Report, LiveSet, BlockerKind | UNDECLARED route |
+| `build-stamp` | env | stdout; exit codes: `docs/error_codes/exit_code_registry.md` | emit, resolve_from | handroll Command::new |
 | `commit-build-fence` | files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | SCHEMA_VERSION, DEFAULT_TTL_SECS, BuildRegistration, ReleaseEvent, RegistrationStore | UNDECLARED route |
 | `composer-typed` | argv, stdin, env, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | ComposerVerdict, classify, main | UNDECLARED route |
+| `contabo-reclaim` | argv, stdin | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | OwnerRequest, OwnerProcessOutput, OwnerForwardedResponse, ConsumerError, CliError | handroll Command::new |
 | `convergence-stamp` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | SCHEMA_VERSION, Stamp, main | handroll process spawn |
 | `dispatch-claim-fence` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | SCHEMA_VERSION, BeadStatus, BeadSnapshot, DispatchIntent | handroll process spawn; handroll br |
+| `dispatch-saga` | argv, stdin, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | DispatchKey, UnmintableKey, Saga, Receipt, Observation | routes subprocess-contract |
 | `dispatch-silence-watch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | SilenceVerdict, SilenceAction, classify, main | routes subprocess-contract; process request supplied to kernel; kernel-routed br |
 | `dispatcher-deadman` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | DispatcherDeadmanRules, DispatcherDeadmanVerdict, main | handroll process spawn; handroll br |
+| `doctrine-retirement-gate` | argv, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Finding, Document, RetirementReason, SpanError, Verdict | UNDECLARED route |
 | `fast-dispatch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | DEFAULT_FRESH_SECONDS, AdmissionConfig, FastDispatchRules, SelectError, admission_fresh_pass | handroll process spawn; handroll br; handroll bv |
 | `finding` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Finding, SpooledFinding, Filed, Waived, Publisher | routes subprocess-contract; process request supplied to kernel |
 | `finding-dispatch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | finding_for, main | handroll process spawn |
 | `fleet-composite` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | FactorSpec, InputError, CompositeReport, SelftestCheck, SelftestReport | handroll process spawn |
+| `fleet-idle-monitor` | argv, stdin, env, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | TrackerBinding, QueueEntry, Dispatch, VerifiedNudge, BindRefusal | UNDECLARED route |
 | `fleet-monitor` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | FleetMonitorError, FleetMonitorConfig, AttentionEvent, monitor_once, run | routes subprocess-contract; process request supplied to kernel; handroll tmux; handroll spawn |
 | `fleet-reconcile` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | ReconcileVerdict, ReconcileReport, main | handroll process spawn; handroll tmux |
 | `fleet-truth` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | FleetTruthError, FleetTruthConfig, FleetSnapshot, collect, main | handroll process spawn; handroll tmux |
+| `fuzz-build-gate` | argv, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | FuzzTarget, RegressionInput, ContractReport, GateError, REQUIRED_WORKER | routes subprocess-contract |
+| `gate-runner` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | RosterEntry, GateReport, Observed, CheckPhase, CheckInvocation | routes subprocess-contract |
+| `grader-attribution-gate` | argv, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | ActorProvenanceRow, ActorProvenanceViolation, CloseAttempt, AttributionPass, EmptyScan | UNDECLARED route |
+| `input-manifest` | argv, stdin, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Manifested, CargoTargetCount, CargoTestResult, ManifestSource, CensusRow | UNDECLARED route |
 | `installer` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | InstallError, InstallTarget, RepoOwnership, IdentityCheck, main | routes subprocess-contract; process request supplied to kernel |
 | `kernel-bypass-gate` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Bypass, GateReport, main | handroll process spawn |
+| `kernel-only-gate` | files | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | HandrollHit, HandrollScanReport, Verdict, SCOPE_LINE, verdict | handroll Command::new |
 | `kernel-only-operator-hook` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | HookInput, Permission, Decision, ParseError, main | routes subprocess-contract; process request supplied to kernel |
 | `loop-coverage` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | CoverageRow, CoverageReport, main | handroll process spawn |
 | `loop-driver` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | DriverConfig, DriverError, DriverState, run | handroll process spawn |
 | `loop-queue-filter` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Runtime, RunOutput, main | handroll process spawn; handroll br |
 | `loop-switch` | UNDECLARED | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | LoopSwitchError, main | handroll process spawn |
 | `loop-tick` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | TickConfig, TickError, TickOutcome, wait_deadline | routes subprocess-contract; process request supplied to kernel; handroll tmux; handroll spawn |
+| `m2-grading-lane` | argv, env | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | TickRecord, LANE, ORACLE_SCHEMA, DEFAULT_ORACLE_RELATIVE, DECISION_NO_FEED | UNDECLARED route |
+| `named-test-filter-gate` | argv, stdin, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Tally, NamedTestRef, GradeError, Grade, is_admit | UNDECLARED route |
 | `no-shell-gate` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Violation, Verdict, GateError, WorkspaceLoad, main | routes subprocess-contract; process request supplied to kernel; handroll br; handroll spawn |
 | `ntm-fleet-monitor` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | FleetMonitorError, FleetMonitorConfig, FleetAction, main | handroll process spawn; handroll tmux |
-| `omp-idle-dispatch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | IdleDispatchError, IdleDispatchConfig, main | handroll process spawn; handroll tmux |
+| `ntm-kernel` | UNDECLARED | stdout; exit codes: `docs/error_codes/exit_code_registry.md` | NtmCall, NtmRun, PaneSnapshot, NtmVerb, NtmOutcome | routes subprocess-contract |
+| `omp-host-tool-guard` | UNDECLARED | stdout; exit codes: `docs/error_codes/exit_code_registry.md` | HostToolDecl, HostToolCall, DenyRule, GuardedTool, GuardPolicy | routes subprocess-contract |
 | `omp-inventory-map` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | InventoryMap, InventoryRow, InventoryNode, InventoryEdge, ProbeEvidence | handroll process spawn; handroll br |
 | `omp-orchestrator` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | LoopConfig, DispatchError, SupervisorError, main | routes subprocess-contract; process request supplied to kernel; handroll tmux; handroll spawn |
 | `omp-rpc-session` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | RpcSessionError, RpcSessionConfig, RpcSessionEvent, run_session | handroll process spawn |
 | `omp-types` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED — source reserved | routes subprocess-contract |
+| `ompo-doctor` | argv, stdin, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | OmpState, OmpMessages, MessageSummary, Signal, HealthReport | routes subprocess-contract |
+| `ompo-start` | argv, stdin, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | PaneId, SpawnReceipt, MailRegistration, MailRoster, PackReceipt | routes subprocess-contract |
 | `oracle-compare` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | OracleError, OracleVerdict, Comparison, compare | handroll process spawn |
 | `oracle-pane-state-differential` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | PaneState, ProjectionState, DifferentialReport, main | routes oracle-compare; handroll process spawn; handroll tmux |
 | `pane-dispatch-fence` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | FenceError, FenceConfig, FenceGuard, main | routes subprocess-contract; process request supplied to kernel; handroll spawn |
@@ -68,12 +84,16 @@ The row block is generated from Cargo metadata and is the artifact checked by th
 | `plan-assemble` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | main | handroll process spawn |
 | `porting-gate` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | PortingGateError, PortingGateReport, main | routes subprocess-contract; process request supplied to kernel |
 | `pre-delete-citation-check` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Citation, CitationError, check_citations, main | handroll process spawn; handroll br |
+| `r1-breadth-gate` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | SubjectScore, Report, CheckError, Attribution, LEVEL_NAMES | UNDECLARED route |
 | `reap-finished-panes` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | ReapError, ReapConfig, ReapReport, main | handroll process spawn; handroll tmux |
 | `receiver-receipt` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | ReceiptVerdict, ReceiptEvidence, classify, main | handroll process spawn; handroll tmux |
 | `refill-idle-panes` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | RefillError, RefillConfig, RefillReport, main | handroll process spawn; handroll tmux |
+| `s2-gate` | argv, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | S2Refuse, FLOOR, REQUIRED_KEYS, admit, readback_ok | UNDECLARED route |
+| `salvage-taxonomy` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | TurnEvidence, Classification, TurnOutcome, SalvageDecision, TaxonomyError | UNDECLARED route |
 | `scratch-home` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | ScratchHomeError, ScratchHomeConfig, ScratchHome, main | routes subprocess-contract; process request supplied to kernel |
 | `state-wildcard-lint` | files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Violation, LintReport, scan_source, main | UNDECLARED route |
 | `subprocess-contract` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | RunError, run_output, run_status, bounded_output, bounded_status | kernel-owned process spawn |
+| `text-structure` | files | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | Section, RawTextMatch, ScanHit, ScanVerdict, code_only | UNDECLARED route |
 | `tick-dispatch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | TickDispatchRules, TickDispatchDecision, admit, main | routes oracle-compare; handroll process spawn; handroll tmux |
 | `tick-monitor` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | MonitorError, MonitorConfig, Observation, monitor, main | handroll process spawn; handroll tmux |
 | `undrained-pipe-lint` | argv, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | Violation, LintReport, strip_line_comment, find_detailed_violations_in_source, find_violations_in_source | UNDECLARED route |
@@ -100,7 +120,20 @@ The row block is generated from Cargo metadata and is the artifact checked by th
 | `sender-identity` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
 | `silent-success-census` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
 | `staged-build-gate` | UNDECLARED | UNDECLARED; exit codes: `docs/error_codes/exit_code_registry.md` | UNDECLARED | UNDECLARED route |
+| `worker-oracle-gate` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | TargetRecord, CensusReport, Classification, MeasurementNamespace, TargetVerdict | UNDECLARED route |
+| `worker-tag-gate` | argv, env, files | stdout, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | WorkerRow, GateError, OS_DARWIN, DARWIN_HOST_TAGS, declares_os_darwin | UNDECLARED route |
 <!-- CRATE-CONTRACT-ROWS-END -->
+
+### Excluded from the workspace, and therefore from the row block
+
+`crates/omp-idle-dispatch` is named in the root manifest's `exclude`, so it is not a package `cargo metadata --no-deps` returns and `CRI-ROSTER-METADATA` puts it outside this table. Its row was inside the block until 2026-09-12 and was a SECOND failure of the coverage leg, hidden behind the first: `validate_inventory` reports missing rows before extra ones, so twenty-three absent rows masked one present-but-ineligible row for as long as the block was incomplete.
+
+The row is KEPT HERE VERBATIM rather than deleted, because it records a scan somebody performed and deleting it would destroy that record to satisfy a rule it predates. It is not checked by the invariant suite, and it cannot be: an excluded crate has no compiler, no CI and no gate, so every cell below is UNVERIFIED by construction.
+
+```
+| `omp-idle-dispatch` | argv, env, files | stdout, files written, exit/status; exit codes: `docs/error_codes/exit_code_registry.md` | IdleDispatchError, IdleDispatchConfig, main | handroll process spawn; handroll tmux |
+```
+
 
 ## Validation
 
