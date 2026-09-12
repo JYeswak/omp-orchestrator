@@ -411,13 +411,13 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
-    // ⛔ 2026-09-12 (73w7w): s1-coverage row DELETED. CI run 34666855450 classified it
-    // REACHABLE (`gate.yml` `-p s1-coverage`) and stale-allowance was the crate's only
-    // FAILING test. `crate_reachability` requires `workflow_invokes && has_remote`.
-    // A Contabo worker has no git remote, so the same delete reddens
-    // `the_ratchet_deadline_*` there (`unacknowledged advisory`). That red is
-    // HOST-SHAPED, not the naming-leg contradiction of 2026-09-11.
-    // CI is the oracle for this flagship red. Do not restore to silence rch.
+    // ⛔ 2026-09-12 (73w7w / 83cb804): s1-coverage row DELETED. CI run 34666855450
+    // classified it REACHABLE (`gate.yml` `-p s1-coverage`). Acknowledgement is NOT
+    // owed: `advisory_gates()` is `!is_reachable()`, so a Reachable crate cannot
+    // appear on the naming/ratchet legs. Restoring the row re-reds stale-allowance
+    // wherever `git remote` is non-empty. A host with no remote (rch worker) still
+    // classifies it Unreachable -- `workflow_invokes && has_remote`, a HOST question
+    // about a REPO trigger, not a missing `Dies when`. Do not restore to silence rch.
     ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("m2-grading-lane", "instrument limitation: source caller scan cannot see its launchd trigger; owner=pane=%19; dies_when=reachability consumes launchd metadata or the crate gains an in-tree source caller"),
@@ -425,8 +425,8 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("cargo-lane-budget", "invoked by fast-dispatch admission via Command::new(FD_BUDGET else ~/.local/bin/cargo-lane-budget) --check (fast-dispatch/src/main.rs:855-858); env-resolved spawns from non-gate binaries are outside the probed surfaces; entered census 2026-09-11 by derived membership. Dies when a spawn probe exists or it gains runnable gate checks."),
-    // 73w7w: contabo-reclaim row deleted with s1-coverage. CI: `-p contabo-reclaim`
-    // in contabo-reclaim.yml → REACHABLE. Same host-shaped rch residual.
+    // 73w7w: contabo-reclaim deleted with s1-coverage. Same CI REACHABLE (`-p` in
+    // contabo-reclaim.yml). Acknowledgement not owed for the same reason.
     ("dispatcher-deadman", "Rust bin selftest/differential-only; every live reference resolves to bin/dispatcher-deadman.sh, absent from this checkout (loop-tick/src/lib.rs:1002-1006). Dies when the shell oracle lands in-repo or the Rust bin gains a caller."),
     ("fast-dispatch", "scheduled operation attested by lockfile plus cron-parent classifier (src/lib.rs:261-278) but no schedule surface visible in repo or live crontab (checked 2026-09-11); outbounds spawn four bins, inbound none. Dies when its schedule source is named in-repo."),
     ("fleet-monitor", "scheduled OBSERVE lane (lock protocol, lane telemetry, standing-verdict ledger); no hook/workflow/launchd/stanza/caller visible; live schedule not observable from repo. Dies when its schedule surface is named."),
@@ -481,8 +481,16 @@ impl AdvisoryRatchetAnchor {
 /// authorized beads sat unclaimed because the reader correctly stopped at the word FREEZE.
 ///
 /// What actually happened on 2026-09-11: the `omp-inventory-map` row was deleted, and the
-/// census named two stale rows while *"only ONE of the two could be deleted"* — see the
-/// restored `s1-coverage` row above for the contradiction that blocks the other.
+/// census named two stale rows while *"only ONE of the two could be deleted"* -- the other
+/// was `s1-coverage`, RESTORED that day because naming still classified it Unreachable.
+///
+/// ⛔ 2026-09-12 (73w7w / 83cb804): THAT ROW IS GONE. Deleted because CI run 34666855450
+/// classified `s1-coverage` REACHABLE via `.github/workflows/gate.yml` `-p s1-coverage`
+/// (and `contabo-reclaim` via `contabo-reclaim.yml`). The 2026-09-11 same-census
+/// contradiction DISSOLVED when CI's reachability flipped; it was not overridden.
+/// Acknowledgement is not owed: `advisory_gates()` only contains Unreachable crates.
+/// Restoring the rows re-reds `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails`
+/// on any host with `git remote`.
 ///
 /// ⭐ A NARROWER PROBE DISAGREED AND WAS WRONG, which is why the mechanism is recorded here:
 /// `grep` over `crates/*/Cargo.toml` + `crates/*/src` reported `omp-inventory-map` as having
@@ -496,6 +504,9 @@ impl AdvisoryRatchetAnchor {
 /// `s1-coverage` into the violation set of another. **A remedy a gate PRESCRIBES BY NAME can
 /// still be wrong, because the gate that prescribes it is not the only gate reading the same
 /// list.** Re-run the whole target after taking a test's advice, not just the test that gave it.
+/// ⛔ 2026-09-12: that lesson stands. The second deletion (83cb804) is a different situation --
+/// CI classified both REACHABLE, so naming/ratchet cannot demand the rows on that census.
+/// Whole-target re-run of `census_membership` is the close of 73w7w.
 ///
 /// ⛔⛔ AND THE CEILING IS DELIBERATELY LEFT AT 24, AGAINST THE ADVICE. Lowering it is what
 /// the stale-allowance message asks for, and I tried both 10 and 11 — but
