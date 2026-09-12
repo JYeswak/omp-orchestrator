@@ -75,3 +75,88 @@ fn config_error_help_fails_the_addressable_leg() {
         other => panic!("ADDRESSABLE census must fail CONFIG_ERROR help, got {other:?}"),
     }
 }
+
+/// KNOWN-BAD FOR THE ALLOWANCE TABLE ITSELF: an ADJUDICATED collision is
+/// silent, and an UNDECLARED one beside it still reddens — message AND exit
+/// code, on the real binary.
+///
+/// Landing the `GuardDecision` row (2026-09-11) proves the allowance works;
+/// it does NOT prove the gate still bites, and those are different claims.
+/// The planted workspace carries BOTH at once: the exact allowanced pair
+/// (contabo-reclaim + omp-host-tool-guard declaring `GuardDecision`) and one
+/// undeclared collision. A gate that has gone soft passes this; a gate that
+/// only ever refuses fails the silence half.
+///
+/// The exit code is pinned as well as the text because `2` (REFUSED) and `1`
+/// (scan ERROR) are different verdicts that a message-only pin conflates,
+/// and because cargo's own `101` matches unrelated breakage.
+#[test]
+fn an_adjudicated_collision_is_silent_and_an_undeclared_one_still_reddens() {
+    let root = std::env::temp_dir().join(format!(
+        "omp-inventory-map-allowance-known-bad-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    let plant = |krate: &str, body: &str| {
+        let src = root.join("crates").join(krate).join("src");
+        std::fs::create_dir_all(&src).expect("crate src");
+        std::fs::write(
+            root.join("crates").join(krate).join("Cargo.toml"),
+            format!("[package]\nname = \"{krate}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"),
+        )
+        .expect("manifest");
+        std::fs::write(src.join("lib.rs"), body).expect("source");
+    };
+
+    // KNOWN-GOOD HALF: only the adjudicated pair, in the exact crate set the
+    // row names. Any other pair declaring `GuardDecision` is still refused —
+    // that is what makes the row a registry and not a blanket pardon.
+    plant("contabo-reclaim", "pub enum GuardDecision { Authorized }\n");
+    plant("omp-host-tool-guard", "pub enum GuardDecision { Execute }\n");
+    let allowed = bin()
+        .args(["types", "--repo"])
+        .arg(&root)
+        .output()
+        .expect("spawn types");
+    let allowed_stdout = String::from_utf8_lossy(&allowed.stdout).into_owned();
+    assert!(
+        !allowed_stdout.contains("COLLISION GuardDecision"),
+        "the adjudicated pair must not be refused: {allowed_stdout}"
+    );
+
+    // KNOWN-BAD HALF: one more collision, declared nowhere.
+    plant("planted-left", "pub struct UndeclaredTwin;\n");
+    plant("planted-right", "pub struct UndeclaredTwin;\n");
+    let refused = bin()
+        .args(["types", "--repo"])
+        .arg(&root)
+        .output()
+        .expect("spawn types");
+    let stdout = String::from_utf8_lossy(&refused.stdout).into_owned();
+    assert_eq!(
+        refused.status.code(),
+        Some(2),
+        "an undeclared collision must exit REFUSED=2, not 0 and not the scan-ERROR 1: {stdout}"
+    );
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("JSON envelope");
+    assert_eq!(value["status"], "REFUSED");
+    let errors = value["data"]["gate_errors"]
+        .as_array()
+        .expect("gate_errors")
+        .iter()
+        .filter_map(|e| e.as_str().map(str::to_owned))
+        .collect::<Vec<_>>();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("COLLISION UndeclaredTwin")
+                && e.contains("planted-left")
+                && e.contains("planted-right")),
+        "the refusal must name the undeclared collision AND both crates: {errors:?}"
+    );
+    assert!(
+        !errors.iter().any(|e| e.contains("COLLISION GuardDecision")),
+        "the adjudicated row must stay silent while the gate bites: {errors:?}"
+    );
+    std::fs::remove_dir_all(&root).expect("remove planted workspace");
+}

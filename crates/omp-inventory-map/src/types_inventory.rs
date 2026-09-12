@@ -305,6 +305,32 @@ pub const ALLOWED_COLLISIONS: &[(&str, &str, &str)] = &[
          Disjoint domains, no shared caller. Dies when a workspace error trait exists; \
          unifying them earlier would couple two gates sharing only a suffix.",
     ),
+    (
+        "GuardDecision",
+        "contabo-reclaim+omp-host-tool-guard",
+        "owner=omp-orchestrator-poumg. VARIANT SETS, measured at HEAD so a reader \
+         falsifies this row by opening two enums rather than by trusting a sentence: \
+         contabo-reclaim/src/model.rs:328 declares Authorized | \
+         SkippedLiveBuild{detail, active_build_ids} | Unknown{detail} | \
+         Unreachable{detail} -- may a build-cache reclaim proceed on a remote worker, \
+         decided by two authorities (control plane + remote process probe) agreeing. \
+         omp-host-tool-guard/src/lib.rs:135 declares Execute | Refuse{code, detail} | \
+         Unknown{reason} -- may the parent run one host_tool_call, decided by policy. \
+         Six of the seven variants are disjoint and no caller is shared. HONEST \
+         CAVEAT, because the overlap is NOT zero: both carry a variant named Unknown. \
+         That is the fleet's UNKNOWN discipline showing up twice (neither may be read \
+         as permission), not one type -- the payloads differ ({detail} about two \
+         disagreeing reclaim authorities versus {reason} that the policy does not \
+         govern this tool) and unifying on the shared idiom would couple a disk \
+         reclaimer to an MCP policy engine. A rename is the better durable fix and is \
+         filed; it is blocked on OWNERSHIP, not principle -- contabo-reclaim has \
+         carried unowned uncommitted work since 2026-09-09. \
+         dies_when= EITHER declaration disappears: the contabo-reclaim restructure \
+         that already deletes model.rs lands, or either crate renames. That condition \
+         is live and near-term, not aspirational, and the STALE ALLOWANCE leg fires \
+         the moment it arrives -- at which point the ceiling falls to 41 in the SAME \
+         edit that deletes this row.",
+    ),
 ];
 
 /// Anchor for the unallowed-collision ratchet (bead zhr29).
@@ -376,14 +402,20 @@ pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeiling
     // shared worktree (uncommitted since 2026-09-09), which is the entire 43-vs-42 gap and is
     // now named by [`CensusSource`] instead of being absorbed as "the lane is a fossil".
     //
-    // Three adjudications close it and NONE is a ceiling move: an ALLOWED_COLLISIONS row for
-    // GuardDecision with a true reason (the two are disjoint -- a reclaim authorization
-    // carrying active_build_ids versus a host_tool_call policy verdict carrying a refusal
-    // code), a rename in either crate, or landing the contabo-reclaim restructure that already
-    // deletes one of them. All three are OUTSIDE this crate's ownership or are an allowance
-    // enlargement, so this leg stays RED IN CI ON PURPOSE, with its number and its source
-    // printed, until that ruling lands. Raising 42 to 43 here would bank the defect into the
-    // bound and is the one move forbidden outright.
+    // ADJUDICATED 2026-09-11, ruling on the record: the ALLOWED_COLLISIONS row for
+    // GuardDecision, carrying owner=, dies_when= and BOTH variant sets. An allowance row whose
+    // reason can be checked by opening two enums is a REGISTRY; it becomes amnesty only when a
+    // row exists without a falsifiable reason. A rename is the better durable fix and is filed
+    // -- blocked on OWNERSHIP (contabo-reclaim carries unowned uncommitted work from
+    // 2026-09-09), not on principle. Raising 42 to 43 would have hidden an UNADJUDICATED
+    // collision and was refused.
+    //
+    // THE CEILING DID NOT MOVE, AND THAT IS THE MEASUREMENT, NOT AN OMISSION. Committed count
+    // re-derived with this crate's own instrument over a clean `git archive HEAD` export:
+    // 43 disallowed, name-for-name identical to CI's list, GuardDecision sited at
+    // contabo-reclaim/src/model.rs:328 + omp-host-tool-guard/src/lib.rs:135. One adjudication
+    // moves it to 42, which IS the ceiling, so the `live <= CEILING <= live + 0` band closes to
+    // equality with no slack banked. The next adjudication lowers this to 41 in the same edit.
     ceiling: 42,
     ceiling_at_recording: 42,
     recorded_at_unix: 1_789_144_925,
