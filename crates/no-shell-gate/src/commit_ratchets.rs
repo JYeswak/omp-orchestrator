@@ -1511,15 +1511,29 @@ mod tests {
         // suite one leg greener. A leg that constructs its own report proves the adapter works;
         // only a leg that enters the production path proves it is WIRED.
         //
-        // `run()` needs a repo root and a staged set: an empty staged set is fine because this
-        // adapter reads the environment, not the diff, and the other four ratchets emit their
-        // own rows which the filter below ignores by prefix.
-        let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(std::path::Path::parent)
-            .expect("crates/<name> has a workspace root two levels up")
-            .to_path_buf();
-        let report = run(&repo_root, &[], &[]);
+        // ⛔ AND THE ROOT IS A TEMP DIRECTORY, NOT THIS REPOSITORY. The first version of this
+        // leg passed `CARGO_MANIFEST_DIR/../..` -- the REAL checkout -- so entering `run()` also
+        // entered `hook_freshness`, hit its STALE arm, created `.git/hook-heal.lock` and appended
+        // `.git/hook-heal.log`, and spawned a cross-build. A LEG THAT MUTATES THE TREE IT
+        // MEASURES IS NOT AN OBSERVATION, and it is not confined to itself: `.git` staged/index
+        // state is SHARED, so the side effect lands in whichever leg reads those bands next.
+        //
+        // `armed_gates` ignores `repo_root` entirely -- it reads the ENVIRONMENT, not the tree --
+        // so a temp dir exercises the identical production path with the identical verdict and no
+        // reachable `.git`. The other four ratchets still run and emit their own rows, which the
+        // prefix filter below ignores; they find nothing to do under an empty root, which is the
+        // point. The wiring claim is unweakened: `run()` is still the caller under test.
+        let scratch = std::env::temp_dir().join(format!(
+            "no-shell-gate-armed-gates-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        ));
+        std::fs::create_dir_all(&scratch).expect("scratch root");
+        let report = run(&scratch, &[], &[]);
+        std::fs::remove_dir_all(&scratch).ok();
         let rows: Vec<&String> = report
             .observations
             .iter()
