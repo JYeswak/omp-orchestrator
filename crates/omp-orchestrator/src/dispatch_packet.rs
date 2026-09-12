@@ -21,8 +21,14 @@ pub enum PacketError {
         actual_status: String,
         actual_assignee: Option<String>,
     },
+    MutationClauseMissing {
+        bead: String,
+    },
+    MutationClauseTooCoarse {
+        bead: String,
+        detail: String,
+    },
 }
-
 impl PacketError {
     pub fn code(&self) -> &'static str {
         match self {
@@ -30,6 +36,8 @@ impl PacketError {
             Self::FiledOnlyRecord { .. } => "FILED_ONLY_RECORD",
             Self::PacketAddsScope { .. } => "PACKET_ADDS_SCOPE",
             Self::BeadNotClaimed { .. } => "BEAD_NOT_CLAIMED",
+            Self::MutationClauseMissing { .. } => "MUTATION_CLAUSE_MISSING",
+            Self::MutationClauseTooCoarse { .. } => "MUTATION_CLAUSE_TOO_COARSE",
         }
     }
 
@@ -37,7 +45,10 @@ impl PacketError {
         match self {
             Self::BeadNotClaimed { .. } => 3,
             Self::PacketFieldMissing(_) => 2,
-            Self::FiledOnlyRecord { .. } | Self::PacketAddsScope { .. } => 1,
+            Self::FiledOnlyRecord { .. }
+            | Self::PacketAddsScope { .. }
+            | Self::MutationClauseMissing { .. }
+            | Self::MutationClauseTooCoarse { .. } => 1,
         }
     }
 }
@@ -69,6 +80,14 @@ impl fmt::Display for PacketError {
                 formatter,
                 "BEAD_NOT_CLAIMED bead={bead} expected_pane={expected_pane} status={actual_status} actual_assignee={} reason=requires_in_progress_claim_on_receiving_pane",
                 actual_assignee.as_deref().unwrap_or("unassigned")
+            ),
+            Self::MutationClauseMissing { bead } => write!(
+                formatter,
+                "MUTATION_CLAUSE_MISSING bead={bead} reason=mutation_demanded_with_empty_clause"
+            ),
+            Self::MutationClauseTooCoarse { bead, detail } => write!(
+                formatter,
+                "MUTATION_CLAUSE_TOO_COARSE bead={bead} detail={detail} reason=mutation_must_name_file_rs_line"
             ),
         }
     }
@@ -244,6 +263,95 @@ fn reject_scope_additions(bead: &str, traps: &str) -> Result<(), PacketError> {
     Ok(())
 }
 
+fn close_reason_mutation_prefix(lower: &str) -> bool {
+    lower.contains("mutation-verified")
+        || lower.contains("mutation-not-required")
+        || lower.contains("mutation-attributed")
+}
+
+fn mutation_heading_body<'a>(trimmed: &'a str, lower: &str) -> Option<&'a str> {
+    let start = lower.find("mutation:")?;
+    if start > 0 {
+        let before = lower.as_bytes()[start - 1];
+        if before == b'-' || before.is_ascii_alphanumeric() {
+            return None;
+        }
+    }
+    Some(trimmed[start + "mutation:".len()..].trim())
+}
+
+fn mutation_clause_body(line: &str) -> Option<&str> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if close_reason_mutation_prefix(&lower) {
+        return None;
+    }
+    if let Some(body) = mutation_heading_body(trimmed, &lower) {
+        return Some(body);
+    }
+    if lower.contains("un-call")
+        || lower.contains("uncall")
+        || lower.contains("un-wire")
+        || lower.contains("unwire")
+        || lower.contains("delete the call")
+        || lower.contains("comment out")
+    {
+        return Some(trimmed);
+    }
+    None
+}
+
+fn names_file_rs_line(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index + 4 < bytes.len() {
+        if bytes[index..].starts_with(b".rs:")
+            && index > 0
+            && (bytes[index - 1].is_ascii_alphanumeric()
+                || bytes[index - 1] == b'_'
+                || bytes[index - 1] == b'-'
+                || bytes[index - 1] == b'/')
+            && bytes[index + 4].is_ascii_digit()
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn reject_coarse_mutation_clause(bead: &str, acceptance: &str) -> Result<(), PacketError> {
+    let mut missing = false;
+    let mut coarse: Option<String> = None;
+    for line in acceptance.lines() {
+        let Some(body) = mutation_clause_body(line) else {
+            continue;
+        };
+        if body.is_empty() {
+            missing = true;
+            continue;
+        }
+        if !names_file_rs_line(body) {
+            coarse.get_or_insert_with(|| body.to_owned());
+        }
+    }
+    if missing {
+        return Err(PacketError::MutationClauseMissing {
+            bead: bead.to_owned(),
+        });
+    }
+    if let Some(detail) = coarse {
+        return Err(PacketError::MutationClauseTooCoarse {
+            bead: bead.to_owned(),
+            detail,
+        });
+    }
+    Ok(())
+}
+
 fn assignee_pane(assignee: &str) -> Option<&str> {
     if let Some(pane) = assignee
         .split(';')
@@ -308,6 +416,7 @@ pub fn render_with_pane(
     let target = target.display().to_string();
     let scope = scope(snapshot);
     let acceptance = acceptance(snapshot).ok_or(PacketError::PacketFieldMissing("acceptance"))?;
+    reject_coarse_mutation_clause(bead, &acceptance)?;
     let stop = "when acceptance is met, when blocked on a named external, or when the packet contradicts the bead — say which";
     let done =
         explicit_done_signal(bead, &acceptance).ok_or(PacketError::PacketFieldMissing("done"))?;
@@ -641,5 +750,96 @@ mod tests {
         )
         .expect_err("same pane");
         assert!(matches!(error, PacketError::PacketAddsScope { .. }));
+    }
+
+    fn packet_for_acceptance(acceptance: &str) -> Result<String, PacketError> {
+        render(
+            &BeadSnapshot::new_with_acceptance(
+                "omp-orchestrator-6we9q",
+                "packet fixture",
+                "body",
+                acceptance,
+                "open",
+                None,
+            ),
+            Path::new("/repo"),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn acceptance_with_no_mutation_clause_still_renders() {
+        let packet = packet_for_acceptance("Run cargo test -p dispatch-packet; expect exit 0")
+            .expect(
+                "item 4 as written would redden every historical bead; no-demand stays admissible",
+            );
+        assert!(packet.contains("Run cargo test -p dispatch-packet; expect exit 0"));
+    }
+
+    #[test]
+    fn mutation_verified_close_prefix_is_not_a_mutation_clause() {
+        let packet = packet_for_acceptance(
+            "Close with MUTATION-VERIFIED after a DIFFERENT pane re-runs cargo test; expect exit 0",
+        )
+        .expect("close-reason prefixes must not be read as a mutation demand");
+        assert!(packet.contains("MUTATION-VERIFIED"));
+    }
+
+    #[test]
+    fn empty_mutation_heading_is_missing_not_coarse() {
+        let error = packet_for_acceptance("1. Mutation:\n2. Run cargo test; expect exit 0")
+            .expect_err("empty mutation clause is a distinct population");
+        assert_eq!(error.code(), "MUTATION_CLAUSE_MISSING");
+        assert_eq!(error.operator_exit_code(), 1);
+        assert!(error.to_string().contains("MUTATION_CLAUSE_MISSING"));
+        assert!(matches!(error, PacketError::MutationClauseMissing { .. }));
+    }
+
+    #[test]
+    fn uncall_the_validator_is_too_coarse() {
+        let error =
+            packet_for_acceptance("Mutation: un-call the validator").expect_err("item 2 known-bad");
+        assert_eq!(error.code(), "MUTATION_CLAUSE_TOO_COARSE");
+        assert_eq!(error.operator_exit_code(), 1);
+        assert!(error.to_string().contains("un-call the validator"));
+        assert!(matches!(error, PacketError::MutationClauseTooCoarse { .. }));
+    }
+
+    #[test]
+    fn uncall_validate_workflows_without_file_line_is_too_coarse() {
+        let error = packet_for_acceptance("Mutation: un-call validate_workflows")
+            .expect_err("item 1 OR would admit the dwj4v specimen");
+        assert_eq!(error.code(), "MUTATION_CLAUSE_TOO_COARSE");
+    }
+
+    #[test]
+    fn named_file_rs_line_stays_admissible() {
+        let packet = packet_for_acceptance(
+            "Mutation: duplicate_block_mapping_key at gate-reachability.rs:216",
+        )
+        .expect("item 2 known-good");
+        assert!(packet.contains("gate-reachability.rs:216"));
+    }
+
+    #[test]
+    fn three_named_site_acceptances_stay_admissible() {
+        for acceptance in [
+            "Mutation: duplicate_block_mapping_key at gate-reachability.rs:216",
+            "KNOWN-BAD: comment out pane_admission at crates/fleet-monitor/src/lib.rs:323",
+            "Mutation: un-wire check_referents at allowance_referents.rs:136",
+        ] {
+            packet_for_acceptance(acceptance)
+                .unwrap_or_else(|error| panic!("{acceptance} must stay admissible: {error}"));
+        }
+    }
+
+    #[test]
+    fn missing_and_coarse_use_distinct_codes() {
+        let missing = packet_for_acceptance("Mutation:").expect_err("missing");
+        let coarse = packet_for_acceptance("Mutation: un-call the validator").expect_err("coarse");
+        assert_ne!(missing.code(), coarse.code());
+        assert_eq!(missing.code(), "MUTATION_CLAUSE_MISSING");
+        assert_eq!(coarse.code(), "MUTATION_CLAUSE_TOO_COARSE");
     }
 }

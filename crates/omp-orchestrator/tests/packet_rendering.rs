@@ -195,3 +195,32 @@ fn quoted_filed_only_language_is_not_a_marker() {
     .expect("quoted marker language must be ignored");
     assert!(packet.contains("Objective: Complete bead b4iv"));
 }
+
+#[test]
+fn named_mutation_site_renders_and_vague_clause_is_refused() {
+    let packet = render(
+        &bead(
+            "omp-orchestrator-dwj4v",
+            "body",
+            "Mutation: duplicate_block_mapping_key at gate-reachability.rs:216",
+        ),
+        Path::new("/repo"),
+        None,
+        None,
+    )
+    .expect("named file.rs:line must stay admissible");
+    assert!(packet.contains("gate-reachability.rs:216"));
+
+    let error = render(
+        &bead(
+            "omp-orchestrator-dwj4v",
+            "body",
+            "Mutation: un-call the validator",
+        ),
+        Path::new("/repo"),
+        None,
+        None,
+    )
+    .expect_err("vague mutation clause must refuse");
+    assert_eq!(error.code(), "MUTATION_CLAUSE_TOO_COARSE");
+}
