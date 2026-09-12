@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Commit-path adapters for the four ratchets that previously ran only as test targets.
+//! Commit-path adapters for the five arms that previously ran only as test targets (or nowhere).
 //!
 //! This module deliberately consumes the staged index, not the mutable worktree, for content
 //! checks. The pre-commit binary is the single trigger; a test-only ratchet is not a commit gate
@@ -29,10 +29,10 @@ pub struct CommitRatchetReport {
     pub refusals: Vec<String>,
 }
 
-/// Run all four ratchet adapters for one staged commit.
+/// Run all five commit-path arms for one staged commit.
 ///
 /// The empty-index decision is made by the caller before this function because an empty index is
-/// the trigger's own terminal outcome. The other three ratchets are scoped to the staged change
+/// the trigger's own terminal outcome. The other arms are scoped to the staged change
 /// or to the installed hook that would enforce it.
 #[must_use]
 pub fn run(repo_root: &Path, staged: &[String], deletions: &[String]) -> CommitRatchetReport {
@@ -41,8 +41,34 @@ pub fn run(repo_root: &Path, staged: &[String], deletions: &[String]) -> CommitR
     census_membership(repo_root, staged, &mut report);
     hook_freshness(repo_root, staged, &mut report);
     omp_drift(repo_root, staged, &mut report);
+    armed_gates(&mut report);
     let _ = deletions;
     report
+}
+
+/// Armed-gate watch (bead omp-orchestrator-l6hsl): report which env-disarmable
+/// gates are ARMED right now, with the death condition each arming voids.
+/// OBSERVATION ONLY, never a refusal: refusing on armed would make arming
+/// unusable, and arming is a conscious operator act. Findings name gate, var,
+/// and void condition; a silent arming is the defect (three accepted gaps
+/// going live unmeasured at once).
+fn armed_gates(report: &mut CommitRatchetReport) {
+    match crate::armed_gates::check_armed(&|key| std::env::var(key).ok(), crate::armed_gates::ARMED_GATES) {
+        Ok(findings) => {
+            if findings.is_empty() {
+                report.observations.push(
+                    "armed_gates: DISARMED_ALL gates=3 detail=no env-disarmable gate is armed".to_owned(),
+                );
+            } else {
+                report.observations.extend(findings.into_iter().map(|finding| {
+                    format!("armed_gates: {finding}")
+                }));
+            }
+        }
+        Err(detail) => {
+            report.observations.push(format!("armed_gates: ERROR detail={detail}"));
+        }
+    }
 }
 
 fn plan_citations(repo_root: &Path, staged: &[String], report: &mut CommitRatchetReport) {
