@@ -648,3 +648,13 @@ fn write_zero_readback_fail_refuses() {
         "a readback miss must not render as S2_OK: {detail}"
     );
 }
+
+/// L5-HASH (jbmy), THE NAMED ACCEPTANCE: alias for `hash_excludes_self_obs`
+/// under the acceptance name. A command matching no test exits 0 and proves
+/// nothing, so the property ships under both names; the body lives in exactly
+/// one place. Same property: the hash is unchanged when only the `data_hash`
+/// field changes, and it MOVES when covered data moves.
+#[test]
+fn hash_stable_under_hash_field() {
+    hash_excludes_self_obs();
+}
