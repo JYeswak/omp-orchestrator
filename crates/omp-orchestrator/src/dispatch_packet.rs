@@ -29,6 +29,11 @@ pub enum PacketError {
         bead: String,
         detail: String,
     },
+    /// Field empty, description has an ACCEPTANCE heading. Distinct from
+    /// [`PacketError::PacketFieldMissing`] — one label for both is xy8oo.
+    AcceptanceInDescriptionOnly {
+        bead: String,
+    },
 }
 impl PacketError {
     pub fn code(&self) -> &'static str {
@@ -39,6 +44,7 @@ impl PacketError {
             Self::BeadNotClaimed { .. } => "BEAD_NOT_CLAIMED",
             Self::MutationClauseMissing { .. } => "MUTATION_CLAUSE_MISSING",
             Self::MutationClauseTooCoarse { .. } => "MUTATION_CLAUSE_TOO_COARSE",
+            Self::AcceptanceInDescriptionOnly { .. } => "ACCEPTANCE_IN_DESCRIPTION_ONLY",
         }
     }
 
@@ -46,6 +52,7 @@ impl PacketError {
         match self {
             Self::BeadNotClaimed { .. } => 3,
             Self::PacketFieldMissing(_) => 2,
+            Self::AcceptanceInDescriptionOnly { .. } => 4,
             Self::FiledOnlyRecord { .. }
             | Self::PacketAddsScope { .. }
             | Self::MutationClauseMissing { .. }
@@ -89,6 +96,10 @@ impl fmt::Display for PacketError {
             Self::MutationClauseTooCoarse { bead, detail } => write!(
                 formatter,
                 "MUTATION_CLAUSE_TOO_COARSE bead={bead} detail={detail} reason=mutation_must_name_file_rs_line"
+            ),
+            Self::AcceptanceInDescriptionOnly { bead } => write!(
+                formatter,
+                "ACCEPTANCE_IN_DESCRIPTION_ONLY bead={bead} reason=populate_acceptance_criteria_field"
             ),
         }
     }
@@ -154,9 +165,48 @@ pub fn classify_mutation_clause(acceptance: &str) -> MutationClauseClass {
     }
 }
 
-/// Acceptance text render would classify: typed field, else description heading.
+/// How a bead's acceptance is sourced. One function, two callers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AcceptanceResolution {
+    /// Typed `acceptance_criteria` field is populated.
+    Field(String),
+    /// Field empty; description has an ACCEPTANCE heading. Not packet text.
+    DescriptionOnly,
+    Missing,
+}
+
+/// THE one reader. Dispatch render and at-send capture both call this.
+pub fn resolve_acceptance(snapshot: &BeadSnapshot) -> AcceptanceResolution {
+    if nonempty(snapshot.acceptance_criteria()).is_some() {
+        return AcceptanceResolution::Field(snapshot.acceptance_criteria().trim().to_owned());
+    }
+    if section_from_description(snapshot.description(), "ACCEPTANCE").is_some() {
+        return AcceptanceResolution::DescriptionOnly;
+    }
+    AcceptanceResolution::Missing
+}
+
+/// True iff the typed field is populated. Capture uses this; dispatch agrees.
+pub fn has_typed_acceptance(snapshot: &BeadSnapshot) -> bool {
+    matches!(resolve_acceptance(snapshot), AcceptanceResolution::Field(_))
+}
+
+/// Acceptance text a packet may render: typed field only.
 pub fn acceptance_text(snapshot: &BeadSnapshot) -> Option<String> {
-    acceptance(snapshot)
+    match resolve_acceptance(snapshot) {
+        AcceptanceResolution::Field(text) => Some(text),
+        AcceptanceResolution::DescriptionOnly | AcceptanceResolution::Missing => None,
+    }
+}
+
+fn packet_acceptance(snapshot: &BeadSnapshot, bead: &str) -> Result<String, PacketError> {
+    match resolve_acceptance(snapshot) {
+        AcceptanceResolution::Field(text) => Ok(text),
+        AcceptanceResolution::DescriptionOnly => Err(PacketError::AcceptanceInDescriptionOnly {
+            bead: bead.to_owned(),
+        }),
+        AcceptanceResolution::Missing => Err(PacketError::PacketFieldMissing("acceptance")),
+    }
 }
 
 fn nonempty(value: &str) -> Option<&str> {
@@ -252,12 +302,6 @@ fn section_from_description(description: &str, heading: &str) -> Option<String> 
     }
     let section = lines.join("\n").trim().to_owned();
     nonempty(&section).map(ToOwned::to_owned)
-}
-
-fn acceptance(snapshot: &BeadSnapshot) -> Option<String> {
-    nonempty(snapshot.acceptance_criteria())
-        .map(ToOwned::to_owned)
-        .or_else(|| section_from_description(snapshot.description(), "ACCEPTANCE"))
 }
 
 fn scope(snapshot: &BeadSnapshot) -> String {
@@ -530,7 +574,7 @@ pub fn render_with_pane(
     }
     let objective = format!("Complete bead {bead}: {}", snapshot.title().trim());
     let scope = scope(snapshot);
-    let acceptance = acceptance(snapshot).ok_or(PacketError::PacketFieldMissing("acceptance"))?;
+    let acceptance = packet_acceptance(snapshot, bead)?;
     reject_coarse_mutation_clause(bead, &acceptance, target)?;
     let target = target.display().to_string();
     let stop = "when acceptance is met, when blocked on a named external, or when the packet contradicts the bead — say which";
@@ -693,14 +737,17 @@ mod tests {
 
     #[test]
     fn empty_acceptance_is_a_typed_refusal() {
-        let error = render(
-            &snapshot("fixture", "no acceptance", ""),
-            Path::new("/repo"),
-            None,
-            None,
-        )
-        .expect_err("missing acceptance must refuse");
+        let snap = snapshot("fixture", "no acceptance", "");
+        let error = render(&snap, Path::new("/repo"), None, None)
+            .expect_err("missing acceptance must refuse");
         assert_eq!(error, PacketError::PacketFieldMissing("acceptance"));
+        assert_eq!(error.code(), "PACKET_FIELD_MISSING");
+        assert_eq!(error.operator_exit_code(), 2);
+        assert!(!has_typed_acceptance(&snap));
+        assert_eq!(
+            render(&snap, Path::new("/repo"), None, None).is_ok(),
+            has_typed_acceptance(&snap)
+        );
     }
 
     #[test]
@@ -723,19 +770,73 @@ mod tests {
     }
 
     #[test]
-    fn acceptance_falls_back_to_description_block() {
-        let packet = render(
-            &snapshot(
-                "fixture",
-                "## ACCEPTANCE\nRun cargo test; expect exit 0\n\n## NO-CLAIM\nlimit",
-                "",
-            ),
-            Path::new("/repo"),
-            None,
-            None,
-        )
-        .expect("description acceptance should render");
-        assert!(packet.contains("Run cargo test; expect exit 0"));
+    fn acceptance_only_in_description_is_a_distinct_refusal() {
+        let snap = snapshot(
+            "fixture",
+            "## ACCEPTANCE\nRun cargo test; expect exit 0\n\n## NO-CLAIM\nlimit",
+            "",
+        );
+        let error = render(&snap, Path::new("/repo"), None, None)
+            .expect_err("description-only acceptance must refuse");
+        assert_eq!(
+            error,
+            PacketError::AcceptanceInDescriptionOnly {
+                bead: "fixture".to_owned()
+            }
+        );
+        assert_eq!(error.code(), "ACCEPTANCE_IN_DESCRIPTION_ONLY");
+        assert_eq!(error.operator_exit_code(), 4);
+        assert_ne!(
+            error.code(),
+            PacketError::PacketFieldMissing("acceptance").code(),
+            "one label for two causes is the residual-label defect"
+        );
+        assert!(!has_typed_acceptance(&snap));
+    }
+
+    #[test]
+    fn description_only_dispatchability_agrees_with_has_acceptance() {
+        let snap = snapshot("aposg-shape", "## ACCEPTANCE\n1. pins serde\n", "");
+        let dispatchable = render(&snap, Path::new("/repo"), None, None).is_ok();
+        let captured = has_typed_acceptance(&snap);
+        assert_eq!(
+            dispatchable, captured,
+            "dispatchability={dispatchable} has_acceptance={captured} must agree under B"
+        );
+        assert!(!dispatchable, "both refuse");
+        assert!(!captured, "both refuse");
+    }
+
+    #[test]
+    fn populated_field_without_heading_stays_accepted() {
+        let snap = snapshot(
+            "populated",
+            "no heading here",
+            "typed acceptance\nRun cargo test; expect exit 0",
+        );
+        assert!(has_typed_acceptance(&snap));
+        let packet = render(&snap, Path::new("/repo"), None, None)
+            .expect("672 populated-field rows must stay dispatchable");
+        assert!(packet.contains("typed acceptance"));
+    }
+
+    #[test]
+    fn resident_and_render_share_resolve_acceptance() {
+        let resident = include_str!("resident.rs");
+        assert!(
+            resident.contains("dispatch_packet::has_typed_acceptance"),
+            "resident.rs must call the unified reader, not trim the bare field"
+        );
+        let src = include_str!("dispatch_packet.rs");
+        assert!(
+            src.contains("packet_acceptance(snapshot, bead)"),
+            "render must go through packet_acceptance"
+        );
+        let resolve_hits = src.matches("resolve_acceptance(snapshot)").count();
+        assert!(
+            resolve_hits >= 3,
+            "resolve_acceptance must be the single reader, hits={resolve_hits}"
+        );
     }
 
     #[test]

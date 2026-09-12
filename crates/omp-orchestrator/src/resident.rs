@@ -3466,12 +3466,11 @@ struct AtSendCapture {
 
 impl AtSendCapture {
     fn from_snapshot(snapshot: &BeadSnapshot) -> Self {
-        let acceptance = snapshot.acceptance_criteria().trim();
         let description = snapshot.description();
         Self {
             status: snapshot.status_label().to_owned(),
             assignee: snapshot.assignee().unwrap_or("").to_owned(),
-            has_acceptance: !acceptance.is_empty(),
+            has_acceptance: dispatch_packet::has_typed_acceptance(snapshot),
             filed_only: description.to_ascii_lowercase().contains("filed only"),
         }
     }
