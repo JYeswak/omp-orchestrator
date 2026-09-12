@@ -80,15 +80,16 @@ fn check(state: PaneState) {
     assert_eq!(find_findings_in_source(source).len(), 1);
     let repaired = source.replace("_ => ()", "PaneState::Idle => ()");
     assert!(find_findings_in_source(&repaired).is_empty());
-    assert!(source.contains("_ => ()"), "mutation must not alter the original");
+    assert!(
+        source.contains("_ => ()"),
+        "mutation must not alter the original"
+    );
 }
 
 #[test]
 fn empty_or_unreadable_workspace_is_an_error() {
-    let root = std::env::temp_dir().join(format!(
-        "state-wildcard-lint-empty-{}",
-        std::process::id()
-    ));
+    let root =
+        std::env::temp_dir().join(format!("state-wildcard-lint-empty-{}", std::process::id()));
     std::fs::create_dir_all(&root).expect("create empty root");
     let report = state_wildcard_lint::lint_workspace(&root);
     assert!(report.scanned.is_empty());
@@ -115,7 +116,11 @@ fn present_but_empty_crates_dir_is_an_error_not_a_pass() {
         "an empty scan set must be an ERROR, not a pass"
     );
     assert!(
-        report.error.as_deref().unwrap_or("").contains("empty scan set"),
+        report
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("empty scan set"),
         "{:?}",
         report.error
     );
@@ -224,7 +229,10 @@ fn finding_display_names_file_line_and_arm() {
         kind: FindingKind::UnresolvedStateType,
     };
     let rendered = finding.to_string();
-    assert!(rendered.starts_with("crates/x/src/main.rs:94:"), "{rendered}");
+    assert!(
+        rendered.starts_with("crates/x/src/main.rs:94:"),
+        "{rendered}"
+    );
     assert!(rendered.contains("`_ => {`"), "{rendered}");
     assert!(rendered.contains("match mode"), "{rendered}");
     assert!(rendered.contains("line 29"), "{rendered}");
@@ -238,9 +246,13 @@ fn declared_allowlist_rows_carry_a_reason_and_a_real_path() {
     for row in DECLARED_ALLOWLIST {
         assert!(row.reason.len() > 40, "row {row:?} needs a real reason");
         assert!(!row.scrutinee.is_empty(), "row {row:?} needs a scrutinee");
-        let path = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-            .join(row.file);
-        assert!(path.exists(), "allowlisted path does not exist: {}", row.file);
+        let path =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(row.file);
+        assert!(
+            path.exists(),
+            "allowlisted path does not exist: {}",
+            row.file
+        );
     }
 }
 
@@ -256,7 +268,10 @@ fn declared_skip_dirs_each_carry_a_reason_and_are_stated() {
         assert!(names.contains(&expected), "{names:?} must prune {expected}");
     }
     for row in state_wildcard_lint::DECLARED_SKIP_DIRS {
-        assert!(row.reason.len() > 20, "skip row {row:?} needs a real reason");
+        assert!(
+            row.reason.len() > 20,
+            "skip row {row:?} needs a real reason"
+        );
     }
     for mode in [
         state_wildcard_lint::ScanMode::RepoWide,
@@ -264,7 +279,10 @@ fn declared_skip_dirs_each_carry_a_reason_and_are_stated() {
     ] {
         let stated = state_wildcard_lint::declared_scope_line(mode);
         for name in &names {
-            assert!(stated.contains(name), "scope line must name {name}: {stated}");
+            assert!(
+                stated.contains(name),
+                "scope line must name {name}: {stated}"
+            );
         }
         assert!(
             stated.contains("masked"),
@@ -379,7 +397,11 @@ fn an_unstaged_wildcard_cannot_refuse_a_clean_staged_change() {
     // RED direction: the sweep finds it and NAMES file:line.
     let sweep = state_wildcard_lint::lint_workspace(&root);
     assert_eq!(sweep.mode, state_wildcard_lint::ScanMode::RepoWide);
-    assert_eq!(sweep.verdict(), state_wildcard_lint::Verdict::Violation, "{sweep:?}");
+    assert_eq!(
+        sweep.verdict(),
+        state_wildcard_lint::Verdict::Violation,
+        "{sweep:?}"
+    );
     let named: Vec<String> = sweep
         .findings
         .iter()
@@ -424,7 +446,10 @@ fn staged_mode_over_the_real_repo_equals_the_sweep() {
     );
     let scoped = state_wildcard_lint::lint_paths(&root, &sweep.scanned);
     assert_eq!(scoped.scanned, sweep.scanned, "the same files must be read");
-    assert_eq!(scoped.findings, sweep.findings, "the same findings, same file:line");
+    assert_eq!(
+        scoped.findings, sweep.findings,
+        "the same findings, same file:line"
+    );
     assert_eq!(scoped.verdict(), sweep.verdict());
 }
 
@@ -439,8 +464,14 @@ fn staged_set_with_no_eligible_file_is_nothing_to_check_not_clean() {
         &["AGENTS.md", "crates/example/tests/it.rs", "docs/PLAN.md"],
     );
     assert!(report.scanned.is_empty(), "{:?}", report.scanned);
-    assert_eq!(report.verdict(), state_wildcard_lint::Verdict::NothingToCheck);
-    assert!(!report.is_pass(), "nothing-to-check must not read as a pass");
+    assert_eq!(
+        report.verdict(),
+        state_wildcard_lint::Verdict::NothingToCheck
+    );
+    assert!(
+        !report.is_pass(),
+        "nothing-to-check must not read as a pass"
+    );
     std::fs::remove_dir_all(&root).expect("remove fixture tree");
 }
 
@@ -449,8 +480,15 @@ fn staged_set_with_no_eligible_file_is_nothing_to_check_not_clean() {
 #[test]
 fn eligibility_predicate_matches_the_declared_floor() {
     use state_wildcard_lint::is_in_scan_scope;
-    for inside in ["crates/x/src/lib.rs", "crates/x/src/bin/y.rs", "crates/x/benches/b.rs"] {
-        assert!(is_in_scan_scope(std::path::Path::new(inside)), "{inside} must be in scope");
+    for inside in [
+        "crates/x/src/lib.rs",
+        "crates/x/src/bin/y.rs",
+        "crates/x/benches/b.rs",
+    ] {
+        assert!(
+            is_in_scan_scope(std::path::Path::new(inside)),
+            "{inside} must be in scope"
+        );
     }
     for outside in [
         "crates/x/tests/it.rs",
