@@ -2934,7 +2934,7 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    **The tell is two instruments disagreeing**, which is why `%20` caught it and a single grep would
    not have. **Same family as `8o`:** a text count answering a different question than the one asked.
 
-8r. **`grep -c` AND `grep -o | wc -l` ANSWER DIFFERENT QUESTIONS, SO TWO HONEST AGENTS CAN
+8w. **`grep -c` AND `grep -o | wc -l` ANSWER DIFFERENT QUESTIONS, SO TWO HONEST AGENTS CAN
    "DISAGREE" ABOUT A FILE THEY BOTH MEASURED CORRECTLY.** Measured 2026-09-12 on
    `crates/no-shell-gate/tests/hook_freshness.rs` at one tree (`e098ad7^`): `modified|mtime` is
    **28 LINES and 42 OCCURRENCES.** Two panes published 28 and 42; **the conductor retracted the 28
@@ -2944,14 +2944,14 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    retraction says the method was wrong; staleness says the tree moved. The 28 is now dead for the
    second reason (39/50 at HEAD), not the first.
 
-8s. **A PATTERN MATCHING BOTH TEST ROWS AND SUMMARY ROWS MEASURES THE CLOCK.** Measured 2026-09-12:
+8x. **A PATTERN MATCHING BOTH TEST ROWS AND SUMMARY ROWS MEASURES THE CLOCK.** Measured 2026-09-12:
    `^test .* FAILED` swept in `test result: FAILED … finished in 0.28s`, which **carries a timing
    and therefore differs every run**, fabricating **11 newly-red and 11 newly-green** out of an
    empty difference. **A set difference over timing-bearing lines is GUARANTEED to look like a
    finding**, and a symmetric result is the shape that reads as real. Caught mid-measurement by the
    agent holding it, which is why it never shipped.
 
-8t. **AN ENVIRONMENT CLASS IS A PROPERTY OF `(leg, box)`, NOT OF THE LEG.** Measured 2026-09-12 when
+8y. **AN ENVIRONMENT CLASS IS A PROPERTY OF `(leg, box)`, NOT OF THE LEG.** Measured 2026-09-12 when
    two independent partitions of the SAME 14 lane reds disagreed on two rows — one calling them
    ABSENT, the other FOSSIL — **and both were right about their own box**: `contabo-3` has no
    `.git` at all, `contabo-1` has one with a stale 85-path index. The identical assertion is ABSENT
@@ -2962,6 +2962,38 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    ⭐ **And the ROOT class has a fix rather than a disclaimer: replace `chmod` with a DANGLING
    SYMLINK** — `read` fails `ENOENT` for every uid, so the error is injected where privilege cannot
    bypass it. That converts an environment-blocked leg into a real one.
+
+8z. **RE-MEASURE BEFORE FILING, AND PUT THE FIX WHERE THE WRONG ACTION WOULD BE TAKEN.** Two rules
+   from one incident, 2026-09-12, and both are about a REMEDY rather than a measurement.
+
+   ⭐ **(a) AN UNSATISFIABLE PAIR IS NOT ALWAYS A DEFECT IN EITHER CLAIM — SOMETIMES IT IS A TRUE
+   REPORT THAT THE WORLD HAS NOT CAUGHT UP YET.** `crates/omp-orchestrator/src/lib.rs` carried a
+   self-documented contradiction (*"TWO ASSERTIONS IN ONE FILE HOLD OPPOSITE VERDICTS ABOUT THE SAME
+   CRATE, so no edit to this list can satisfy both"*) and it **dissolved without anyone overriding
+   either assertion** — CI began invoking the crate, so `s1-coverage` became genuinely Reachable and
+   the row became genuinely stale. **Same shape as the `cargo-lane-budget` deletion the same night:
+   the IDENTICAL edit was WRONG before a spawn probe existed and RIGHT after it.** So the remedy for
+   an unsatisfiable pair is **RE-MEASURE, then file** — a bead filed against a dissolved
+   contradiction is a stale premise with a tracker id, and the conductor nearly filed exactly that.
+
+   ⭐⭐ **(b) THE DURABLE FIX IS OFTEN A SENTENCE PLACED WHERE THE WRONG ACTION WOULD BE TAKEN, NOT A
+   TRACKER ROW PLACED WHERE SOMEONE MIGHT READ IT.** Third instance in one session. What replaced
+   the contradiction is better than the bead either party would have written, because it sits AT the
+   row a future reader would restore:
+
+   > *"Acknowledgement is NOT owed: `advisory_gates()` is `!is_reachable()` … A host with no remote
+   > (rch worker) still classifies it Unreachable — `workflow_invokes && has_remote`, a HOST
+   > question about a REPO trigger, not a missing `Dies when`. **Do not restore to silence rch.**"*
+
+   **A bead is read by whoever opens the queue; a comment is read by whoever is about to do the
+   wrong thing.** For a defect whose remedy is *"do not do the obvious repair"*, the second is
+   strictly better placement — and it is the same reasoning behind this file's rule that a
+   superseding amendment must land AT the original text.
+
+   ⛔ **NO-CLAIM: this is not a licence to stop filing beads.** A comment cannot be queued,
+   assigned, graded or counted, and it is invisible to `bv`. The rule is about a NARROW class —
+   *"the obvious repair is the wrong one"* — where the reader you must reach is defined by the file
+   they have open, not by the queue they are working.
 
 8p. **EVERY DISPATCH REQUIRES A CALLBACK, BECAUSE A WORKER HAS NO WAKE TRIGGER.** Joshua's call,
    2026-09-07, fleet-wide. Landed in the dispatch template and synced to
