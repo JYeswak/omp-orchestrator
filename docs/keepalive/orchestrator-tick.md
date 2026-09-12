@@ -139,6 +139,29 @@ DELETE nothing — BUILT-not-WIRED in the other direction.** Option (A) is close
 3/7 incomplete, and the residual scraping is what **option B** exists to address. **Nobody dispatches
 one of these three without first naming the site whose scraper it deletes.** Spinner counts, if you
 need them, carry their regex: `[Ss]pinner` over `crates/*/src` = 77 raw / 16 files / 11 crates.
+
+⛔⛔ **AND BEFORE ANY FUTURE ADOPTION, READ THIS: `--panes` RETURNS ANOTHER PANE'S DATA WITH
+`success=true`.** Measured live 2026-09-12 against ntm `v1.31.0-4-ge4718530`, during `h5rr6`'s grade:
+
+```
+--inspect-index=99  ->  exit 1, success:false, PANE_NOT_FOUND, payload zeroed   CORRECT REFUSAL
+--inspect-index=1   ->  exit 0, success:true
+--panes=99          ->  EXIT 0, success TRUE, pane_index 0                       CONFIDENTLY WRONG
+```
+
+**The verb SILENTLY IGNORES `--panes` and answers about pane 0.** ⭐ **So this repo's
+populated-zeroed-payload rule is not the worst case: the worst case is ANOTHER PANE'S DATA PRESENTED
+AS YOURS.** Zeros look like absence and invite a second look; a plausible payload for the wrong pane
+does not. **"Key on `exit != 0`" is sound for this verb ONLY under `--inspect-index`** — under
+`--panes` the exit is 0 and the content is wrong, which no exit-code branch can catch.
+**An adopter MUST use `--inspect-index` and MUST REFUSE `--panes` rather than pass it through.**
+
+⛔ **AND `output.last_lines` IS ELIDED AND DECORATED, WHICH IS WHY FOUR READERS WERE REJECTED ON
+MEASUREMENT RATHER THAN JUDGEMENT.** A live capture contains the literal row `" ▏ … +58 more lines"`
+plus box glyphs and IRC ornament from the renderer. **So a receipt HASH over that text is unstable by
+construction, a bead id or a spinner frame can fall INSIDE the elision, and the reaper's product IS
+the text.** Probe the payload; do not reason about its field names.
+
 Option (B), the pane-side RPC bridge is DEFERRED as the typed endgame, so **`fphs buz1 uvps jw9z djte` stay
 blocked on purpose — do not force them.** (C) filed upstream.
 
