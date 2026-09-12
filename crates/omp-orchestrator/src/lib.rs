@@ -30,6 +30,7 @@
 
 pub mod spine_emit;
 pub mod dispatch_packet;
+pub mod mutation_minimality;
 pub mod cross_pane_hold;
 pub mod jsm_suggest;
 use std::collections::BTreeSet;

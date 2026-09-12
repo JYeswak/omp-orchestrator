@@ -258,6 +258,7 @@ fn live_ledger_mutation_site_debt_only_falls() {
     let mut missing = 0usize;
     let mut none = 0usize;
     let mut post_cutoff_seen = 0usize;
+    let mut post_cutoff_ids: Vec<String> = Vec::new();
 
     for (number, line) in text.lines().enumerate() {
         if line.trim().is_empty() {
@@ -306,6 +307,7 @@ fn live_ledger_mutation_site_debt_only_falls() {
             MutationClauseClass::Coarse(_) => {
                 if post {
                     post_cutoff_coarse += 1;
+                    post_cutoff_ids.push(id.to_owned());
                 } else {
                     pre_cutoff_coarse += 1;
                 }
@@ -333,12 +335,14 @@ fn live_ledger_mutation_site_debt_only_falls() {
          mutation clauses (a silent no-op wearing a falling ratchet)"
     );
 
+    post_cutoff_ids.sort();
     eprintln!(
         "SCAN: parsed={parsed} dispatchable={dispatchable} none={none} named={named} \
          missing={missing} pre_cutoff_coarse={pre_cutoff_coarse}/{PRE_CUTOFF_COARSE_CEILING} \
          post_cutoff_coarse={post_cutoff_coarse}/{POST_CUTOFF_COARSE_CEILING} \
          post_cutoff_seen={post_cutoff_seen}"
     );
+    eprintln!("SCAN: post_cutoff_coarse_ids={}", post_cutoff_ids.join(" "));
 
     assert!(
         pre_cutoff_coarse <= PRE_CUTOFF_COARSE_CEILING,

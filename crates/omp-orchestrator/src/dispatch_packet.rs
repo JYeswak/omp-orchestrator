@@ -611,9 +611,11 @@ pub fn render_grading_packet(
         Some("peer grade assignment — re-run acceptance, do not implement"),
         None,
     )?;
-    Ok(format!(
+    let mut packet = format!(
         "GRADE ASSIGNMENT (not implementation)\nObserver: {observer_pane} (may be WORKING; observer is not the grader).\nGrader pane: {grader_pane}\nDo not implement. Re-run the bead's acceptance. Close with MUTATION-VERIFIED if it holds; otherwise GAP/UNKNOWN.\nYou are not the author if your pane is distinct from ACK pane-scoped keys.\n\nCLOSE-REASON POLICY (emitted here because a packet that omits it owns the\nsilence it gets): if your close reason CITES A CARGO TEST FIGURE it MUST also\nname where that figure was produced -- `worker=<name>` for a remote run, or\n`local`. ack-spine refuses the row otherwise (CLOSE_REASON_WORKER_MISSING).\nMeasured 2026-09-11: 40 closes across six agents were left unlandable because\nno packet said this, so a whole session of grading could not reach the tree --\nand nobody but the closing agent can honestly supply the token afterwards.\n\n{work}"
-    ))
+    );
+    packet.push_str(&crate::mutation_minimality::grading_instruction());
+    Ok(packet)
 }
 
 #[cfg(test)]
@@ -853,6 +855,13 @@ mod tests {
         assert!(
             grade.contains("worker=<name>") && grade.contains("CLOSE_REASON_WORKER_MISSING"),
             "a grading packet must state the close-reason worker policy: {grade}"
+        );
+        assert!(
+            grade.contains("MINIMAL")
+                && grade.contains("SUPERSET")
+                && grade.contains("INERT")
+                && grade.contains("classify_mutation_minimality"),
+            "grading packet must carry fhsyv minimality instruction: {grade}"
         );
     }
 
