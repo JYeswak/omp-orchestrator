@@ -893,8 +893,22 @@ const NARROWING_ALLOWANCE: &[(&str, &str)] = &[
     // `usage:` string and `:853` inside `plan_queues`, so the rows had gone ORPHANED while the
     // casts were undeclared at their new lines — the bidirectional check caught both halves of
     // the same drift, which is the shape it was written for. One occurrence per file each.
+    //
+    // ⛔ RE-ANCHORED AGAIN 2026-09-12: `:1146` -> `:1153`, THE SAME ROW, ONE DAY LATER. That is
+    // the finding, not the fix. THIS TABLE IS KEYED BY `path:LINE`, so ANY edit that inserts a
+    // line above a declared cast breaks its row — and breaks it TWICE, because the bidirectional
+    // check then reports one ORPHANED allowance and one UNDECLARED site for a cast that never
+    // moved relative to its own function. ONE LINE-SHIFT, TWO FAILING ROWS: the identical shape
+    // as the `XC-PT-RESPONSE` rename in §6 of the registry (`omp-orchestrator-sc0h5`), with a
+    // line number playing the part the expression played there.
+    //
+    // A LINE-KEYED REGISTRY IS A DRIFT GENERATOR: its rows rot on edits that do not touch their
+    // subject, so the gate bills honest refactors for maintenance it did not cause. Re-anchoring
+    // is the cheap repair and it is NOT the remedy — the remedy is a key that survives motion
+    // (enclosing function, or occurrence-index within the file). Filed rather than done here,
+    // because changing the key changes what the gate can prove and that is not a drive-by edit.
     ("crates/loop-queue-filter/src/main.rs:282:output.code as u8", "ALLOWANCE CATEGORY-2: output.code forwards the child status under XC-PT-OUTPUT; range validation remains outside this gate."),
-    ("crates/omp-idle-dispatch/src/main.rs:1146:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate."),
+    ("crates/omp-idle-dispatch/src/main.rs:1153:exit as i32", "ALLOWANCE CATEGORY-2: exit forwards the child status into process::exit; range validation remains outside this gate. Re-anchored from `:1146` on 2026-09-12; see the note above on the line-key hazard."),
     ("crates/pane-oracle-diff/src/main.rs:103:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
     ("crates/pane-oracle-diff/src/main.rs:169:v.exit_code() as u8", "ALLOWANCE CATEGORY-2: v.exit_code() forwards the typed verdict under XC-PT-EXITCODE; range validation remains outside this gate."),
     ("crates/tick-dispatch/src/main.rs:385:exit as u8", "ALLOWANCE CATEGORY-2: exit forwards the child/status contract under XC-PT-EXIT; range validation remains outside this gate."),
