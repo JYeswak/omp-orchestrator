@@ -1,12 +1,15 @@
 # S1 gate residual — the non-PASS crates, ENUMERATED
 
 ```
-⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 6. Superseded FOUR times
+⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 5. Superseded FIVE times
    on 2026-09-11/12, each against a NEWER verdict-bearing run. Old figures are kept as
    SUPERSEDED rather than deleted, because a deleted number cannot be checked against the
    run that produced it.
+   ⛔ AND THE COUNT IN THIS HEADER IS THE MOST-FALSIFIED LINE IN THE REPOSITORY: 20 -> 6 -> 5
+   inside two days. It is superseded by the AUTHORITATIVE block below, not by this sentence.
+   If they disagree, the block wins and this line is stale AGAIN.
 
-AUTHORITATIVE  run 34670418396   headSha 83cb804e   conclusion=failure
+SUPERSEDED     run 34670418396   headSha 83cb804e   conclusion=failure
   GATE_RUNNER_FAILING      count=2  no-shell-gate, path-literal-guard
   GATE_RUNNER_UNMEASURABLE count=4  (unchanged: admission-reason, finding, loop-driver,
                                     loop-queue-filter)
@@ -37,6 +40,55 @@ AUTHORITATIVE  run 34670418396   headSha 83cb804e   conclusion=failure
      (34670112469) is in the same failing state, so the conversion is IN this tree and the
      crate fails on a DIFFERENT leg -- a strict-YAML duplicate-key assertion in
      gate_reachability.rs, which is the crate that reads AGENTS.md/README.md/CLAUDE.md.
+
+AUTHORITATIVE  THREE CONSECUTIVE VERDICT-BEARING RUNS, IDENTICAL NUMBERS, THREE DIFFERENT TREES
+  34680036272  481f6afd  failure  |  34680337115  98c2d491  failure  |  34680728807  aaab351f  failure
+  ALL THREE:  pass=89 fail=1 unmeasurable=4   against GATE_RUNNER_PLAN crates=94  (89+1+4 = 94)
+  GATE_RUNNER_FAILING      count=1  no-shell-gate
+  GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
+                                    finding:MISSING_EXECUTABLE,
+                                    loop-driver:POLICY_UNAVAILABLE,
+                                    loop-queue-filter:MISSING_EXECUTABLE
+  non-PASS = 5.
+
+  ⭐⭐ THIS IS THE FIRST STABLE READING THIS FILE HAS EVER CARRIED, and stability is a stronger
+     result than any single verdict. This document's own warning is that the failure count moves
+     in BOTH directions run to run and that a trend from two samples is a figure wearing a
+     narrative. Three consecutive runs over three distinct heads returning byte-identical
+     counts AND identical name lists is not a trend -- it is a repeated measurement. Cite the
+     stability, not the delta.
+
+  ⭐ AND THE ENTRY BELOW PREDICTED path-literal-guard's DEPARTURE AND THE PREDICTION HELD.
+     It stated: the red "is EXPECTED HERE, NOT A REGRESSION -- the fix is 1a436be
+     (REPO_WIDE_SUBDIRS={src,tests}) which POSTDATES this run's head ... its verdict is PENDING
+     ... the next push produces it." It did. path-literal-guard is ABSENT from the failing set
+     in all three runs above. A prediction written into this file, dated against a specific
+     commit, and confirmed by the next verdict -- which is what a pending verdict is FOR.
+
+  ⭐ omp-orchestrator's DEPARTURE IS ALSO CONFIRMED AND ATTRIBUTABLE. It sat at
+     ALL_TESTS_SKIPPED/UNMEASURABLE on 3c70915e; AdmissionFix's compile fix 4fe7452 restored
+     coverage and the crate is ABSENT from both lists in all three runs -- it PASSES.
+     ⛔ THE CONDUCTOR PREDICTED THIS WOULD COME BACK RED ("coverage returning, not a
+     regression") AND BROADCAST THAT TO THREE PANES. IT CAME BACK GREEN. The retraction is
+     recorded here because the prediction was wrong in the flattering-to-misread direction: had
+     the fleet believed it, a real repair would have read as a second coverage collapse.
+     The ALL_TESTS_SKIPPED window was hiding a HEALTHY crate.
+
+  ⛔ no-shell-gate IS NOW THE SOLE FAILING CRATE IN THE WORKSPACE, across all three runs.
+     fail=1 IS NOT "nearly done" -- one crate carries any number of red legs, and
+     InvMapRed measured it as "a large pre-existing failing set plus the live
+     watcher-unwiring regression", which is why it declined to publish a suite figure from it.
+     The partition of that set (PRODUCT vs ENVIRONMENT vs REGISTRY-DRIFT, WITH its denominator
+     of legs and targets ATTEMPTED) is omp-orchestrator-sc0h5, whose own acceptance asserts
+     "45 legs across 22 targets" -- a TRANSCRIBED COUNT under re-derivation, not a fact.
+
+  ⛔ AND loop-queue-filter:MISSING_EXECUTABLE IN THESE THREE RUNS IS NOT A LIVE DEFECT.
+     620b991 DELETED that false precondition -- 73 measurable legs were being declined for a
+     tool the suite never needs, its own legs fixturing a 0o755 bv at
+     selector_unavailable.rs:51-55. `git merge-base --is-ancestor 620b991 aaab351f` -> NO.
+     THE DELETION POSTDATES ALL THREE HEADS. Its run (34681145274) was still RUNNING when this
+     entry was written, so the deletion's effect is UNMEASURED IN CI. Nobody reads this row as
+     the fix failing, and nobody re-files it.
 
 SUPERSEDED     run 34666855450   headSha 5d3ef562   conclusion=failure
   GATE_RUNNER_FAILING      count=2  no-shell-gate, omp-orchestrator
