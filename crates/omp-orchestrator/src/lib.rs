@@ -411,16 +411,13 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("extraction-roster", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("refill-idle-panes", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("response-envelope-check", "lib with no manifest caller; entered census 2026-09-02 by derived membership, untriaged"),
-    // ⛔⛔ RESTORED 2026-09-11 AFTER A MEASURED CONTRADICTION IN THIS CRATE'S OWN CENSUS.
-    // `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails` reports this row STALE
-    // ("s1-coverage (now REACHABLE -- delete the row)"), while
-    // `every_advisory_unreachable_row_is_named_in_the_allowance` lists "s1-coverage" among the
-    // crates that are UNREACHABLE and therefore MUST be named here. Deleting the row satisfies
-    // the first and violates the second; keeping it does the reverse. TWO ASSERTIONS IN ONE
-    // FILE HOLD OPPOSITE VERDICTS ABOUT THE SAME CRATE, so no edit to this list can satisfy
-    // both and the fix belongs in whichever reachability predicate is wrong -- not here.
-    // Kept, because keeping it is the state that was already reviewed.
-    ("s1-coverage", "advisory-unreachable: S1 depth is suspended by Atlas Arc R1 and the HD-0012 hook decision pending Joshua approval; no production caller is honest while S1 is frozen. Dies when an approved S1 build wave wires this crate into an in-tree production caller; delete this allowance row then"),
+    // ⛔ 2026-09-12 (73w7w): s1-coverage row DELETED. CI run 34666855450 classified it
+    // REACHABLE (`gate.yml` `-p s1-coverage`) and stale-allowance was the crate's only
+    // FAILING test. `crate_reachability` requires `workflow_invokes && has_remote`.
+    // A Contabo worker has no git remote, so the same delete reddens
+    // `the_ratchet_deadline_*` there (`unacknowledged advisory`). That red is
+    // HOST-SHAPED, not the naming-leg contradiction of 2026-09-11.
+    // CI is the oracle for this flagship red. Do not restore to silence rch.
     ("silent-success-census", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("tick-dispatch", "bin with no invocation site; entered census 2026-09-02 by derived membership, untriaged"),
     ("m2-grading-lane", "instrument limitation: source caller scan cannot see its launchd trigger; owner=pane=%19; dies_when=reachability consumes launchd metadata or the crate gains an in-tree source caller"),
@@ -428,7 +425,8 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("cargo-lane-budget", "invoked by fast-dispatch admission via Command::new(FD_BUDGET else ~/.local/bin/cargo-lane-budget) --check (fast-dispatch/src/main.rs:855-858); env-resolved spawns from non-gate binaries are outside the probed surfaces; entered census 2026-09-11 by derived membership. Dies when a spawn probe exists or it gains runnable gate checks."),
-    ("contabo-reclaim", "bin-only; sole in-repo trigger is CI workflow_dispatch test step (.github/workflows/contabo-reclaim.yml:21, human-only); consumes external control-plane rch-reclaim-owner, unrunnable in gate-runner. Dies when a scheduled in-repo lane invokes it."),
+    // 73w7w: contabo-reclaim row deleted with s1-coverage. CI: `-p contabo-reclaim`
+    // in contabo-reclaim.yml → REACHABLE. Same host-shaped rch residual.
     ("dispatcher-deadman", "Rust bin selftest/differential-only; every live reference resolves to bin/dispatcher-deadman.sh, absent from this checkout (loop-tick/src/lib.rs:1002-1006). Dies when the shell oracle lands in-repo or the Rust bin gains a caller."),
     ("fast-dispatch", "scheduled operation attested by lockfile plus cron-parent classifier (src/lib.rs:261-278) but no schedule surface visible in repo or live crontab (checked 2026-09-11); outbounds spawn four bins, inbound none. Dies when its schedule source is named in-repo."),
     ("fleet-monitor", "scheduled OBSERVE lane (lock protocol, lane telemetry, standing-verdict ledger); no hook/workflow/launchd/stanza/caller visible; live schedule not observable from repo. Dies when its schedule surface is named."),
