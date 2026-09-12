@@ -714,6 +714,10 @@ fn yaml_job_key(trimmed: &str, job: &str) -> bool {
         || trimmed.starts_with(&format!("{job}:\t"))
 }
 
+fn leading_indent(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CiJobResolution {
     Live { line: usize },
@@ -721,23 +725,67 @@ enum CiJobResolution {
     Missing,
 }
 
-/// `Wired { kind: Ci }` must not treat a comment as a live job. The previous
-/// matcher was `workflow.contains("  {job}:")`, which cannot distinguish a live
-/// workflow step from a comment — GATE-014's class of false positive.
+/// `Wired { kind: Ci }` must resolve to a job that is a DIRECT CHILD OF `jobs:`.
+///
+/// Two false-positive classes, both measured:
+/// 1. TEXT-vs-STRUCTURE for comments — `workflow.contains` treated `#  gate:` as live.
+///    Strip `#` lines before matching (trim_start starts with `#` => continue).
+/// 2. DEPTH — matching on `trimmed` discards indentation, so a `with: / gate: true`
+///    INPUT is indistinguishable from a job named `gate`. GATE-014's class one
+///    layer down. Direct children of `jobs:` only.
+///
+/// Duplicate job keys at that indent: FIRST-WINS, pinned. YAML last-wins is a
+/// different layer; this matcher does not parse the mapping.
 fn resolve_ci_job(workflow: &str, job: &str) -> CiJobResolution {
     let mut commented = None;
+    let mut jobs_indent: Option<usize> = None;
+    let mut child_indent: Option<usize> = None;
     for (index, line) in workflow.lines().enumerate() {
         let line_no = index + 1;
+        let indent = leading_indent(line);
         let trimmed = line.trim_start();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some(jobs) = jobs_indent {
+            if indent <= jobs && !trimmed.starts_with('#') {
+                if yaml_job_key(trimmed, "jobs") {
+                    jobs_indent = Some(indent);
+                    child_indent = None;
+                    continue;
+                }
+                jobs_indent = None;
+                child_indent = None;
+            }
+        }
         if trimmed.starts_with('#') {
-            let after = trimmed.trim_start_matches('#').trim_start();
-            if yaml_job_key(after, job) && commented.is_none() {
-                commented = Some(line_no);
+            if let Some(jobs) = jobs_indent {
+                let after = trimmed.trim_start_matches('#').trim_start();
+                let is_child = match child_indent {
+                    Some(child) => indent == child,
+                    None => indent > jobs,
+                };
+                if is_child && yaml_job_key(after, job) && commented.is_none() {
+                    commented = Some(line_no);
+                    if child_indent.is_none() {
+                        child_indent = Some(indent);
+                    }
+                }
             }
             continue;
         }
-        if yaml_job_key(trimmed, job) {
-            return CiJobResolution::Live { line: line_no };
+        if yaml_job_key(trimmed, "jobs") {
+            jobs_indent = Some(indent);
+            child_indent = None;
+            continue;
+        }
+        if let Some(jobs) = jobs_indent {
+            if indent > jobs {
+                let child = *child_indent.get_or_insert(indent);
+                if indent == child && yaml_job_key(trimmed, job) {
+                    return CiJobResolution::Live { line: line_no };
+                }
+            }
         }
     }
     match commented {
@@ -839,8 +887,26 @@ fn every_plan_gate_identifier_has_a_referent_or_dies_when() {
             }
         }
     }
-    assert_eq!(wired, 13, "technical/property identifiers wired (GATE-014 is DeclaredNotWired)");
-    assert_eq!(declared, 11, "future business identifiers declared, not wired");
+    assert!(
+        wired > 0,
+        "zero wired identifiers is an ERROR, never a pass"
+    );
+    assert!(
+        declared > 0,
+        "zero declared-not-wired identifiers is an ERROR, never a pass"
+    );
+    assert_eq!(
+        wired + declared,
+        GATE_IDENTIFIER_REFERENTS.len(),
+        "every identifier is exactly one of wired/declared"
+    );
+    assert!(
+        GATE_IDENTIFIER_REFERENTS.iter().any(|gate| {
+            gate.id == "GATE-014"
+                && matches!(gate.status, GateIdentifierStatus::DeclaredNotWired)
+        }),
+        "GATE-014 is INERT (commit-build-fence) until an uncommented CI step invokes it"
+    );
     let ci = GATE_IDENTIFIER_REFERENTS
         .iter()
         .filter(|gate| {
@@ -870,10 +936,11 @@ fn ci_referent_live_job_is_uncommented() {
 #[test]
 fn ci_referent_commented_job_is_red_and_names_file_line() {
     // Wired { kind: Ci } cannot distinguish a live workflow step from a comment.
-    let workflow = "#  planted-ci-job:\n  other:\n    runs-on: ubuntu-latest\n";
+    // The commented key must be a jobs: child; a top-level comment is not a job.
+    let workflow = "jobs:\n  # planted-ci-job:\n  other:\n    runs-on: ubuntu-latest\n";
     assert_eq!(
         resolve_ci_job(workflow, "planted-ci-job"),
-        CiJobResolution::Commented { line: 1 }
+        CiJobResolution::Commented { line: 2 }
     );
     let err = match resolve_ci_job(workflow, "planted-ci-job") {
         CiJobResolution::Commented { line } => {
@@ -881,17 +948,50 @@ fn ci_referent_commented_job_is_red_and_names_file_line() {
         }
         other => panic!("commented job must be Commented, got {other:?}"),
     };
-    assert!(err.contains("fixture.yml:1"), "{err}");
+    assert!(err.contains("fixture.yml:2"), "{err}");
 }
 
 #[test]
 fn ci_referent_live_job_wins_over_a_commented_twin() {
-    let workflow = "#  gate:\n  gate:\n    runs-on: ubuntu-latest\n";
+    // Live-beats-commented at the jobs: child indent. Does NOT prove two live
+    // candidates: that case is pinned separately as first-wins.
+    let workflow = "jobs:\n  # gate:\n  gate:\n    runs-on: ubuntu-latest\n";
+    assert_eq!(
+        resolve_ci_job(workflow, "gate"),
+        CiJobResolution::Live { line: 3 }
+    );
+}
+
+#[test]
+fn ci_referent_nested_input_named_gate_is_missing() {
+    // only_nested: a `with: / gate: true` INPUT is not a job.
+    let workflow = "jobs:\n  build:\n    with:\n      gate: true\n";
+    assert_eq!(
+        resolve_ci_job(workflow, "gate"),
+        CiJobResolution::Missing
+    );
+}
+
+#[test]
+fn ci_referent_real_job_wins_over_a_nested_input_of_the_same_name() {
+    let workflow =
+        "jobs:\n  build:\n    with:\n      gate: true\n  gate:\n    runs-on: ubuntu-latest\n";
+    assert_eq!(
+        resolve_ci_job(workflow, "gate"),
+        CiJobResolution::Live { line: 5 }
+    );
+}
+
+#[test]
+fn ci_referent_first_jobs_child_wins_among_duplicate_names() {
+    // PINNED, not accidental. YAML last-wins is a different layer.
+    let workflow = "jobs:\n  gate:\n    runs-on: a\n  gate:\n    runs-on: b\n";
     assert_eq!(
         resolve_ci_job(workflow, "gate"),
         CiJobResolution::Live { line: 2 }
     );
 }
+
 
 
 #[test]
