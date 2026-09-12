@@ -939,6 +939,40 @@ pub fn lint_paths<P: AsRef<Path>>(root: &Path, paths: &[P]) -> LintReport {
     finish(ScanMode::StagedPaths, scanned, findings)
 }
 
+/// Lint STAGED BLOBS: the bytes the commit is made of, supplied by the caller.
+///
+/// THE DEFECT THIS CLOSES (`omp-orchestrator-249hz`, sixth instance). [`lint_paths`]
+/// selects the STAGED SET and then reads each file from the WORKTREE -- its own error
+/// string says *"cannot read staged {path}"* about bytes that are not staged. In a
+/// twelve-agent shared checkout the two trees diverge constantly, and both directions are
+/// real: a wildcard arm that IS staged but already fixed in the worktree passes the gate
+/// and lands (the false green), and one present only in the unstaged worktree refuses a
+/// commit that does not contain it (the false red). Measured on the mirror file the same
+/// day: worktree 13856429 B / 434 closed rows against index 13796127 B / 428.
+///
+/// The caller supplies `(repo-relative name, source)` pairs read with `git show :<path>`,
+/// so this function touches no filesystem at all and cannot read the wrong tree. Scope is
+/// still decided HERE, by [`is_in_scan_scope`], so the staged and repo-wide modes cannot
+/// drift apart on which files count -- `staged_mode_over_the_whole_tree_equals_repo_wide`
+/// remains the standing proof.
+///
+/// `lint_paths` stays for the `state-wildcard-lint --staged <paths>` CLI and the sweep,
+/// where the worktree IS the subject the operator asked about. On the COMMIT path it is
+/// the wrong reader, and the commit path no longer calls it.
+pub fn lint_sources<N: AsRef<str>, S: AsRef<str>>(sources: &[(N, S)]) -> LintReport {
+    let mut scanned = Vec::new();
+    let mut findings = Vec::new();
+    for (name, source) in sources {
+        let name = name.as_ref();
+        if !is_in_scan_scope(Path::new(name)) {
+            continue;
+        }
+        scanned.push(name.to_owned());
+        findings.extend(scan_source(name, source.as_ref()));
+    }
+    finish(ScanMode::StagedPaths, scanned, findings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

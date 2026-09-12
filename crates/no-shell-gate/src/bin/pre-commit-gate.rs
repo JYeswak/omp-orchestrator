@@ -384,7 +384,47 @@ fn main() -> ExitCode {
     // never staged. Scoping one gate and leaving the other would have moved
     // the fleet block, not removed it. The sweep survives as
     // `state-wildcard-lint <root>` and `cargo test -p state-wildcard-lint`.
-    let swl_report = state_wildcard_lint::lint_paths(&repo_root, &staged);
+    //
+    // AND IT NOW READS THE STAGED BLOBS, not the worktree (omp-orchestrator-249hz, sixth
+    // instance, and the third call site in this binary to need it after :349 and :1400).
+    // `lint_paths` selected the STAGED SET and then read each file with
+    // `fs::read_to_string` -- its own error string says "cannot read staged {path}" about
+    // bytes that are not staged. The dangerous direction needs nothing exotic: `git add`,
+    // keep fixing, `git commit` with no pathspec, and a staged wildcard arm lands while
+    // the gate reads the repaired worktree and says CLEAN.
+    //
+    // A path in the staged set with NO INDEX ENTRY is a staged DELETION and is skipped --
+    // a deleted file has no content to lint, and refusing it would be an unsatisfiable
+    // gate. Any OTHER read failure is a REFUSAL that names the path: an unreadable staged
+    // file must never pass as "nothing found", which is the vacuous skip this binary
+    // already removed from GATE 2.
+    let mut swl_sources: Vec<(String, String)> = Vec::new();
+    for staged_file in &staged {
+        if !state_wildcard_lint::is_in_scan_scope(Path::new(staged_file)) {
+            continue;
+        }
+        match staged_blob(&repo_root, staged_file) {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(source) => swl_sources.push((staged_file.clone(), source)),
+                Err(_) => refusals.push(format!(
+                    "state-wildcard-lint: staged blob for {staged_file} is not UTF-8 -- an \
+                     undecodable staged file is a REFUSAL, never a skip"
+                )),
+            },
+            Err(why) if staged_path_is_deleted(&repo_root, staged_file) => {
+                let _ = writeln!(
+                    io::stderr(),
+                    "state-wildcard-lint: skipping {staged_file} -- staged DELETION, no index \
+                     entry to lint ({why})"
+                );
+            }
+            Err(why) => refusals.push(format!(
+                "state-wildcard-lint: cannot read STAGED blob for {staged_file}: {why} -- an \
+                 unreadable staged file is a REFUSAL, never a pass"
+            )),
+        }
+    }
+    let swl_report = state_wildcard_lint::lint_sources(&swl_sources);
     match swl_report.verdict() {
         state_wildcard_lint::Verdict::Violation | state_wildcard_lint::Verdict::VacuousError => {
             if let Some(error) = &swl_report.error {
@@ -813,6 +853,27 @@ fn staged_blob(repo_root: &Path, path: &str) -> Result<Vec<u8>, String> {
             "git show {stage_spec} exceeded deadline; group killed"
         )),
         subprocess_contract::BoundedOutcome::Unspawned(error) => Err(error.to_string()),
+    }
+}
+
+/// True when `path` has NO ENTRY in the index: a staged deletion, or never tracked.
+///
+/// PROSE-FREE, deliberately. The alternative is matching `git show`'s English failure
+/// text, which is locale-dependent and would make a gate's verdict depend on `LC_ALL`.
+/// `git ls-files --stage -- <path>` prints one record when the path is in the index and
+/// NOTHING when it is not, so absence is read off an empty stdout. A git that fails or
+/// times out here answers NEITHER question, so it is reported as "not deleted" and the
+/// caller's read error stands as the refusal -- an unknown must never become a skip.
+fn staged_path_is_deleted(repo_root: &Path, path: &str) -> bool {
+    let mut command = std::process::Command::new("git");
+    command
+        .current_dir(repo_root)
+        .args(["ls-files", "--stage", "--", path]);
+    match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(10)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().is_empty()
+        }
+        _ => false,
     }
 }
 
