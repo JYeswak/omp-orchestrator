@@ -26,6 +26,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use no_shell_gate::{check_repo, scan, tracked_files, GateError, Verdict, Violation};
 
+mod common;
+
 // ---------------------------------------------------------------- helpers
 
 fn repo_root() -> PathBuf {
@@ -285,8 +287,17 @@ fn missing_git_metadata_fails_closed() {
 /// even when CI is skipped entirely.
 #[test]
 fn this_repo_is_clean() {
+    let root = repo_root();
+    // A BOX THAT CANNOT NAME A COMMIT CANNOT SAY THIS REPOSITORY IS CLEAN
+    // (`omp-orchestrator-typed-unreadable-roster-tihld`). `rch` strips `.git/`, so on the
+    // lane `check_repo` returned `GitFailed("fatal: not a git repository")` and this leg
+    // reported the REPOSITORY dirty when what was missing was the repository. The verdict
+    // below is UNCHANGED on any box that can read: a tracked `.sh` still fails here.
+    let Some(_) = common::paths_or_unmeasured(&root, "this_repo_is_clean", "crates") else {
+        return;
+    };
     assert_eq!(
-        check_repo(&repo_root()).expect("gate must render a verdict on this repo"),
+        check_repo(&root).expect("gate must render a verdict on this repo"),
         Verdict::Clean,
         "a tracked .sh or .py is in the index — port it to Rust; the \
          exemption list is empty by design"
@@ -388,6 +399,15 @@ fn the_scan_set_is_this_repository_and_not_a_fragment_of_one() {
 /// exit 0 while the tree is clean.
 #[test]
 fn binary_is_green_on_this_repo() {
+    // Same discriminator as `this_repo_is_clean`: with no repository to read, the binary
+    // exits 2 with `git ls-files failed: fatal: not a git repository`, and asserting 0
+    // there measures the box. On a readable tree this leg is unchanged -- exit 0 and
+    // `ok:` are still required, and a planted `.sh` still reddens
+    // `binary_exits_1_on_planted_shell` beside it.
+    let Some(_) = common::paths_or_unmeasured(&repo_root(), "binary_is_green_on_this_repo", "crates")
+    else {
+        return;
+    };
     let (code, stdout, stderr) = run_gate(None);
     assert_eq!(
         code,
@@ -425,4 +445,157 @@ fn binary_exits_2_on_empty_index() {
         Some(2),
         "empty index must exit 2 (error), never 0: {stderr}"
     );
+}
+
+/// THE ADJUDICATING ARM, FIXTURED -- because no worker can reach it.
+///
+/// `omp-orchestrator-typed-unreadable-roster-tihld`. On this lane every box either has no
+/// `.git` (contabo-3) or a repository that cannot name a commit, so the legs above take
+/// the UNMEASURED path and prove nothing there. An unfixtured conversion is a suppression
+/// nobody has exercised, so all three answers are exercised here instead:
+///
+/// ```text
+/// READABLE   a committed crate is listed; a STAGED-ONLY crate is NOT  -> the discriminator
+/// NO REPO    a directory with no .git                                 -> typed UNREADABLE
+/// UNBORN     `git init` with no commit                                -> typed UNREADABLE
+/// ```
+///
+/// The staged-only crate is what makes this a COMMIT read rather than an index read: it is
+/// in the index and not in the commit, so a listing that includes it came from `ls-files`.
+#[test]
+fn the_typed_roster_reads_the_commit_and_names_a_tree_that_has_none() {
+    let dir = fresh_git_tree("typed-roster");
+    stage(&dir, "crates/committed-crate/Cargo.toml", "[package]\n");
+    run_git(
+        &dir,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "fixture baseline [test]",
+        ],
+        "commit fixture baseline",
+    );
+    stage(&dir, "crates/staged-crate/Cargo.toml", "[package]\n");
+    fs::create_dir_all(dir.join("crates/untracked-crate")).expect("create untracked crate");
+    fs::write(dir.join("crates/untracked-crate/Cargo.toml"), "[package]\n")
+        .expect("write untracked manifest");
+
+    let (names, rev) = common::committed_crate_names(&dir).expect("a committed tree yields a roster");
+    assert_eq!(
+        names,
+        vec!["committed-crate".to_owned()],
+        "the roster must carry the COMMIT: a staged-only or untracked crate is invisible to CI \
+         and must be invisible here"
+    );
+    assert_eq!(rev.len(), 40, "the roster must name the commit it came from: {rev}");
+    assert!(
+        common::paths_or_unmeasured(&dir, "fixture", "crates").is_some(),
+        "a readable tree must produce a listing, not an UNMEASURABLE"
+    );
+
+    // ⛔ THE ANTI-SHRUG LEG: A READABLE ROSTER STILL PRODUCES A REAL VERDICT, AND STILL
+    // FAILS. Without this the conversion above is indistinguishable from turning four
+    // gates into "I could not read the roster" on every box. Same fixture, now with a
+    // tracked `.sh` in it: the roster reads, and the gate REFUSES.
+    stage(&dir, "tool.sh", "#!/bin/sh\necho no\n");
+    run_git(
+        &dir,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "planted shell [test]",
+        ],
+        "commit planted shell",
+    );
+    assert!(
+        common::paths_or_unmeasured(&dir, "fixture-violation", "crates").is_some(),
+        "the fixture must still be READABLE, or the verdict below proves nothing"
+    );
+    match check_repo(&dir).expect("a readable tree must render a verdict") {
+        Verdict::Violations(found) => assert!(
+            found.iter().any(|violation: &Violation| violation.path.ends_with("tool.sh")),
+            "a readable roster must still name the planted shell: {found:?}"
+        ),
+        Verdict::Clean => {
+            panic!("a tracked .sh on a READABLE tree must FAIL -- an UNMEASURABLE-everywhere gate is a shrug")
+        }
+    }
+
+    // NO REPOSITORY: the contabo-3 shape.
+    let bare = std::env::temp_dir().join(format!(
+        "no-shell-gate-{}-typed-roster-norepo-{}",
+        std::process::id(),
+        FIXTURE_SEQ.fetch_add(1, Ordering::SeqCst)
+    ));
+    fs::create_dir_all(&bare).expect("create non-repo dir");
+    match common::committed_crate_names(&bare) {
+        Err(source) => {
+            let reason = source.blocked_reason().unwrap_or_default().to_owned();
+            assert!(
+                reason.contains("git"),
+                "a gitless tree must say WHICH command could not answer: {reason}"
+            );
+        }
+        Ok((names, _)) => panic!("a gitless tree must not yield a roster: {names:?}"),
+    }
+
+    // UNBORN HEAD: a repository that exists and cannot name a commit.
+    let unborn = fresh_git_tree("typed-roster-unborn");
+    match common::committed_crate_names(&unborn) {
+        Err(source) => {
+            let reason = source.blocked_reason().unwrap_or_default().to_owned();
+            assert!(
+                reason.contains("rev-parse") || reason.contains("HEAD"),
+                "an unborn HEAD must name the revision it could not resolve: {reason}"
+            );
+        }
+        Ok((names, _)) => panic!("an unborn HEAD must not yield a roster: {names:?}"),
+    }
+
+    // READABLE AND EMPTY IS STILL AN ERROR, and a DIFFERENT one: the two must never collapse.
+    let empty = fresh_git_tree("typed-roster-empty");
+    stage(&empty, "README.md", "no crates here\n");
+    run_git(
+        &empty,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "-qm",
+            "no crates [test]",
+        ],
+        "commit crate-free fixture",
+    );
+    match common::committed_crate_names(&empty) {
+        Err(source) => {
+            let reason = source.blocked_reason().unwrap_or_default().to_owned();
+            assert!(
+                reason.contains("is an ERROR, never a clean bill"),
+                "a readable but crate-free commit must be an ERROR naming emptiness, not an \
+                 unreadable tree: {reason}"
+            );
+            // AND IT MUST NOT LOOK LIKE AN UNREADABLE TREE: the reason names the COMMIT it
+            // read, which the git-failure arms cannot do. That is the distinction the two
+            // answers must never lose.
+            assert!(
+                reason.starts_with("commit ") && !reason.contains("`git"),
+                "an empty answer must name the commit it read, never a failed command: {reason}"
+            );
+        }
+        Ok((names, _)) => panic!("a crate-free commit must not yield a roster: {names:?}"),
+    }
+
+    for path in [dir, bare, unborn, empty] {
+        fs::remove_dir_all(path).expect("fixture cleanup");
+    }
 }

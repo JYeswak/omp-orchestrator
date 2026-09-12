@@ -34,6 +34,8 @@
 
 use std::path::PathBuf;
 
+mod common;
+
 /// Re-recorded 2026-09-05 BY THIS GATE'S OWN SCAN: 9 pid-only kill sites
 /// (was 30). Count FELL — sites converted, not added. Dies when the last
 /// non-kernel `.kill()` routes through subprocess-contract; then LOWER.
@@ -60,17 +62,14 @@ fn code_only(text: &str) -> String {
     text_structure::code_only(text).into_owned()
 }
 
-fn pid_kill_sites(root: &std::path::Path) -> Option<Vec<String>> {
-    let out = std::process::Command::new("git")
-        .args(["ls-files", "crates"])
-        .current_dir(root)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
+/// The scan, over the paths the COMMIT carries.
+///
+/// `None` no longer means "git failed" -- it cannot, because the read is typed now and
+/// the caller has already been told WHY. This returns the hits over a listing it was
+/// handed, so an unreadable tree never reaches here at all.
+fn pid_kill_sites(root: &std::path::Path, tracked: &[String]) -> Vec<String> {
     let mut hits = Vec::new();
-    for rel in String::from_utf8_lossy(&out.stdout).lines() {
+    for rel in tracked.iter().map(String::as_str) {
         if !rel.ends_with(".rs") || rel.contains("/tests/") {
             continue;
         }
@@ -87,7 +86,7 @@ fn pid_kill_sites(root: &std::path::Path) -> Option<Vec<String>> {
             }
         }
     }
-    Some(hits)
+    hits
 }
 
 #[test]
@@ -96,9 +95,19 @@ fn the_pid_only_kill_count_only_falls() {
         eprintln!("SKIP the_pid_only_kill_count_only_falls: no repo root");
         return;
     };
-    let Some(hits) = pid_kill_sites(&root) else {
-        panic!("git ls-files failed; an unreadable listing must not read as a pass");
+    let Some((tracked, rev)) = common::paths_or_unmeasured(
+        &root,
+        "the_pid_only_kill_count_only_falls",
+        "crates",
+    ) else {
+        return;
     };
+    let hits = pid_kill_sites(&root, &tracked);
+    println!(
+        "PID_KILL_SCAN rev={rev} tracked_paths={} hits={}",
+        tracked.len(),
+        hits.len()
+    );
 
     // ANTI-VACUITY: ~30 sites measured. A collapse means the scan broke, not that the
     // workspace stopped killing processes. `citation_integrity` failed exactly this way today,

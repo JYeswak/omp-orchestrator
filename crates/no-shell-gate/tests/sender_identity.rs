@@ -75,6 +75,8 @@ use std::time::Duration;
 
 use subprocess_contract::{bounded_output, BoundedOutcome};
 
+mod common;
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -446,6 +448,25 @@ fn scan(root: &Path) -> Scan {
     scan_roster(root, &tracked_crates(root))
 }
 
+/// The scan, or a NAMED UNKNOWN (`omp-orchestrator-typed-unreadable-roster-tihld`).
+///
+/// The roster comes from the COMMIT through the shared typed read, so a box that cannot
+/// name one reports `GATE_RUNNER_UNMEASURABLE` and this suite renders no verdict --
+/// instead of scanning an EMPTY roster and firing `SENDER_SCAN_EMPTY`, which blamed the
+/// scan for an environment that was never able to answer. The vacuity guards below are
+/// UNCHANGED and still fire on a readable roster that really is empty.
+fn scan_or_unmeasured(root: &Path, leg: &str) -> Option<Scan> {
+    let (names, rev) = common::crate_names_or_unmeasured(root, leg)?;
+    let scanned = scan_roster(root, &names);
+    println!(
+        "SENDER_SCAN rev={rev} crates={} files={} sites={}",
+        scanned.crates,
+        scanned.files,
+        scanned.sites.len()
+    );
+    Some(scanned)
+}
+
 // ---------------------------------------------------------------------------------------
 // The allowance
 // ---------------------------------------------------------------------------------------
@@ -604,7 +625,9 @@ fn dispatch(session: &str, pane: &str, packet: &str) -> Vec<String> {
 #[test]
 fn every_dispatch_site_renders_a_from_line() {
     let root = repo_root();
-    let scanned = scan(&root);
+    let Some(scanned) = scan_or_unmeasured(&root, "every_dispatch_site_renders_a_from_line") else {
+        return;
+    };
     let complaints = unidentified_sites(&scanned).expect("the real scan must not be vacuous");
     assert!(
         complaints.is_empty(),
@@ -624,17 +647,21 @@ fn an_empty_dispatch_site_set_is_an_error() {
 
     // POSITIVE CONTROL 1: the roster is real. Floor seeded from this suite's own
     // measurement (56 tracked manifests on 2026-09-02) and set far enough below it that
-    // ordinary growth does not trip it, far enough above zero that a broken git does.
-    let roster = tracked_crates(&root);
+    // ordinary growth does not trip it, far enough above zero that a SHORT roster does.
+    // A roster that could not be READ no longer reaches this floor at all -- it is
+    // reported UNMEASURABLE above, because "git could not answer" and "git answered with
+    // too few crates" are different findings and this assert can only speak to the second.
+    let Some(scanned) = scan_or_unmeasured(&root, "an_empty_dispatch_site_set_is_an_error") else {
+        return;
+    };
     assert!(
-        roster.len() > 40,
-        "only {} tracked crate manifest(s) from `git ls-files` — if git is failing here \
-         the roster is a lie and every clean bill below it is vacuous",
-        roster.len()
+        scanned.crates > 40,
+        "only {} crate(s) in the committed roster -- a roster this short means the tree \
+         lost crates, and every clean bill below it is vacuous",
+        scanned.crates
     );
 
     // POSITIVE CONTROL 2: the tokenizer finds literals that are known to be present.
-    let scanned = scan(&root);
     assert!(
         scanned.files >= 100,
         "only {} source file(s) scanned across {} crates",
@@ -744,7 +771,11 @@ fn a_planted_dispatch_site_with_a_from_line_passes() {
 #[test]
 fn every_allowance_row_carries_a_reason_and_names_a_real_site() {
     let root = repo_root();
-    let scanned = scan(&root);
+    let Some(scanned) =
+        scan_or_unmeasured(&root, "every_allowance_row_carries_a_reason_and_names_a_real_site")
+    else {
+        return;
+    };
     assert!(
         !scanned.sites.is_empty(),
         "vacuous scan: staleness cannot be judged with no sites"
