@@ -68,6 +68,34 @@ pub fn require_envelope(row: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
+/// L5-CURSOR (enjg): optional cursor fields for snapshot-shaped portals.
+///
+/// A one-shot portal may omit cursor state; a snapshot must not invent it.
+/// `latest_cursor` is a number when the position is known, else null WITH a
+/// reason in `cursor_reason`. `replay_window` is a `[lo, hi]` pair when the
+/// replay bounds are known, else null under the same reason. A null without
+/// a reason is refused rather than rendered: a bare null says nothing about
+/// WHY the position is unknown, and the cheaper rendering — a fabricated 0 —
+/// would read as a real position (replay from the start) instead of as
+/// ignorance. `None` therefore never becomes `0` on any path through here.
+pub fn cursor_envelope(
+    cursor: Option<u64>,
+    window: Option<(u64, u64)>,
+    reason: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    if (cursor.is_none() || window.is_none()) && reason.is_none() {
+        return Err(
+            "L5_CURSOR_NULL_WITHOUT_REASON — a null cursor field without a reason explains nothing; refusing rather than rendering ignorance as data"
+                .to_owned(),
+        );
+    }
+    Ok(serde_json::json!({
+        "latest_cursor": cursor,
+        "replay_window": window.map(|(lo, hi)| vec![lo, hi]),
+        "cursor_reason": reason,
+    }))
+}
+
 /// Queue depth read from the JSONL mirror, never from a subprocess.
 ///
 /// `br`/`bv` are absent on CI lanes (MISSING_EXECUTABLE at the gate runner),

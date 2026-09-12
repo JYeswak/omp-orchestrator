@@ -696,3 +696,52 @@ fn missing_envelope_field_is_not_a_row() {
         "non-object refusal must be typed, got {error}"
     );
 }
+
+/// L5-CURSOR (enjg): cursor fields are a number when known, null WITH a
+/// reason when not, and never a fabricated 0. `None` must not become `0` on
+/// any path — a 0 reads as a real position, not as ignorance.
+#[test]
+fn cursor_field_number_or_null_with_reason() {
+    use ompo_start::portal::cursor_envelope;
+
+    // KNOWN-GOOD control: a known position renders as a number.
+    let known = cursor_envelope(Some(42), Some((7, 42)), None).expect("known cursor renders");
+    assert_eq!(known["latest_cursor"], json!(42));
+    assert_eq!(known["replay_window"], json!([7, 42]));
+    println!("L5_CURSOR_KNOWN row={known}");
+
+    // TARGET: unknown renders null WITH the reason — and the null is null,
+    // not a fabricated 0.
+    let unknown =
+        cursor_envelope(None, None, Some("snapshot predates cursor tracking"))
+            .expect("null with reason renders");
+    assert!(
+        unknown["latest_cursor"].is_null(),
+        "unknown cursor must be null, got {}",
+        unknown["latest_cursor"]
+    );
+    assert!(
+        unknown["replay_window"].is_null(),
+        "unknown window must be null, got {}",
+        unknown["replay_window"]
+    );
+    assert_eq!(
+        unknown["cursor_reason"],
+        json!("snapshot predates cursor tracking")
+    );
+    assert_ne!(
+        unknown["latest_cursor"], json!(0),
+        "a null cursor must never render as 0"
+    );
+    println!("L5_CURSOR_NULL row={unknown}");
+
+    // A null WITHOUT a reason is refused, not rendered: bare nulls explain
+    // nothing about why the position is unknown.
+    let refused = cursor_envelope(None, Some((0, 9)), None).expect_err(
+        "a null cursor field without a reason must REFUSE, not render",
+    );
+    assert!(
+        refused.contains("L5_CURSOR_NULL_WITHOUT_REASON"),
+        "refusal must be typed, got {refused}"
+    );
+}
