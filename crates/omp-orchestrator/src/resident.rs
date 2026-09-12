@@ -5487,6 +5487,7 @@ fn mail_failure_row(error: &MailError) -> &'static str {
             "DISPATCH_RESULT_MAIL_CURSOR_UNUSABLE"
         }
         MailError::EmptyCatalogue => "DISPATCH_RESULT_MAIL_EMPTY_CATALOGUE",
+        MailError::NoLeaseEnumeration { .. } => "DISPATCH_RESULT_MAIL_NO_LEASE_ENUMERATION",
         MailError::ToolRefused { .. } => "DISPATCH_RESULT_MAIL_REFUSED",
         MailError::Rpc { .. } | MailError::Protocol { .. } | MailError::Codec { .. } => {
             "DISPATCH_RESULT_MAIL_PROTOCOL"
@@ -5518,7 +5519,8 @@ fn mail_error_is_fd_exhaustion(error: &MailError) -> bool {
         | MailError::UnexpectedStatus { .. }
         | MailError::CursorAhead { .. }
         | MailError::CursorExpired { .. }
-        | MailError::EmptyCatalogue => false,
+        | MailError::EmptyCatalogue
+        | MailError::NoLeaseEnumeration { .. } => false,
     }
 }
 
@@ -9475,6 +9477,7 @@ exit 2
                 operation: "send_message".to_owned(),
             },
             MailError::EmptyCatalogue,
+            MailError::NoLeaseEnumeration { catalogue_tools: 45 },
             MailError::Protocol {
                 detail: "bad envelope".to_owned(),
             },
