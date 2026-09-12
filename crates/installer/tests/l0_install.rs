@@ -1,7 +1,7 @@
 use installer::{
     check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
     git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks,
-    parse_cosign_version, publish_atomic, publish_atomic_durable, refuse_path_collisions,
+    parse_cosign_version, path_collision_hits, publish_atomic, publish_atomic_durable, refuse_path_collisions,
     resolve_platform_triple, resolve_repo_ownership, seal_install_report, stage_artifact_stream,
     probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_policy,
     AgentOutcome, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookBackup, HookWrite,
@@ -413,6 +413,12 @@ fn path_collision_lists_every_hit() {
     }
 }
 
+/// Live-host observation, macOS only: /usr/sbin/installer is Apple platform
+/// truth, not a portable fixture. Linux never treats this branch as
+/// acceptance; the deterministic foreign-fixture test below is the portable
+/// leg. The is_file guard stays: absence on macOS is an observation, while
+/// absence of a CREATED fixture (below) is ERROR.
+#[cfg(target_os = "macos")]
 #[test]
 fn path_collision_usr_sbin_first_refuses_without_overwrite() {
     let usr_sbin = Path::new("/usr/sbin/installer");
@@ -438,6 +444,40 @@ fn path_collision_usr_sbin_first_refuses_without_overwrite() {
         other => panic!("expected PathCollision, got {other:?}"),
     }
     assert_eq!(fs::read(&dest).expect("read after"), before, "no overwrite");
+}
+
+#[test]
+fn foreign_path_collision_refuses_before_replace() {
+    // Deterministic cross-platform fixture: a FOREIGN TempDir holding an
+    // `installer` binary first on PATH, plus an owned destination carrying
+    // our bytes. No live-host paths anywhere; every fixture here is created
+    // by the test, so absence is ERROR (expect), never a skip. Wired through
+    // refuse_path_collisions — the gate before replace.
+    let foreign = TempDir::new("path-foreign");
+    let foreign_hit = foreign.path().join("installer");
+    fs::write(&foreign_hit, b"foreign-owner").expect("foreign hit");
+    let owned = TempDir::new("path-owned-f");
+    let dest = owned.path().join("installer");
+    fs::write(&dest, b"ours").expect("owned dest");
+    let path_env = format!("{}:{}", foreign.path().display(), owned.path().display());
+    // ONE exact foreign hit: the owned destination is filtered from the
+    // refusal because it is ours, not a collision.
+    let error = refuse_path_collisions("installer", &path_env, Some(&dest))
+        .expect_err("foreign installer on PATH must refuse");
+    match error {
+        InstallError::PathCollision { hits } => {
+            assert_eq!(hits, vec![foreign_hit.display().to_string()], "{hits:?}");
+            let text = InstallError::PathCollision { hits: hits.clone() }.to_string();
+            assert!(text.starts_with("L0_PATH_COLLISION"), "{text}");
+            assert!(text.contains(&hits[0]), "{text}");
+        }
+        other => panic!("expected PathCollision, got {other:?}"),
+    }
+    assert_eq!(fs::read(&dest).expect("read after"), b"ours", "no overwrite");
+    // Negative control: the owned destination alone on PATH is no collision.
+    let owned_only = owned.path().display().to_string();
+    refuse_path_collisions("installer", &owned_only, Some(&dest))
+        .expect("owned-only PATH is no collision");
 }
 
 #[test]
