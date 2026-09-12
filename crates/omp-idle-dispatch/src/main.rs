@@ -1017,7 +1017,7 @@ fn config_error_exit(error: &ConfigError) -> u8 {
     CONFIG_ERROR_EXIT
 }
 
-/// ENV PARITY CONTRACT (cp-79am1). bin/omp-idle-dispatch.sh — deleted by the Rust port,
+/// ENV PARITY CONTRACT (control-plane#cp-79am1). bin/omp-idle-dispatch.sh — deleted by the Rust port,
 /// restored here from git (45c613d^, lines 25-27) — exported, in order:
 ///   PATH=<fleet PATH, personal bin dir first>
 ///   TMUX_TMPDIR set-if-unset to the user's tmux socket dir (the deleted script

@@ -7,11 +7,11 @@
 //! posted when it did not.
 //!
 //! THE ALTERNATIVES, RULED OUT BY MEASUREMENT:
-//! * ntm send-flag REFUSES codex panes entirely (cp-nq2s9) — structurally
+//! * ntm send-flag REFUSES codex panes entirely (control-plane#cp-nq2s9) — structurally
 //!   impossible for half the fleet.
 //! * Agent Mail returned 'database is locked' on both writes with RSS
 //!   130MB->687MB over 98 minutes and a restart that fixed it — state
-//!   accumulation, not a fix (cp-4fsjw).
+//!   accumulation, not a fix (control-plane#cp-4fsjw).
 //! * A bead comment via br comments add is the only artifact that survives
 //!   pane death, context compaction, and a daemon restart.
 //!

@@ -5,7 +5,7 @@
 //! Outcomes are how a message reached an IRC-bus recipient (`injected` / `woken` /
 //! `revived` / `failed`) — **not** what they did with it, and **not** a tmux/ntm
 //! pane send. Pane transport cannot produce this type; mapping sender exit onto it
-//! is the cp-z42vu shape (sender success read as delivery).
+//! is the control-plane#cp-z42vu shape (sender success read as delivery).
 
 use std::fmt;
 use std::path::Path;

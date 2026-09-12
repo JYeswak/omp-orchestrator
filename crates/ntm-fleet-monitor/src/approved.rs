@@ -203,7 +203,7 @@ mod tests {
         );
     }
 
-    /// cp-rfx78's FALSE FREE, at the type level: an unmeasured pane cannot
+    /// control-plane#cp-rfx78's FALSE FREE, at the type level: an unmeasured pane cannot
     /// produce the value an executor demands.
     #[test]
     fn false_free_cannot_mint() {

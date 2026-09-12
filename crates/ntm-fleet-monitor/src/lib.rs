@@ -13,7 +13,7 @@
 //! Reuses [`loop_coverage::LoopLayer`] — do not fork the phase list.
 //! Pane dispatchability is a CALLER-SUPPLIED fact from
 //! `controller_tick::PaneLiveness::is_dispatchable`. This crate does not re-derive
-//! Working/Frozen/Idle; that fork is what cp-rfx78 cost.
+//! Working/Frozen/Idle; that fork is what control-plane#cp-rfx78 cost.
 //!
 //! NO-CLAIM BOUNDARY: a green `cargo test -p ntm-fleet-monitor` proves the
 //! classifier matches the policy fixtures. It does not prove the next tick
@@ -159,7 +159,7 @@ impl ApprovalKind {
 /// Why a wave was refused. Safety, not taste. Never "ask Joshua".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Refusal {
-    /// Caller said the pane is not Idle. Sending here is the cp-rfx78 FALSE FREE.
+    /// Caller said the pane is not Idle. Sending here is the control-plane#cp-rfx78 FALSE FREE.
     PaneNotDispatchable,
     /// PHASE -1. A finding with no bead is lost.
     FindingWithoutBead,

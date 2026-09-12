@@ -7,7 +7,7 @@
 //! Joshua says so): a dispatched bead receives one assignee and a deadline.
 //! After the deadline, the conductor asks one question — did the assignee post
 //! a verdict? The answer must come from READING BACK the tracker's comment
-//! list, never from a send's exit code (cp-z42vu: ntm send-flag returned
+//! list, never from a send's exit code (control-plane#cp-z42vu: ntm send-flag returned
 //! `successful:["4"]` while the packet never reached the pane).
 //!
 //! THE `br comment` SINGULAR TRAP: `br comment <id> <text>` prefix-matches to

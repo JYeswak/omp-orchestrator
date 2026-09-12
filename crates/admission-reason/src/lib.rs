@@ -607,7 +607,7 @@ pub fn explain_text(text: &str, publication_check: bool, rules: &Rules) -> Strin
 }
 /// ONE-LINE refusal detail for a ledger ROW, from the ledger text the refuser actually read.
 ///
-/// MEASURED 2026-08-27 (bead cp-jsgiu): `controller-tick` emitted 62 `admission_refused` rows
+/// MEASURED 2026-08-27 (bead control-plane#cp-jsgiu): `controller-tick` emitted 62 `admission_refused` rows
 /// carrying `reason=verdict_not_pass` and NO `detail` field at all, while the very ledger it had
 /// just parsed said `docs-staleness RED file=.flywheel/GOAL.md commits_since_last_touch=56
 /// limit=50`. The loop recorded THAT it stopped and never WHY, for over an hour, and diagnosing it

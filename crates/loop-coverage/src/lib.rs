@@ -291,7 +291,7 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
     LayerCoverage {
         layer: LoopLayer::Conformance,
         what_must_be_true: "A session is legible iff session_repo_dir resolves, tracker ready-queue works, ntm sees it, a Charter exists, and every declared gate is invoked. Session name is not the repo dir.",
-        failure_modes: &["cp-3ifx clutterfreespaces decoy clone read CONFORMANT"],
+        failure_modes: &["control-plane#cp-3ifx clutterfreespaces decoy clone read CONFORMANT"],
         mandatory_proofs: &[ProofLevel::E2e],
         proof_artifacts: &["crates/fast-dispatch/src/lib.rs", "crates/fast-dispatch/src/main.rs"],
         typed_edge_cases: &[
@@ -345,11 +345,11 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
         layer: LoopLayer::Dispatch,
         what_must_be_true: "A send is admitted only for PaneLiveness::Idle, through a fence that is passed every flag it requires, with --json dry-run verification and a packet body. Identical captures with an activity marker are Frozen, not ready. UNKNOWN/77 is Indeterminate, not a refusal.",
         failure_modes: &[
-            "2026-08-27 capture_is_stable admitted frozen / refused live (defect 7, cp-rfx78)",
+            "2026-08-27 capture_is_stable admitted frozen / refused live (defect 7, control-plane#cp-rfx78)",
             "2026-08-27 fence missing --ready-probe EXIT_CONFIG (defect 5)",
             "2026-08-27 dry-run without --json (defect 6)",
             "2026-08-27 cargo-lane-budget 77 treated as refusal (defect 4)",
-            "cp-g7n sender success / unsubmitted packet",
+            "control-plane#cp-g7n sender success / unsubmitted packet",
         ],
         mandatory_proofs: &[ProofLevel::Unit, ProofLevel::Integration],
         proof_artifacts: &[

@@ -1,4 +1,4 @@
-//! ENV PARITY CONTRACT for the wired-but-inert-guard Rust port (cp-79am1).
+//! ENV PARITY CONTRACT for the wired-but-inert-guard Rust port (control-plane#cp-79am1).
 //!
 //! bin/wired-but-inert-guard.sh — deleted by the Rust port, restored here from git
 //! (45c613d^) — exported NOTHING: its only environment statement was `set -uo pipefail`.

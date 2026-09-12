@@ -851,7 +851,7 @@ pub fn check(config: &Config) -> Report {
 pub fn packet_contract(session: &str, pane: &str) -> Option<String> {
     let lane = resolve_lane_identity(None, session, false)?;
     Some(format!(
-        "Cargo target lane contract (cp-xxu9):\n  worker identity: session={session} (pane={pane} is a volatile routing handle); shared lane key={lane}\n  shared work: derive the target lane from the worker/session identity, never from a bead,\n    task, attempt, commit, or human-readable prompt name.\n  isolation escape hatch: only genuinely incompatible work may set the target repo's\n    *_LANE_ISOLATED=1 (or equivalent) and supply an explicit unique task lane.\n  before building: do not invent a new target root; reuse the session lane and report any\n    wrapper that ignores this contract to its owning repository."
+        "Cargo target lane contract (control-plane#cp-xxu9):\n  worker identity: session={session} (pane={pane} is a volatile routing handle); shared lane key={lane}\n  shared work: derive the target lane from the worker/session identity, never from a bead,\n    task, attempt, commit, or human-readable prompt name.\n  isolation escape hatch: only genuinely incompatible work may set the target repo's\n    *_LANE_ISOLATED=1 (or equivalent) and supply an explicit unique task lane.\n  before building: do not invent a new target root; reuse the session lane and report any\n    wrapper that ignores this contract to its owning repository."
     ))
 }
 

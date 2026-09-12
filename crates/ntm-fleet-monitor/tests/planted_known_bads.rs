@@ -37,7 +37,7 @@ fn dispatch_onto_a_working_pane_is_refuse_not_required() {
         WaveVerdict::Refuse {
             reason: Refusal::PaneNotDispatchable
         },
-        "cp-rfx78 FALSE FREE: this is a safety refuse, not an escalation to Joshua"
+        "control-plane#cp-rfx78 FALSE FREE: this is a safety refuse, not an escalation to Joshua"
     );
     assert!(!w.verdict.apply_allowed());
 }

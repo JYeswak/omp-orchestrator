@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn a_waiver_with_a_reason_records_it() {
         let waived = ok_finding()
-            .waive("superseded by cp-g6sy8; same class, already owned")
+            .waive("superseded by control-plane#cp-g6sy8; same class, already owned")
             .expect("reasoned waiver");
         assert!(waived.reason().contains("superseded"));
         assert!(
