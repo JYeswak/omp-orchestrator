@@ -195,3 +195,46 @@ fn next_command_agrees() {
     println!("json_next {:?}", json_next_command(&steps));
     println!("ready_first {:?}", ready_first.next_command);
 }
+
+#[test]
+fn ordered_ids_tui_json_steps() {
+    let mut steps = fixture_steps();
+    apply_predicates(&mut steps, false, false, false);
+    let source = ordered_ids(&steps);
+    let tui = tui_ordered_ids(&steps);
+    let json = json_ordered_ids(&steps);
+    assert_eq!(tui, source, "TUI ordered ids must equal STEPS");
+    assert_eq!(json, source, "JSON ordered ids must equal STEPS");
+    assert_eq!(tui, json, "TUI and JSON must emit the same ordered ids");
+
+    let tui_hides_skipped: Vec<&'static str> = steps
+        .iter()
+        .filter(|step| step.status != StepStatus::Skipped)
+        .map(|step| step.id)
+        .collect();
+    let json_set: std::collections::HashSet<_> = json.iter().copied().collect();
+    let buggy_set: std::collections::HashSet<_> = tui_hides_skipped.iter().copied().collect();
+    let set_equality_would_pass_buggy = json_set.is_superset(&buggy_set);
+    let ordered_equality_buggy = json == tui_hides_skipped;
+
+    println!("STEPS {source:?}");
+    println!("json {json:?}");
+    println!("tui_honest {tui:?}");
+    println!("tui_hides_skipped {tui_hides_skipped:?}");
+    println!("honest_parity {}", tui == json && json == source);
+    println!("set_equality_would_pass_buggy {set_equality_would_pass_buggy}");
+    println!("ordered_equality_buggy {ordered_equality_buggy}");
+
+    assert!(
+        tui == json && json == source,
+        "honest renderers must match STEPS order"
+    );
+    assert!(
+        set_equality_would_pass_buggy,
+        "set compare is the trap that would ship the buggy TUI"
+    );
+    assert!(
+        !ordered_equality_buggy,
+        "TUI that drops Skipped must FAIL the ordered compare"
+    );
+}
