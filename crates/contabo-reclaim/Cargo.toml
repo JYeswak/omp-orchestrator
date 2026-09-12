@@ -4,8 +4,12 @@ name = "contabo-reclaim"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Thin consumer for the control-plane rch-reclaim-owner contract"
+description = "Contabo worker reclaimer: shell-conformance sweep port plus the control-plane owner consumer"
 autotests = false
+
+[[bin]]
+name = "reclaim-sweep"
+path = "src/bin/reclaim_sweep.rs"
 
 [[bin]]
 name = "contabo-reclaim"
@@ -17,11 +21,14 @@ path = "tests/fake_rch_reclaim_owner.rs"
 [[test]]
 name = "reclaimer"
 path = "tests/reclaimer.rs"
-
+[[test]]
+name = "sweep_cli"
+path = "tests/sweep_cli.rs"
 [dependencies]
 asupersync = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }
 
 [lints.rust]
 unsafe_code = "forbid"

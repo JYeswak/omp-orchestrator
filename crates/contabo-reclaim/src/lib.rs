@@ -14,6 +14,12 @@
 //! body. The owner's worker RPCs are a different surface that does read stdin;
 //! this crate never invokes them, so nothing here offers stdin at all.
 
+/// Sweep machinery (bead 4bem8): the shell-conformance port. Unwired by the
+/// owner pivot in 026135c and rewired here -- an uncompiled module is not a
+/// port, however green the suite reads without it.
+pub mod model;
+pub mod probe;
+
 use asupersync::io::AsyncReadExt;
 use asupersync::process::{Child, Command, ProcessError, ProcessGroupMode, ProcessSignalTarget, Stdio};
 use asupersync::runtime::{JoinError, TaskHandle};

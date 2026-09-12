@@ -3,7 +3,7 @@
 use crate::model::{
     decide_guards, parse_listing, validate_candidate, ActiveBuild, CandidateSet, ControlSnapshot,
     EntryKind, FleetReport, GuardDecision, ReclaimError, ReclaimMode, ReclaimRefusal,
-    ReclaimReport, RemoteProcessObservation, RunOutcome, WorkerSpec, WORKERS,
+    ReclaimReport, RemoteProcessObservation, RunOutcome, ValidatedCandidate, WorkerSpec, WORKERS,
 };
 use asupersync::process::Command;
 use asupersync::time::timeout;
@@ -91,10 +91,13 @@ pub async fn run(cx: &Cx, config: &Config) -> Result<ReclaimReport, ReclaimError
         }
     };
     let candidates = match parse_listing(&listing) {
+        // Leg 6, sweep half: a sweep evaluating zero directories is an
+        // ERROR, never clean. An empty find output on a healthy box is
+        // indistinguishable from a broken find, so fail closed.
         Ok(CandidateSet::Empty) => {
-            report.outcome = RunOutcome::AlreadyClean;
+            report.outcome = crate::model::vacuous_listing_outcome();
             report.detail =
-                "EMPTY_CANDIDATE_SET: no whitelisted artifact entries under base".to_owned();
+                "VACUOUS_CANDIDATE_SET: find listed zero entries under base".to_owned();
             return Ok(report);
         }
         Ok(CandidateSet::NonEmpty(candidates)) => candidates,
@@ -142,19 +145,72 @@ pub async fn run(cx: &Cx, config: &Config) -> Result<ReclaimReport, ReclaimError
         return Ok(report);
     }
 
-    report.bytes = valid
-        .iter()
-        .map(|candidate| candidate.candidate.bytes)
-        .sum();
-    report.directories = valid.len();
+    // Twin gate (leg 4): ONLY export caches consult the Mac-side twin.
+    // Build artifacts sweep by kind; the twin predicate never sees them.
+    // Every twin-gated candidate records a decision row carrying the
+    // instant and the twin observed then.
+    let epoch_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0);
+    let mut sweepable: Vec<ValidatedCandidate> = Vec::with_capacity(valid.len());
+    for candidate in valid {
+        if !crate::model::twin_gate_applies(candidate.rule) {
+            sweepable.push(candidate);
+            continue;
+        }
+        let parent_is_canonical = candidate
+            .candidate
+            .path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| crate::model::CANONICAL_CHECKOUTS.contains(&name));
+        // The worker replicates the Mac layout, so the twin is the same
+        // absolute path on this host.
+        let twin = crate::model::read_twin_state(&candidate.candidate.path);
+        match crate::model::gate_export_cache(parent_is_canonical, twin) {
+            crate::model::SweepVerdict::Sweep { reason } => {
+                report.decision_rows.push(crate::model::LeaseDecision {
+                    path: candidate.candidate.path.clone(),
+                    sweep: true,
+                    reason,
+                    epoch_secs,
+                    twin_at_decision: twin,
+                });
+                sweepable.push(candidate);
+            }
+            crate::model::SweepVerdict::Keep { reason } => {
+                report.decision_rows.push(crate::model::LeaseDecision {
+                    path: candidate.candidate.path.clone(),
+                    sweep: false,
+                    reason,
+                    epoch_secs,
+                    twin_at_decision: twin,
+                });
+                report.kept += 1;
+            }
+        }
+    }
     if config.mode == ReclaimMode::DryRun {
         report.outcome = RunOutcome::Planned;
+        report.directories = sweepable.len();
+        report.bytes = sweepable.iter().map(|candidate| candidate.candidate.bytes).sum();
         report.detail =
-            "DRY_RUN: no deletion requested; every candidate passed both guards".to_owned();
+            "DRY_RUN: no deletion requested; twin gate decided, integrity not consulted on a plan"
+                .to_owned();
         return Ok(report);
     }
-
-    for candidate in &valid {
+    let df_before = match df_avail_kb(cx, config.worker, &config.base).await {
+        Ok(kb) => kb,
+        Err(error) => {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = format!("df_before_unreadable detail={error}");
+            return Ok(report);
+        }
+    };
+    let mut reclaimed_bytes: u64 = 0;
+    for candidate in &sweepable {
         cx.checkpoint().map_err(|_| ReclaimError::Runtime {
             detail: "cancelled before deletion".to_owned(),
         })?;
@@ -197,11 +253,164 @@ pub async fn run(cx: &Cx, config: &Config) -> Result<ReclaimReport, ReclaimError
                 return Ok(report);
             }
         }
-        delete_candidate(cx, config.worker, &candidate.candidate.path).await?;
+        // Leg 5: existence probed BEFORE the delete, never inferred after.
+        // Leg 3: the outcome and the counter update are one operation.
+        let path = candidate.candidate.path.display().to_string();
+        let existed = match remote_exists(cx, config.worker, &candidate.candidate.path).await {
+            Ok(existed) => existed,
+            Err(error) => {
+                report.outcome = RunOutcome::Unknown;
+                report.detail = format!("existence_probe_failed path={path} detail={error}");
+                return Ok(report);
+            }
+        };
+        let mut stderr = String::new();
+        let rm_success = if existed {
+            match delete_candidate(cx, config.worker, &candidate.candidate.path).await {
+                Ok(()) => true,
+                Err(error) => {
+                    stderr = error.to_string();
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        let applied = crate::model::apply_delete_observation(
+            &path,
+            existed,
+            rm_success,
+            &stderr,
+            candidate.candidate.bytes,
+        );
+        reclaimed_bytes += applied.bytes_delta;
+        report.directories += applied.dir_delta;
+        report.absent_before += applied.absent_delta;
+        if let Some(line) = applied.failure_line {
+            report.failures.push(line);
+        }
+    }
+    report.bytes = reclaimed_bytes;
+    // Leg 2 runs BEFORE the failure accounting, per the observed oracle: a
+    // failing delete beside a lying counter refused with exit 3, not 5.
+    // DRY never reaches here, so the counter below is reclaimed bytes and
+    // the df delta must show them.
+    let df_after = match df_avail_kb(cx, config.worker, &config.base).await {
+        Ok(kb) => kb,
+        Err(error) => {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = format!("df_after_unreadable detail={error}");
+            return Ok(report);
+        }
+    };
+    match crate::model::check_integrity(
+        reclaimed_bytes / 1024,
+        df_after.saturating_sub(df_before),
+        report.failures.len() as u64,
+    ) {
+        crate::model::IntegrityVerdict::Agree { .. } => {}
+        crate::model::IntegrityVerdict::CounterLie { counter_mb, df_mb } => {
+            report.outcome = RunOutcome::IntegrityRefused;
+            report.detail = format!(
+                "INTEGRITY counter={counter_mb}MB df_delta={df_mb}MB tolerance=4MB -- \
+                 the counter lied about the filesystem"
+            );
+            return Ok(report);
+        }
+        crate::model::IntegrityVerdict::DfExcess {
+            counter_mb,
+            df_mb,
+            failures,
+        } => {
+            report.detail = crate::model::df_excess_warn_text(counter_mb, df_mb, failures);
+        }
+    }
+    if !report.failures.is_empty() {
+        report.outcome = RunOutcome::DeleteFailed;
+        report.detail = format!(
+            "{}; DELETE-FAILURES -- {} delete(s) failed and are named above; box is not 'done'",
+            report.detail,
+            report.failures.len()
+        );
+        return Ok(report);
+    }
+    // Leg 6, verifier half as a self-check: an ok report with zero decision
+    // rows is vacuous. Unreachable through the flow above (every validated
+    // candidate leaves a row or a refusal), legged synthetically.
+    if crate::model::check_decisions_nonvacuous(&report.decision_rows).is_err()
+        && evaluated_is_empty(&report)
+    {
+        report.outcome = RunOutcome::Vacuous;
+        report.detail = "VACUOUS_SWEEP: ok verdict with no evaluated bucket filled".to_owned();
+        return Ok(report);
     }
     report.outcome = RunOutcome::Reclaimed;
     report.detail = "APPLY: all candidates re-authorized immediately before deletion".to_owned();
     Ok(report)
+}
+
+/// True when every evaluated bucket is empty (leg 5 identity, all zero).
+fn evaluated_is_empty(report: &ReclaimReport) -> bool {
+    crate::model::evaluated_total(report) == 0
+}
+
+/// Available KiB on the filesystem holding BASE (portability leg: `df -Pk`
+/// reports KiB on both macOS and Linux; and the mount measured is BASE's,
+/// never `/`).
+async fn df_avail_kb(
+    cx: &Cx,
+    worker: WorkerSpec,
+    base: &Path,
+) -> Result<u64, ReclaimError> {
+    let base = base.to_string_lossy().into_owned();
+    let output = run_command(
+        cx,
+        ssh(worker, &["df", "-Pk", &base]),
+        worker.id,
+        "df-avail",
+    )
+    .await?;
+    if !output.success {
+        return Err(ReclaimError::Output {
+            worker: worker.id.to_owned(),
+            operation: "df-avail",
+            detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let row = text.lines().filter(|line| !line.trim().is_empty()).last();
+    let avail = row
+        .and_then(|line| line.split_whitespace().nth(3))
+        .ok_or_else(|| ReclaimError::Probe {
+            worker: worker.id.to_owned(),
+            detail: "df -Pk output has no available-blocks column".to_owned(),
+        })?;
+    avail.parse::<u64>().map_err(|error| ReclaimError::Probe {
+        worker: worker.id.to_owned(),
+        detail: format!("df available blocks not numeric: {error}"),
+    })
+}
+
+/// Pre-delete existence probe (leg 5): `test -e` exit 0/1. Any other exit
+/// is a probe failure, never evidence either way.
+async fn remote_exists(cx: &Cx, worker: WorkerSpec, path: &Path) -> Result<bool, ReclaimError> {
+    let path = path.to_string_lossy().into_owned();
+    let output = run_command(
+        cx,
+        ssh(worker, &["test", "-e", "--", &path]),
+        worker.id,
+        "existence-probe",
+    )
+    .await?;
+    match output.code {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        other => Err(ReclaimError::Output {
+            worker: worker.id.to_owned(),
+            operation: "existence-probe",
+            detail: format!("test -e exited {other:?}"),
+        }),
+    }
 }
 pub async fn run_all_workers(
     cx: &Cx,
@@ -216,6 +425,29 @@ pub async fn run_all_workers(
     })
     .await?;
     FleetReport::from_reports(mode, reports)
+}
+
+/// Fleet entry honoring a worker selection: one worker's report still folds
+/// through `from_reports` so exit codes and the vacuity aggregate mean the
+/// same thing for one worker and for all of them.
+pub async fn run_selected(
+    cx: &Cx,
+    base: &Path,
+    mode: ReclaimMode,
+    selection: &crate::model::WorkerSelection,
+) -> Result<FleetReport, ReclaimError> {
+    match selection {
+        crate::model::WorkerSelection::One(worker) => {
+            let config = Config {
+                worker: *worker,
+                base: base.to_path_buf(),
+                mode,
+            };
+            let report = run(cx, &config).await?;
+            FleetReport::from_reports(mode, vec![report])
+        }
+        crate::model::WorkerSelection::All => run_all_workers(cx, base, mode).await,
+    }
 }
 
 pub async fn run_workers_sequentially<F>(
