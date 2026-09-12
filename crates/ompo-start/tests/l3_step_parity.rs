@@ -432,3 +432,46 @@ fn steps_identity_delta_unmeasurable_without_home() {
         "the label must name the missing home, got {verdict}"
     );
 }
+
+/// L3-ARRAY (zr1g leg 4): the parity gate classifies TuiOnly and empty
+/// arrays distinctly. A TUI that reorders or drops an ID while JSON stays
+/// canonical is `TuiOnly` naming the id and index — never `Ok`, never a
+/// bare count. Two empty lists are `Empty`, never a vacuous pass.
+#[test]
+fn parity_gate_names_tui_only_and_refuses_empty() {
+    use ompo_start::ParityMismatch;
+
+    // KNOWN-GOOD control: agreeing lists pass, so the refusals below are
+    // load-bearing rather than a gate that refuses everything.
+    let steps = fixture_steps();
+    let ids = ordered_ids(&steps);
+    assert!(
+        check_id_parity(&ids, &ids).is_ok(),
+        "agreeing TUI/JSON id lists must pass"
+    );
+
+    // TUI-ONLY: TUI drops one id while JSON stays canonical.
+    let mut dropped = ids.clone();
+    dropped.remove(1);
+    match check_id_parity(&dropped, &ids) {
+        Err(ParityMismatch::TuiOnly { id, tui_index }) => {
+            println!("L3_PARITY_TUI_ONLY id={id} tui_index={tui_index}");
+            // The gate names the TUI-side id AT the divergence point: after
+            // dropping index 1, TUI[1] is the old JSON[2], which JSON lacks
+            // at index 1. Naming the removed id instead would point at a
+            // row that is nowhere in either list at that index.
+            assert_eq!(id, ids[2], "must name the TUI id JSON lacks there");
+            assert_eq!(id, dropped[1]);
+            assert_eq!(tui_index, 1);
+        }
+        other => panic!("a dropped TUI id must classify TuiOnly, got {other:?}"),
+    }
+
+    // EMPTY: two empty lists refuse; a vacuous pass would certify nothing.
+    match check_id_parity(&[], &[]) {
+        Err(ParityMismatch::Empty) => {
+            println!("L3_PARITY_EMPTY refused");
+        }
+        other => panic!("empty id lists must refuse as Empty, got {other:?}"),
+    }
+}
