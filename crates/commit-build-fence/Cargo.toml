@@ -28,13 +28,17 @@ unsafe_code = "forbid"
 # than hardcoded, because a path literal in a manifest is what path-literal-guard
 # exists to refuse.
 # HAZARD 1 (omp-orchestrator-etyur, %6's ruling): `init` MUTATES -- it writes
-# git_dir(repo)/omp-build-registration.json (src/main.rs:279) -- so it is SETUP, not a
-# check, and it must SAY SO. A gate that mutates the tree it gates cannot distinguish
-# "already conformant" from "I made it conformant": both produce the same green.
-# Declaring it requires the table form, which is deliberate -- setup is declared, never
-# inferred from position.
+# git_dir(repo)/omp-build-registration.json -- so it is SETUP, not a check, and
+# it is NOT declared here. A gate that mutates the tree it gates cannot
+# distinguish "already conformant" from "I made it conformant": both produce
+# the same green. `init` stays available as a binary subcommand for explicit
+# store creation; the check pass must never invoke it.
+# omp-orchestrator-3lf36, option (b): `check` needs no setup. A missing store
+# at the derived default path is a defined Clear verdict
+# (COMMIT_FENCE_CLEAR reason=no_registration_store), so the single declared
+# phase plans Execute instead of SkipDependent. A missing store at an explicit
+# --store path still refuses; see src/main.rs run_check.
 checks = [
-    { bin = "commit-build-fence", args = ["init", "--repo", "{repo}"], setup = true },
     { bin = "commit-build-fence", args = ["check", "--repo", "{repo}"] },
 ]
 

@@ -565,3 +565,156 @@ fn cli_contract_refuses_a_positional_path_and_accepts_the_documented_default() {
         );
     }
 }
+
+/// omp-orchestrator-3lf36, option (b): a missing store at the DERIVED default
+/// path is a defined Clear, not an error. `init` writes exactly that path, so
+/// its absence means nothing was ever registered here and nothing is fenced.
+/// The verdict carries a reason DISTINCT from an empty store (item 4).
+#[test]
+fn derived_missing_store_clears_with_no_store_reason() {
+    let dir = fresh_repo("derived-missing");
+    let repo = dir.canonicalize().expect("canonical repo");
+    assert!(
+        !store_for(&dir).exists(),
+        "fixture must start storeless"
+    );
+    let output = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo.display().to_string(),
+        "--head".to_owned(),
+        current_head(&dir),
+        "--now".to_owned(),
+        now_unix().to_string(),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "derived-missing must Clear: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("COMMIT_FENCE_CLEAR"),
+        "Clear must name its verdict: {stdout}"
+    );
+    assert!(
+        stdout.contains("reason=no_registration_store"),
+        "derived-missing needs its own reason: {stdout}"
+    );
+    assert!(
+        !stdout.contains("reason=empty_store"),
+        "derived-missing must not share the empty-store verdict: {stdout}"
+    );
+}
+
+/// Item 4, other half: a present-but-empty derived store Clears with its own
+/// reason. The two Clears never share a verdict.
+#[test]
+fn derived_empty_store_clears_with_empty_reason() {
+    let dir = fresh_repo("derived-empty");
+    let repo = dir.canonicalize().expect("canonical repo");
+    RegistrationStore::empty()
+        .save_atomic(&store_for(&dir))
+        .expect("write empty derived store");
+    let output = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo.display().to_string(),
+        "--head".to_owned(),
+        current_head(&dir),
+        "--now".to_owned(),
+        now_unix().to_string(),
+    ]);
+    assert!(
+        output.status.success(),
+        "empty derived store must Clear: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("reason=empty_store"),
+        "empty store needs its own reason: {stdout}"
+    );
+    assert!(
+        !stdout.contains("reason=no_registration_store"),
+        "empty store must not share the missing-store verdict: {stdout}"
+    );
+}
+
+/// Fail-closed half: a missing store at an EXPLICIT --store path still
+/// refuses exit 2. The caller named a place; its absence may be a typo hiding
+/// live registrations elsewhere.
+#[test]
+fn explicit_missing_store_still_refuses() {
+    let dir = fresh_repo("explicit-missing");
+    let repo = dir.canonicalize().expect("canonical repo");
+    let absent = dir.join("no-such-registration.json");
+    let output = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo.display().to_string(),
+        "--store".to_owned(),
+        absent.display().to_string(),
+        "--head".to_owned(),
+        current_head(&dir),
+        "--now".to_owned(),
+        now_unix().to_string(),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "explicit-missing must stay fail-closed: {stderr}"
+    );
+    assert!(
+        stderr.contains("registration_store_missing"),
+        "explicit-missing keeps its verdict: {stderr}"
+    );
+}
+
+/// Item 3, binary half: a genuinely fenced DERIVED-default store refuses with
+/// the FENCE reason and the distinct exit code. Pins the MESSAGE and the CODE.
+#[test]
+fn derived_fenced_store_refuses_with_fence_reason() {
+    let dir = fresh_repo("derived-fenced");
+    let repo = dir.canonicalize().expect("canonical repo");
+    let repo_arg = repo.display().to_string();
+    let now = now_unix();
+    let mut store = RegistrationStore::empty();
+    store
+        .register(BuildRegistration {
+            build_id: "build-derived-fenced".to_owned(),
+            repo: repo_arg.clone(),
+            head: "registered-head".to_owned(),
+            holder: "fence-test".to_owned(),
+            started_at_unix: now.saturating_sub(60),
+            expires_at_unix: now + 600,
+        })
+        .expect("register live build");
+    store
+        .save_atomic(&store_for(&dir))
+        .expect("save fenced derived store");
+    let output = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo_arg,
+        "--head".to_owned(),
+        current_head(&dir),
+        "--now".to_owned(),
+        now.to_string(),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "fenced derived store must refuse: {stderr}"
+    );
+    assert!(
+        stderr.contains("COMMIT_FENCE_REFUSED"),
+        "missing fence verdict: {stderr}"
+    );
+    assert!(
+        stderr.contains("build-derived-fenced"),
+        "missing build identity: {stderr}"
+    );
+}

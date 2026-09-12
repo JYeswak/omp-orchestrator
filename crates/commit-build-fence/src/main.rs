@@ -136,6 +136,22 @@ async fn run(cx: &Cx, args: &[String]) -> Result<Outcome, String> {
 fn run_check(args: &[String]) -> Result<Outcome, StoreError> {
     let repo = repo_path(args)?;
     let store = store_path(args, &repo)?;
+    // omp-orchestrator-3lf36, option (b): the check needs no setup. A missing
+    // store at the DERIVED default path means no registration was ever written
+    // here -- init writes exactly this path -- so nothing is fenced here and
+    // the defined verdict is Clear, distinct from an empty store (item 4).
+    // A missing store at a caller-named place (--store or
+    // OMP_BUILD_REGISTRATION) can be a typo hiding live registrations
+    // elsewhere, so it stays fail-closed: fall through to check(), which
+    // refuses with registration_store_missing. Malformed stores refuse on
+    // both paths. lib check() itself is untouched.
+    if fs::metadata(&store).is_err() && !store_was_explicit(args) {
+        println!(
+            "COMMIT_FENCE_CLEAR path={} reason=no_registration_store",
+            store.display()
+        );
+        return Ok(Outcome::Allow);
+    }
     let current_head = head_for(args, &repo, &store)?;
     let now = option(args, "--now")?
         .map(|value| parse_u64("--now", &value))
@@ -146,7 +162,13 @@ fn run_check(args: &[String]) -> Result<Outcome, StoreError> {
         })?
         .unwrap_or_else(now_unix);
     match check(&store, &repo.display().to_string(), &current_head, now)? {
-        FenceVerdict::Clear => Ok(Outcome::Allow),
+        FenceVerdict::Clear => {
+            println!(
+                "COMMIT_FENCE_CLEAR path={} reason=empty_store",
+                store.display()
+            );
+            Ok(Outcome::Allow)
+        },
         FenceVerdict::Refused {
             registration,
             current_head,
@@ -267,6 +289,19 @@ fn repo_path(args: &[String]) -> Result<PathBuf, StoreError> {
         operation: "canonicalize repository".to_owned(),
         detail: error.to_string(),
     })
+}
+
+/// Whether the caller named the store's place. A `--store` flag or an
+/// `OMP_BUILD_REGISTRATION` value is an explicit place: if the file is absent
+/// there, the caller may have pointed at the wrong location while live
+/// registrations sit elsewhere, so absence stays fail-closed. The derived
+/// default (git_dir/omp-build-registration.json) can only be absent when no
+/// registration was ever written here, so absence is a defined Clear.
+/// Presence-only: a malformed `--store` value still errors from store_path.
+fn store_was_explicit(args: &[String]) -> bool {
+    args.iter()
+        .any(|argument| argument == "--store" || argument.starts_with("--store="))
+        || std::env::var_os("OMP_BUILD_REGISTRATION").is_some()
 }
 
 fn store_path(args: &[String], repo: &Path) -> Result<PathBuf, StoreError> {

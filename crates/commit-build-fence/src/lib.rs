@@ -247,8 +247,15 @@ impl FenceVerdict {
 
 /// Check one repo against the explicit registration store at one clock value.
 /// Missing and malformed stores return errors; only a valid empty/expired store
-/// permits the commit to continue. `check` never creates the store: a fresh
-/// checkout caller, including CI, must invoke `init` before requesting a verdict.
+/// permits the commit to continue. `check` never creates the store.
+/// SCOPE (omp-orchestrator-3lf36, option (b)): this refusal is about the store
+/// check() was handed. The `check` COMMAND maps a missing store at the
+/// DERIVED default path to Clear before calling check() -- init writes exactly
+/// that path, so its absence means nothing was ever registered here -- while a
+/// missing store at a caller-named path (--store / OMP_BUILD_REGISTRATION)
+/// still reaches this refusal, because the caller may have pointed at the
+/// wrong place. A fresh-checkout caller invoking check() directly, or via an
+/// explicit store path, must still invoke `init` first.
 pub fn check(
     store_path: &Path,
     repo: &str,
