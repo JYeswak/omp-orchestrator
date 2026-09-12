@@ -16,10 +16,10 @@
 
 use gate_runner::{
     build_report, check_allowance, derive_checks, derive_roster, expand, parse_ledger,
-    parse_mode, render_roster_file, workspace_names, CrateVerdict, Invocation, Mode,
-    NoTestsDisposition, Observed, RosterError, RosterWriteError, Subsumption,
-    UnmeasurablePrecondition, EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED, EXIT_LEDGER_DRIFT, EXIT_OK,
-    EXIT_SHORT_ROSTER,
+    parse_mode, plan_check_phase, render_roster_file, workspace_names, CheckRunPlan,
+    CrateVerdict, Invocation, Mode, NoTestsDisposition, Observed, RosterError, RosterWriteError,
+    Subsumption, UnmeasurablePrecondition, EXIT_EMPTY_ROSTER, EXIT_GATE_FAILED, EXIT_LEDGER_DRIFT,
+    EXIT_OK, EXIT_SHORT_ROSTER,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -911,6 +911,66 @@ fn distinct_bins_are_a_fan_out_and_need_no_setup_declaration() {
     assert!(
         checks[0].phases.iter().all(|p| !p.setup),
         "none of them is setup, and none needed to say so"
+    );
+}
+
+/// omp-orchestrator-fence-ci-non-verdict-16l. Skipping only `init` and then running
+/// `check` makes every fresh CI checkout fail `registration_store_missing` — the
+/// same token the hook uses for a real missing store. The check cannot produce a
+/// verdict after its setup is skipped.
+#[test]
+fn a_check_after_skipped_setup_of_the_same_bin_cannot_produce_a_verdict() {
+    let md = r#"{"packages":[{"name":"fence","manifest_path":"/x/f/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[
+            {"bin":"fence","args":["init","--repo","{repo}"],"setup":true},
+            {"bin":"fence","args":["check","--repo","{repo}"]}
+          ]}}}]}"#;
+    let checks = derive_checks(md).expect("parses");
+    let phases = &checks[0].phases;
+    assert_eq!(
+        plan_check_phase(phases, 0),
+        CheckRunPlan::SkipSetup,
+        "init is setup"
+    );
+    assert_eq!(
+        plan_check_phase(phases, 1),
+        CheckRunPlan::SkipDependent {
+            skipped_setup_index: 0
+        },
+        "check after skipped init is not a fence verdict"
+    );
+}
+
+/// KNOWN-GOOD: a lone check with no prior setup still executes. If this collapsed
+/// into SkipDependent, every one-phase gate would go silent.
+#[test]
+fn a_lone_check_with_no_prior_setup_still_executes() {
+    let md = r#"{"packages":[{"name":"alpha","manifest_path":"/x/a/Cargo.toml","targets":[],
+         "metadata":{"gate":{"checks":[["--repo","{repo}"]]}}}]}"#;
+    let checks = derive_checks(md).expect("parses");
+    assert_eq!(
+        plan_check_phase(&checks[0].phases, 0),
+        CheckRunPlan::Execute
+    );
+}
+
+/// Distinct bins are a fan-out: a setup on bin A does not make bin B unmeasurable.
+#[test]
+fn a_fan_out_check_is_not_setup_dependent_on_a_different_bin() {
+    let md = r#"{"packages":[{"name":"nsg","manifest_path":"/x/n/Cargo.toml","targets":[],
+        "metadata":{"gate":{"checks":[
+          {"bin":"setup-bin","args":["init"],"setup":true},
+          {"bin":"gate-reachability","args":["--root","{repo}"]}
+        ]}}}]}"#;
+    let checks = derive_checks(md).expect("parses");
+    assert_eq!(
+        plan_check_phase(&checks[0].phases, 0),
+        CheckRunPlan::SkipSetup
+    );
+    assert_eq!(
+        plan_check_phase(&checks[0].phases, 1),
+        CheckRunPlan::Execute,
+        "a different bin does not inherit another bin's skipped setup"
     );
 }
 

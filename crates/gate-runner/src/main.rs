@@ -283,7 +283,17 @@ fn main() -> ExitCode {
             continue;
         }
         for (index, phase) in invocation.phases.iter().enumerate() {
-            let outcome = run_declared_check(&repo, &scratch, &invocation.crate_name, phase);
+            let outcome = match gate_runner::plan_check_phase(&invocation.phases, index) {
+                gate_runner::CheckRunPlan::SkipSetup => CheckOutcome::SkippedSetup,
+                gate_runner::CheckRunPlan::SkipDependent {
+                    skipped_setup_index,
+                } => CheckOutcome::SkippedSetupDependent {
+                    setup_phase: skipped_setup_index,
+                },
+                gate_runner::CheckRunPlan::Execute => {
+                    run_declared_check(&repo, &scratch, &invocation.crate_name, phase)
+                }
+            };
             let row = outcome.render_row(&invocation.crate_name, index);
             print!("{row}");
             let _ = std::io::Write::flush(&mut std::io::stdout());
@@ -414,6 +424,11 @@ enum CheckOutcome {
     },
     /// A declared SETUP phase, deliberately not executed on a check pass.
     SkippedSetup,
+    /// A later same-bin phase after skipped setup. NOT Unmeasurable: rch-refused
+    /// and "check needs the store init would have written" are different facts.
+    SkippedSetupDependent {
+        setup_phase: usize,
+    },
 }
 
 impl CheckOutcome {
@@ -433,6 +448,11 @@ impl CheckOutcome {
             Self::SkippedSetup => format!(
                 "CHECK_SKIPPED_SETUP crate={crate_name} phase={phase} \
                  reason=declared_setup_mutates_and_is_not_a_check\n"
+            ),
+            Self::SkippedSetupDependent { setup_phase } => format!(
+                "CHECK_SKIPPED_SETUP_DEPENDENT crate={crate_name} phase={phase} \
+                 setup_phase={setup_phase} \
+                 reason=check_reads_state_setup_would_have_created\n"
             ),
         }
     }

@@ -1266,6 +1266,43 @@ pub fn expand(argv: &[String], repo: &str, scratch: &str) -> Vec<String> {
         .collect()
 }
 
+/// Whether a declared check phase should run, given the phases already planned.
+///
+/// # Why this is not "just skip `setup: true`"
+///
+/// `commit-build-fence` declares `init` (`setup = true`) then `check`. Skipping only
+/// `init` and then executing `check` is the fresh-checkout non-verdict: every CI
+/// tree has no registration store, so `check` always exits 2 with
+/// `reason=registration_store_missing`. That message is the REAL missing-store
+/// refusal on the hook path, so CI cannot tell "this commit was fenced" from
+/// "this checkout never ran init". Red by construction (rule 10).
+///
+/// A later phase of the SAME bin after a skipped setup therefore cannot produce
+/// a verdict. Distinct bins are a fan-out and still execute.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckRunPlan {
+    Execute,
+    SkipSetup,
+    SkipDependent { skipped_setup_index: usize },
+}
+
+#[must_use]
+pub fn plan_check_phase(phases: &[CheckPhase], index: usize) -> CheckRunPlan {
+    let phase = &phases[index];
+    if phase.setup {
+        return CheckRunPlan::SkipSetup;
+    }
+    if let Some(skipped_setup_index) = phases[..index]
+        .iter()
+        .position(|prior| prior.setup && prior.bin == phase.bin)
+    {
+        return CheckRunPlan::SkipDependent {
+            skipped_setup_index,
+        };
+    }
+    CheckRunPlan::Execute
+}
+
 /// What a former `gate.yml` job did, and what now subsumes it.
 ///
 /// `fsu7` item 10 forbids deleting a job to reduce the count: the 2026-09-06 defect was a MISSING

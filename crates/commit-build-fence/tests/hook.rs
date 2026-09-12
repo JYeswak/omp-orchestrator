@@ -268,6 +268,44 @@ fn real_hook_treats_missing_store_as_error() {
         "missing-store reason absent: {stderr}"
     );
 }
+
+/// ANTI-VACUITY for 16l half (b): a probe that never found a git dir is UNKNOWN,
+/// not `registration_store_missing`. Missing is "I looked at this path and the
+/// file is absent". No `.git` is "I could not look". Those must not share a token.
+#[test]
+fn a_repo_with_no_git_dir_is_unknown_not_a_missing_store() {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("commit-build-fence-nogit-{nonce}"));
+    fs::create_dir_all(&dir).expect("create bare dir");
+    let repo = dir.canonicalize().expect("canonical");
+    let output = run_fence(&[
+        "check".to_owned(),
+        "--repo".to_owned(),
+        repo.display().to_string(),
+    ]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "failed-to-look is exit 2: {stderr}"
+    );
+    assert!(
+        stderr.contains("COMMIT_FENCE_ERROR"),
+        "typed error: {stderr}"
+    );
+    assert!(
+        stderr.contains("operation=read git directory"),
+        "unknown must name the failed probe: {stderr}"
+    );
+    assert!(
+        !stderr.contains("registration_store_missing"),
+        "unknown must not share the missing-store verdict: {stderr}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
 #[test]
 fn ci_shaped_init_then_check_clears_and_active_registration_refuses() {
     let dir = fresh_repo("ci-shaped");
