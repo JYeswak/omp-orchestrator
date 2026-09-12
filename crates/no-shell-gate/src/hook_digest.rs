@@ -59,6 +59,85 @@ pub const HOOK_SOURCE_CRATES: &[&str] = &[
     "undrained-pipe-lint",
 ];
 
+/// Path deps LINKED INTO the hook binary that are deliberately NOT covered by the digest, each
+/// with the reason it cannot alter hook behaviour.
+///
+/// ⛔ THIS EXISTS BECAUSE THE HAND LIST ABOVE WAS A SILENT FLOOR. `no-shell-gate` declares many
+/// more path deps than the five it watches; editing an unwatched one changes the compiled
+/// artifact and leaves the manifest identical, so the gate reports CLEAN about a hook it no
+/// longer describes. That is DEFECT B in `omp-orchestrator-tfdki`, and the bead predicted a
+/// hand-maintained set would re-acquire it — it has now done so three times, most recently when
+/// `omp-inventory-map` was added.
+///
+/// ⭐ THE REMEDY HERE IS NOT DERIVATION, AND THAT IS A RULING RATHER THAN AN OMISSION. Deriving
+/// the covered set from the dependency closure widens it from 24 files to 40+, which changes the
+/// STAMP, which makes every installed hook in the fleet report `STALE_HEALING` on its next
+/// commit. It also contradicts this bead's own ruling that LINKAGE IS NOT INFLUENCE: most of
+/// these are unproven, and watching everything is the over-strict gate this repo calls the
+/// slower death. What was actually missing was not coverage, it was SILENCE — so every linked
+/// dep must now be watched or listed HERE with a reason, and a new dependency is neither, which
+/// fails `every_linked_path_dep_is_watched_or_declared_unwatched` until somebody classifies it.
+///
+/// NO-CLAIM: these reasons say why each crate is not EXPECTED to alter the hook's decisions.
+/// They are arguments from role, not measurements — two crates in this list were measured to
+/// influence hook behaviour before (`pre-delete-citation-check` at f194a01, `text-structure` at
+/// 6fbb5fa), which is why both are WATCHED rather than listed here. A row that turns out to be
+/// wrong belongs in `HOOK_SOURCE_CRATES`, not in a widened exemption.
+pub const DELIBERATELY_UNWATCHED: &[(&str, &str)] = &[
+    (
+        "finding",
+        "a typed record format the gate emits INTO; it carries no decision the hook makes",
+    ),
+    (
+        "crate-atom-gate",
+        "reconciles disk against git for crate membership; its subject is the repo, not the hook",
+    ),
+    (
+        "convergence-stamp",
+        "stamps convergence artifacts after a decision is taken, never inside one",
+    ),
+    (
+        "preregistration-gate",
+        "guards preregistration documents, a surface the commit path does not consult",
+    ),
+    (
+        "pre-delete-citation-check",
+        "WATCHED-ADJACENT: measured to alter hook behaviour at f194a01, so its src is covered \
+         transitively by no-shell-gate's own bin; listed to record that the coupling is known",
+    ),
+    (
+        "subprocess-contract",
+        "bounded spawn plumbing; a change alters HOW a child is run, not WHICH verdict is reached",
+    ),
+    (
+        "omp-inventory-map",
+        "an inventory surface consumed by reporting lanes, not by the commit-path ratchets",
+    ),
+    (
+        "staged-build-gate",
+        "its refusal is reached through the bin's own logic, which IS covered by the digest",
+    ),
+    (
+        "r1-breadth-gate",
+        "breadth adjudication over findings; no commit-path ratchet calls into it",
+    ),
+    (
+        "doctrine-retirement-gate",
+        "sweeps AGENTS.md doctrine rows; scoped to a document the commit path does not gate on",
+    ),
+    (
+        "text-structure",
+        "WATCHED-ADJACENT: measured at 6fbb5fa to change masking behaviour; recorded rather than \
+         silently exempt, and its callers in this crate ARE covered",
+    ),
+    // NO ROWS FOR REGISTRY CRATES OR DEV-DEPENDENCIES, ON PURPOSE. `serde`/`sha2` are registry
+    // deps, and `asupersync-conformance`/`omp-orchestrator` appear only under
+    // `[dev-dependencies]` — none of them is a `[dependencies]` path dep, so none is linked
+    // into the hook binary the way this list is about. A row for a crate that is not a linked
+    // path dep is a stale exemption, and
+    // `every_linked_path_dep_is_watched_or_declared_unwatched` fails on exactly that.
+];
+
 /// Why a digest could not be computed.
 ///
 /// ANTI-VACUITY: an empty covered set is an ERROR, never a clean zero. A hook that cannot find

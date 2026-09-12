@@ -52,161 +52,28 @@ fn repo_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Crates whose source is compiled INTO the hook binary.
+/// ⛔ THE PRE-COMMIT MTIME-ORDERING LEG WAS RETIRED HERE (`omp-orchestrator-tfdki`, done-bar (d)),
+/// TOGETHER WITH ITS `HOOK_SOURCE_CRATES` COPY AND ITS `newest_source` WALK.
 ///
-/// Derived from `crates/no-shell-gate/src/bin/pre-commit-gate.rs` and the lints it
-/// calls. Hand-maintained, and that is a weakness worth naming: a new lint linked
-/// into the hook and not added here is invisible to this gate — the same
-/// hand-maintained-list defect that made the gate census report frozen verdicts.
-const HOOK_SOURCE_CRATES: &[&str] = &[
-    "no-shell-gate",
-    "state-wildcard-lint",
-    "path-literal-guard",
-    "orchestration-tick-gate",
-    "undrained-pipe-lint",
-];
-
-fn newest_source(root: &Path) -> Option<(PathBuf, SystemTime)> {
-    let mut newest: Option<(PathBuf, SystemTime)> = None;
-    for crate_name in HOOK_SOURCE_CRATES {
-        let dir = root.join("crates").join(crate_name).join("src");
-        let mut stack = vec![dir];
-        while let Some(d) = stack.pop() {
-            let Ok(entries) = std::fs::read_dir(&d) else {
-                continue;
-            };
-            for e in entries.flatten() {
-                let p = e.path();
-                if p.is_dir() {
-                    stack.push(p);
-                    continue;
-                }
-                if p.extension().is_none_or(|x| x != "rs") {
-                    continue;
-                }
-                let Ok(meta) = std::fs::metadata(&p) else {
-                    continue;
-                };
-                let Ok(mtime) = meta.modified() else { continue };
-                let replace = newest.as_ref().is_none_or(|(_, t)| mtime > *t);
-                if replace {
-                    newest = Some((p, mtime));
-                }
-            }
-        }
-    }
-    newest
-}
-
-#[test]
-fn the_installed_hook_is_not_older_than_the_source_it_enforces() {
-    let root = repo_root();
-    let hook = root.join(".git/hooks/pre-commit");
-
-    // An absent hook is a finding, not a pass. A repo whose gates are documented
-    // and uninstalled is the shape this project keeps refusing.
-    // THREE STATES, NOT TWO -- re-keyed 2026-09-07 (`hzm43`).
-    //
-    // This used to early-return and PASS whenever the hook was unreadable, saying so with an
-    // `eprintln!`. libtest CAPTURES a passing test's output, so the reason was invisible inside a
-    // green run -- and `.git/` is excluded from the rch overlay (`~/.config/rch/config.toml:29`),
-    // so EVERY lane run of this suite reported green about a hook it could not see. That is how a
-    // five-day-stale hook survived: the oracle whose whole job is catching staleness was
-    // structurally blind in the only environment we run Rust in. The comment above it read "say so
-    // out loud instead of passing silently" -- and the mechanism it described could not do that.
-    //
-    // The precondition is now keyed on what actually distinguishes the two absences:
-    //
-    //   `.git` present, no hook -> a real checkout enforcing NOTHING. FAIL.
-    //   no `.git` at all        -> a synced worker copy that cannot answer. UNMEASURED.
-    //   hook present            -> compare mtimes, as before.
-    //
-    // Absence alone still never satisfies this leg: it takes absence PLUS proof that the
-    // environment cannot answer.
-    // KEYED ON WHETHER THE REPOSITORY HAS HISTORY -- and the lane refuted three simpler keys
-    // first, one run each, 2026-09-07:
-    //
-    //   `.git` exists          worker=YES   not a discriminator
-    //   `.git/hooks` exists    worker=YES   not a discriminator -- a DIRECTORY SKELETON survives
-    //   `.git/HEAD` is_file    worker=YES   not a discriminator -- HEAD exists with no history
-    //
-    // The rch worker presents a COMPLETE, EMPTY repository: `.git/` is excluded from the sync,
-    // and something on the worker `git init`s the tree, so every existence check inside `.git`
-    // answers YES while the hook is absent. Each of those keys reproduced the `mirror_oracle`
-    // defect retracted earlier the same day -- a precondition on a PROXY whose value varies by
-    // environment.
-    //
-    // History is the property that a `git init` cannot fake and a real checkout cannot lack:
-    // a tree that can run a PRE-COMMIT hook is a tree with commits in it. An empty init has no
-    // refs and no packed-refs.
-    let head_file = root.join(".git/HEAD");
-    let hooks_dir = root.join(".git/hooks");
-    let has_history = root.join(".git/packed-refs").is_file()
-        || std::fs::read_dir(root.join(".git/refs/heads"))
-            .map(|mut entries| entries.next().is_some())
-            .unwrap_or(false);
-    let Ok(hook_meta) = std::fs::metadata(&hook) else {
-        assert!(
-            !has_history,
-            "THIS IS A COMMITTING CHECKOUT AND NO PRE-COMMIT HOOK IS INSTALLED.\n\
-             \n\
-             HEAD file: {}\n\
-             hooks dir: {}\n\
-             absent:    {}\n\
-             \n\
-             A repository whose gates are documented and uninstalled is the shape this project\n\
-             keeps refusing, and it is not a skip: every pre-commit gate in this tree is inert\n\
-             here. Measured 2026-09-07 -- an installed hook five days older than the gate it was\n\
-             meant to carry let a `100644 => 100755` exec bit land 2h16m AFTER that gate shipped.\n\
-             \n\
-             Repair:\n\
-               cargo build --release --bin pre-commit-gate\n\
-               cp <target>/release/pre-commit-gate .git/hooks/pre-commit",
-            head_file.display(),
-            hooks_dir.display(),
-            hook.display()
-        );
-        // No history: an empty `git init` skeleton, which is what an rch worker presents. It
-        // cannot host a commit, so it cannot answer this question. Every discriminator is
-        // printed -- including the three the lane refuted -- so a reader of a green run can see
-        // WHICH state this was rather than inferring a pass from silence.
-        eprintln!(
-            "UNMEASURED the_installed_hook_is_not_older_than_the_source_it_enforces: \
-             reason=no_history root={} git_exists={} hooks_dir_exists={} head_is_file={} \
-             has_history=false -- an empty repository cannot commit, so the installed hook is \
-             unobservable here. This is NOT a pass for the subject.",
-            root.display(),
-            root.join(".git").exists(),
-            hooks_dir.exists(),
-            head_file.is_file()
-        );
-        return;
-    };
-
-    let hook_mtime = hook_meta.modified().expect("hook mtime readable");
-
-    let (newest_path, newest_mtime) = newest_source(&root)
-        .expect("ANTI-VACUITY: no .rs sources found under the hook's crates — the scan is broken");
-
-    assert!(
-        newest_mtime <= hook_mtime,
-        "THE INSTALLED HOOK IS STALE.\n\
-         \n\
-         hook:   {}\n\
-         newer:  {}\n\
-         \n\
-         The hook is a compiled binary that LINKS these crates as libraries; it does\n\
-         not shell out, so editing a lint has no effect until the hook is rebuilt and\n\
-         reinstalled. A stale hook enforces rules that no longer exist in the source.\n\
-         \n\
-         Repair:\n\
-           cargo build --release --bin pre-commit-gate\n\
-           cp <target>/release/pre-commit-gate .git/hooks/pre-commit\n\
-           .git/hooks/pre-commit   # expect exit 0",
-        hook.display(),
-        newest_path.display(),
-    );
-}
+/// It asserted `newest_source_mtime <= hook_mtime` across the five hand-listed crates. That is
+/// the ORACLE THIS BEAD REPLACED: `commit_ratchets::hook_freshness` now reports
+/// `oracle=content_digest` from `hook_digest`, and mtime is gone from the production freshness
+/// path entirely.
+///
+/// It is DELETED rather than kept beside the digest for a reason stronger than tidiness:
+/// **A HOOK-TOUCH SATISFIES IT BY CONSTRUCTION.** `touch .git/hooks/pre-commit` moves
+/// `hook_mtime` forward and the assertion passes on a hook that was never rebuilt — which is
+/// precisely the escape hatch acceptance 4 exists to close. A retired oracle left asserted
+/// beside its replacement does not merely duplicate: it re-offers the bypass, and a green run
+/// containing both reads as two independent confirmations when one of them can be satisfied by
+/// a metadata write. Its replacement is
+/// [`crate::the_installed_hook_content_verdict_ignores_the_hook_s_own_mtime`] below, which pins
+/// that the content verdict does not move when the hook's mtime does.
+///
+/// The pre-PUSH mtime legs further down are NOT retired and that asymmetry is deliberate — see
+/// their own doc comment. tfdki replaced the PRE-COMMIT oracle only; pre-push has no digest, so
+/// deleting its mtime legs would remove the only freshness check it has.
+use no_shell_gate::hook_digest::HOOK_SOURCE_CRATES;
 
 /// Literals a landed commit introduced into the hook's source, and that commit.
 ///
@@ -421,14 +288,27 @@ fn every_accepted_staleness_row_names_a_bead_and_a_reason() {
     }
 }
 
-/// The SAME staleness class, aimed at the pre-push hook — which had no leg at all
-/// until 2026-09-02.
+/// PRE-PUSH ONLY, AND DELIBERATELY STILL MTIME — RE-SCOPED, NOT RETIRED
+/// (`omp-orchestrator-tfdki`, done-bar (d)).
 ///
-/// `.git/hooks/pre-push` is also a compiled Mach-O binary (615,728 bytes, built
-/// 09-01 09:49 when this was written), so teaching `pre-push-gate.rs` to check
-/// toolchain parity with CI changed nothing about what the installed hook
-/// enforces. That is exactly the failure the pre-commit leg above was written for,
-/// and it was reachable through the pre-push door the whole time.
+/// ⛔ THIS IS THE WEAKER ORACLE AND IT IS KEPT ON PURPOSE. tfdki replaced the PRE-COMMIT
+/// freshness oracle with a content digest; `.git/hooks/pre-push` HAS NO DIGEST. Deleting this
+/// leg alongside the pre-commit one would have removed the only freshness check pre-push has,
+/// which is a coverage loss dressed as a cleanup — so the blanket reading of "retire the mtime
+/// legs" is refused here and the asymmetry is stated instead.
+///
+/// ⛔ AND ITS LIMITS ARE NAMED SO NOBODY READS IT AS THE PRE-COMMIT CONTRACT: mtime proves the
+/// binary is NOT OLDER than these three sources. It does NOT prove it was built from them, and
+/// `touch .git/hooks/pre-push` satisfies it without a rebuild. It is a floor, not a proof.
+///
+/// DEATH CONDITION: this leg and its sibling below die when `pre-push-gate` carries a stamped
+/// source manifest of its own, at which point they are replaced by a content comparison exactly
+/// as the pre-commit leg was. Until then a weak check beats none.
+///
+/// The original finding that earned it: `.git/hooks/pre-push` is also a compiled Mach-O binary
+/// (615,728 bytes, built 09-01 09:49 when this was written), so teaching `pre-push-gate.rs` to
+/// check toolchain parity with CI changed nothing about what the installed hook enforces — the
+/// same laundering the pre-commit leg was written for, reachable through the pre-push door.
 #[test]
 fn the_installed_pre_push_hook_is_not_older_than_its_source() {
     let root = repo_root();
@@ -538,4 +418,187 @@ fn an_installed_pre_push_copy_is_fresh_when_present() {
         installed.display(),
         newest_path.display()
     );
+}
+
+// ── tfdki DONE-BAR (b) AND (c), AND THE ROOT-CLASS GAP IN ACCEPTANCE 5 ─────────────────────
+
+/// ACCEPTANCE 4, WHICH HAD NO LEG: `touch .git/hooks/pre-commit` MUST NOT RESCUE A STALE HOOK.
+///
+/// The old mtime oracle could be laundered by a metadata write on the hook itself — that is the
+/// escape hatch this bead closes, and until now it was closed only BY CONSTRUCTION ("the hook's
+/// mtime is never compared"), which is an argument about absence. Absence is exactly what a
+/// future edit reintroduces silently, so it is pinned here as behaviour.
+///
+/// Driven at the API, not through the installed binary: the hook's stamp is baked from the REAL
+/// repo at ITS build time, so no fixture can ever be CLEAN against it — the structural reason
+/// the previous fixture-level leg was vacuous.
+#[test]
+fn the_content_verdict_is_unmoved_by_writing_the_hook_itself() {
+    let tree = tempfile::tempdir().expect("tempdir");
+    let root = tree.path();
+    let src = root.join("crates/no-shell-gate/src");
+    std::fs::create_dir_all(&src).expect("covered crate src");
+    let covered = src.join("lib.rs");
+    std::fs::write(&covered, b"fn a() {}\n").expect("write covered source");
+
+    let stamped = no_shell_gate::hook_digest::hook_source_manifest(root)
+        .expect("the fixture tree is a covered tree");
+    assert!(
+        !no_shell_gate::hook_digest::manifest_rows(&stamped).is_empty(),
+        "RULE hook_touch_non_vacuous: a manifest with no rows would make every assertion below \
+         pass without measuring anything"
+    );
+
+    // GENUINELY STALE: one byte of a covered source changes after the stamp.
+    std::fs::write(&covered, b"fn b() {}\n").expect("edit covered source");
+    let current = no_shell_gate::hook_digest::hook_source_manifest(root).expect("recompute");
+    let before = no_shell_gate::hook_digest::diff_manifests(&stamped, &current);
+    assert!(
+        !before.is_empty(),
+        "RULE hook_touch_precondition: the tree must be STALE before the touch, or the leg \
+         proves nothing about rescuing staleness"
+    );
+
+    // THE ESCAPE HATCH: write the hook itself, which is what a `touch` does to mtime.
+    let hooks = root.join(".git/hooks");
+    std::fs::create_dir_all(&hooks).expect("hooks dir");
+    let hook = hooks.join("pre-commit");
+    std::fs::write(&hook, b"#!/bin/sh\nexit 0\n").expect("install hook");
+    let hook_first = std::fs::metadata(&hook)
+        .and_then(|m| m.modified())
+        .expect("hook mtime");
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    std::fs::write(&hook, b"#!/bin/sh\nexit 0\n").expect("re-write hook");
+    let hook_second = std::fs::metadata(&hook)
+        .and_then(|m| m.modified())
+        .expect("hook mtime");
+    assert!(
+        hook_second >= hook_first,
+        "RULE hook_touch_is_real: the hook's mtime must actually have moved, or this leg is \
+         asserting against a touch that never happened"
+    );
+
+    let after = no_shell_gate::hook_digest::diff_manifests(
+        &stamped,
+        &no_shell_gate::hook_digest::hook_source_manifest(root).expect("recompute"),
+    );
+    assert_eq!(
+        after, before,
+        "RULE hook_touch_cannot_launder: writing the hook must not change the content verdict; \
+         the old mtime oracle could be rescued this way and the digest must not be"
+    );
+    assert!(
+        !after.is_empty(),
+        "RULE hook_touch_cannot_launder: the tree is still stale after the hook was touched"
+    );
+}
+
+/// DONE-BAR (c): THE HAND LIST IS NOW A RATCHET, NOT A SILENT FLOOR.
+///
+/// `no-shell-gate` declares path deps that are LINKED INTO the hook binary; `HOOK_SOURCE_CRATES`
+/// watches five of them. Editing an unwatched one changes the artifact and leaves the manifest
+/// identical — DEFECT B in the bead, which its own comment predicted a hand list would
+/// re-acquire, and which has now happened three times (`omp-inventory-map` is the newest).
+///
+/// ⛔ DERIVATION WAS CONSIDERED AND DELIBERATELY NOT TAKEN HERE. Deriving the covered set from
+/// the closure widens it from 24 files to 40+, which CHANGES THE STAMP, which makes every
+/// installed hook in the fleet report `STALE_HEALING` on its next commit. That is a fleet-wide
+/// event and it is not this leg's to trigger. It also contradicts the bead's own ruling —
+/// "LINKAGE IS NOT INFLUENCE, ten are unproven, watching 16 crates is the over-strict gate this
+/// repo calls the slower death".
+///
+/// ⭐ WHAT THIS LEG DOES INSTEAD IS THE PART THAT WAS ACTUALLY MISSING: it removes the SILENCE.
+/// Every declared path dep must be either WATCHED or explicitly listed as unwatched WITH A
+/// REASON. A new dependency is neither, so it FAILS here until somebody classifies it. The
+/// drift stops being invisible without the blast radius of watching everything.
+#[test]
+fn every_linked_path_dep_is_watched_or_declared_unwatched() {
+    let manifest = std::fs::read_to_string(
+        repo_root().join("crates/no-shell-gate/Cargo.toml"),
+    )
+    .expect("no-shell-gate manifest is readable");
+    // SCOPED TO `[dependencies]`. A `[dev-dependencies]` path dep is linked into the TEST
+    // binary, never into the installed hook, so counting it here would demand an exemption row
+    // for a crate that cannot affect the artifact this digest describes.
+    let declared: Vec<String> = manifest
+        .lines()
+        .skip_while(|line| line.trim() != "[dependencies]")
+        .skip(1)
+        .take_while(|line| !line.trim_start().starts_with('['))
+        .filter_map(|line| {
+            let (name, rest) = line.split_once('=')?;
+            rest.contains("path = \"../")
+                .then(|| name.trim().to_owned())
+        })
+        .collect();
+    assert!(
+        declared.len() >= 5,
+        "RULE dep_ratchet_non_vacuous: only {} path deps parsed out of the manifest; a parser \
+         that reads nothing would pass this leg while measuring nothing",
+        declared.len()
+    );
+
+    let unclassified: Vec<&String> = declared
+        .iter()
+        .filter(|dep| {
+            !HOOK_SOURCE_CRATES.contains(&dep.as_str())
+                && !no_shell_gate::hook_digest::DELIBERATELY_UNWATCHED
+                    .iter()
+                    .any(|(name, _)| name == dep)
+        })
+        .collect();
+    assert!(
+        unclassified.is_empty(),
+        "RULE dep_ratchet: {} linked path dep(s) are neither WATCHED nor declared unwatched: \
+         {unclassified:?}\nAdd each to HOOK_SOURCE_CRATES (it will change the stamp and every \
+         hook in the fleet will heal once), or to DELIBERATELY_UNWATCHED with the reason it \
+         cannot alter hook behaviour. Silence is the one option this leg removes.",
+        unclassified.len()
+    );
+
+    for (name, reason) in no_shell_gate::hook_digest::DELIBERATELY_UNWATCHED {
+        assert!(
+            declared.iter().any(|dep| dep == name),
+            "RULE dep_ratchet_expires: {name:?} is declared unwatched but is no longer a path \
+             dep; a stale exemption is how an allowlist outlives its reason"
+        );
+        assert!(
+            reason.len() > 20,
+            "RULE dep_ratchet_reasoned: {name:?} needs a real reason, not a placeholder"
+        );
+    }
+}
+
+/// ACCEPTANCE 5's `Unreadable` ARM, PROVED WITHOUT A `chmod` — the ROOT-class workaround.
+///
+/// ⛔ A `chmod`-unreadable fixture IS READABLE AS ROOT, and the lane workers run as root, so a
+/// permission-based leg is unprovable there BY CONSTRUCTION (ROOT class). A DANGLING SYMLINK is
+/// not a permission: `read` fails with ENOENT for every uid, so the error is injected at the
+/// filesystem boundary in a way privilege cannot bypass.
+#[test]
+fn an_unreadable_covered_source_is_a_typed_refusal_not_a_pass() {
+    let tree = tempfile::tempdir().expect("tempdir");
+    let root = tree.path();
+    let src = root.join("crates/no-shell-gate/src");
+    std::fs::create_dir_all(&src).expect("covered crate src");
+    std::fs::write(src.join("lib.rs"), b"fn a() {}\n").expect("write readable source");
+
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(root.join("nowhere.rs"), src.join("dangling.rs"))
+        .expect("dangling symlink");
+
+    let outcome = no_shell_gate::hook_digest::hook_source_manifest(root);
+    match outcome {
+        Err(no_shell_gate::hook_digest::DigestError::Unreadable { path, .. }) => {
+            assert!(
+                path.contains("dangling.rs"),
+                "RULE unreadable_named: the refusal must name the file it could not read, got \
+                 {path}"
+            );
+        }
+        other => panic!(
+            "RULE unreadable_is_refused: an unreadable covered source must be a typed refusal, \
+             never a manifest computed over the files that happened to be readable; got {other:?}"
+        ),
+    }
 }

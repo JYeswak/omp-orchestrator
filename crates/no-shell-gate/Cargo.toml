@@ -39,6 +39,7 @@ unsafe_code = "forbid"
 
 [dev-dependencies]
 serde_json = "1"
+tempfile = "3"
 asupersync-conformance = { path = "../asupersync-conformance" }
 text-structure = { path = "../text-structure" }
 omp-orchestrator = { path = "../omp-orchestrator" }
