@@ -151,15 +151,15 @@ id = "S1-HOOK-CLAUDE-STOP"
 event = "claude Stop"
 matcher = "(none -- fires on every Stop)"
 class = "gate"
-fail_mode = "UNMEASURED"
+fail_mode = "per-binary, pane-1 re-ran 2026-09-12 (qc0h): zestgraph-close-check UNKNOWN (--help/--selftest/--probe all rc=0 0 bytes); zestgraph-agent-prompt-drift REPORT-ONLY/fail-open (own --selftest KB1: drift reported, exit still 0); zestgraph-machine-health fail-closed OBSERVED (--probe FAIL + exit 1). finding-bead-gate.sh OUT-OF-SCOPE this bead."
 binary = "zestgraph-close-check, zestgraph-agent-prompt-drift, zestgraph-machine-health, finding-bead-gate.sh"
 policy_file = ""
 source_commit = ""
-language = "rust x3 + SHELL x1 -- see harm_class"
+language = "rust Mach-O arm64 x3 (close-check, agent-prompt-drift, machine-health) measured pane-1 2026-09-12; SHELL x1 finding-bead-gate.sh UNTOUCHED this probe"
 stage = "live"
 certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a session close; AND CARRIES A LIVE .sh HOOK against AGENTS.md's 'No .sh hook, ever'"
-measured = "1 matcher / 4 hooks. finding-bead-gate.sh is under ~/.claude/, outside the tree, so the no-shell gate that walks git ls-files cannot see it -- the same geography escape as PX-E14."
+measured = "qc0h: command -v + file + --help/--selftest/--probe on the three rust STOP binaries. Independent re-run pane-1. finding-bead-gate.sh not executed. Zero inferred rows."
 note = "HD-0011's clause -- REFUSE Stop while an in_progress bead held by this agent has no STAGE comment since dispatch -- is still 0 of 4. The four live hooks do something else."
 
 [[box.hook]]
