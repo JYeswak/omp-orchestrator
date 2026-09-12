@@ -12,7 +12,8 @@ path = "src/main.rs"
 [dependencies]
 ack-spine = { path = "../ack-spine" }
 serde_json = "1"
-finding = { path = "../finding" }
+# `finding` is gone with the `br` spawn: the closed-bead oracle is the STAGED
+# `.beads/issues.jsonl` blob, so this crate no longer names the tracker binary.
 subprocess-contract = { path = "../subprocess-contract" }
 omp-types = { path = "../omp-types" }
 

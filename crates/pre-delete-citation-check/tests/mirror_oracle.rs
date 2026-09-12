@@ -11,8 +11,8 @@
 //! Every assertion keys on the MESSAGE or on a caught conflict, never on a bare `is_err()`.
 
 use pre_delete_citation_check::{
-    beads_mirror_path, check_deletions, parse_closed_beads, parse_closed_beads_jsonl_checked,
-    read_closed_beads_from_mirror,
+    beads_mirror_path, check_deletions, parse_closed_beads_jsonl_checked,
+    read_closed_beads_from_mirror, read_index_mirror, ClosedBead, IndexMirror,
 };
 
 /// A closed bead whose ONLY citation of the deleted path is in a comment. This is the exact
@@ -28,10 +28,11 @@ const COMMENT_ONLY_CITATION: &str = concat!(
     "\n"
 );
 
-/// FIRES-ON-KNOWN-BAD, and it is the whole bead: the OLD oracle misses this citation and the
-/// NEW one catches it. Both halves asserted in one test so the delta cannot be misread.
+/// FIRES-ON-KNOWN-BAD, and it is the whole bead: a comment-stripped oracle misses this
+/// citation and the mirror oracle catches it. Both halves asserted in one test so the delta
+/// cannot be misread.
 #[test]
-fn a_comment_only_citation_is_caught_by_the_mirror_and_missed_by_the_br_oracle() {
+fn a_comment_only_citation_is_caught_by_the_mirror_and_missed_without_comments() {
     let deletions = vec!["bin/fleet-composite.py".to_owned()];
 
     // NEW oracle: comments are present, so the conflict is found and attributed.
@@ -48,22 +49,22 @@ fn a_comment_only_citation_is_caught_by_the_mirror_and_missed_by_the_br_oracle()
         "the conflict must name WHICH surface cited it, so a repair knows where to look"
     );
 
-    // OLD oracle: the same rows through `br list --json` shape carry no comments at all, so
-    // the identical deletion sails through. This is not a hypothetical -- it is what the live
-    // commit-path gate did until dpa4.
-    let br_shaped = format!(
-        r#"{{"issues":[{{"id":"fx-comment-only","status":"closed","close_reason":"DONE superseded by a Rust crate"}}]}}"#
-    );
-    let br_closed = parse_closed_beads(&br_shaped);
-    assert_eq!(br_closed.len(), 1, "the br-shaped row must still parse");
+    // OLD oracle's SHAPE. `br list --json --status closed` returned rows with no `comments`
+    // key at all (measured 2026-09-07: 196 rows, zero), so the vector reaching
+    // `check_deletions` looked exactly like this and the identical deletion sailed through.
+    // That parser is deleted with its spawn; the shape it produced is reconstructed here so
+    // the delta this gate turns on stays a STANDING ASSERTION rather than a claim in a
+    // comment -- if `check_deletions` ever starts finding a citation in a comment-free bead,
+    // the premise has changed and dpa4 must be re-measured, not assumed.
+    let comment_free = vec![ClosedBead {
+        id: "fx-comment-only".to_owned(),
+        close_reason: "DONE superseded by a Rust crate".to_owned(),
+        comments: Vec::new(),
+    }];
     assert!(
-        br_closed[0].comments.is_empty(),
-        "premise of the whole bead: the br oracle carries no comments"
-    );
-    assert!(
-        check_deletions(&deletions, &br_closed).is_empty(),
-        "the br oracle MISSES the comment-only citation -- if this ever finds it, the premise \
-         has changed and dpa4 must be re-measured, not assumed"
+        check_deletions(&deletions, &comment_free).is_empty(),
+        "a comment-free oracle MISSES the comment-only citation; that miss is the defect the \
+         mirror oracle exists to close"
     );
 }
 
@@ -115,12 +116,15 @@ fn every_empty_or_unreadable_oracle_is_a_named_refusal() {
         "the refusal must name the offending line; got {malformed:?}"
     );
 
+    // UNREADABLE ORACLE, and the read is now the INDEX (`omp-orchestrator-5lgku`): a root
+    // that is not a repository cannot answer, and the refusal must name a reason and the
+    // path rather than degrade into an empty closed-bead set.
     let absent = read_closed_beads_from_mirror(std::path::Path::new(
         "/nonexistent/dpa4-probe-repo-root",
     ))
-    .expect_err("an ABSENT mirror must refuse, not read as zero citations");
+    .expect_err("an UNREADABLE staged mirror must refuse, not read as zero citations");
     assert!(
-        absent.contains("PRE_DELETE_BEADS_UNREADABLE reason=mirror_unreadable"),
+        absent.contains("PRE_DELETE_BEADS_UNREADABLE reason="),
         "got {absent:?}"
     );
     assert!(
@@ -132,17 +136,23 @@ fn every_empty_or_unreadable_oracle_is_a_named_refusal() {
 /// The REAL mirror in this repository must be readable and must actually carry comments.
 /// A fixture-only suite cannot prove the production oracle is non-vacuous.
 ///
-/// ENVIRONMENT DISCRIMINATION, and it is the point of this comment. Joshua's contabo-lane rule
-/// makes the Linux workers authoritative, and `rch` syncs SOURCE without `.git` or `.beads/`.
-/// This test failed there on its first lane run -- correctly, as written, and for the wrong
-/// reason: the mirror was ABSENT, which is UNMEASURED, not "the oracle is vacuous". Those are
-/// two verdicts with two remedies and a Rust test has only pass/fail to say them in.
+/// ENVIRONMENT DISCRIMINATION, and it is the point of this comment. Joshua's contabo-lane
+/// rule makes the Linux workers authoritative, and `rch` syncs SOURCE. A tree that cannot
+/// present the oracle is UNMEASURED, not "the oracle is vacuous": two verdicts with two
+/// remedies, and a Rust test has only pass/fail to say them in.
 ///
-/// The discriminator is POSITIVE, never "the input is missing so assume fine": a tree with no
-/// `.git` is a synced worker copy and cannot answer this question at all. A tree that IS a
-/// checkout and has no mirror is the real defect and still FAILS. That keeps the vacuous-green
-/// shape out: absence alone never satisfies this test, only absence PLUS proof that the
-/// environment is not a repository.
+/// THE DISCRIMINATOR FOLLOWS THE ORACLE (`omp-orchestrator-5lgku`). It used to key on the
+/// WORKTREE mirror's existence, which stopped being the gate's input when the reader moved
+/// to the index. Measured on contabo-1 2026-09-11, on the run that caught this: `.git` is
+/// present AND the worktree mirror is present, while `git ls-files --stage --
+/// .beads/issues.jsonl` returns EMPTY -- so the old discriminator waved the leg through and
+/// it then failed on a denominator of 0, reporting "the oracle is vacuous" for a tree whose
+/// index simply has no tracker. The question this test asks is about the INDEX oracle, so a
+/// tree whose index carries no mirror cannot answer it at all.
+///
+/// STILL POSITIVE, never "the input is missing so assume fine": an index read that FAILS is
+/// a failure, and an index mirror that IS present and carries no comments is the dpa4 defect
+/// and still FAILS. Only `NotInIndex` -- the typed "this tree has no tracker" -- declines.
 ///
 /// CAVEAT MEASURED ON THE LANE, and it limits the claim: libtest CAPTURES stdout for a
 /// PASSING test, so the `UNMEASURED` line below is invisible in a green run unless
@@ -156,30 +166,31 @@ fn the_real_repository_mirror_carries_comments() {
     let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..");
-    let path = beads_mirror_path(&repo_root);
+    let worktree_copy = beads_mirror_path(&repo_root);
 
-    if !repo_root.join(".git").exists() {
-        // Loud, named, and it prints the reason so a reader of a green run can see that this
-        // leg did NOT run rather than inferring it passed.
-        println!(
-            "UNMEASURED reason=not_a_repo_checkout root={} mirror_present={} -- rch syncs \
-             source without .git or .beads, so the production oracle is unobservable here. \
-             This is not a pass for the subject.",
-            repo_root.display(),
-            path.exists()
-        );
-        return;
-    }
+    let staged = match read_index_mirror(&repo_root) {
+        Ok(IndexMirror::Staged(text)) => text,
+        Ok(IndexMirror::NotInIndex) => {
+            // Loud, named, and it prints the evidence so a reader of a green run can see
+            // that this leg did NOT run rather than inferring it passed.
+            println!(
+                "UNMEASURED reason=mirror_not_in_index root={} worktree_copy_present={} -- \
+                 this tree's INDEX carries no tracker, which is what an rch-synced source \
+                 copy looks like, so the production oracle is unobservable here. This is not \
+                 a pass for the subject.",
+                repo_root.display(),
+                worktree_copy.exists()
+            );
+            return;
+        }
+        Err(error) => panic!(
+            "the index read itself failed at {}: {error} -- an unreadable index is a failure, \
+             never a decline",
+            repo_root.display()
+        ),
+    };
 
-    assert!(
-        path.exists(),
-        "this IS a repo checkout ({}) and the mirror is absent at {} -- the live gate has no \
-         oracle, which is the dpa4 defect in its most direct form",
-        repo_root.display(),
-        path.display()
-    );
-
-    let closed = read_closed_beads_from_mirror(&repo_root).expect("the real mirror must parse");
+    let closed = parse_closed_beads_jsonl_checked(&staged).expect("the real mirror must parse");
     let with_comments = closed.iter().filter(|b| !b.comments.is_empty()).count();
     assert!(
         closed.len() >= 50,

@@ -33,25 +33,20 @@ use std::time::Duration;
 
 pub use omp_types::named_outcomes::ChildOutcome;
 
-/// Deadline for `git diff --cached --diff-filter=D --name-only`.
+/// Deadline for the `git` reads on the commit path: the staged-deletion diff and the
+/// two index reads behind [`read_index_mirror`].
 ///
 /// A local index read with no lock contention; 30s is two orders of magnitude
 /// above any observed value and exists to terminate a wedged child, not to
 /// police a slow one.
 pub const GIT_DIFF_DEADLINE: Duration = Duration::from_secs(30);
 
-/// Deadline for `br list --json --status closed`.
-///
-/// DELIBERATELY GENEROUS, and the number is argued rather than picked. This gate
-/// runs on the COMMIT path against a ~31 MB `.beads/beads.db` with several live
-/// writers, where AGENTS.md records reads at 40-250s, one `br comments add` at
-/// 56.7s under contention, and a close attempt held for 290s. A ceiling below
-/// that band would fire on a HEALTHY-but-contended read and refuse every commit
-/// in the repo -- the over-strict-gate failure the acceptance for this fix names,
-/// and the same defect as the `mail_pending` ceiling set under its subject's own
-/// documented deadline, where every measured CANCELED was the caller's SIGTERM
-/// landing first. 300s sits above the observed band, so a fire means WEDGED.
-pub const BR_LIST_DEADLINE: Duration = Duration::from_secs(300);
+// REMOVED WITH ITS SPAWN: `BR_LIST_DEADLINE` argued a 300s ceiling for
+// `br list --json --status closed`, and nothing on the commit path spawns `br` any more.
+// The tracker oracle is the INDEX mirror (`omp-orchestrator-dpa4` moved it off `br`;
+// `omp-orchestrator-5lgku` moved it off the worktree), which takes no `.beads/.write.lock`
+// and needs no contention band. A tuned constant whose subject no longer runs is a
+// documented fiction, so it is deleted rather than kept "in case".
 
 /// Spawn `command` under `deadline` and return the TYPED outcome.
 ///
@@ -165,68 +160,21 @@ pub fn parse_staged_deletions(git_output: &str) -> Vec<String> {
         .collect()
 }
 
-/// Extract closed beads from `br list --json --status closed` output.
-/// The `br list` wraps rows in `.issues`.
-pub fn parse_closed_beads(br_json: &str) -> Vec<ClosedBead> {
-    let parsed: Result<Value, _> = serde_json::from_str(br_json);
-    let Ok(value) = parsed else { return Vec::new() };
-    let issues = match value.get("issues").and_then(Value::as_array) {
-        Some(issues) => issues,
-        None => return Vec::new(),
-    };
-
-    let mut beads = Vec::new();
-    for issue in issues {
-        let status = issue.get("status").and_then(Value::as_str).unwrap_or("");
-        if status != "closed" {
-            continue;
-        }
-        let id = issue
-            .get("id")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned();
-        let close_reason = issue
-            .get("close_reason")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned();
-        // The br JSON does not inline comments; the caller fetches them separately.
-        beads.push(ClosedBead {
-            id,
-            close_reason,
-            comments: Vec::new(),
-        });
-    }
-    beads
-}
-
-/// Checked tracker parse for the gate boundary. Empty, malformed, or non-record output is
-/// restrictive: the deletion cannot be certified safe when the bead store was not read.
-pub fn parse_closed_beads_checked(br_json: &str) -> Result<Vec<ClosedBead>, String> {
-    let value: Value = serde_json::from_str(br_json)
-        .map_err(|error| format!("PRE_DELETE_BEADS_UNREADABLE reason=malformed_json detail={error}"))?;
-    let issues = value
-        .get("issues")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "PRE_DELETE_BEADS_UNREADABLE reason=missing_issues".to_owned())?;
-    if issues.is_empty() {
-        return Err("PRE_DELETE_BEADS_EMPTY reason=zero_bead_records_readable".to_owned());
-    }
-    let beads = parse_closed_beads(br_json);
-    if beads.is_empty() {
-        return Err("PRE_DELETE_BEADS_EMPTY reason=no_closed_records_readable".to_owned());
-    }
-    Ok(beads)
-}
+// SUPERSEDED AND DELETED: `parse_closed_beads` and `parse_closed_beads_checked` parsed
+// `br list --json --status closed`. Nothing spawns `br` any more -- the oracle is the
+// STAGED `.beads/issues.jsonl` blob -- and that JSON never carried a `comments` key, which
+// is the `omp-orchestrator-dpa4` defect those functions embodied. Keeping a second parser
+// for a surface no caller reads is how two oracles drift; `parse_closed_beads_jsonl_checked`
+// is now the only closed-bead parser in the crate.
 
 /// Read closed beads from the `.beads/issues.jsonl` MIRROR, comments included.
 ///
 /// THE DEFECT THIS CLOSES (`omp-orchestrator-dpa4`): `ClosedBead::comments` exists,
 /// [`check_deletions`] scans it, and until this function landed EVERY production caller
-/// passed an empty vector. [`parse_closed_beads`] says so in its own body -- *"The br JSON
-/// does not inline comments; the caller fetches them separately"* -- and no caller ever
-/// did. Measured 2026-09-07: `br list --json --status closed` returns **196 rows and 0 of
+/// passed an empty vector. The deleted `parse_closed_beads` said so in its own body --
+/// *"The br JSON does not inline comments; the caller fetches them separately"* -- and no
+/// caller ever did. Measured 2026-09-07: `br list --json --status closed` returns **196
+/// rows and 0 of
 /// them carry a `comments` key at all**, so the comment-scanning half of this gate was
 /// structurally vacuous, not merely untested.
 ///
@@ -297,21 +245,179 @@ pub fn parse_closed_beads_jsonl_checked(jsonl: &str) -> Result<Vec<ClosedBead>, 
     Ok(beads)
 }
 
-/// Path of the tracker mirror relative to a repository root.
+/// Repo-relative path of the tracker mirror. ONE constant, so the INDEX read, the
+/// worktree helper and every message name the same file and cannot drift apart.
+pub const MIRROR_PATH: &str = ".beads/issues.jsonl";
+
+/// WORKTREE path of the tracker mirror.
+///
+/// NOT THE GATE'S ORACLE. The commit path must read [`read_index_mirror`]; this helper
+/// exists for environment discrimination (does this tree carry a mirror at all) and for
+/// messages. A caller that reads these bytes on the commit path re-opens 249hz.
 pub fn beads_mirror_path(repo_root: &Path) -> std::path::PathBuf {
-    repo_root.join(".beads").join("issues.jsonl")
+    repo_root.join(MIRROR_PATH)
 }
 
-/// Read and check the mirror at `repo_root`. An absent file is restrictive, NOT an empty pass.
+/// Why the staged mirror could not be read.
+///
+/// TYPED, because the remedies differ and the binary maps a DEADLINE to its own exit
+/// code: a timeout is not a verdict, and collapsing it into "git failed" is the
+/// conflation that cost this repo a six-hour false diagnosis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MirrorReadError {
+    /// `git` ran and refused: not a repository, unreadable index, corrupt object.
+    GitFailed {
+        code: Option<i32>,
+        argv: String,
+        detail: String,
+    },
+    /// `git` never returned within the deadline, so the staged mirror is UNKNOWN.
+    Timeout { after_ms: u64, group_killed: bool },
+    /// `git` could not be spawned at all: a PATH/env problem, not a tracker problem.
+    Unspawnable { detail: String },
+    /// The staged blob is not UTF-8. Decoding it LOSSILY would turn unreadable bytes
+    /// into a clean-looking mirror with no records, which is a silent pass.
+    NotUtf8 { bytes: usize },
+}
+
+impl fmt::Display for MirrorReadError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MirrorReadError::GitFailed { code, argv, detail } => write!(
+                formatter,
+                "PRE_DELETE_BEADS_UNREADABLE reason=git_index_read_failed path={MIRROR_PATH} \
+                 argv={argv} code={code:?} detail={detail}"
+            ),
+            MirrorReadError::Timeout {
+                after_ms,
+                group_killed,
+            } => write!(
+                formatter,
+                "PRE_DELETE_GIT_TIMEOUT reason=index_read_timeout path={MIRROR_PATH} \
+                 after_ms={after_ms} group_killed={group_killed}; no exit status was observed, \
+                 so the STAGED mirror is UNKNOWN and no deletion can be certified citation-free"
+            ),
+            MirrorReadError::Unspawnable { detail } => write!(
+                formatter,
+                "PRE_DELETE_BEADS_UNREADABLE reason=git_unspawnable path={MIRROR_PATH} \
+                 detail={detail}"
+            ),
+            MirrorReadError::NotUtf8 { bytes } => write!(
+                formatter,
+                "PRE_DELETE_BEADS_UNREADABLE reason=staged_blob_not_utf8 path={MIRROR_PATH} \
+                 bytes={bytes}"
+            ),
+        }
+    }
+}
+
+/// What the INDEX holds for the tracker mirror.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexMirror {
+    /// The index carries the mirror: these are the exact bytes this commit lands.
+    Staged(String),
+    /// The mirror is not in the index at all, so this commit's tree carries no tracker
+    /// and there is nothing for the citation gate to cross-reference against.
+    NotInIndex,
+}
+
+/// Run one `git` read against `repo_root` under [`GIT_DIFF_DEADLINE`], returning RAW bytes.
+///
+/// Bytes, not a `String`: [`run_bounded`] decodes stdout with `from_utf8_lossy`, and a
+/// lossy blob read is how a mirror that cannot be decoded becomes a clean-looking mirror
+/// with zero records. The strict decode happens at the one call site that needs text.
+fn bounded_git_bytes(repo_root: &Path, args: &[&str]) -> Result<Vec<u8>, MirrorReadError> {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(repo_root).args(args);
+    match subprocess_contract::bounded_output(&mut command, GIT_DIFF_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(output.stdout)
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            Err(MirrorReadError::GitFailed {
+                code: output.status.code(),
+                argv: args.join(" "),
+                detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+            })
+        }
+        subprocess_contract::BoundedOutcome::TimedOut => Err(MirrorReadError::Timeout {
+            after_ms: u64::try_from(GIT_DIFF_DEADLINE.as_millis()).unwrap_or(u64::MAX),
+            group_killed: true,
+        }),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(MirrorReadError::Unspawnable {
+                detail: error.to_string(),
+            })
+        }
+    }
+}
+
+/// Read the tracker mirror THE COMMIT IS MADE OF: the INDEX blob, never the worktree file.
+///
+/// THE DEFECT THIS CLOSES (`omp-orchestrator-5lgku`, fifth instance of open P0
+/// `omp-orchestrator-249hz`). The index, the worktree and HEAD are three different trees
+/// and they diverge constantly in a twelve-agent shared checkout -- measured 2026-09-11 on
+/// ONE file: worktree 13637 B, index 11279 B, HEAD 0 B, with the index advanced by a third
+/// party mid-read. A pre-commit gate's subject is the STAGED set, so a worktree read judges
+/// rows the commit is not landing and misses rows it IS landing. Both directions are real:
+/// a row citing a deleted path that is staged but not yet written to the worktree passes
+/// (false green), and a citation present only in the unstaged worktree refuses a commit
+/// that does not contain it (false red). The false green is the dangerous one and it needs
+/// nothing exotic -- `git add`, keep editing, `git commit` with no pathspec.
+///
+/// The same fix landed for the close-reason gate at f194a01 on the same day; this is the
+/// citation gate's copy of it, in the crate that owns the reader rather than at the call
+/// site, so every caller gets the index by construction.
+///
+/// PRESENCE IS READ PROSE-FREE. `git ls-files --stage -- <path>` prints one record when the
+/// path is in the index and NOTHING when it is not, so absence is read off an empty stdout
+/// rather than off git's English error text, which is locale-dependent and would make this
+/// gate's verdict depend on `LC_ALL`.
+///
+/// TWO ABSENCES ARE NOT ONE, and this is the whole reason for [`IndexMirror`]. A mirror
+/// that is in the index and carries no closed records is an ERROR
+/// (`PRE_DELETE_BEADS_EMPTY`, via [`parse_closed_beads_jsonl_checked`]) -- the oracle was
+/// read and came back empty. A mirror that is ABSENT FROM THE INDEX is
+/// `GATE_NOT_APPLICABLE`: this commit's tree carries no tracker, and refusing every such
+/// commit is the unsatisfiable-gate shape this repo removed twice on 2026-09-11.
+///
+/// RESIDUAL, stated: a commit that removes the mirror from the index while deleting a cited
+/// file gets `NotInIndex` and this gate goes quiet for that commit. It is announced on
+/// stderr by [`read_closed_beads_from_mirror`], never silent, and it is strictly narrower
+/// than the worktree hole it replaces.
+pub fn read_index_mirror(repo_root: &Path) -> Result<IndexMirror, MirrorReadError> {
+    let entry = bounded_git_bytes(repo_root, &["ls-files", "--stage", "--", MIRROR_PATH])?;
+    if String::from_utf8_lossy(&entry).trim().is_empty() {
+        return Ok(IndexMirror::NotInIndex);
+    }
+    let spec = format!(":{MIRROR_PATH}");
+    let blob = bounded_git_bytes(repo_root, &["show", &spec])?;
+    let bytes = blob.len();
+    // STRICT, never lossy: replacement characters would parse as a mirror that simply has
+    // no closed rows, which reads identically to a healthy-but-uncited tracker.
+    let text = String::from_utf8(blob).map_err(|_| MirrorReadError::NotUtf8 { bytes })?;
+    Ok(IndexMirror::Staged(text))
+}
+
+/// Read the closed beads the COMMIT carries. An unreadable oracle is restrictive; a mirror
+/// that is absent from the index is `GATE_NOT_APPLICABLE`, announced rather than silent.
+///
+/// This is the shim the pre-commit hook calls: it flattens [`MirrorReadError`] to the
+/// `String` the hook renders. Callers that must distinguish a DEADLINE from a refusal --
+/// this crate's own binary does, to keep its exit code 4 -- call [`read_index_mirror`].
 pub fn read_closed_beads_from_mirror(repo_root: &Path) -> Result<Vec<ClosedBead>, String> {
-    let path = beads_mirror_path(repo_root);
-    let text = std::fs::read_to_string(&path).map_err(|error| {
-        format!(
-            "PRE_DELETE_BEADS_UNREADABLE reason=mirror_unreadable path={} detail={error}",
-            path.display()
-        )
-    })?;
-    parse_closed_beads_jsonl_checked(&text)
+    match read_index_mirror(repo_root).map_err(|error| error.to_string())? {
+        IndexMirror::Staged(text) => parse_closed_beads_jsonl_checked(&text),
+        IndexMirror::NotInIndex => {
+            eprintln!(
+                "pre-delete-citation-check: GATE_NOT_APPLICABLE reason=mirror_not_in_index \
+                 path={MIRROR_PATH} root={} -- this commit's tree carries no tracker, so there \
+                 is no closed-bead oracle to cross-reference and nothing was checked",
+                repo_root.display()
+            );
+            Ok(Vec::new())
+        }
+    }
 }
 /// One closed bead whose close reason does not carry an admitted prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]

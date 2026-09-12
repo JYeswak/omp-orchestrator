@@ -8,7 +8,7 @@
 //! never on an exit code -- AGENTS.md gate rule 7 records `cargo` exiting 101 for two
 //! unrelated causes, so an exit-code-only leg goes green on any unrelated breakage.
 
-use pre_delete_citation_check::{run_bounded, ChildOutcome, BR_LIST_DEADLINE, GIT_DIFF_DEADLINE};
+use pre_delete_citation_check::{run_bounded, ChildOutcome, GIT_DIFF_DEADLINE};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -135,24 +135,8 @@ fn an_unspawnable_command_is_spawn_failed_not_timed_out() {
     }
 }
 
-/// The `br` deadline must sit ABOVE the observed contention band, not below it.
-/// AGENTS.md records reads at 40-250s, one `br comments add` at 56.7s, and a close
-/// attempt held for 290s. A ceiling inside that band fires on a HEALTHY-but-contended
-/// read and refuses every commit -- the same defect as the `mail_pending` ceiling set
-/// under its subject's own documented deadline.
-#[test]
-fn the_br_deadline_sits_above_the_measured_contention_band() {
-    assert!(
-        BR_LIST_DEADLINE >= Duration::from_secs(291),
-        "BR_LIST_DEADLINE is {}s, at or below the 290s close attempt AGENTS.md records; \
-         a bound inside the observed band converts contention into a false refusal on the \
-         commit path",
-        BR_LIST_DEADLINE.as_secs()
-    );
-    assert!(
-        BR_LIST_DEADLINE <= Duration::from_secs(900),
-        "BR_LIST_DEADLINE is {}s; a bound this wide is indistinguishable from none for an \
-         operator waiting on a commit",
-        BR_LIST_DEADLINE.as_secs()
-    );
-}
+// REMOVED WITH ITS SUBJECT: `the_br_deadline_sits_above_the_measured_contention_band`
+// asserted a band for `BR_LIST_DEADLINE`. Nothing on the commit path spawns `br` any more
+// -- the closed-bead oracle is the STAGED `.beads/issues.jsonl` blob -- so the constant and
+// its leg are both gone. A green assertion about a constant no caller reads is exactly the
+// frozen-snapshot-as-measurement shape this repository keeps deleting.

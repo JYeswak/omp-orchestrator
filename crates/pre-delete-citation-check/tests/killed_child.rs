@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
-use pre_delete_citation_check::{check_deletions, parse_closed_beads_checked};
+use pre_delete_citation_check::{check_deletions, parse_closed_beads_jsonl_checked};
 
 fn killed_git_dir(dir: &std::path::Path) -> std::path::PathBuf {
     let git = dir.join("git");
@@ -107,18 +107,26 @@ fn working_git_with_no_deletions_passes() {
     std::fs::remove_dir_all(&tmp).ok();
 }
 
+/// ANTI-VACUITY on the ORACLE the commit path now reads: every shape of "no records" is a
+/// typed error, never an empty closed-bead set that reads identically to a clean tracker.
 #[test]
 fn empty_closed_bead_records_are_an_error_not_a_pass() {
-    for raw in ["", "{}", "{\"issues\":[]}"] {
-        let error = parse_closed_beads_checked(raw).expect_err("empty tracker input must refuse");
-        assert!(error.contains("PRE_DELETE_BEADS_"), "typed anti-vacuity error: {error}");
+    for raw in ["", "   \n\n", "{\"id\":\"a\",\"status\":\"open\"}\n"] {
+        let error =
+            parse_closed_beads_jsonl_checked(raw).expect_err("empty mirror input must refuse");
+        assert!(
+            error.contains("PRE_DELETE_BEADS_EMPTY"),
+            "typed anti-vacuity error: {error}"
+        );
     }
 }
 
+/// The original incident specimen, carried through the oracle that actually runs.
 #[test]
 fn closed_status_predicate_detects_cp_op5uu() {
-    let json = r#"{"issues":[{"id":"cp-op5uu","status":"closed","close_reason":"bin/omp-idle-dispatch.sh"}]}"#;
-    let beads = parse_closed_beads_checked(json).expect("closed record is readable");
+    let jsonl =
+        r#"{"id":"cp-op5uu","status":"closed","close_reason":"bin/omp-idle-dispatch.sh"}"#;
+    let beads = parse_closed_beads_jsonl_checked(jsonl).expect("closed record is readable");
     let conflicts = check_deletions(&["bin/omp-idle-dispatch.sh".to_owned()], &beads);
     assert_eq!(conflicts.len(), 1, "closed-status specimen must be detected");
     assert_eq!(conflicts[0].bead_id, "cp-op5uu");
