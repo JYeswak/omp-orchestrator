@@ -37,7 +37,7 @@ pub struct Step {
 
 /// Persona / not-live / HD set `status`. They do not delete the step.
 pub fn apply_predicates(steps: &mut [Step], live: bool, persona_a: bool, hd0009_decided: bool) {
-    for step in steps {
+    for step in steps.iter_mut() {
         match step.predicate {
             Predicate::Always => {}
             Predicate::PersonaA if !persona_a => {
@@ -51,6 +51,18 @@ pub fn apply_predicates(steps: &mut [Step], live: bool, persona_a: bool, hd0009_
                 step.reason_code = Some("HD-0009");
             }
             _ => {}
+        }
+    }
+    if !hd0009_decided {
+        let mut past_halt = false;
+        for step in steps.iter_mut() {
+            if step.predicate == Predicate::Hd0009Decided {
+                past_halt = true;
+                continue;
+            }
+            if past_halt && step.status == StepStatus::Ready {
+                step.status = StepStatus::Blocked;
+            }
         }
     }
 }

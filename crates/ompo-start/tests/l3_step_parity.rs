@@ -266,3 +266,33 @@ fn both_renderers_borrow_the_same_array() {
         "known-bad: cloned TUI that drops last id diverges"
     );
 }
+
+#[test]
+fn undecided_hd0009_blocks_tail() {
+    let mut steps = fixture_steps();
+    apply_predicates(&mut steps, true, true, false);
+    let hd = steps
+        .iter()
+        .find(|step| step.id == "L3-HD0009")
+        .expect("HD-0009 stays in STEPS");
+    assert_eq!(hd.status, StepStatus::Blocked);
+    assert_eq!(hd.reason_code, Some("HD-0009"));
+    assert_eq!(
+        next_command(&steps),
+        Some("ask Joshua: slash vs launchd vs hand")
+    );
+    let hd_idx = steps
+        .iter()
+        .position(|step| step.id == "L3-HD0009")
+        .expect("HD-0009 index");
+    assert!(
+        steps[hd_idx + 1..]
+            .iter()
+            .all(|step| step.status != StepStatus::Ready),
+        "undecided HD-0009 must not leave a later Ready: {:?}",
+        steps[hd_idx + 1..]
+            .iter()
+            .map(|step| (step.id, step.status))
+            .collect::<Vec<_>>()
+    );
+}
