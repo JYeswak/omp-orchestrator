@@ -80,8 +80,50 @@ fn manifest(root: &Path, crate_name: &str) -> String {
     })
 }
 
-fn declares_check(root: &Path, crate_name: &str) -> bool {
-    manifest(root, crate_name).contains("[package.metadata.gate]")
+/// ⛔ THE PARSER, NOT A SUBSTRING. `omp-orchestrator-fence-ci-non-verdict-16l`, ruling 2.
+///
+/// This used to be `manifest(root, crate_name).contains("[package.metadata.gate]")` — a substring
+/// match on the stanza HEADER. Two readers of "does this crate declare a check" then disagreed BY
+/// CONSTRUCTION, and THE WEAKER ONE WAS THE ONE IN THE GATE: the header is present for
+/// `commit-build-fence`, whose phases are `init` (setup) then `check` ON THE SAME BIN, so
+/// `plan_check_phase` skips the setup and then skips the check as setup-dependent. Nothing of that
+/// crate executes on a check pass — INCLUDING ON A GENUINELY FENCED TREE — and the substring could
+/// not see it.
+///
+/// DECLARED IS NOT EXECUTABLE. This asks the same question the runner asks, through the same
+/// parser and the same plan, so the gate and the runner cannot drift.
+fn declares_executable_check(crate_name: &str) -> bool {
+    let metadata = workspace_metadata();
+    let checks = gate_runner::derive_checks(metadata).expect("cargo metadata parses");
+    checks
+        .iter()
+        .filter(|c| c.crate_name == crate_name)
+        .any(|c| {
+            (0..c.phases.len()).any(|index| {
+                gate_runner::plan_check_phase(&c.phases, index) == gate_runner::CheckRunPlan::Execute
+            })
+        })
+}
+
+/// `cargo metadata` for THIS workspace, read once. Not a build: `--no-deps --offline`.
+static WORKSPACE_METADATA: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let output = std::process::Command::new(cargo)
+        .args(["metadata", "--no-deps", "--format-version", "1", "--offline"])
+        .current_dir(repo_root())
+        .output()
+        .expect("cargo metadata must be spawnable");
+    assert!(
+        output.status.success(),
+        "ANTI-VACUITY: cargo metadata failed, so an empty check set would read as 'nothing \
+         declares a check' — a refusal, never a pass: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("metadata is utf8")
+});
+
+fn workspace_metadata() -> &'static str {
+    &WORKSPACE_METADATA
 }
 
 fn has_any_test(root: &Path, crate_name: &str) -> bool {
@@ -128,15 +170,31 @@ fn every_former_gate_job_crate_is_still_reached_through_the_entry_point() {
     let mut unreached = Vec::new();
     for (crate_name, ran_binary) in FORMER_JOB_CRATES {
         let tests = has_any_test(&root, crate_name);
-        let checks = declares_check(&root, crate_name);
+        let checks = declares_executable_check(crate_name);
         if !tests {
             unreached.push(format!("{crate_name}: no test invocation in the derived roster"));
         }
+        // ⛔ TWO CAUSES, TWO SENTENCES. "No stanza at all" and "a stanza whose every phase is
+        // setup or setup-dependent" are DIFFERENT FACTS WITH DIFFERENT REMEDIES — declare a
+        // check, versus make the declared check executable. Reporting both as "declares no
+        // stanza" is the residual-label defect, and it would have been actively FALSE here:
+        // commit-build-fence's stanza is present and correct, and still nothing runs.
         if *ran_binary && !checks {
-            unreached.push(format!(
-                "{crate_name}: ran its BINARY in gate.yml and declares no \
-                 [package.metadata.gate] stanza — its run half is UNREACHED"
-            ));
+            let declared = manifest(&root, crate_name).contains("[package.metadata.gate]");
+            unreached.push(if declared {
+                format!(
+                    "{crate_name}: ran its BINARY in gate.yml and its [package.metadata.gate] \
+                     stanza declares NO EXECUTABLE phase — every phase is setup or \
+                     setup-dependent, so the check is SKIPPED on a check pass, INCLUDING ON A \
+                     GENUINELY FAILING TREE. Its run half is UNREACHED. The remedy is to make the \
+                     check executable, NOT to declare one."
+                )
+            } else {
+                format!(
+                    "{crate_name}: ran its BINARY in gate.yml and declares no \
+                     [package.metadata.gate] stanza — its run half is UNREACHED"
+                )
+            });
         }
     }
     assert!(
@@ -160,7 +218,7 @@ fn state_wildcard_lint_is_reached_by_declaration_not_by_a_yaml_job() {
         "state-wildcard-lint must contribute tests to the derived roster"
     );
     assert!(
-        declares_check(&root, "state-wildcard-lint"),
+        declares_executable_check("state-wildcard-lint"),
         "state-wildcard-lint's BINARY check must be declared in its own \
          crates/state-wildcard-lint/Cargo.toml under [package.metadata.gate]. This is the 2026-09-06 \
          invariant after translation: the incident's requirement was that its gate is REACHED, not \
@@ -200,7 +258,8 @@ fn the_former_job_list_is_non_empty_and_every_crate_exists() {
 /// POSITIVE CONTROL for the detector itself: a crate that declares no stanza must be seen as
 /// declaring none.
 ///
-/// Without this, a `declares_check` that always returned `true` would make every leg above pass.
+/// Without this, a `declares_executable_check` that always returned `true` would make every leg
+/// above pass.
 /// A scan that cannot report absence cannot report presence either. `omp-types` is a normal
 /// library crate with no gate metadata; `gate-runner` is intentionally metadata-declared so its
 /// own lane is reachable.
@@ -208,12 +267,12 @@ fn the_former_job_list_is_non_empty_and_every_crate_exists() {
 fn the_stanza_detector_can_report_absence() {
     let root = repo_root();
     assert!(
-        !declares_check(&root, "omp-types"),
+        !declares_executable_check("omp-types"),
         "omp-types declares no gate stanza, so the detector must report absence here; if this fails, \
          the detector is stuck on true and every other leg in this file is vacuous"
     );
     assert!(
-        declares_check(&root, "state-wildcard-lint"),
+        declares_executable_check("state-wildcard-lint"),
         "and it must report presence where a stanza exists"
     );
 }
