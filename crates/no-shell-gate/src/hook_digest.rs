@@ -125,8 +125,12 @@ pub const DELIBERATELY_UNWATCHED: &[(&str, &str)] = &[
     ),
     (
         "crate-atom-gate",
-        "DISARMED: its call site is behind `OMP_CRATE_ATOM_GATE=1` (pre-commit-gate.rs:632), \
-         so a default commit never spawns the binary and cannot refuse. ZERO library \
+        "DISARMED: the AUTHORITATIVE statement of that is now the typed row in \
+         `armed_gates::ARMED_GATES` (gate=\"crate-atom-gate\", var=\"OMP_CRATE_ATOM_GATE\"), \
+         which is what the freshness leg keys on since omp-orchestrator-0rfwk; the call site \
+         behind that var (pre-commit-gate.rs:632) is the CODE the registry describes, not the \
+         record of it, and a source substring is a rendering of a state rather than the state. \
+         A default commit never spawns the binary and cannot refuse. ZERO library \
          references (`crate_atom_gate::`) in this crate's src: the hook reaches it ONLY by \
          SPAWNING target/debug/crate-atom-gate or ~/.local/bin/crate-atom-gate \
          (pre-commit-gate.rs:1403-1406, BINARY_ABSENT arm). hook_digest does not stamp that \
