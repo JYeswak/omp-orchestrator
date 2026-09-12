@@ -12,6 +12,10 @@ use ack_stage::{
     AckStageResult, TransportReceipt,
 };
 
+use crate::uds_target_gate::{
+    observe_uds_target_gate, uds_cycle_admission, uds_cycle_allows_new_claim_or_dispatch,
+    UdsCycleAdmission, UdsObserveInput,
+};
 use ack_spine::ledger::StepKind;
 use decision_ledger::{HeartbeatAction, HumanClause};
 use agent_mail_native::identity::{format_sender_header, resolve_pane_identity, BindingStatus, PaneIdentity};
@@ -937,186 +941,52 @@ fn require_success(program: &str, output: Output) -> Result<Vec<u8>, String> {
         String::from_utf8_lossy(&output.stderr).trim()
     ))
 }
-const UDS_ENVELOPE_SCHEMA: &str = "uds/v2";
-const UDS_PROJECTION_SCHEMA: &str = "uds-target-gates/v1";
-const UDS_FH_REQUIREMENTS: [&str; 2] = ["fh-doctor", "fh-how-oracle"];
-const UDS_TARGET_GATE_VERB: &str = "target-gate";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct UdsProcessResult {
-    process_exit: Option<i32>,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
-impl UdsProcessResult {
-    fn from_output(output: Output) -> Self {
-        Self {
-            process_exit: output.status.code(),
-            stdout: output.stdout,
-            stderr: output.stderr,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct UdsTargetGateRequirement {
-    id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct UdsTargetGateObservation {
-    requirements: Vec<UdsTargetGateRequirement>,
-}
-
-fn uds_target_gate_unwired(detail: impl AsRef<str>) -> String {
-    format!("UDS_TARGET_GATE_UNWIRED {}", detail.as_ref())
-}
-
-fn uds_target_gate_exit(code: &str) -> Option<i32> {
-    match code {
-        "EC-PASS" => Some(0),
-        "EC-RED" => Some(1),
-        "EC-USAGE" => Some(2),
-        "EC-UNRUN" => Some(77),
-        _ => None,
-    }
-}
-
-fn parse_uds_target_gate(result: UdsProcessResult) -> Result<UdsTargetGateObservation, String> {
-    let process_exit = result.process_exit.ok_or_else(|| {
-        uds_target_gate_unwired("process_exit=signal")
-    })?;
-    let value: Value = serde_json::from_slice(&result.stdout).map_err(|error| {
-        uds_target_gate_unwired(format!(
-            "malformed_envelope detail={} stderr={}",
-            error,
-            one_line_detail(&String::from_utf8_lossy(&result.stderr))
-        ))
-    })?;
-    let schema = value
-        .get("schema")
-        .and_then(Value::as_str)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=schema"))?;
-    if schema != UDS_ENVELOPE_SCHEMA {
-        return Err(uds_target_gate_unwired(format!(
-            "envelope_schema={schema} expected={UDS_ENVELOPE_SCHEMA}"
-        )));
-    }
-    let verb = value
-        .get("verb")
-        .and_then(Value::as_str)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=verb"))?;
-    if verb != UDS_TARGET_GATE_VERB {
-        return Err(uds_target_gate_unwired(format!(
-            "envelope_verb={verb} expected={UDS_TARGET_GATE_VERB}"
-        )));
-    }
-    let code = value
-        .get("code")
-        .and_then(Value::as_str)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=code"))?;
-    let exit_status = value
-        .get("exit_status")
-        .and_then(Value::as_i64)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_envelope missing=exit_status"))?;
-    if exit_status != i64::from(process_exit) {
-        return Err(uds_target_gate_unwired(format!(
-            "envelope_mismatch code={code} exit_status={exit_status} process_exit={process_exit}"
-        )));
-    }
-    let Some(expected_exit) = uds_target_gate_exit(code) else {
-        return Err(uds_target_gate_unwired(format!(
-            "unsupported_code code={code} exit_status={exit_status}"
-        )));
-    };
-    if exit_status != i64::from(expected_exit) {
-        return Err(uds_target_gate_unwired(format!(
-            "code_exit_mismatch code={code} exit_status={exit_status} expected={expected_exit}"
-        )));
-    }
-    if code != "EC-PASS" {
-        let detail = value
-            .get("detail")
-            .and_then(Value::as_str)
-            .unwrap_or("typed UDS target-gate refusal");
-        return Err(uds_target_gate_unwired(format!(
-            "uds_code={code} exit_status={exit_status} detail={detail}"
-        )));
-    }
-    let projection = value
-        .get("projection")
-        .and_then(Value::as_object)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_projection missing=projection"))?;
-    let projection_schema = projection
-        .get("schema")
-        .and_then(Value::as_str)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_projection missing=schema"))?;
-    if projection_schema != UDS_PROJECTION_SCHEMA {
-        return Err(uds_target_gate_unwired(format!(
-            "projection_schema={projection_schema} expected={UDS_PROJECTION_SCHEMA}"
-        )));
-    }
-    let rows = projection
-        .get("requirements")
-        .and_then(Value::as_array)
-        .ok_or_else(|| uds_target_gate_unwired("malformed_projection missing=requirements"))?;
-    if rows.len() != UDS_FH_REQUIREMENTS.len() {
-        return Err(uds_target_gate_unwired(format!(
-            "requirement_count={} expected={}",
-            rows.len(),
-            UDS_FH_REQUIREMENTS.len()
-        )));
-    }
-    let mut requirements = Vec::with_capacity(rows.len());
-    for (index, expected_id) in UDS_FH_REQUIREMENTS.iter().enumerate() {
-        let row = rows
-            .get(index)
-            .and_then(Value::as_object)
-            .ok_or_else(|| uds_target_gate_unwired(format!("missing_requirement={expected_id}")))?;
-        let id = row
-            .get("id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| uds_target_gate_unwired(format!("missing_requirement={expected_id}")))?;
-        if id != *expected_id {
-            return Err(uds_target_gate_unwired(format!(
-                "requirement_order index={index} expected={expected_id} found={id}"
-            )));
-        }
-        let command = row
-            .get("command")
-            .and_then(Value::as_str)
-            .ok_or_else(|| uds_target_gate_unwired(format!("missing_trigger={expected_id}")))?;
-        if command.trim().is_empty() {
-            return Err(uds_target_gate_unwired(format!("missing_trigger={expected_id}")));
-        }
-        requirements.push(UdsTargetGateRequirement { id: id.to_owned() });
-    }
-    Ok(UdsTargetGateObservation { requirements })
-}
-
-async fn observe_uds_target_gate(
-    cx: &Cx,
+fn apply_uds_cycle_halt(
     config: &Config,
-) -> Result<UdsTargetGateObservation, String> {
-    let Some(binary) = config.uds_binary.as_ref() else {
-        return Err(uds_target_gate_unwired("config_missing=uds_binary"));
-    };
-    let Some(registry) = config.uds_registry.as_ref() else {
-        return Err(uds_target_gate_unwired("config_missing=uds_registry"));
-    };
-    let binary = binary.to_string_lossy().into_owned();
-    let args = vec![
-        "target-gate".to_owned(),
-        registry.display().to_string(),
-        config.repo.display().to_string(),
-        "--json".to_owned(),
-    ];
-    let output = invoke(cx, config, &binary, &args)
-        .await
-        .map_err(|error| uds_target_gate_unwired(format!("invoke={error}")))?;
-    parse_uds_target_gate(UdsProcessResult::from_output(output))
+    tick: u64,
+    admission: UdsCycleAdmission,
+) -> Result<(), String> {
+    debug_assert!(
+        !uds_cycle_allows_new_claim_or_dispatch(&admission),
+        "halt path is only for Unproven/Unwired"
+    );
+    match admission {
+        UdsCycleAdmission::Observed(_) => Err(
+            "UDS_TARGET_GATE_UNWIRED invariant_broken observed_reached_halt".to_owned(),
+        ),
+        UdsCycleAdmission::Unproven { detail } => {
+            write_heartbeat(
+                config,
+                tick,
+                "UDS_TARGET_GATE_UNPROVEN",
+                &format!("detail={detail} owner=josh"),
+            )?;
+            write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
+            eprintln!("{detail}");
+            Ok(())
+        }
+        UdsCycleAdmission::Unwired { detail } => {
+            let unwired = vec![detail];
+            let joined = unwired.join(" ");
+            let line = crate::resident_tick::gate_unwired_line(&unwired);
+            write_heartbeat(
+                config,
+                tick,
+                "GATE_UNWIRED",
+                &format!("unwired={joined} owner=josh"),
+            )?;
+            write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
+            eprintln!("{line}");
+            if crate::resident_tick::SURVIVE_GATE_UNWIRED {
+                return Ok(());
+            }
+            Err(format!("GATE_UNWIRED unwired={joined}"))
+        }
+    }
 }
+
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum AsupersyncConformanceEvidence {
@@ -5993,28 +5863,28 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // `gate.yml` failed six consecutive runs unread. **The only path that has ever
     // reached a human is a verdict the operator had to answer.** A count written to a
     // file would be the fourth instance of that class.
-    let uds_gate = match observe_uds_target_gate(cx, config).await {
-        Ok(projection) => projection,
-        Err(unwired) => {
-            let unwired = vec![unwired];
-            let joined = unwired.join(" ");
-            let line = crate::resident_tick::gate_unwired_line(&unwired);
-            write_heartbeat(
-                config,
-                tick,
-                "GATE_UNWIRED",
-                &format!("unwired={joined} owner=josh"),
-            )?;
-            write_heartbeat(config, tick, "NO_DISPATCH_TICK", "skip_reap=true")?;
-            eprintln!("{line}");
-            if crate::resident_tick::SURVIVE_GATE_UNWIRED {
-                return Ok(());
-            }
-            return Err(format!("GATE_UNWIRED unwired={joined}"));
-        }
+    let admission = uds_cycle_admission(
+        observe_uds_target_gate(
+            cx,
+            &UdsObserveInput {
+                binary: config.uds_binary.as_deref(),
+                registry: config.uds_registry.as_deref(),
+                repo: &config.repo,
+                tmux_tmpdir: &config.tmux_tmpdir,
+                command_timeout: config.command_timeout,
+            },
+        )
+        .await,
+    );
+    if !uds_cycle_allows_new_claim_or_dispatch(&admission) {
+        return apply_uds_cycle_halt(config, tick, admission);
+    }
+    let UdsCycleAdmission::Observed(uds_gate) = admission else {
+        return apply_uds_cycle_halt(config, tick, admission);
     };
     println!(
-        "UDS_TARGET_GATE_OBSERVED requirements={}",
+        "UDS_TARGET_GATE_OBSERVED trigger={} requirements={}",
+        uds_gate.trigger,
         uds_gate
             .requirements
             .iter()
@@ -11261,4 +11131,66 @@ exit 2
             other => panic!("active reservation must refuse close, got {other:?}"),
         }
     }
+    // Stays in resident::tests: recover_pending_findings is private. Moving it
+    // would require pub(crate) on the recovery path — production API widening.
+    #[test]
+    fn recover_pending_findings_valid_pending_row_succeeds_without_dispatch() {
+        let (temp, mut config) = isolated_fixture_config();
+        std::fs::create_dir_all(&config.finding_spool).expect("spool");
+        std::fs::create_dir_all(&config.pending_dispatch).expect("pending");
+        let finding = finding::Finding::new(
+            "UDS recovery fixture must republish",
+            "A pending spool row is compensation, not a new claim",
+            "recover_pending_findings succeeds, pending empty, pending_dispatch empty",
+            vec!["uds-recovery".to_owned()],
+            1,
+        )
+        .expect("fixture finding");
+        finding
+            .spool(&config.finding_spool)
+            .expect("spool production pending row");
+        let _ = finding
+            .waive("already spooled for recovery fixture")
+            .expect("consume Finding");
+        assert_eq!(
+            finding::pending(&config.finding_spool)
+                .expect("pending sweep")
+                .len(),
+            1
+        );
+        config.br = executable_named(
+            &temp,
+            "fake-br",
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> ./br-argv.log\nprintf '%s\\n' 'uds-recovery-bead-1'\nexit 0\n",
+        )
+        .display()
+        .to_string();
+        let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+        runtime
+            .block_on(async {
+                let cx = Cx::current().expect("runtime context");
+                recover_pending_findings(&cx, &config, 1).await
+            })
+            .expect("valid pending recovery must succeed");
+        assert!(
+            finding::pending(&config.finding_spool)
+                .expect("pending sweep")
+                .is_empty(),
+            "recovery must consume the pending row"
+        );
+        let pending_dispatch = std::fs::read_dir(&config.pending_dispatch)
+            .expect("read pending-dispatch")
+            .count();
+        assert_eq!(pending_dispatch, 0, "recovery must not write dispatch markers");
+        let br_argv = std::fs::read_to_string(config.repo.join("br-argv.log")).expect("br argv");
+        assert!(br_argv.contains("create"), "{br_argv}");
+        assert!(
+            !br_argv.contains("update") && !br_argv.contains("ready"),
+            "recovery must not claim/dispatch: {br_argv}"
+        );
+        let _ = temp;
+    }
+
+
+
 }

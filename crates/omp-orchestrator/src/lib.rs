@@ -40,6 +40,7 @@ use text_structure::{code_only, toml_code_only};
 pub mod target_directory;
 pub mod resident_tick;
 pub mod resident;
+mod uds_target_gate;
 pub mod resident_liveness;
 pub mod packet_admission;
 pub mod host_precondition;
