@@ -168,6 +168,69 @@ pub struct TypeCounts {
     pub crates_with_types: usize,
 }
 
+/// Where the census content came from, and therefore WHAT the census is
+/// evidence about.
+///
+/// MEASURED 2026-09-11, which is why this type exists. ONE commit produced
+/// TWO collision counts, because two readers read two different trees:
+///
+/// | reader | tree | unallowed collisions |
+/// |---|---|---|
+/// | CI, `gh run 34649810365` on `8a0b449` | clean clone | **43** |
+/// | the rch lane and this Mac, same `crates/*/src` bytes | shared worktree | **42** |
+///
+/// `git diff 8a0b449..78ed136 -- 'crates/*/src'` is EMPTY, so the two are
+/// reading the same commit. The whole delta is one name, `GuardDecision`,
+/// and one file: `crates/contabo-reclaim/src/model.rs`, which declares it,
+/// is DELETED in the shared worktree (since 2026-09-09) and still
+/// uncommitted. A worktree scan is therefore a statement about five agents'
+/// scratch edits, not about the repository — AGENTS.md rule 8 (a `cargo`
+/// figure is never evidence about a commit) in its exact shape. A leg that
+/// pins a NUMBER must know which of the two trees it just read, or it
+/// reports green on a tree nobody can push, which is what happened here:
+/// the lane was green all day on a red commit and nobody could see why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CensusSource {
+    /// Crate records handed straight in (fixtures, or a caller that already
+    /// holds its set). The caller DECLARED the population under judgment, so
+    /// every leg applies to it: there is no tree to disagree with.
+    Declared,
+    /// Every census input on disk is byte-identical to `rev`. The scan IS the
+    /// repository, so a number read from it is evidence about a commit.
+    Committed { rev: String },
+    /// The scanned tree is not a commit — dirty, or not a git checkout at
+    /// all. `reason` names which, because an unreadable probe is UNKNOWN and
+    /// UNKNOWN must never be spent as a pass.
+    Worktree { reason: String },
+}
+
+impl Default for CensusSource {
+    /// The safe default is the one that claims nothing.
+    fn default() -> Self {
+        Self::Worktree {
+            reason: "census source was not recorded".to_owned(),
+        }
+    }
+}
+
+impl CensusSource {
+    /// True when a verdict ABOUT THE REPOSITORY may be drawn from this scan.
+    #[must_use]
+    pub fn is_authoritative(&self) -> bool {
+        matches!(self, Self::Declared | Self::Committed { .. })
+    }
+
+    /// Why no repository verdict is available — `None` when one is.
+    #[must_use]
+    pub fn blocked_reason(&self) -> Option<&str> {
+        match self {
+            Self::Worktree { reason } => Some(reason.as_str()),
+            Self::Declared | Self::Committed { .. } => None,
+        }
+    }
+}
+
 /// The full generated inventory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeInventory {
@@ -180,6 +243,11 @@ pub struct TypeInventory {
     pub missing: Vec<MissingTypeRow>,
     pub seam_decisions: Vec<SeamDecision>,
     pub named_zeros: Vec<String>,
+    /// WHICH TREE these records came from. Every leg that judges the
+    /// REPOSITORY (the collision ratchet, the three stale-row legs) reads
+    /// this first: a scratch tree is not a commit and cannot convict a row.
+    #[serde(default)]
+    pub source: CensusSource,
 }
 
 /// Named collision allowances: (type name, the exact crate pair, reason).
@@ -298,6 +366,24 @@ pub const UNALLOWED_COLLISION_RATCHET: CollisionCeilingAnchor = CollisionCeiling
     //     is environment-independent because both crates are tracked in both trees.
     //   So 44 - 2 = 42. If CI disagrees, the assert PRINTS the live number and the correction is
     //   this line -- and it must follow the measurement, never the reverse.
+    //
+    // CI DISAGREED, and the correction is NOT mine to make. Run 34649810365 on `8a0b449`
+    // (whose `crates/*/src` tree is byte-identical to `78ed136` -- `git diff` over that
+    // pathspec is empty) read live **43**, not 42, and printed the list: the derivation above
+    // is short by exactly ONE name, `GuardDecision`, declared `pub enum` in BOTH
+    // crates/contabo-reclaim/src/model.rs:328 and crates/omp-host-tool-guard/src/lib.rs:135.
+    // It is missing from every lane and laptop reading because that model.rs is DELETED in the
+    // shared worktree (uncommitted since 2026-09-09), which is the entire 43-vs-42 gap and is
+    // now named by [`CensusSource`] instead of being absorbed as "the lane is a fossil".
+    //
+    // Three adjudications close it and NONE is a ceiling move: an ALLOWED_COLLISIONS row for
+    // GuardDecision with a true reason (the two are disjoint -- a reclaim authorization
+    // carrying active_build_ids versus a host_tool_call policy verdict carrying a refusal
+    // code), a rename in either crate, or landing the contabo-reclaim restructure that already
+    // deletes one of them. All three are OUTSIDE this crate's ownership or are an allowance
+    // enlargement, so this leg stays RED IN CI ON PURPOSE, with its number and its source
+    // printed, until that ruling lands. Raising 42 to 43 here would bank the defect into the
+    // bound and is the one move forbidden outright.
     ceiling: 42,
     ceiling_at_recording: 42,
     recorded_at_unix: 1_789_144_925,
@@ -317,12 +403,14 @@ pub const UNALLOWED_COLLISION_CEILING: usize = UNALLOWED_COLLISION_RATCHET.ceili
 /// `live <= CEILING <= live + TOLERANCE` band collapses to equality -- which is strictly
 /// stronger, and is what the tolerance existed to make possible rather than to preserve.
 ///
-/// ⛔ THE RCH LANE CANNOT ADJUDICATE THIS LEG AND ITS RED THERE IS NOT A REPO STATE. The
-/// collision census derives its roster from git, and the worker's index is a fossil (measured
-/// 2026-09-11: 86 paths against this Mac's 1131), so the lane reads a SHORT live count and the
-/// band refuses. The red names its cause here so the next reader does not lower the CEILING to
-/// fit a fossil -- which would bank the defect into the bound permanently. CI is the oracle for
-/// this leg; the lane is not.
+/// ⛔ THE RCH LANE CANNOT ADJUDICATE THIS LEG AND ITS RED THERE IS NOT A REPO STATE. CI is the
+/// oracle for this leg; the lane is not. MECHANISM CORRECTED 2026-09-11: the cause is NOT a
+/// fossil git index (the sentence here used to say so, citing 86 paths against this Mac's
+/// 1131). `scan_workspace_types` never asked git anything -- it walked `crates/*/src` with
+/// `std::fs`, so the lane read the SHARED WORKTREE that rsync shipped it, uncommitted
+/// deletions and all. Same commit, different bytes, different number: 42 on the lane and this
+/// Mac, 43 in CI, and the leg could not tell the two apart. It can now: the tree names itself
+/// in [`CensusSource`], and only a [`CensusSource::Committed`] scan may spend a number here.
 ///
 /// FIGURES UPDATED 2026-09-11 AFTER THE RENAME THAT RETIRED THE TWO NAMES ABOVE. The pairs this
 /// comment recorded were `both trees 44 / lane 42`; with `Hit` and `ScanReport` renamed in
@@ -737,7 +825,123 @@ fn parse_source(
     }
 }
 
+/// The git binary. A constant so a caller grepping for the spawn finds it.
+const GIT: &str = "git";
+
+/// How many divergent paths a [`CensusSource::Worktree`] reason names before
+/// it summarises the rest. Enough to identify the crate, short enough to read.
+const NAMED_DIVERGENCES: usize = 5;
+
+/// Is `path` an input this census actually reads?
+///
+/// Scoped to exactly the two shapes [`scan_workspace_types`] opens — the
+/// per-crate manifest (the roster) and `src/**/*.rs` (the content). A dirty
+/// `tests/` file or a stray artifact cannot change any number this module
+/// prints, so it must not cost the scan its authority either; the predicate
+/// is what keeps "authoritative" from degenerating into "nobody is working".
+fn is_census_input(path: &str) -> bool {
+    let Some(rest) = path.strip_prefix("crates/") else {
+        return false;
+    };
+    let Some((_crate_dir, tail)) = rest.split_once('/') else {
+        return false;
+    };
+    tail == "Cargo.toml" || (tail.starts_with("src/") && tail.ends_with(".rs"))
+}
+
+fn run_git(repo_root: &Path, args: &[&str]) -> Result<Vec<u8>, String> {
+    let output = std::process::Command::new(GIT)
+        .args(args)
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| format!("cannot run `{GIT} {}`: {e}", args.join(" ")))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let detail = if detail.is_empty() {
+            format!("exit {:?}, no stderr", output.status.code())
+        } else {
+            detail
+        };
+        return Err(format!("`{GIT} {}` failed: {detail}", args.join(" ")));
+    }
+    Ok(output.stdout)
+}
+
+/// What can the tree at `repo_root` testify about?
+///
+/// [`CensusSource::Committed`] ONLY when every census input on disk is
+/// byte-identical to `HEAD`. Anything else — one modified source, one
+/// untracked `.rs`, no git at all — is [`CensusSource::Worktree`] carrying
+/// the reason, because a number read from a tree that is not a commit is not
+/// evidence about that commit, and a leg told otherwise reports green on
+/// bytes nobody can push. That is not hypothetical: see [`CensusSource`].
+pub fn census_source(repo_root: &Path) -> CensusSource {
+    let rev = match run_git(repo_root, &["rev-parse", "HEAD"]) {
+        Ok(bytes) => String::from_utf8_lossy(&bytes).trim().to_owned(),
+        Err(reason) => return CensusSource::Worktree { reason },
+    };
+    if rev.len() != 40 || !rev.chars().all(|c| c.is_ascii_hexdigit()) {
+        return CensusSource::Worktree {
+            reason: format!("`{GIT} rev-parse HEAD` returned {rev:?}, which is not a commit id"),
+        };
+    }
+    // `-z` so paths arrive raw: `core.quotePath` escaping would make a
+    // non-ASCII path unparseable, and an unparseable path must never be
+    // silently read as "clean".
+    let status = match run_git(repo_root, &["status", "--porcelain", "-z", "--", "crates"]) {
+        Ok(bytes) => bytes,
+        Err(reason) => return CensusSource::Worktree { reason },
+    };
+    let mut divergent: Vec<String> = Vec::new();
+    for chunk in status.split(|b| *b == 0) {
+        if chunk.is_empty() {
+            continue;
+        }
+        let text = String::from_utf8_lossy(chunk).into_owned();
+        // Each record is `XY <path>`; a rename emits the destination that
+        // way and the source as a bare following record. Both forms are
+        // checked, so neither half of a rename can slip through.
+        let path = match text.get(3..) {
+            Some(tail) if text.as_bytes().get(2) == Some(&b' ') => tail.to_owned(),
+            _ => text,
+        };
+        if is_census_input(&path) {
+            divergent.push(path);
+        }
+    }
+    if divergent.is_empty() {
+        return CensusSource::Committed { rev };
+    }
+    divergent.sort_unstable();
+    divergent.dedup();
+    let shown = divergent
+        .iter()
+        .take(NAMED_DIVERGENCES)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    let more = divergent.len().saturating_sub(NAMED_DIVERGENCES);
+    let tail = if more > 0 {
+        format!(" (+{more} more)")
+    } else {
+        String::new()
+    };
+    CensusSource::Worktree {
+        reason: format!(
+            "{} census input(s) under crates/ differ from HEAD {}: {shown}{tail}",
+            divergent.len(),
+            &rev[..12]
+        ),
+    }
+}
+
 /// Walk `crates/*/src/**/*.rs` under `repo_root` and build the inventory.
+///
+/// The content is the tree's, ALWAYS — this reads what is on disk, including
+/// your uncommitted work, which is what a developer wants to see. What it no
+/// longer does is leave the reader guessing WHICH tree that was: the result
+/// carries [`TypeInventory::source`] from [`census_source`], and every leg
+/// that convicts the repository consults it first.
 ///
 /// Errors (typed, never silent): a missing `crates/` root; a workspace with
 /// zero crates; a crate with zero sources.
@@ -800,7 +1004,9 @@ pub fn scan_workspace_types(repo_root: &Path) -> Result<TypeInventory, crate::In
         });
     }
 
-    Ok(assemble(inventory_crates))
+    let mut inventory = assemble(inventory_crates);
+    inventory.source = census_source(repo_root);
+    Ok(inventory)
 }
 
 fn walk(dir: std::path::PathBuf) -> Vec<std::path::PathBuf> {
@@ -912,6 +1118,10 @@ pub fn assemble(crates: Vec<CrateTypes>) -> TypeInventory {
         missing: missing_vocabulary(),
         seam_decisions: seam_decisions(),
         named_zeros,
+        // Handed in, so the caller owns the population: a fixture is judged
+        // as given. Only `scan_workspace_types` overwrites this, with what
+        // the tree it just read can actually testify about.
+        source: CensusSource::Declared,
     }
 }
 
@@ -1036,7 +1246,11 @@ impl TypeInventory {
         // Stale allowance: a row that no longer corresponds to a real
         // collision is drift and must be pruned. (Validated against the REAL
         // workspace scan; synthetic fixtures skip this via `check_fixture`.)
-        if self.crates_scanned_is_real_workspace() {
+        // AUTHORITY, added 2026-09-11: "no longer collides" is a claim about
+        // the REPOSITORY, and a scratch tree cannot make it. Deleting one
+        // uncommitted file convicted a live row this way — see
+        // [`TypeInventory::adjudicable`].
+        if self.adjudicable() {
             for (name, _, _) in ALLOWED_COLLISIONS {
                 if !self.collisions.iter().any(|c| &c.name == name) {
                     errors.push(format!(
@@ -1052,7 +1266,7 @@ impl TypeInventory {
         // allowance table. A triage row for a split that no longer exists
         // means the resolution LANDED and nobody pruned the row — which is
         // how a resolved finding keeps reading as open debt.
-        if self.crates_scanned_is_real_workspace() {
+        if self.adjudicable() {
             for (name, set, owner, _) in VOCABULARY_SPLITS {
                 let live = self.vocabulary_splits().into_iter().any(|c| {
                     let mut keys: Vec<&str> = c.crates.iter().map(String::as_str).collect();
@@ -1076,7 +1290,7 @@ impl TypeInventory {
         // about a crate that grew three enums — measured 2026-09-03 on
         // `finding-dispatch`, caught only because one test happened to pin
         // the exact zero list.
-        if self.crates_scanned_is_real_workspace() {
+        if self.adjudicable() {
             for (name, _) in NAMED_ZEROS {
                 let Some(c) = self.crates.iter().find(|c| c.crate_name == *name) else {
                     errors.push(format!(
@@ -1120,6 +1334,132 @@ impl TypeInventory {
                 .iter()
                 .any(|c| c.crate_name == "omp-inventory-map")
     }
+
+    /// May a claim ABOUT THE REPOSITORY be drawn from these records?
+    ///
+    /// Two conditions, and both are load-bearing. The set must be a real
+    /// workspace scan (or a fixture that declares itself one), AND the tree
+    /// it came from must be able to testify — [`CensusSource::Committed`] or
+    /// [`CensusSource::Declared`]. The second condition is the one added on
+    /// 2026-09-11, after a row was convicted as STALE by a tree that simply
+    /// had an uncommitted deletion in it: `crates/contabo-reclaim/src/model.rs`
+    /// is gone from this worktree and present in HEAD, so the shared checkout
+    /// says `GuardDecision` does not collide and the repository says it does.
+    /// Only one of those two is a commit.
+    ///
+    /// This SUPPRESSES nothing in CI, which reads a clean clone and so is
+    /// always [`CensusSource::Committed`]; it suppresses exactly the verdicts
+    /// a scratch tree was never entitled to.
+    fn adjudicable(&self) -> bool {
+        self.crates_scanned_is_real_workspace() && self.source.is_authoritative()
+    }
+}
+
+/// What the collision ratchet has to say about one scan.
+///
+/// A verdict type rather than a bare `bool` so the UNKNOWN case has a name
+/// and a reason to carry: the leg that used to compare a number could only
+/// pass or fail, so on a tree it had no business judging it PASSED — and a
+/// pass is what everybody reads as "the repository is fine".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RatchetVerdict {
+    /// Live count sits exactly inside the band. The bound held.
+    Held { count: usize },
+    /// A collision was added without adjudicating it.
+    Rose { count: usize, ceiling: usize },
+    /// A collision was resolved and the bound was not lowered with it —
+    /// banked slack, which is a future rise nobody will see.
+    Slack { count: usize, ceiling: usize },
+    /// No verdict is available and this is NOT a pass. `reason` names the
+    /// tree that could not testify.
+    NotAdjudicated { reason: String },
+}
+
+/// Apply [`UNALLOWED_COLLISION_RATCHET`] to a scan, source first.
+///
+/// Source FIRST is the whole point: the count is read only after the tree
+/// has proven it can speak for a commit. A worktree with the identical
+/// number is still [`RatchetVerdict::NotAdjudicated`], because the identity
+/// would be a coincidence — measured 2026-09-11, when the shared checkout
+/// read exactly the ceiling (42) while the commit it came from read 43.
+#[must_use]
+pub fn collision_ratchet_verdict(inventory: &TypeInventory) -> RatchetVerdict {
+    if let Some(reason) = inventory.source.blocked_reason() {
+        return RatchetVerdict::NotAdjudicated {
+            reason: reason.to_owned(),
+        };
+    }
+    let count = inventory.disallowed().len();
+    if count > UNALLOWED_COLLISION_CEILING {
+        return RatchetVerdict::Rose {
+            count,
+            ceiling: UNALLOWED_COLLISION_CEILING,
+        };
+    }
+    if UNALLOWED_COLLISION_CEILING > count + UNTRACKED_COLLISION_TOLERANCE {
+        return RatchetVerdict::Slack {
+            count,
+            ceiling: UNALLOWED_COLLISION_CEILING,
+        };
+    }
+    RatchetVerdict::Held { count }
+}
+
+/// The environment whose verdict on this leg is BINDING, when we are in one.
+///
+/// CI is the oracle (see [`UNTRACKED_COLLISION_TOLERANCE`]), so CI is the one
+/// place where "I could not read the repository" must be a hard failure
+/// rather than a named UNKNOWN — otherwise the day git is missing from the
+/// runner is the day this gate silently stops existing.
+#[must_use]
+pub fn binding_environment() -> Option<String> {
+    for key in ["GITHUB_ACTIONS", "CI"] {
+        if let Ok(value) = std::env::var(key) {
+            if value == "true" || value == "1" {
+                return Some(format!("{key}={value}"));
+            }
+        }
+    }
+    None
+}
+
+/// The ratchet as a GATE: verdict plus the environment, in, refusal text out.
+///
+/// Pure, so the one branch nobody can reach from a laptop or the lane — CI
+/// failing to read the repository — is still exercised by a test rather than
+/// trusted. `binding` comes from [`binding_environment`] in production.
+///
+/// UNKNOWN is spent as UNKNOWN OUTSIDE the oracle (returned, not raised) and
+/// as a REFUSAL inside it. Both halves matter: a lane red on a tree it was
+/// rsynced is noise, and an oracle that cannot read the repository yet
+/// reports green is the gate quietly ceasing to exist.
+pub fn collision_ratchet_gate(
+    inventory: &TypeInventory,
+    binding: Option<&str>,
+) -> Result<RatchetVerdict, String> {
+    let verdict = collision_ratchet_verdict(inventory);
+    match &verdict {
+        RatchetVerdict::Held { .. } => Ok(verdict),
+        RatchetVerdict::Rose { count, ceiling } => Err(format!(
+            "unallowed collisions rose {count} > ceiling {ceiling}: adjudicate each (allow with a true reason, rename, or unify) -- raising the ceiling is amnesty: {}",
+            inventory
+                .disallowed()
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>()
+                .join(",")
+        )),
+        RatchetVerdict::Slack { count, ceiling } => Err(format!(
+            "ceiling {ceiling} exceeds live {count} + tolerance {UNTRACKED_COLLISION_TOLERANCE}: lower the ceiling, do not bank slack -- a raise must follow a measured rise"
+        )),
+        RatchetVerdict::NotAdjudicated { reason } => match binding {
+            Some(env) => Err(format!(
+                "{env} is the oracle for this leg and it could not read the repository: {reason} \
+                 -- fix the checkout, never the bound"
+            )),
+            None => Ok(verdict),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -1145,6 +1485,29 @@ mod tests {
             // that is the case the named-zero legs are about.
             has_lib: true,
         }
+    }
+
+    /// A DECLARED inventory carrying exactly `count` unallowed collisions.
+    ///
+    /// Synthetic names (`RatchetSpecimenN`) so the fixture can never pick up
+    /// a real allowance row by accident — the count is ours, stated, and
+    /// independent of whatever the workspace happens to hold today.
+    fn inventory_with_disallowed(count: usize) -> TypeInventory {
+        let names: Vec<String> = (0..count).map(|i| format!("RatchetSpecimen{i}")).collect();
+        let decls: Vec<(&str, TypeKind)> = names
+            .iter()
+            .map(|n| (n.as_str(), TypeKind::Struct))
+            .collect();
+        let inventory = assemble(vec![
+            crate_with("ratchet-left", &decls),
+            crate_with("ratchet-right", &decls),
+        ]);
+        assert_eq!(
+            inventory.disallowed().len(),
+            count,
+            "the specimen must carry the count it claims"
+        );
+        inventory
     }
 
     /// A binary-only crate: `main.rs`, no `lib.rs`, therefore no library
@@ -1638,20 +2001,240 @@ mod tests {
             .and_then(|p| p.parent())
             .expect("repo root is two levels above the crate");
         let inv = scan_workspace_types(repo).expect("scan works");
-        let count = inv.disallowed().len();
-        assert!(
-            count <= UNALLOWED_COLLISION_CEILING,
-            "unallowed collisions rose {count} > ceiling {UNALLOWED_COLLISION_CEILING}: adjudicate each (allow with a true reason, rename, or unify) -- raising the ceiling is amnesty: {}",
-            inv.disallowed()
-                .iter()
-                .map(|c| c.name.as_str())
-                .collect::<Vec<_>>()
-                .join(",")
+        match collision_ratchet_gate(&inv, binding_environment().as_deref()) {
+            Err(refusal) => panic!("{refusal}"),
+            Ok(RatchetVerdict::NotAdjudicated { reason }) => {
+                // UNKNOWN, and it is spent as UNKNOWN — never as a pass on
+                // the number. The leg still has to say something falsifiable
+                // here, so it says what IS true: the instrument named its
+                // limit, the scan it did manage is not empty, and no held
+                // verdict was manufactured from a tree that cannot testify.
+                assert!(
+                    !reason.trim().is_empty(),
+                    "a non-adjudicated verdict MUST name the tree that could not testify"
+                );
+                assert!(
+                    !inv.crates.is_empty() && inv.counts.enums + inv.counts.structs > 0,
+                    "anti-vacuity: an empty scan is an error, not an excuse to skip the ratchet"
+                );
+                assert!(
+                    !matches!(
+                        collision_ratchet_verdict(&inv),
+                        RatchetVerdict::Held { .. }
+                    ),
+                    "a tree that cannot testify must NEVER produce a held verdict"
+                );
+            }
+            Ok(_) => {}
+        }
+    }
+
+    /// KNOWN-BAD, both directions of the band, on a DECLARED set so the
+    /// numbers are ours and not the workspace's.
+    ///
+    /// `Rose` is the amnesty case (a collision added and not adjudicated);
+    /// `Slack` is the banked-slack case (a collision resolved and the bound
+    /// left high, which hides the next rise). The band is `live <= ceiling
+    /// <= live + TOLERANCE`, and with TOLERANCE at 0 that is equality — so
+    /// one over and one under must BOTH refuse.
+    #[test]
+    fn the_ratchet_refuses_a_rise_and_refuses_banked_slack() {
+        let held = inventory_with_disallowed(UNALLOWED_COLLISION_CEILING);
+        assert_eq!(
+            collision_ratchet_verdict(&held),
+            RatchetVerdict::Held {
+                count: UNALLOWED_COLLISION_CEILING
+            },
+            "known-good: exactly the ceiling must hold"
         );
-        assert!(
-            UNALLOWED_COLLISION_CEILING <= count + UNTRACKED_COLLISION_TOLERANCE,
-            "ceiling {UNALLOWED_COLLISION_CEILING} exceeds live {count} + tolerance {UNTRACKED_COLLISION_TOLERANCE}: lower the ceiling, do not bank slack -- a raise must follow a measured rise"
+
+        let rose = inventory_with_disallowed(UNALLOWED_COLLISION_CEILING + 1);
+        assert_eq!(
+            collision_ratchet_verdict(&rose),
+            RatchetVerdict::Rose {
+                count: UNALLOWED_COLLISION_CEILING + 1,
+                ceiling: UNALLOWED_COLLISION_CEILING
+            },
+            "one unadjudicated collision above the ceiling must refuse"
         );
+
+        let slack = inventory_with_disallowed(UNALLOWED_COLLISION_CEILING - 1);
+        assert_eq!(
+            collision_ratchet_verdict(&slack),
+            RatchetVerdict::Slack {
+                count: UNALLOWED_COLLISION_CEILING - 1,
+                ceiling: UNALLOWED_COLLISION_CEILING
+            },
+            "a resolved collision with the bound left high must refuse as slack"
+        );
+        // The GATE, not just the verdict: each refusal must carry its own
+        // message, and the rise must NAME the specimens (a bare count tells
+        // the next reader nothing about which name to adjudicate).
+        let rose_message = collision_ratchet_gate(&rose, None)
+            .expect_err("a rise must refuse regardless of environment");
+        assert!(
+            rose_message.contains("rose")
+                && rose_message.contains("amnesty")
+                && rose_message.contains("RatchetSpecimen0"),
+            "the rise refusal must name the offenders: {rose_message}"
+        );
+        let slack_message = collision_ratchet_gate(&slack, None)
+            .expect_err("banked slack must refuse regardless of environment");
+        assert!(
+            slack_message.contains("do not bank slack"),
+            "the slack refusal must say what to do: {slack_message}"
+        );
+        collision_ratchet_gate(&held, Some("GITHUB_ACTIONS=true"))
+            .expect("known-good: the ceiling holds in the oracle too");
+    }
+
+    /// UNKNOWN is spent differently in the two environments, and BOTH halves
+    /// are load-bearing.
+    ///
+    /// Off-oracle (a laptop, the rch lane, which is rsynced WITHOUT `.git`)
+    /// an unreadable repository is a named UNKNOWN, not a red: the tree was
+    /// never the commit and a red there is noise nobody can act on. IN the
+    /// oracle it is a hard refusal — the day CI cannot read the repository
+    /// is the day this gate stops existing, and it must say so rather than
+    /// report green. That branch is unreachable from every machine that runs
+    /// this suite, which is exactly why it is tested here and not trusted.
+    #[test]
+    fn an_unreadable_repository_is_unknown_off_oracle_and_fatal_inside_it() {
+        let mut scratch = inventory_with_disallowed(UNALLOWED_COLLISION_CEILING);
+        scratch.source = CensusSource::Worktree {
+            reason: "no .git in this tree".to_owned(),
+        };
+
+        let off_oracle = collision_ratchet_gate(&scratch, None)
+            .expect("off the oracle an unreadable tree is UNKNOWN, not a refusal");
+        assert!(
+            matches!(off_oracle, RatchetVerdict::NotAdjudicated { .. }),
+            "and UNKNOWN is what it must return — never Held: {off_oracle:?}"
+        );
+
+        let in_oracle = collision_ratchet_gate(&scratch, Some("GITHUB_ACTIONS=true"))
+            .expect_err("the oracle must refuse a repository it cannot read");
+        assert!(
+            in_oracle.contains("GITHUB_ACTIONS=true")
+                && in_oracle.contains("no .git in this tree")
+                && in_oracle.contains("fix the checkout, never the bound"),
+            "the oracle refusal must name the environment, the cause, and the \
+             remedy that is NOT moving the bound: {in_oracle}"
+        );
+    }
+
+    /// The defect this whole source-awareness exists for, as a test.
+    ///
+    /// A scratch tree holding EXACTLY the ceiling still yields no verdict.
+    /// That identity is what happened on 2026-09-11: the shared worktree
+    /// read 42 with the ceiling at 42 and reported green all day, while the
+    /// commit underneath it read 43 and CI was red. A pass that agrees with
+    /// the bound by coincidence is the most expensive kind.
+    #[test]
+    fn a_tree_that_cannot_testify_never_passes_the_ratchet() {
+        let mut scratch = inventory_with_disallowed(UNALLOWED_COLLISION_CEILING);
+        scratch.source = CensusSource::Worktree {
+            reason: "1 census input(s) under crates/ differ from HEAD deadbeefcafe: \
+                     crates/contabo-reclaim/src/model.rs"
+                .to_owned(),
+        };
+        let verdict = collision_ratchet_verdict(&scratch);
+        assert!(
+            matches!(verdict, RatchetVerdict::NotAdjudicated { ref reason }
+                if reason.contains("crates/contabo-reclaim/src/model.rs")),
+            "the refusal must carry the tree's reason: {verdict:?}"
+        );
+
+        // MUTATION, REVERTED: make the same records authoritative and the
+        // verdict appears. Without this leg the test above would also pass
+        // against a function that never adjudicates anything.
+        scratch.source = CensusSource::Committed {
+            rev: "0".repeat(40),
+        };
+        assert_eq!(
+            collision_ratchet_verdict(&scratch),
+            RatchetVerdict::Held {
+                count: UNALLOWED_COLLISION_CEILING
+            },
+            "the identical records, from a commit, must adjudicate"
+        );
+    }
+
+    /// A scratch tree cannot convict an allowance row of being stale.
+    ///
+    /// BOTH controls, because suppression is exactly the kind of change that
+    /// silently turns a leg off: DECLARED records convict the row (the leg
+    /// still works), the same records marked as a worktree do not.
+    #[test]
+    fn a_scratch_tree_cannot_declare_an_allowance_row_stale() {
+        // A real-looking workspace in which NO allowance row collides.
+        let mut inv = assemble(vec![
+            crate_with("omp-inventory-map", &[("InventoryMap", TypeKind::Struct)]),
+            crate_with("omp-types", &[("Budget", TypeKind::Struct)]),
+        ]);
+        inv.named_zeros = Vec::new();
+
+        let declared = inv.check().err().unwrap_or_default();
+        let stale: Vec<&String> = declared
+            .iter()
+            .filter(|e| e.contains("STALE ALLOWANCE"))
+            .collect();
+        assert_eq!(
+            stale.len(),
+            ALLOWED_COLLISIONS.len(),
+            "known-good: a declared set with no collisions must convict EVERY \
+             allowance row, or this control proves nothing: {declared:?}"
+        );
+
+        inv.source = CensusSource::Worktree {
+            reason: "26 census input(s) under crates/ differ from HEAD".to_owned(),
+        };
+        let scratch = inv.check().err().unwrap_or_default();
+        assert!(
+            !scratch.iter().any(|e| e.contains("STALE ALLOWANCE")),
+            "a tree that is not a commit must not convict a live row: {scratch:?}"
+        );
+    }
+
+    /// The instrument itself, against the tree the test is running in.
+    ///
+    /// Whichever branch this repo is in, the answer must be SPECIFIC: a
+    /// committed scan names a 40-hex rev, a worktree scan names what differs.
+    /// An empty or generic reason would make the UNKNOWN unreadable, which is
+    /// the failure mode the type exists to prevent.
+    #[test]
+    fn the_census_names_the_tree_it_read() {
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .expect("repo root is two levels above the crate");
+        match census_source(repo) {
+            CensusSource::Committed { rev } => {
+                assert_eq!(rev.len(), 40, "a committed source must name HEAD: {rev}");
+                assert!(
+                    rev.chars().all(|c| c.is_ascii_hexdigit()),
+                    "a committed source must name a commit id: {rev}"
+                );
+            }
+            CensusSource::Worktree { reason } => {
+                assert!(
+                    reason.contains("census input(s)") || reason.contains(GIT),
+                    "a worktree source must name the divergence or the failed \
+                     probe, never just decline: {reason}"
+                );
+            }
+            CensusSource::Declared => {
+                panic!("a filesystem scan can never be Declared — that is the fixture source")
+            }
+        }
+
+        // The predicate that decides authority, on both sides. A census
+        // input and a path that merely lives under crates/.
+        assert!(is_census_input("crates/omp-inventory-map/src/types_inventory.rs"));
+        assert!(is_census_input("crates/omp-inventory-map/Cargo.toml"));
+        assert!(!is_census_input("crates/omp-inventory-map/tests/inventory.rs"));
+        assert!(!is_census_input("crates/omp-inventory-map/artifacts/x.toml"));
+        assert!(!is_census_input("docs/plan/00-brief.md"));
     }
 
     /// The STALE NAMED-ZERO leg, on fixtures, with BOTH controls.
@@ -1817,6 +2400,144 @@ mod tests {
             1,
             "{row_name} splitting against a DIFFERENT leaf is a new finding"
         );
+    }
+
+    /// [`census_source`] against a REAL git repository, because the branch
+    /// that matters most cannot be reached from the machines that run this
+    /// suite: the rch lane gets an rsync WITHOUT `.git`, so it only ever
+    /// sees the worktree branch, and CI only ever sees the committed one.
+    /// A fixture repo is the only place both are reachable at once — and a
+    /// path shipped to the oracle untested is how the oracle learns to say
+    /// "I cannot read the repository" and be believed.
+    ///
+    /// Every leg here is a control: clean commit -> Committed; a modified
+    /// source -> Worktree NAMING it; an untracked `.rs` -> Worktree; and a
+    /// dirty `tests/` file -> STILL Committed, which is the scoping claim
+    /// `is_census_input` makes and the reason authority does not degenerate
+    /// into "nobody is working".
+    #[test]
+    fn census_source_reads_a_real_git_repository() {
+        let root = std::env::temp_dir().join(format!(
+            "omp-inventory-map-census-source-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let src = root.join("crates/specimen/src");
+        std::fs::create_dir_all(&src).expect("specimen source root");
+        std::fs::create_dir_all(root.join("crates/specimen/tests")).expect("specimen test root");
+        std::fs::write(
+            root.join("crates/specimen/Cargo.toml"),
+            "[package]\nname = \"specimen\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .expect("specimen manifest");
+        std::fs::write(src.join("lib.rs"), "pub struct Specimen;\n").expect("specimen source");
+
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new(GIT)
+                .args(args)
+                .current_dir(&root)
+                .output()
+                .unwrap_or_else(|e| panic!("`{GIT} {}` did not spawn: {e}", args.join(" ")));
+            assert!(
+                output.status.success(),
+                "`{GIT} {}` failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["add", "--all"]);
+        git(&[
+            "-c",
+            "user.name=census fixture",
+            "-c",
+            "user.email=census@fixture.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "specimen",
+        ]);
+
+        // KNOWN-GOOD: a clean checkout speaks for its commit.
+        let committed = census_source(&root);
+        let rev = match &committed {
+            CensusSource::Committed { rev } => rev.clone(),
+            other => panic!("a clean checkout must be Committed: {other:?}"),
+        };
+        assert_eq!(rev.len(), 40, "the source must carry HEAD: {rev}");
+        assert!(committed.is_authoritative(), "a commit may be adjudicated");
+        assert!(committed.blocked_reason().is_none());
+
+        // SCOPING CONTROL: dirt OUTSIDE the census inputs changes nothing.
+        std::fs::write(
+            root.join("crates/specimen/tests/specimen.rs"),
+            "// untracked test file\n",
+        )
+        .expect("dirty test file");
+        assert_eq!(
+            census_source(&root),
+            CensusSource::Committed { rev: rev.clone() },
+            "a file this census never reads must not cost the scan its authority"
+        );
+
+        // KNOWN-BAD 1: an untracked source under `src` is content CI cannot
+        // see, so the tree stops speaking for the commit.
+        std::fs::write(src.join("extra.rs"), "pub struct Extra;\n").expect("untracked source");
+        let untracked = census_source(&root);
+        match &untracked {
+            CensusSource::Worktree { reason } => assert!(
+                reason.contains("crates/specimen/src/extra.rs") && reason.contains(&rev[..12]),
+                "the reason must name the path and the HEAD it diverged from: {reason}"
+            ),
+            other => panic!("an untracked source must refuse authority: {other:?}"),
+        }
+        assert!(!untracked.is_authoritative());
+        std::fs::remove_file(src.join("extra.rs")).expect("revert untracked source");
+        assert!(
+            matches!(census_source(&root), CensusSource::Committed { .. }),
+            "reverting the mutation must restore authority"
+        );
+
+        // KNOWN-BAD 2: a DELETED tracked source — the exact shape that made
+        // the lane and CI disagree (`crates/contabo-reclaim/src/model.rs`).
+        std::fs::remove_file(src.join("lib.rs")).expect("delete tracked source");
+        match census_source(&root) {
+            CensusSource::Worktree { reason } => assert!(
+                reason.contains("crates/specimen/src/lib.rs"),
+                "a deleted tracked source must be named: {reason}"
+            ),
+            other => panic!("a deleted tracked source must refuse authority: {other:?}"),
+        }
+        std::fs::write(src.join("lib.rs"), "pub struct Specimen;\n").expect("restore source");
+        assert!(
+            matches!(census_source(&root), CensusSource::Committed { .. }),
+            "restoring the byte-identical source must restore authority"
+        );
+
+        // And the scan carries it end to end, not just the probe.
+        let scanned = scan_workspace_types(&root).expect("fixture scan");
+        assert!(
+            matches!(scanned.source, CensusSource::Committed { .. }),
+            "the scan must stamp what the probe measured: {:?}",
+            scanned.source
+        );
+
+        // A directory with no git at all is UNKNOWN, and says why.
+        let bare = std::env::temp_dir().join(format!(
+            "omp-inventory-map-census-nogit-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&bare);
+        std::fs::create_dir_all(&bare).expect("bare root");
+        match census_source(&bare) {
+            CensusSource::Worktree { reason } => assert!(
+                !reason.trim().is_empty(),
+                "a gitless tree must still say why it cannot testify"
+            ),
+            other => panic!("a tree with no git cannot be authoritative: {other:?}"),
+        }
+        std::fs::remove_dir_all(&bare).expect("remove bare root");
+        std::fs::remove_dir_all(&root).expect("remove census fixture");
     }
 
     /// Every VOCABULARY_SPLITS row is well-formed: an owner that is one of

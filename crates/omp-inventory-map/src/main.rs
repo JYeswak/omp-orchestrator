@@ -346,6 +346,12 @@ fn types_command(config: ProbeConfig) -> ExitCode {
                 status,
                 data: Some(serde_json::json!({
                     "counts": inventory.counts,
+                    // WHICH TREE this census read. Published first among
+                    // equals because every number below it is a statement
+                    // about that tree and about nothing else: a worktree
+                    // scan and the commit under it disagreed by a whole
+                    // collision on 2026-09-11 and neither reader could tell.
+                    "census_source": inventory.source,
                     "collisions": inventory.collisions,
                     // The SHARP class, published separately because an
                     // undifferentiated wall of collisions is an unread red.
