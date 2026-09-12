@@ -198,3 +198,78 @@ pub fn post_spawn_recheck(verdict: &crate::liveness::LiveVerdict) -> Recheck {
         ),
     }
 }
+
+/// L4-ARTIFACT (25yo): the SwarmState artifact with readback.
+///
+/// After L4 runs, the retained spawn/WAVE hash, the mail observation and the
+/// pack hash are written as one JSON artifact and READ BACK. A write whose
+/// exit was 0 is not evidence the bytes are right; the readback is. The
+/// retained wave hash is re-verified against disk BEFORE it is embedded, so
+/// the artifact carries a live measurement rather than a transcribed one.
+/// A zero-byte file and a missing file both FAIL readback with typed
+/// reasons — neither is an empty success.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SwarmState {
+    pub wave_hash: String,
+    pub pack_sha256: String,
+    pub mail: serde_json::Value,
+}
+
+/// Write `swarm-state.json` under `dir` and return its path.
+pub fn write_swarm_state(
+    dir: &Path,
+    spawn: &SpawnReceipt,
+    mail: &serde_json::Value,
+    pack_sha256: &str,
+) -> Result<PathBuf, String> {
+    verify_retained_hash(spawn).map_err(|error| error.to_string())?;
+    let state = serde_json::json!({
+        "wave_hash": spawn.wave_hash,
+        "pack_sha256": pack_sha256,
+        "mail": mail,
+    });
+    let bytes = serde_json::to_vec(&state).expect("swarm state is JSON-serializable");
+    let path = dir.join("swarm-state.json");
+    crate::inception::write_atomic_observed(&path, &bytes)
+        .map_err(|error| error.to_string())?;
+    Ok(path)
+}
+
+/// Read a SwarmState artifact back. Missing files, empty/unparseable bytes
+/// and absent-or-empty required keys are typed refusals, never defaults.
+pub fn read_swarm_state(path: &Path) -> Result<SwarmState, String> {
+    let bytes = fs::read(path).map_err(|error| {
+        format!(
+            "L4_SWARMSTATE_MISSING path={} detail={error}",
+            path.display()
+        )
+    })?;
+    let row: serde_json::Value = serde_json::from_slice(&bytes).map_err(|error| {
+        format!(
+            "L4_SWARMSTATE_MALFORMED path={} detail={error}",
+            path.display()
+        )
+    })?;
+    let object = row.as_object().ok_or_else(|| {
+        format!(
+            "L4_SWARMSTATE_NOT_OBJECT path={}",
+            path.display()
+        )
+    })?;
+    let required = |field: &str| {
+        object
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| format!("L4_SWARMSTATE_MISSING_FIELD field={field}"))
+    };
+    let mail = object.get("mail").cloned().ok_or_else(|| {
+        "L4_SWARMSTATE_MISSING_FIELD field=mail".to_owned()
+    })?;
+    Ok(SwarmState {
+        wave_hash: required("wave_hash")?,
+        pack_sha256: required("pack_sha256")?,
+        mail,
+    })
+}

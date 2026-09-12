@@ -21,9 +21,9 @@ pub mod hd0009;
 pub use foundation::{append_s1_foundation, s1_row, s1_rows_citing_inception, INCEPTION_REF, SOURCE};
 pub use pack::{retain_pack_receipt, PackError, PackReceipt, SendAttempt, TICK_ZERO_TARGET};
 pub use spawn::{
-    generate_wave, panes_from_list_panes, post_spawn_recheck, sha256_hex, spawn_gate,
-    spawn_retain_wave_hash, verify_retained_hash, PaneId, Recheck, SpawnGate, SpawnReceipt,
-    SpawnWaveError,
+    generate_wave, panes_from_list_panes, post_spawn_recheck, read_swarm_state, sha256_hex,
+    spawn_gate, spawn_retain_wave_hash, verify_retained_hash, write_swarm_state, PaneId, Recheck,
+    SpawnGate, SpawnReceipt, SpawnWaveError, SwarmState,
 };
 pub use steps::{
     apply_predicates, check_id_parity, fixture_steps, json_next_command, json_ordered_ids,

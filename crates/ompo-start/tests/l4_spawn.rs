@@ -51,3 +51,58 @@ fn typed_wave_md_fails() {
         other => panic!("pre-existing typed WAVE.md must fail generate, got {other:?}"),
     }
 }
+
+/// L4-ARTIFACT (25yo): after the write lands, the SwarmState artifact exists
+/// and readback of the required keys succeeds. The retained wave hash is
+/// re-verified live before embedding. A zero-byte write and a missing file
+/// both FAIL readback — neither is an empty success.
+#[test]
+fn swarm_state_write_readback() {
+    use ompo_start::{
+        read_swarm_state, write_swarm_state, PackReceipt, SwarmState,
+    };
+
+    // KNOWN-GOOD control: retained receipts round-trip with their values.
+    let dir = tempfile::tempdir().expect("scratch");
+    let wave = dir.path().join("WAVE.md");
+    let spawn = spawn_retain_wave_hash("%7\n%8\n", &wave).expect("generate");
+    let pack = PackReceipt::new("%7", b"pack-bytes");
+    let mail = serde_json::json!({"status": "PRESENT"});
+    let path = write_swarm_state(dir.path(), &spawn, &mail, pack.pack_sha256())
+        .expect("artifact writes");
+    assert!(path.exists(), "the artifact must exist after the write");
+    let back = read_swarm_state(&path).expect("artifact reads back");
+    assert_eq!(
+        back,
+        SwarmState {
+            wave_hash: spawn.wave_hash.clone(),
+            pack_sha256: pack.pack_sha256().to_owned(),
+            mail: mail.clone(),
+        },
+        "readback must reproduce the retained receipts exactly"
+    );
+    println!(
+        "L4_SWARMSTATE_OK wave={} pack={}",
+        back.wave_hash, back.pack_sha256
+    );
+
+    // ZERO-BYTE write FAILS readback: empty bytes are not an empty success.
+    let zero = dir.path().join("zero-state.json");
+    std::fs::write(&zero, b"").expect("zero bytes land");
+    let error = read_swarm_state(&zero).expect_err(
+        "a zero-byte artifact must FAIL readback, not succeed",
+    );
+    println!("L4_SWARMSTATE_ZERO refusal={error}");
+
+    // MISSING file FAILS readback: absence is not a row either.
+    let missing = dir.path().join("never-written.json");
+    assert!(!missing.exists());
+    let error = read_swarm_state(&missing).expect_err(
+        "a missing artifact must FAIL readback, not succeed",
+    );
+    println!("L4_SWARMSTATE_MISSING refusal={error}");
+    assert!(
+        error.contains("never-written.json"),
+        "the refusal must name the missing path, got {error}"
+    );
+}
