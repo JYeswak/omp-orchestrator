@@ -581,9 +581,16 @@ fn every_linked_path_dep_is_watched_or_declared_unwatched() {
 /// spawned binary is UNDETECTABLE, and hook_digest MUST NOT cover crate-atom-gate src
 /// (TIER 3, zero library refs -- covering it is stamp churn for zero decision signal).
 ///
-/// KNOWN-BAD: deleting `PRESENT AND STALE` from the exemption reason reddens this leg.
-/// Deleting the env-flag pin from pre-commit-gate.rs also reddens (death of (c)).
-/// BINARY_ABSENT cannot discriminate this mutant -- it is a different arm.
+/// KNOWN-BAD, BOTH DIRECTIONS (bead omp-orchestrator-0rfwk):
+///   ARM the gate -- delete the guard from pre-commit-gate.rs -- and this leg reddens, because
+///   the var from the registry is no longer in the hook's CODE. That direction was already
+///   proven by mutation during the 9yf5s grade (exit=101, contabo-2).
+///   RESPELL the same condition -- line-split it, or write it `matches!` -- and this leg stays
+///   GREEN. That direction was BROKEN until 0rfwk: the pin matched an exact source substring, so
+///   a formatter could report a disarmed gate as armed. A leg with only the first direction is a
+///   text match standing in for a state.
+/// Deleting `PRESENT AND STALE` from the exemption reason also reddens (the row must stay honest).
+/// BINARY_ABSENT cannot discriminate any of these -- it is a different arm.
 #[test]
 fn crate_atom_gate_spawned_binary_freshness_is_an_accepted_gap() {
     assert!(
@@ -610,17 +617,60 @@ fn crate_atom_gate_spawned_binary_freshness_is_an_accepted_gap() {
         );
     }
 
+    // THE STATE, FROM THE TYPED REGISTRY -- not from the hook's source text
+    // (bead omp-orchestrator-0rfwk). This assertion used to be
+    // `bin.contains("if std::env::var(\"OMP_CRATE_ATOM_GATE\").as_deref() == Ok(\"1\")")`,
+    // an exact source substring standing in for a STATE. A rustfmt line-split,
+    // a `matches!`, or any respelling of the SAME condition reddened it with
+    // "the env gate is removed" -- a FALSE ARMING REPORT about a gate that is
+    // still disarmed. Same family as a fixture description string counted as a
+    // caller, and as a `grep -c` returning substrings against a true zero.
+    //
+    // ANTI-VACUITY FIRST, because re-keying onto a registry is exactly where
+    // this goes quiet: a lookup that finds nothing must be an ERROR. A leg that
+    // passes because the key was renamed is indistinguishable from one that
+    // checked, and `ARMED_GATES` is itself hand-maintained.
+    let arm = no_shell_gate::armed_gates::ARMED_GATES
+        .iter()
+        .find(|arm| arm.gate == "crate-atom-gate")
+        .expect(
+            "RULE 0rfwk_registry_nonvacuous: ARMED_GATES does not register crate-atom-gate, so \
+             this leg has nothing to assert about and must not pass silently",
+        );
+    assert!(
+        !arm.death.trim().is_empty(),
+        "RULE 0rfwk_death_named: the registry row must carry the condition that voids it"
+    );
+
+    // AND THE GUARD ITSELF, SEMANTICALLY. The registry says the gate is
+    // env-disarmable and names the var; it CANNOT say the guard still EXISTS,
+    // because a hand-maintained row survives the deletion of the code it
+    // describes. So the var, taken FROM the registry, is looked for in the
+    // hook's CODE rather than as an exact expression spelling.
+    //
+    // `code_only`, NOT `code_and_literals`: the var IS a string literal, and
+    // `code_and_literals` blanks literal BODIES -- its own doc says "use
+    // `code_only` when string literals are themselves the evidence being
+    // measured". I reached for the wrong one first and the leg reddened on a
+    // CLEAN tree, which is the instrument answering a question I had not asked.
+    //
+    // Comments must still be dropped: pre-commit-gate.rs:630 names the var in
+    // prose ("Re-arm with OMP_CRATE_ATOM_GATE=1"), so an unstripped scan would
+    // find the comment after the guard was deleted and pass over an ARMED gate.
     let bin = std::fs::read_to_string(
         repo_root().join("crates/no-shell-gate/src/bin/pre-commit-gate.rs"),
     )
     .expect("pre-commit-gate.rs readable");
+    let code = text_structure::code_only(&bin);
     assert!(
-        bin.contains("if std::env::var(\"OMP_CRATE_ATOM_GATE\").as_deref() == Ok(\"1\")"),
-        "RULE 9yf5s_still_disarmed: (c) dies the day this env gate is removed; re-arming \
-         without stamping the spawned binary is the defect this bead named"
+        code.contains(arm.var),
+        "RULE 9yf5s_still_disarmed: the hook's CODE no longer names {} , so the gate is armed \
+         (or the var was renamed); (c) dies the day that happens, and re-arming without stamping \
+         the spawned binary is the defect 9yf5s named",
+        arm.var
     );
     assert!(
-        bin.contains("crate_atom_gate_on_commit_path"),
+        code.contains("crate_atom_gate_on_commit_path"),
         "RULE 9yf5s_spawn_site: the disarmed call must still exist so the death condition is real"
     );
 }
