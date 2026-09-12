@@ -155,6 +155,14 @@ fn every_wave_output_is_either_cited_or_a_named_finding() {
                 "coverage output {output_crate} was never probed, which is neither a citation \
                  nor a finding: {reason}"
             ),
+            // tzz74 added this variant and THIS MATCH WAS NOT UPDATED, which stopped the whole
+            // crate's suite compiling and turned omp-orchestrator into ALL_TESTS_SKIPPED in CI
+            // -- a coverage collapse that reads as a repair from outside. An unmeasured input
+            // is not a citation and not a finding, exactly like Unprobed above.
+            GateReachability::Undetermined { missing_input } => panic!(
+                "coverage output {output_crate} could not be classified because an input was \
+                 absent, which is neither a citation nor a finding: {missing_input}"
+            ),
         }
     }
 
