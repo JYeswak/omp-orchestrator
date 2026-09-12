@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! Commit-path adapters for the five arms that previously ran only as test targets (or nowhere).
+//! Commit-path adapters for the six arms that previously ran only as test targets (or nowhere).
 //!
 //! This module deliberately consumes the staged index, not the mutable worktree, for content
 //! checks. The pre-commit binary is the single trigger; a test-only ratchet is not a commit gate
@@ -22,14 +22,14 @@ const GIT_READ_DEADLINE: Duration = Duration::from_secs(10);
 /// check drift into disagreeing about which sources the hook is built from.
 use crate::hook_digest::{self, HOOK_SOURCE_CRATES};
 
-/// The commit-path result of running the four ratchet adapters.
+/// The commit-path result of running the six ratchet adapters.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct CommitRatchetReport {
     pub observations: Vec<String>,
     pub refusals: Vec<String>,
 }
 
-/// Run all five commit-path arms for one staged commit.
+/// Run all six commit-path arms for one staged commit.
 ///
 /// The empty-index decision is made by the caller before this function because an empty index is
 /// the trigger's own terminal outcome. The other arms are scoped to the staged change
@@ -46,8 +46,397 @@ pub fn run(repo_root: &Path, staged: &[String], deletions: &[String]) -> CommitR
     // the crate still compiled, and the suite got GREENER by one leg. The production path is
     // run(); a leg that constructs its own report never enters it.
     armed_gates(&mut report);
+    // Staged-set reference closure (5fl28): the one arm that reads staged
+    // blobs plus git state instead of the worktree. Same rule as above: it
+    // must be called HERE; a direct leg on check_staged_closure proves the
+    // classifier, never the wiring.
+    staged_reference_closure(repo_root, staged, deletions, &mut report);
     let _ = deletions;
     report
+}
+
+/// STAGED-SET REFERENCE CLOSURE (bead omp-orchestrator-5fl28). Refuse staged
+/// content that references a symbol whose sole declaration lives in a dirty
+/// file outside the staged set.
+///
+/// Measured 2026-09-11: two agents committed correctly path-scoped work that
+/// jointly broke HEAD for hours (a use staged without its declaration),
+/// while green remote runs hid it because the lane ships the worktree. A
+/// path-scoped commit is whole-file and cannot see the symbols it carries,
+/// so closure is checked at commit time from staged blobs plus git state --
+/// never from the worktree alone, never by building.
+///
+/// Boundaries, stated so the next reader does not widen them by accident:
+/// tracked `.rs` files only; `mod`/`use` are not declarations here (the bead
+/// names fn|struct|enum|trait|const|static|type plus 4-space CamelCase enum
+/// variants); a staged deletion removes declarations rather than using them
+/// and belongs to the pre-delete gate, not this one; untracked files are
+/// invisible to the committed tree by construction and are not dirty files.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagedRefusal {
+    pub symbol: String,
+    pub declared_in: String,
+    pub used_in: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StagedClosure {
+    Clean { staged_rs: usize, dirty_checked: usize },
+    Refused(Vec<StagedRefusal>),
+    TerminalEmpty { reason: &'static str },
+    GitError { detail: String },
+}
+
+const ITEM_KEYWORDS: &[&str] = &["fn", "struct", "enum", "trait", "const", "static", "type"];
+
+fn is_ident_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
+fn is_ident_char(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+/// Split leading identifier-like tokens (`pub`, `crate`, `unsafe`... are all
+/// one token each; punctuation splits).
+fn leading_tokens(line: &str) -> Vec<&str> {
+    let bytes = line.as_bytes();
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    while index < bytes.len() {
+        while index < bytes.len() && !is_ident_char(bytes[index]) {
+            index += 1;
+        }
+        let start = index;
+        while index < bytes.len() && is_ident_char(bytes[index]) {
+            index += 1;
+        }
+        if start < index {
+            tokens.push(&line[start..index]);
+        }
+    }
+    tokens
+}
+
+/// The declared name on one code-only line, if it declares anything: the
+/// first keyword hit wins, so `pub unsafe fn foo` declares `foo` and
+/// `const FOO: u32` declares `FOO`. Match arms (`Foo => ...`) and use-paths
+/// (`HoldReason::Variant` in expression position) are uses, not
+/// declarations, and are excluded so a staged use cannot attribute a dirty
+/// declaration to itself. Residual: a BARE CamelCase expression opening a
+/// 4-space line (no `::`, no `=>`) still reads as a variant declaration;
+/// that conjunction is rare and the use-detection below still fires on it.
+fn declaration_name(line: &str) -> Option<String> {
+    if line.contains("=>") {
+        return None;
+    }
+    let tokens = leading_tokens(line);
+    for (position, token) in tokens.iter().enumerate() {
+        if ITEM_KEYWORDS.contains(token) {
+            if let Some(name) = tokens.get(position + 1) {
+                if name.bytes().next().is_some_and(is_ident_start) {
+                    return Some((*name).to_owned());
+                }
+            }
+            return None;
+        }
+    }
+    // Enum variants: exactly 4-space indented CamelCase. Deeper nesting is
+    // not a variant body; shallower is not inside an enum. A `::` anywhere
+    // on the line means a path expression, never a definition.
+    if line.contains("::") {
+        return None;
+    }
+    let indented = line.strip_prefix("    ")?;
+    if indented.starts_with(' ') {
+        return None;
+    }
+    let name: String = indented.bytes().take_while(|b| is_ident_char(*b)).map(|b| b as char).collect();
+    let first = name.bytes().next()?;
+    if !first.is_ascii_uppercase() || name.is_empty() {
+        return None;
+    }
+    Some(name)
+}
+
+/// Declared names over masked text: comments AND string/char bodies blanked
+/// (a `struct` inside a string literal declares nothing — measured: the
+/// extractor's own unit test caught `let text = "struct Phantom"` declaring
+/// `Phantom`). Line structure preserved, so the variant-indent rule holds.
+fn declared_names(code: &str) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    for line in text_structure::code_and_literals(code).lines() {
+        if let Some(name) = declaration_name(line) {
+            names.insert(name);
+        }
+    }
+    names
+}
+
+
+fn git_lines(repo_root: &Path, args: &[&str]) -> Result<Vec<String>, String> {
+    git_text(repo_root, args).map(|text| {
+        text.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect()
+    })
+}
+
+/// Tracked `.rs` files whose worktree differs from the index, outside the
+/// staged set. Untracked (`??`) files are not dirty files: they have no HEAD
+/// content to diff and the commit does not contain them.
+fn dirty_unstaged_rs(repo_root: &Path, staged: &[String]) -> Result<Vec<(String, bool)>, String> {
+    // Raw lines, NOT trimmed: porcelain's index column is a LEADING space
+    // and trimming it turns every ` M` row into a staged `M ` row (measured:
+    // the gate saw zero dirt with a dirty file present). Empty lines only.
+    let text = git_text(repo_root, &["status", "--porcelain=v1", "--untracked-files=no"])?;
+    let mut dirty = Vec::new();
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        let mut chars = line.chars();
+        let index_status = chars.next().unwrap_or(' ');
+        let worktree_status = chars.next().unwrap_or(' ');
+        if index_status == '?' {
+            continue;
+        }
+        if worktree_status == ' ' {
+            continue;
+        }
+        let path = line.get(3..).unwrap_or("").trim();
+        let path = path.rsplit(" -> ").next().unwrap_or(path).trim();
+        if !path.ends_with(".rs") || path.is_empty() {
+            continue;
+        }
+        if staged.iter().any(|staged_path| staged_path == path) {
+            continue;
+        }
+        dirty.push((path.to_owned(), index_status == 'A'));
+    }
+    dirty.sort();
+    dirty.dedup();
+    Ok(dirty)
+}
+fn head_declarations(repo_root: &Path) -> Result<std::collections::BTreeSet<String>, String> {
+    let mut command = std::process::Command::new("git");
+    command.current_dir(repo_root).args([
+        "grep",
+        "-h",
+        "-E",
+        "-I",
+        "-e",
+        "^[ \\t]*(pub[ \\t(]|fn |struct |enum |trait |const |static |type )",
+        "-e",
+        "^    [A-Z]",
+        "HEAD",
+        "--",
+        "*.rs",
+    ]);
+    match subprocess_contract::bounded_output(&mut command, GIT_READ_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(declared_names(&String::from_utf8_lossy(&output.stdout)))
+        }
+        subprocess_contract::BoundedOutcome::Completed(output)
+            if output.status.code() == Some(1) && output.stdout.is_empty() =>
+        {
+            // Exit 1 with no output is "no matches", not a failure.
+            Ok(std::collections::BTreeSet::new())
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // No HEAD object yet: nothing is committed, so nothing can break.
+            if stderr.contains("ambiguous argument 'HEAD'") || stderr.contains("unknown revision") {
+                Ok(std::collections::BTreeSet::new())
+            } else {
+                Err(format!("git grep HEAD exited {:?}: {}", output.status.code(), stderr.trim()))
+            }
+        }
+        other => Err(format!("git grep HEAD did not complete: {other:?}")),
+    }
+}
+
+/// The pure classifier: staged blobs, dirty worktree contents keyed by path,
+/// HEAD contents keyed by path (empty where index-added), and repo-wide HEAD
+/// declarations. Returns every (symbol, declarer, user) triple whose sole
+/// declaration lives outside the staged set.
+fn classify_closure(
+    staged: &[(String, String)],
+    dirty: &[(String, String, String)],
+    head_declared: &std::collections::BTreeSet<String>,
+) -> Vec<StagedRefusal> {
+    let mut staged_declared = std::collections::BTreeSet::new();
+    for (_, content) in staged {
+        staged_declared.extend(declared_names(content));
+    }
+    let mut refusals = Vec::new();
+    let mut users: Vec<&(String, String)> = staged.iter().collect();
+    users.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut declarers: Vec<(&String, std::collections::BTreeSet<String>)> = dirty
+        .iter()
+        .map(|(path, worktree, head)| {
+            let added: std::collections::BTreeSet<String> = declared_names(worktree)
+                .difference(&declared_names(head))
+                .cloned()
+                .collect();
+            (path, added)
+        })
+        .collect();
+    declarers.sort_by(|a, b| a.0.cmp(b.0));
+    let mut symbols: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for (_, added) in &declarers {
+        symbols.extend(added.iter().cloned());
+    }
+    for symbol in symbols {
+        if staged_declared.contains(&symbol) || head_declared.contains(&symbol) {
+            continue;
+        }
+        // String-blind on both sides: a symbol mentioned inside a string
+        // literal is not a code reference (same rule as declarations above;
+        // has_identifier's own code_only masking is idempotent over this).
+        let use_masked: Vec<(String, String)> = users
+            .iter()
+            .map(|(path, content)| ((*path).clone(), text_structure::code_and_literals(content)))
+            .collect();
+        let used_in = match use_masked
+            .iter()
+            .find(|(_, masked)| text_structure::has_identifier(masked, &symbol))
+            .map(|(path, _)| path.clone())
+        {
+            Some(path) => path,
+            None => continue,
+        };
+        let declared_in = declarers
+            .iter()
+            .find(|(_, added)| added.contains(&symbol))
+            .map(|(path, _)| (*path).clone());
+        let declared_in = match declared_in {
+            Some(path) => path,
+            None => continue,
+        };
+        refusals.push(StagedRefusal { symbol, declared_in, used_in });
+    }
+    refusals
+}
+
+/// Commit-time entry point over live git state. Staged blobs come from the
+/// index (`git show :path`: what the commit WILL contain); dirty content
+/// comes from the worktree; HEAD content per dirty file distinguishes added
+/// declarations from carried ones. Any git read that fails is ERROR, never
+/// an empty scan — a gate that cannot see its inputs refuses closed.
+pub fn check_staged_closure(
+    repo_root: &Path,
+    staged: &[String],
+    deletions: &[String],
+) -> StagedClosure {
+    let staged_rs: Vec<&str> = staged
+        .iter()
+        .map(String::as_str)
+        .filter(|path| path.ends_with(".rs"))
+        .filter(|path| !deletions.iter().any(|deleted| deleted == path))
+        .collect();
+    if staged_rs.is_empty() {
+        // Terminal, not pass: with no Rust staged content there is nothing
+        // this gate can refuse, and reporting CLEAN would certify nothing.
+        // The binary owns the truly-empty index terminal; this arm answers
+        // the no-rust-content case the same way.
+        let reason = if staged.is_empty() { "no_staged_files" } else { "no_rust_staged_content" };
+        return StagedClosure::TerminalEmpty { reason };
+    }
+    let mut staged_blobs: Vec<(String, String)> = Vec::new();
+    for path in &staged_rs {
+        match git_text(repo_root, &["show", &format!(":{path}")]) {
+            Ok(text) => staged_blobs.push(((*path).to_owned(), text)),
+            Err(detail) => {
+                return StagedClosure::GitError {
+                    detail: format!("cannot read staged blob for {path}: {detail}"),
+                }
+            }
+        }
+    }
+    let dirty_paths = match dirty_unstaged_rs(repo_root, staged) {
+        Ok(paths) => paths,
+        Err(detail) => return StagedClosure::GitError { detail },
+    };
+    let mut dirty: Vec<(String, String, String)> = Vec::new();
+    for (path, index_added) in &dirty_paths {
+        // A worktree-ABSENT file declares nothing, so absence is an answer,
+        // not an error: its added set is empty by construction. Any other
+        // read failure stays ERROR — a gate that cannot see refuses closed.
+        let worktree = match std::fs::read_to_string(repo_root.join(path)) {
+            Ok(text) => text,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(detail) => {
+                return StagedClosure::GitError {
+                    detail: format!("cannot read dirty worktree file {path}: {detail}"),
+                }
+            }
+        };
+        // Index-added files have no HEAD blob by construction, so every
+        // worktree declaration is added. Any other file whose HEAD blob is
+        // unreadable is ERROR: silently treating it as empty would widen
+        // `added` on a transient git failure and refuse healthy commits.
+        let head = if *index_added {
+            String::new()
+        } else {
+            match git_text(repo_root, &["show", &format!("HEAD:{path}")]) {
+                Ok(text) => text,
+                Err(detail) => {
+                    return StagedClosure::GitError {
+                        detail: format!("cannot read HEAD blob for {path}: {detail}"),
+                    }
+                }
+            }
+        };
+        dirty.push((path.clone(), worktree, head));
+    }
+    let dirty_owned = std::mem::take(&mut dirty);
+    let head_declared = match head_declarations(repo_root) {
+        Ok(declared) => declared,
+        Err(detail) => return StagedClosure::GitError { detail },
+    };
+    let refusals = classify_closure(
+        &staged_blobs.iter().map(|(p, c)| (p.clone(), c.clone())).collect::<Vec<_>>(),
+        &dirty_owned,
+        &head_declared,
+    );
+    if refusals.is_empty() {
+        StagedClosure::Clean { staged_rs: staged_blobs.len(), dirty_checked: dirty_owned.len() }
+    } else {
+        StagedClosure::Refused(refusals)
+    }
+}
+
+fn staged_reference_closure(
+    repo_root: &Path,
+    staged: &[String],
+    deletions: &[String],
+    report: &mut CommitRatchetReport,
+) {
+    match check_staged_closure(repo_root, staged, deletions) {
+        StagedClosure::Clean { staged_rs, dirty_checked } => {
+            report.observations.push(format!(
+                "staged-reference-closure: CLEAN staged_rs={staged_rs} dirty_checked={dirty_checked}"
+            ));
+        }
+        StagedClosure::Refused(rows) => {
+            for row in rows {
+                report.refusals.push(format!(
+                    "staged-reference-closure: REFUSED symbol={} declared_in={} used_in={} -- stage the declaring file with the use (one commit), or remove the use; a path-scoped commit cannot see symbols outside its set",
+                    row.symbol, row.declared_in, row.used_in
+                ));
+            }
+        }
+        StagedClosure::TerminalEmpty { reason } => {
+            report.observations.push(format!(
+                "staged-reference-closure: TERMINAL_EMPTY reason={reason}"
+            ));
+        }
+        StagedClosure::GitError { detail } => {
+            report.refusals.push(format!(
+                "staged-reference-closure: ERROR detail={detail} -- inputs unreadable, refusing closed"
+            ));
+        }
+    }
 }
 
 /// Armed-gate watch (bead omp-orchestrator-l6hsl): report which env-disarmable
@@ -1547,6 +1936,38 @@ mod tests {
         assert!(
             rows[0].contains(&format!("gates={}", crate::armed_gates::ARMED_GATES.len())),
             "denominator derived from the registry, never a literal (item B): {rows:?}"
+        );
+    }
+
+    #[test]
+    fn declared_names_covers_items_variants_and_pub_forms() {
+        let names = declared_names(
+            "pub struct Token;\nfn helper() {}\n    /// doc\n    Active\n    Stale(u32),\nconst LIMIT: u32 = 1;\n",
+        );
+        for expected in ["Token", "helper", "Active", "Stale", "LIMIT"] {
+            assert!(names.contains(expected), "missing {expected}: {names:?}");
+        }
+    }
+
+    #[test]
+    fn declared_names_ignores_comments_strings_and_match_arms() {
+        // A `fn` inside a comment or a string declares nothing, and a match
+        // arm (`Foo =>`) is a use: without the `=>` exclusion a staged match
+        // would attribute a dirty declaration to itself and hide the break.
+        let names = declared_names(
+            "// fn ghost() {}\nlet text = \"struct Phantom\";\nmatch token {\n    Active => {}\n}\n",
+        );
+        assert!(names.is_empty(), "prose must not declare: {names:?}");
+        // A use-path in expression position declares nothing, even at
+        // variant indent: without this the staged user attributes the dirty
+        // declaration to itself and the break goes silent.
+        let pathy = declared_names("    HoldReason::StagedUseWithoutDeclaration\n");
+        assert!(pathy.is_empty(), "use-path must not declare: {pathy:?}");
+        let names = declared_names("fn publish() {}\nlet my_fn = 1;\npub(crate) struct Real;\n");
+        assert_eq!(
+            names.iter().collect::<Vec<_>>(),
+            vec![&"Real".to_owned(), &"publish".to_owned()],
+            "{names:?}"
         );
     }
 }
