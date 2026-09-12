@@ -3233,6 +3233,55 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    routed around. Express the ratchet as a per-crate assertion or a ratio, never a workspace-wide
    absolute, and only then wire it fail-closed.
 
+11. **WHEN A LEG EXISTS TO PROVE A *DIVERGENCE*, PIN THE WRONG ANSWER AS WELL AS THE RIGHT ONE.**
+   Added 2026-09-12 from `tihld`'s consumer-surface residual, and it is a gate rule this file did
+   not have.
+
+   The defect: a guard read `rev-parse` + `ls-tree` while its consumer read `git ls-files`, so on a
+   box where one surface answers and the other does not, **the guard admits and the leg still dies
+   for the environment.** The fixture manufactures that box: a real commit, then `.git/index`
+   overwritten with garbage — HEAD still resolves, `ls-files` fails naming itself.
+
+   ⭐ **The leg asserts FOUR things, and the fourth is the one worth copying:**
+
+   ```
+   positive control -- BOTH surfaces read BEFORE the corruption, so the divergence is the
+                       corruption's doing and not a broken fixture
+   the INDEX guard DECLINES
+   the CONSUMER agrees with the guard (check_repo is Err)
+   ⭐ the COMMIT guard ADMITS -- asserted EXPLICITLY, because that admission IS the gap
+   ```
+
+   **A leg that pins only the correct behaviour proves a STATE; a leg that pins both proves a
+   DISTINCTION.** Asserting only *"the index guard declines"* passes under a guard that declines for
+   the wrong reason, and under a future refactor that collapses both surfaces into one. **Pinning
+   the wrong answer too means the leg cannot go green by accident — and if someone later "fixes" the
+   superseded surface, the leg reports that the divergence is GONE instead of silently agreeing.**
+
+   ⛔ **AND THE COROLLARY THE SAME UNIT DELIVERED: A GREEN ON A BOX WHERE THE DIVERGENCE CANNOT
+   OCCUR IS NOT A CONTROL FOR THE MUTANT.** *"The mutant only changes WHICH SURFACE the guard
+   consults, so on a box where both surfaces answer or neither does, the two guards are
+   INDISTINGUISHABLE — only the fixture that manufactures the divergence can tell them apart."* The
+   author declared its own `17 passed / 0 failed` **inadmissible** on exactly that reasoning. **Ask
+   what a mutant is allowed to change, then ask on which boxes that change is observable.**
+
+   ⭐ **AND A FIXTURE-INTERNAL LEG IS BOX-INDEPENDENT, WHICH IS STRONGER THAN A SAME-BOX PAIR:** the
+   mutant reddened on `contabo-1`, `-2` and `-4`, nine landed attempts, `exit=101` every time,
+   **because the leg does not depend on the box's own repo shape.** That property is what makes the
+   shape provable at all — and it is the answer to the confounded-cross-box class recorded above,
+   not an exception to it.
+
+   ⛔ **Label it honestly: this closes a gap BY CONSTRUCTION, not by measurement.** No box in this
+   fleet has been observed with a resolvable HEAD and an unreadable index. ⭐ **A gap closed by
+   construction and labelled as such is worth more than one closed by a measurement nobody can
+   reproduce.**
+
+   ⭐ **One more decision from that unit, because it is the temptation refused:** the index reader
+   reports its revision as the literal string `index`, **not a sha** — *"the index HAS no revision
+   and inventing one would be a provenance claim nobody can check."* A sha there would have been
+   plausible, unfalsifiable and wrong. **Fabricated provenance is refused at the point where
+   inventing it would have been easiest.**
+
 ## Instrument contracts: what each surface ACTUALLY returns
 
 **Receipt:** [`CENSUS-ARCHIVE-INSTRUMENTS.md`](docs/inventories/CENSUS-ARCHIVE-INSTRUMENTS.md#instrument-contracts-what-each-surface-actually-returns)
