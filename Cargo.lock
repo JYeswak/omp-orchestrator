@@ -7,6 +7,7 @@ name = "ack-spine"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "finding",
  "loop-queue-filter",
  "proptest",
@@ -34,6 +35,7 @@ dependencies = [
 name = "admission-reason"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "regex",
  "serde",
  "serde_json",
@@ -174,6 +176,7 @@ dependencies = [
 name = "asupersync-conformance"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "sha2 0.11.0",
  "undrained-pipe-lint",
 ]
@@ -221,6 +224,7 @@ dependencies = [
 name = "bead-holder"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
  "subprocess-contract",
 ]
@@ -291,9 +295,14 @@ dependencies = [
 name = "blocker-taxonomy"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "build-stamp"
+version = "0.1.0"
 
 [[package]]
 name = "bumpalo"
@@ -311,6 +320,7 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 name = "cargo-lane-budget"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -396,6 +406,7 @@ name = "commit-build-fence"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "serde",
  "serde_json",
 ]
@@ -404,6 +415,7 @@ dependencies = [
 name = "composer-typed"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "regex",
 ]
 
@@ -433,16 +445,16 @@ name = "contabo-reclaim"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "serde",
  "serde_json",
- "subprocess-contract",
- "tempfile",
 ]
 
 [[package]]
 name = "convergence-stamp"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
 ]
 
@@ -480,6 +492,7 @@ dependencies = [
 name = "crate-atom-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "finding",
  "loop-queue-filter",
  "serde_json",
@@ -490,6 +503,7 @@ dependencies = [
 name = "crate-soundness-verify"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "subprocess-contract",
 ]
 
@@ -592,6 +606,7 @@ checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 name = "decision-ledger"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
 ]
 
@@ -633,6 +648,7 @@ dependencies = [
 name = "dispatch-claim-fence"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
 ]
@@ -642,6 +658,7 @@ name = "dispatch-saga"
 version = "0.1.0"
 dependencies = [
  "blocker-taxonomy",
+ "build-stamp",
  "grader-attribution-gate",
  "omp-types",
  "pane-dispatch-fence",
@@ -654,6 +671,7 @@ dependencies = [
 name = "dispatch-silence-watch"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "finding",
  "serde",
  "serde_json",
@@ -674,12 +692,16 @@ dependencies = [
 name = "dispatcher-deadman"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "subprocess-contract",
 ]
 
 [[package]]
 name = "doctrine-retirement-gate"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+]
 
 [[package]]
 name = "ed25519"
@@ -730,6 +752,7 @@ name = "extraction-roster"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -739,10 +762,13 @@ dependencies = [
 name = "fast-dispatch"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "chrono",
+ "composer-typed",
  "finding",
  "loop-queue-filter",
  "loop-switch",
+ "ntm-kernel",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -772,6 +798,7 @@ name = "finding"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "futures-lite",
  "subprocess-contract",
 ]
@@ -787,17 +814,28 @@ dependencies = [
 name = "fleet-composite"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
 ]
 
 [[package]]
+name = "fleet-idle-monitor"
+version = "0.1.0"
+dependencies = [
+ "build-stamp",
+ "serde_json",
+]
+
+[[package]]
 name = "fleet-monitor"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "fs2",
  "ntm-fleet-monitor",
+ "ntm-kernel",
  "regex",
  "serde_json",
  "subprocess-contract",
@@ -808,6 +846,7 @@ dependencies = [
 name = "fleet-reconcile"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
  "subprocess-contract",
  "tick-monitor",
@@ -817,6 +856,7 @@ dependencies = [
 name = "fleet-truth"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "chrono",
  "finding",
  "serde_json",
@@ -920,6 +960,7 @@ dependencies = [
 name = "fuzz-build-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "subprocess-contract",
 ]
 
@@ -927,6 +968,7 @@ dependencies = [
 name = "gate-runner"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "input-manifest",
  "serde",
  "serde_json",
@@ -993,6 +1035,7 @@ dependencies = [
 name = "grader-attribution-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
 ]
 
@@ -1067,6 +1110,7 @@ version = "0.1.0"
 dependencies = [
  "agent-mail-native",
  "asupersync",
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -1096,6 +1140,7 @@ dependencies = [
 name = "input-manifest"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
 ]
@@ -1140,12 +1185,24 @@ dependencies = [
 [[package]]
 name = "kernel-bypass-gate"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+ "text-structure",
+]
+
+[[package]]
+name = "kernel-only-gate"
+version = "0.1.0"
+dependencies = [
+ "text-structure",
+]
 
 [[package]]
 name = "kernel-only-operator-hook"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "lifecycle-event",
  "lifecycle-monitor",
  "serde",
@@ -1164,6 +1221,7 @@ name = "lifecycle-event"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "omp-types",
  "serde_json",
  "tempfile",
@@ -1174,6 +1232,7 @@ name = "lifecycle-monitor"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "lifecycle-event",
  "serde_json",
  "subprocess-contract",
@@ -1205,6 +1264,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 name = "loop-coverage"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "finding",
  "loop-queue-filter",
  "serde",
@@ -1218,6 +1278,7 @@ name = "loop-driver"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "chrono",
  "loop-switch",
  "serde",
@@ -1232,6 +1293,7 @@ version = "0.1.0"
 dependencies = [
  "admission-reason",
  "blocker-taxonomy",
+ "build-stamp",
  "path-literal-guard",
  "regex",
  "serde_json",
@@ -1241,6 +1303,7 @@ dependencies = [
 name = "loop-switch"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "chrono",
  "serde_json",
 ]
@@ -1249,6 +1312,7 @@ dependencies = [
 name = "loop-tick"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "chrono",
  "finding",
  "loop-queue-filter",
@@ -1261,6 +1325,7 @@ dependencies = [
 name = "m2-grading-lane"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "dispatch-saga",
 ]
 
@@ -1283,6 +1348,7 @@ dependencies = [
 name = "named-test-filter-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "input-manifest",
  "serde_json",
 ]
@@ -1324,6 +1390,7 @@ dependencies = [
  "crate-atom-gate",
  "doctrine-retirement-gate",
  "finding",
+ "omp-inventory-map",
  "omp-orchestrator",
  "orchestration-tick-gate",
  "path-literal-guard",
@@ -1332,9 +1399,11 @@ dependencies = [
  "r1-breadth-gate",
  "serde_json",
  "serde_yaml_ng",
+ "sha2 0.11.0",
  "staged-build-gate",
  "state-wildcard-lint",
  "subprocess-contract",
+ "tempfile",
  "text-structure",
  "undrained-pipe-lint",
 ]
@@ -1353,10 +1422,20 @@ name = "ntm-fleet-monitor"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "loop-coverage",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
+]
+
+[[package]]
+name = "ntm-kernel"
+version = "0.1.0"
+dependencies = [
+ "asupersync",
+ "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1426,10 +1505,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "omp-host-tool-guard"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "subprocess-contract",
+]
+
+[[package]]
 name = "omp-inventory-map"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "omp-surface-consumption",
  "ompo-doctor",
  "regex",
@@ -1480,6 +1569,7 @@ name = "omp-rpc-session"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "serde_json",
 ]
 
@@ -1487,6 +1577,7 @@ dependencies = [
 name = "omp-surface-consumption"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
  "subprocess-contract",
 ]
@@ -1507,6 +1598,7 @@ version = "0.1.0"
 dependencies = [
  "asupersync",
  "lifecycle-event",
+ "ntm-kernel",
  "omp-orchestrator",
  "omp-rpc-session",
  "ompo-start",
@@ -1520,6 +1612,9 @@ dependencies = [
 name = "ompo-start"
 version = "0.1.0"
 dependencies = [
+ "asupersync",
+ "build-stamp",
+ "decision-ledger",
  "lifecycle-event",
  "lifecycle-monitor",
  "serde",
@@ -1546,6 +1641,7 @@ dependencies = [
 name = "oracle-pane-state-differential"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "oracle-compare",
  "serde_json",
  "subprocess-contract",
@@ -1556,6 +1652,7 @@ dependencies = [
 name = "orchestration-tick-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "crate-atom-gate",
  "serde_json",
 ]
@@ -1565,6 +1662,7 @@ name = "pane-dispatch-fence"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "subprocess-contract",
 ]
 
@@ -1572,6 +1670,8 @@ dependencies = [
 name = "pane-dispatch-ready"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
+ "ntm-kernel",
  "omp-types",
  "regex",
  "serde_json",
@@ -1584,6 +1684,7 @@ dependencies = [
 name = "pane-oracle-diff"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "oracle-compare",
  "regex",
  "serde_json",
@@ -1596,6 +1697,7 @@ name = "pane-truth"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "ntm-kernel",
  "regex",
  "serde",
  "serde_json",
@@ -1641,6 +1743,9 @@ checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 [[package]]
 name = "path-literal-guard"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+]
 
 [[package]]
 name = "pem-rfc7468"
@@ -1735,6 +1840,7 @@ name = "porting-gate"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -1754,7 +1860,7 @@ name = "pre-delete-citation-check"
 version = "0.1.0"
 dependencies = [
  "ack-spine",
- "finding",
+ "build-stamp",
  "omp-types",
  "serde_json",
  "subprocess-contract",
@@ -1851,6 +1957,9 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 [[package]]
 name = "r1-breadth-gate"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+]
 
 [[package]]
 name = "rand"
@@ -1939,7 +2048,9 @@ dependencies = [
 name = "reap-finished-panes"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "fs2",
+ "omp-orchestrator",
  "pane-dispatch-ready",
  "serde_json",
  "subprocess-contract",
@@ -1950,9 +2061,11 @@ dependencies = [
 name = "receiver-receipt"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "pane-truth",
  "proptest",
  "subprocess-contract",
+ "text-structure",
  "tick-monitor",
 ]
 
@@ -1971,6 +2084,7 @@ version = "0.1.0"
 dependencies = [
  "agent-mail-native",
  "asupersync",
+ "build-stamp",
  "dispatch-claim-fence",
  "finding",
  "fleet-reconcile",
@@ -2088,6 +2202,7 @@ name = "s1-coverage"
 version = "0.1.0"
 dependencies = [
  "asupersync",
+ "build-stamp",
  "regex",
  "serde",
  "serde_json",
@@ -2098,6 +2213,7 @@ dependencies = [
 name = "s2-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
 ]
 
@@ -2118,6 +2234,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 name = "scratch-home"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -2278,6 +2395,7 @@ dependencies = [
 name = "silent-success-census"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde",
  "serde_json",
  "subprocess-contract",
@@ -2320,12 +2438,16 @@ dependencies = [
 name = "staged-build-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "subprocess-contract",
 ]
 
 [[package]]
 name = "state-wildcard-lint"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+]
 
 [[package]]
 name = "subprocess-contract"
@@ -2423,6 +2545,7 @@ dependencies = [
 name = "tick-dispatch"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "oracle-compare",
  "serde_json",
  "subprocess-contract",
@@ -2433,6 +2556,7 @@ dependencies = [
 name = "tick-monitor"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "lifecycle-event",
  "lifecycle-monitor",
  "omp-types",
@@ -2470,6 +2594,9 @@ checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
 [[package]]
 name = "undrained-pipe-lint"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+]
 
 [[package]]
 name = "unicode-ident"
@@ -2512,6 +2639,7 @@ checksum = "16062d030850f35054e37746427b9febb74a2f24c9c6dd6fa2d0c13c5f53221e"
 name = "verify-dispatch"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "chrono",
  "finding",
  "serde",
@@ -2765,6 +2893,7 @@ dependencies = [
 name = "wired-but-inert-guard"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "subprocess-contract",
 ]
 
@@ -2778,6 +2907,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 name = "worker-oracle-gate"
 version = "0.1.0"
 dependencies = [
+ "build-stamp",
  "serde_json",
  "tempfile",
 ]
@@ -2785,6 +2915,9 @@ dependencies = [
 [[package]]
 name = "worker-tag-gate"
 version = "0.1.0"
+dependencies = [
+ "build-stamp",
+]
 
 [[package]]
 name = "xattr"

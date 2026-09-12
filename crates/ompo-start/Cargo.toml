@@ -35,6 +35,7 @@ name = "ompo-start-mail-freshness"
 path = "src/bin/mail_freshness.rs"
 
 [dev-dependencies]
+asupersync = { workspace = true }
 tempfile = "3"
 
 [build-dependencies]

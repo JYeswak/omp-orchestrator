@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
 use ompo_start::liveness::{classify, LiveVerdict, SourceVerdict};
+use asupersync::runtime::{JoinError, RuntimeBuilder};
+use asupersync::types::CancelKind;
+use asupersync::Cx;
 
 fn source(name: &str, panes: &[&str], available: bool, fresh: bool) -> SourceVerdict {
     SourceVerdict {
@@ -893,6 +896,72 @@ fn post_spawn_not_live_halts() {
     };
     assert!(
         reason.contains("agent-mail"),
+
         "the halt must carry the verdict's cause, got {reason}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// S1-L4-CX (i0mv): spawn through subprocess-contract + Cx. A cancelled spawn
+// reads as NAMED Cancelled and a panicking task joins as NAMED Panicked --
+// never as a missing row. The name_* maps below are the seam the mutation
+// drops: deleting an arm flips that outcome to "absent" and must RED.
+// ---------------------------------------------------------------------------
+
+fn name_run_error(error: &subprocess_contract::RunError) -> &'static str {
+    match error {
+        subprocess_contract::RunError::Cancelled(_) => "cancelled",
+        _ => "absent",
+    }
+}
+
+fn name_join_error(error: &JoinError) -> &'static str {
+    match error {
+        JoinError::Panicked(_) => "panicked",
+        _ => "absent",
+    }
+}
+
+#[test]
+fn spawn_cancelled_is_named() {
+    let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
+    runtime.block_on(async {
+        let cx = Cx::current().expect("runtime Cx");
+        // Arm 1: child spawn through subprocess-contract + Cx, cancelled mid-run.
+        let cancel = cx.clone();
+        let trigger = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            cancel.cancel_with(CancelKind::User, Some("test cancel"));
+        });
+        let mut command = asupersync::process::Command::new("sleep");
+        command.arg("30");
+        let result = subprocess_contract::run_output(&cx, command).await;
+        trigger.join().expect("cancellation trigger");
+        let error = result.expect_err("cancelled spawn must not read as success");
+        println!("spawn_cancelled kind={} display={error}", name_run_error(&error));
+        assert_eq!(
+            name_run_error(&error),
+            "cancelled",
+            "a cancelled spawn must name Cancelled, not absence"
+        );
+        assert!(
+            error.to_string().contains("CANCELLED"),
+            "the named reason carries its name, got {error}"
+        );
+        // Arm 2: a spawned task that panics joins as named Panicked.
+        let mut panicker = cx
+            .spawn(|_task| async { panic!("test panic") })
+            .expect("task spawn");
+        match panicker.join(&cx).await {
+            Err(join_error) => {
+                println!("spawn_panicked name={}", name_join_error(&join_error));
+                assert_eq!(
+                    name_join_error(&join_error),
+                    "panicked",
+                    "a panicking task must join Panicked, not absence"
+                );
+            }
+            Ok(()) => panic!("a panicking task must not join Ok"),
+        }
+    });
 }
