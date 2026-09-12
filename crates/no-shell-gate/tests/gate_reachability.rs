@@ -177,6 +177,9 @@ fn duplicate_yaml_is_strict_parse_error_exit_one() {
 
 #[test]
 fn flow_yaml_duplicate_is_strict_parse_error_exit_one() {
+    // serde_yaml_ng refuses this specimen (`duplicate entry with key "runs-on"`).
+    // The local flow scanner that used to pin `duplicate mapping key` was deleted
+    // because no flow-mapping duplicate existed that serde accepted.
     let root = fixture_root("flow-duplicate-yaml");
     write_fixture(&root, "crates/foo-gate/src/lib.rs", "pub fn gate() {}\n");
     write_fixture(
@@ -191,8 +194,8 @@ fn flow_yaml_duplicate_is_strict_parse_error_exit_one() {
     let error = report["error"].as_str().unwrap_or_default();
     assert!(error.starts_with("STRICT_YAML_PARSE"), "error prefix: {error}");
     assert!(
-        error.contains("duplicate mapping key"),
-        "must name the duplicate, not a serde last-key-wins success: {error}"
+        error.contains("duplicate entry with key"),
+        "serde must refuse this flow duplicate: {error}"
     );
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
