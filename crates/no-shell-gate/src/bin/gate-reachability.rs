@@ -179,57 +179,35 @@ fn read_state(root: &Path) -> ReadState {
     }
 }
 
-fn duplicate_block_mapping_key(text: &str) -> Option<(String, usize)> {
-    let mut stack: Vec<(usize, BTreeSet<String>)> = Vec::new();
-    for (index, raw) in text.lines().enumerate() {
-        let code = yaml_code_only(raw);
-        let trimmed = code.trim_start();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let indent = code.chars().take_while(|c| *c == ' ').count();
-        while stack.last().is_some_and(|(seen, _)| *seen > indent) {
-            stack.pop();
-        }
-        if stack.last().map(|(seen, _)| *seen) != Some(indent) {
-            stack.push((indent, BTreeSet::new()));
-        }
-        if trimmed.starts_with('-') || trimmed.starts_with('{') {
-            continue;
-        }
-        let Some(colon) = trimmed.find(':') else {
-            continue;
-        };
-        let key = trimmed[..colon].trim();
-        if key.is_empty() {
-            continue;
-        }
-        let keys = &mut stack.last_mut().expect("indent frame").1;
-        if !keys.insert(key.to_owned()) {
-            return Some((key.to_owned(), index + 1));
-        }
-    }
-    None
-}
 
 
 fn strict_workflow_parse(path: &Path, text: &str) -> Result<(), String> {
-    if let Some((key, line)) = duplicate_block_mapping_key(text) {
-        return Err(format!(
-            "STRICT_YAML_PARSE path={} detail=duplicate mapping key {key:?} at line {line}",
-            path.display()
-        ));
-    }
-    // serde_yaml_ng Mapping::deserialize refuses duplicate keys in flow AND
-    // block mappings (`duplicate entry with key`). Measured 2026-09-12 against
-    // 17 specimens: every string-duplicate flow mapping REJECTS, including
-    // `{a:1,a:2}`, nested flow, JSON-style flow, and `{runs-on, runs-on}` on a
-    // block line. Merge keys (`{<<: {a:1}, a:2}`) ACCEPT -- those are not
-    // string-duplicate keys, so a flow scanner would not have refused them
-    // either. The flow-mapping scanner is deleted because no flow specimen
-    // existed that serde accepted and the scanner refused.
+    // ⛔ BOTH HAND SCANNERS ARE GONE. `serde_yaml_ng::from_str` IS the duplicate-key oracle and
+    // the line below is the whole check.
     //
-    // The block-mapping scanner is not deleted in this unit.
+    // The FLOW scanner went first (17 specimens, `5oavm`). The BLOCK scanner is deleted here on
+    // its own census (`omp-orchestrator-aposg`, 12 specimens run against `serde_yaml_ng`
+    // directly), and the census answered the keep-question in the NEGATIVE:
+    //
+    //   THE KEEP-CONDITION WAS "serde ACCEPTS one the scanner REJECTS". IT NEVER FIRED --
+    //   ZERO of 12. Every specimen the scanner refused, serde refused too: sibling top-level,
+    //   nested under a mapping, across a document boundary, a trailing-space key, and a
+    //   duplicate following a comment line.
+    //
+    // ⭐ AND THE SCANNER WAS STRICTLY WEAKER, WHICH IS THE FINDING RATHER THAN A TIE. FOUR
+    // specimens were REJECTED BY SERDE AND ACCEPTED BY THE SCANNER:
+    //     `a: 1` + `"a": 2`     quoted vs unquoted spelling of one key
+    //     `a: 1` + `'a': 2`     single-quoted vs unquoted
+    //     a duplicate inside a sequence item (`- k: 1` / `  k: 2`)
+    //     a duplicate in a flow mapping on a block line (`m: {a: 1, a: 2}`)
+    // It compared raw text between the indent and the first colon, so quoting changed the key
+    // it thought it saw, and its `-`/`{` skips stepped over exactly the shapes serde catches.
+    // Keeping it would have implied coverage it did not have.
+    //
+    // Three specimens are ACCEPTED BY BOTH and must stay accepted: anchor/alias reuse, a merge
+    // key (`<<: *base` beside its own `k:`), and the same key name at different nesting levels.
+    // None is a duplicate key, and a scanner that refused them would be the over-strict gate
+    // this repo routes around.
     serde_yaml_ng::from_str::<YamlValue>(text)
         .map(|_| ())
         .map_err(|error| format!("STRICT_YAML_PARSE path={} detail={error}", path.display()))
