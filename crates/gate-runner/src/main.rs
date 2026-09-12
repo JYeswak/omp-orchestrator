@@ -859,6 +859,20 @@ fn environment_precondition_with_path(
             }
         })
     };
+    // THE SCOPE-NAMING FORM. A crate-level row that says only "the tool is absent" leaves the
+    // reader to infer that the WHOLE crate is unmeasured, which for `finding` is 2 of 33 legs.
+    // Naming the target in the detail costs nothing and is the difference between "this crate is
+    // dark" and "these two legs are".
+    let missing_executable_for = |executable: &str, scope: &str| {
+        (!executable_available(executable, path)).then(|| {
+            UnmeasurablePrecondition::MissingExecutable {
+                executable: executable.to_owned(),
+                detail: format!(
+                    "{executable} is unavailable on PATH; the unmeasured scope is {scope}"
+                ),
+            }
+        })
+    };
 
     if matches!(
         crate_name,
@@ -884,8 +898,24 @@ fn environment_precondition_with_path(
                 detail: "the ack-spine lane requires the tracker ledger".to_owned(),
             })
         }
-        "finding" => missing_executable("br"),
-        "loop-queue-filter" => missing_executable("bv"),
+        // SCOPED, NOT CRATE-WIDE IN MEANING: only `tests/br_publisher.rs` spawns the tool, and
+        // since `finding`'s e97576c those two legs decline themselves with the same code. The row
+        // stays because the SUBJECT (filing through the real tracker) genuinely cannot be measured
+        // without `br`; the detail now names the target so the reader learns WHICH 2 of 33 legs
+        // are unmeasured rather than inferring that all 33 are.
+        "finding" => missing_executable_for("br", "--test br_publisher (2 of 33 legs)"),
+        // ⛔ NO `loop-queue-filter` ROW. DELETED 2026-09-12
+        // (`omp-orchestrator-precondition-target-scope-yuy2g`) because it was a FALSE
+        // PRECONDITION, not an over-broad one: the predicate "is `bv` on PATH" describes no
+        // dependency of that suite. Measured on contabo-2 with NO `bv` present,
+        // `cargo test -p loop-queue-filter --no-fail-fast` = 55 + 1 + 9 + 5 + 3 = 73 passed,
+        // 0 failed, exit=0 in 17585ms -- the legs fixture their own 0o755 `bv`
+        // (`loop-queue-filter/tests/selector_unavailable.rs:51-55`) rather than requiring the
+        // real tool. The row therefore declined 73 MEASURABLE legs, and
+        // `pass + fail + unmeasurable == PLAN crates` reconciled either way, so no sum control
+        // could see it: the tally is validated, never which bucket a crate is in nor HOW MUCH OF
+        // A CRATE the bucket swallowed. `a_declared_precondition_whose_crate_needs_no_tool_is_a_reject`
+        // below is what stops this row, or another like it, being re-added by hand.
         "dispatch-silence-watch" if !executable_available("crontab", path) => {
             Some(UnmeasurablePrecondition::MissingScheduler {
                 scheduler: "crontab".to_owned(),
@@ -1116,6 +1146,85 @@ fn environment_preconditions_have_typed_bad_and_good_legs() {
         "a present positive-control executable must not be classified as missing"
     );
     let _ = std::fs::remove_dir_all(bin_dir);
+}
+
+/// ⛔ A DECLARED PRECONDITION WHOSE CRATE PASSES IN FULL WITHOUT THE TOOL IS A FALSE PRECONDITION.
+///
+/// `omp-orchestrator-precondition-target-scope-yuy2g`, acceptance 2b. The `loop-queue-filter`/`bv`
+/// row declined 73 measurable legs for a tool that suite never needs, and nothing in this crate
+/// could see it: the row's own probe answers "is the tool on PATH", which is TRUE of the
+/// environment and says nothing about whether the suite depends on it.
+///
+/// This leg pins the DIRECTION that matters: a crate named in the table must have at least one
+/// test file that actually spawns its declared tool. It cannot prove the converse (a suite that
+/// spawns a tool nobody declared), which is `run_crate`'s job to surface as a failure.
+#[test]
+fn a_declared_precondition_whose_crate_needs_no_tool_is_a_reject() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("crates/<name> has a workspace root two levels up")
+        .to_path_buf();
+    // The table's executable-keyed rows, spelled here because the table is a `match` and cannot be
+    // enumerated. A row added there and not here leaves this leg silent, which is why the
+    // ANTI-VACUITY assertion below refuses an empty list.
+    let declared: &[(&str, &str)] = &[("finding", "br")];
+    assert!(
+        !declared.is_empty(),
+        "ANTI-VACUITY: an empty declaration list makes this leg pass while checking nothing"
+    );
+    for (crate_name, tool) in declared {
+        let tests = workspace.join("crates").join(crate_name).join("tests");
+        let mut spawning: Vec<String> = Vec::new();
+        let entries = std::fs::read_dir(&tests)
+            .unwrap_or_else(|error| panic!("{crate_name} must have a tests/ dir: {error}"));
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "rs") {
+                if let Ok(text) = std::fs::read_to_string(&path) {
+                    // The spawn shape, not a mere mention: `Command::new("<tool>")`. A doc comment
+                    // naming the tool is not a dependency on it -- the prose-collision class.
+                    if text.contains(&format!("Command::new(\"{tool}\")")) {
+                        spawning.push(path.display().to_string());
+                    }
+                }
+            }
+        }
+        assert!(
+            !spawning.is_empty(),
+            "FALSE PRECONDITION: the table declines {crate_name} when {tool} is absent, but no \
+             test file in crates/{crate_name}/tests spawns it. Either delete the row (the \
+             loop-queue-filter/bv remedy: 73 legs were declined for a tool the suite never used) \
+             or point it at the target that does."
+        );
+    }
+}
+
+/// KNOWN-BAD for the leg above, on a fixture rather than by editing the live table: a crate whose
+/// tests never spell the spawn must be detected as a false declaration.
+#[test]
+fn the_false_precondition_detector_fires_on_a_crate_that_never_spawns_the_tool() {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("workspace root");
+    let tests = workspace.join("crates/loop-queue-filter/tests");
+    let mut spawning = 0usize;
+    for entry in std::fs::read_dir(&tests).expect("loop-queue-filter tests dir").flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|ext| ext == "rs") {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                if text.contains("Command::new(\"bv\")") {
+                    spawning += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(
+        spawning, 0,
+        "the deleted loop-queue-filter/bv row is only safe to delete while NO leg spawns the real \
+         tool; {spawning} file(s) now do, so the row must come back -- scoped to them"
+    );
 }
 /// Remove ANSI CSI sequences so a colorized line matches the same predicates as a plain one.
 ///
