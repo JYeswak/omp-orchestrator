@@ -1,12 +1,44 @@
 # S1 gate residual — the non-PASS crates, ENUMERATED
 
 ```
-⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 6. Superseded THREE times
+⛔ THE TITLE ONCE SAID "the 20 non-PASS crates". THE RESIDUAL IS NOW 6. Superseded FOUR times
    on 2026-09-11/12, each against a NEWER verdict-bearing run. Old figures are kept as
    SUPERSEDED rather than deleted, because a deleted number cannot be checked against the
    run that produced it.
 
-AUTHORITATIVE  run 34666855450   headSha 5d3ef562   conclusion=failure
+AUTHORITATIVE  run 34670418396   headSha 83cb804e   conclusion=failure
+  GATE_RUNNER_FAILING      count=2  no-shell-gate, path-literal-guard
+  GATE_RUNNER_UNMEASURABLE count=4  (unchanged: admission-reason, finding, loop-driver,
+                                    loop-queue-filter)
+  non-PASS = 6.
+  SUM CONTROL PRESENT: pass=88 fail=2 unmeasurable=4 = 94 against GATE_RUNNER_PLAN crates=94.
+
+  ⭐ omp-orchestrator LEFT THE FAILING SET AND THIS DEPARTURE IS ATTRIBUTABLE, unlike the
+     two earlier ones recorded below. 83cb804e IS the run's head AND is the commit that
+     deleted the stale s1-coverage / contabo-reclaim allowance rows. Root-caused as PRODUCT
+     registry-drift with the worktree-vs-committed discriminator (lib.rs IDENTICAL at
+     5d3ef562 / HEAD / worktree BEFORE the edit), so the red was real before anything moved.
+
+  BOTH REMAINING CAUSES ARE NAMED, from this run's own text:
+    no-shell-gate      test=duplicate_yaml_is_strict_parse_error_exit_one
+                       panicked at crates/no-shell-gate/tests/gate_reachability.rs:171:5
+                       invocations=47, phases 0/1/2 -- the largest suite in the workspace
+    path-literal-guard failing_targets=unattributed_target
+                       (failing_tests:the_repo_wide_narrowing_is_load_bearing)
+
+  ⛔ AND path-literal-guard's RED IS EXPECTED HERE, NOT A REGRESSION: the fix is 1a436be
+     (REPO_WIDE_SUBDIRS={src,tests}) which POSTDATES this run's head. A run is a verdict
+     about ITS OWN HEAD; citing it against a later commit is the stale-oracle error this
+     file already records twice. Its verdict is PENDING -- 8 verdict-bearing runs, ZERO in
+     flight, so the next push produces it.
+
+  ⛔ no-shell-gate IS THE ONE GENUINELY UNRESOLVED PRODUCT RED, and tihld's six-leg
+     UNREADABLE conversion is NOT the cause: that landed at 97a43936, whose own run
+     (34670112469) is in the same failing state, so the conversion is IN this tree and the
+     crate fails on a DIFFERENT leg -- a strict-YAML duplicate-key assertion in
+     gate_reachability.rs, which is the crate that reads AGENTS.md/README.md/CLAUDE.md.
+
+SUPERSEDED     run 34666855450   headSha 5d3ef562   conclusion=failure
   GATE_RUNNER_FAILING      count=2  no-shell-gate, omp-orchestrator
   GATE_RUNNER_UNMEASURABLE count=4  admission-reason:POLICY_UNAVAILABLE,
                                     finding:MISSING_EXECUTABLE,
