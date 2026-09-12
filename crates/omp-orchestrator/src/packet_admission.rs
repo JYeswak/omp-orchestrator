@@ -170,7 +170,13 @@ mod tests {
         let renderer = include_str!("dispatch_packet.rs");
         assert!(!renderer.contains("PLAN.md"));
         assert!(!renderer.contains("docs/plan"));
-        assert!(!renderer.contains("read_to_string"));
+        // `read_to_string` is not a plan read. The renderer looks up
+        // `.beads/issues.jsonl` created_at for the mutation-site grandfather
+        // (6we9q). Banning the fs primitive conflated those.
+        assert!(
+            renderer.contains(".beads/issues.jsonl"),
+            "grandfather lookup must stay in the renderer, not a side channel"
+        );
         assert!(renderer.contains("PACKET_REFUSED_FILED_ONLY"));
     }
 

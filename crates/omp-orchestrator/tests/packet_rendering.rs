@@ -1,6 +1,10 @@
 use dispatch_claim_fence::BeadSnapshot;
-use omp_orchestrator::dispatch_packet::{render, render_with_pane, PacketError};
-use std::path::Path;
+use omp_orchestrator::dispatch_packet::{
+    acceptance_text, classify_mutation_clause, render, render_with_pane, MutationClauseClass,
+    PacketError, MUTATION_SITE_CUTOFF, POST_CUTOFF_COARSE_CEILING, PRE_CUTOFF_COARSE_CEILING,
+};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 fn bead(id: &str, description: &str, acceptance: &str) -> BeadSnapshot {
     BeadSnapshot::new_with_acceptance(id, "packet fixture", description, acceptance, "open", None)
@@ -223,4 +227,127 @@ fn named_mutation_site_renders_and_vague_clause_is_refused() {
     )
     .expect_err("vague mutation clause must refuse");
     assert_eq!(error.code(), "MUTATION_CLAUSE_TOO_COARSE");
+}
+
+#[test]
+fn live_ledger_mutation_site_debt_only_falls() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("CARGO_MANIFEST_DIR is crates/<pkg>")
+        .to_path_buf();
+    let path = repo.join(".beads/issues.jsonl");
+    let text = fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!(
+            "ANTI-VACUITY: cannot read {}: {error}. An unreadable ledger is an ERROR, never a \
+             zero-refusal pass.",
+            path.display()
+        )
+    });
+    assert!(
+        !text.trim().is_empty(),
+        "ANTI-VACUITY: {} is empty. An empty scan set is an ERROR, never a pass.",
+        path.display()
+    );
+
+    let mut parsed = 0usize;
+    let mut dispatchable = 0usize;
+    let mut pre_cutoff_coarse = 0usize;
+    let mut post_cutoff_coarse = 0usize;
+    let mut named = 0usize;
+    let mut missing = 0usize;
+    let mut none = 0usize;
+    let mut post_cutoff_seen = 0usize;
+
+    for (number, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_str(line).unwrap_or_else(|error| {
+            panic!("{}:{}: not JSON ({error})", path.display(), number + 1)
+        });
+        parsed += 1;
+        let id = value["id"].as_str().unwrap_or_default();
+        assert!(
+            !id.is_empty(),
+            "{}:{}: bead record has no id",
+            path.display(),
+            number + 1
+        );
+        let status = value["status"].as_str().unwrap_or_default();
+        if status == "closed" || status == "tombstone" {
+            continue;
+        }
+        let snapshot = BeadSnapshot::new_with_acceptance(
+            id,
+            value["title"].as_str().unwrap_or_default(),
+            value["description"].as_str().unwrap_or_default(),
+            value["acceptance_criteria"].as_str().unwrap_or_default(),
+            status,
+            None,
+        );
+        let Some(acceptance) = acceptance_text(&snapshot) else {
+            continue;
+        };
+        dispatchable += 1;
+        let created: String = value["created_at"]
+            .as_str()
+            .map(|stamp| stamp.chars().take(10).collect())
+            .filter(|day: &String| day.len() == 10)
+            .unwrap_or_else(|| "9999-99-99".to_owned());
+        let post = created.as_str() >= MUTATION_SITE_CUTOFF;
+        if post {
+            post_cutoff_seen += 1;
+        }
+        match classify_mutation_clause(&acceptance) {
+            MutationClauseClass::None => none += 1,
+            MutationClauseClass::NamedSite => named += 1,
+            MutationClauseClass::Missing => missing += 1,
+            MutationClauseClass::Coarse(_) => {
+                if post {
+                    post_cutoff_coarse += 1;
+                } else {
+                    pre_cutoff_coarse += 1;
+                }
+            }
+        }
+    }
+
+    assert!(
+        parsed > 0,
+        "ANTI-VACUITY: parsed zero beads from {}",
+        path.display()
+    );
+    assert!(
+        dispatchable > 0,
+        "ANTI-VACUITY: zero dispatchable beads; the scan classified nothing"
+    );
+    assert!(
+        post_cutoff_seen > 0,
+        "ANTI-VACUITY: no live bead created on/after {MUTATION_SITE_CUTOFF}; the delta leg would \
+         scan empty and report green"
+    );
+    assert!(
+        pre_cutoff_coarse > 0,
+        "ANTI-VACUITY: pre-cutoff coarse is 0; the classifier is no longer seeing historical \
+         mutation clauses (a silent no-op wearing a falling ratchet)"
+    );
+
+    eprintln!(
+        "SCAN: parsed={parsed} dispatchable={dispatchable} none={none} named={named} \
+         missing={missing} pre_cutoff_coarse={pre_cutoff_coarse}/{PRE_CUTOFF_COARSE_CEILING} \
+         post_cutoff_coarse={post_cutoff_coarse}/{POST_CUTOFF_COARSE_CEILING} \
+         post_cutoff_seen={post_cutoff_seen}"
+    );
+
+    assert!(
+        pre_cutoff_coarse <= PRE_CUTOFF_COARSE_CEILING,
+        "pre-cutoff coarse {pre_cutoff_coarse} exceeded ceiling {PRE_CUTOFF_COARSE_CEILING}; the \
+         ratchet may only fall"
+    );
+    assert!(
+        post_cutoff_coarse <= POST_CUTOFF_COARSE_CEILING,
+        "post-cutoff coarse {post_cutoff_coarse} exceeded ceiling {POST_CUTOFF_COARSE_CEILING}; \
+         new work must name file.rs:N rather than raise the ceiling"
+    );
 }

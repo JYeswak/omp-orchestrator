@@ -1,6 +1,7 @@
 use ack_stage::ack_instruction;
 use dispatch_claim_fence::BeadSnapshot;
 use std::fmt;
+use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +92,71 @@ impl fmt::Display for PacketError {
             ),
         }
     }
+}
+
+/// Beads created on or after this UTC date must name `file.rs:N` in a mutation
+/// clause. Pre-cutoff coarse clauses are grandfathered at render. Moving the
+/// cutoff FORWARD is amnesty for new work and is refused on review; moving it
+/// BACKWARD is a tightening.
+pub const MUTATION_SITE_CUTOFF: &str = "2026-09-12";
+
+/// Coarse mutation clauses on non-terminal beads created before
+/// [`MUTATION_SITE_CUTOFF`]. Seeded 2026-09-12 from the live ledger after
+/// word-boundary matching. May only fall.
+pub const PRE_CUTOFF_COARSE_CEILING: usize = 44;
+
+/// Coarse mutation clauses on non-terminal beads created on/after the cutoff.
+/// Seeded 2026-09-12. May only fall. New post-cutoff work that omits `file.rs:N`
+/// raises this and is a gate failure, not a ceiling raise.
+pub const POST_CUTOFF_COARSE_CEILING: usize = 9;
+
+/// What [`classify_mutation_clause`] found in one acceptance body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MutationClauseClass {
+    /// No mutation demand. Historical beads without a mutation clause stay
+    /// dispatchable (item 4 of 6we9q).
+    None,
+    /// At least one demand names `file.rs:N`; none are empty or coarse.
+    NamedSite,
+    /// A demand exists and names no `file.rs:N`.
+    Coarse(String),
+    /// A `Mutation:` heading with an empty body. Distinct from coarse.
+    Missing,
+}
+
+/// Classifies an acceptance body with the same helpers render uses.
+pub fn classify_mutation_clause(acceptance: &str) -> MutationClauseClass {
+    let mut missing = false;
+    let mut coarse: Option<String> = None;
+    let mut named = false;
+    for line in acceptance.lines() {
+        let Some(body) = mutation_clause_body(line) else {
+            continue;
+        };
+        if body.is_empty() {
+            missing = true;
+            continue;
+        }
+        if names_file_rs_line(body) {
+            named = true;
+        } else {
+            coarse.get_or_insert_with(|| body.to_owned());
+        }
+    }
+    if missing {
+        MutationClauseClass::Missing
+    } else if let Some(detail) = coarse {
+        MutationClauseClass::Coarse(detail)
+    } else if named {
+        MutationClauseClass::NamedSite
+    } else {
+        MutationClauseClass::None
+    }
+}
+
+/// Acceptance text render would classify: typed field, else description heading.
+pub fn acceptance_text(snapshot: &BeadSnapshot) -> Option<String> {
+    acceptance(snapshot)
 }
 
 fn nonempty(value: &str) -> Option<&str> {
@@ -269,6 +335,31 @@ fn close_reason_mutation_prefix(lower: &str) -> bool {
         || lower.contains("mutation-attributed")
 }
 
+/// True when `needle` occurs in `haystack` with non-alphanumeric (or start/end)
+/// boundaries. `unwire` must not match `unwired`; `uncall` must not match
+/// `uncalled`. Both sides already ASCII-lowercased.
+fn contains_ascii_word(haystack: &str, needle: &str) -> bool {
+    let hay = haystack.as_bytes();
+    let needle = needle.as_bytes();
+    if needle.is_empty() || hay.len() < needle.len() {
+        return false;
+    }
+    let last = hay.len() - needle.len();
+    let mut index = 0;
+    while index <= last {
+        if &hay[index..index + needle.len()] == needle {
+            let before_ok = index == 0 || !hay[index - 1].is_ascii_alphanumeric();
+            let after = index + needle.len();
+            let after_ok = after == hay.len() || !hay[after].is_ascii_alphanumeric();
+            if before_ok && after_ok {
+                return true;
+            }
+        }
+        index += 1;
+    }
+    false
+}
+
 fn mutation_heading_body<'a>(trimmed: &'a str, lower: &str) -> Option<&'a str> {
     let start = lower.find("mutation:")?;
     if start > 0 {
@@ -292,12 +383,12 @@ fn mutation_clause_body(line: &str) -> Option<&str> {
     if let Some(body) = mutation_heading_body(trimmed, &lower) {
         return Some(body);
     }
-    if lower.contains("un-call")
-        || lower.contains("uncall")
-        || lower.contains("un-wire")
-        || lower.contains("unwire")
-        || lower.contains("delete the call")
-        || lower.contains("comment out")
+    if contains_ascii_word(&lower, "un-call")
+        || contains_ascii_word(&lower, "uncall")
+        || contains_ascii_word(&lower, "un-wire")
+        || contains_ascii_word(&lower, "unwire")
+        || contains_ascii_word(&lower, "delete the call")
+        || contains_ascii_word(&lower, "comment out")
     {
         return Some(trimmed);
     }
@@ -323,33 +414,58 @@ fn names_file_rs_line(text: &str) -> bool {
     false
 }
 
-fn reject_coarse_mutation_clause(bead: &str, acceptance: &str) -> Result<(), PacketError> {
-    let mut missing = false;
-    let mut coarse: Option<String> = None;
-    for line in acceptance.lines() {
-        let Some(body) = mutation_clause_body(line) else {
+fn bead_created_day(repo: &Path, bead_id: &str) -> Option<String> {
+    let path = repo.join(".beads/issues.jsonl");
+    let text = fs::read_to_string(path).ok()?;
+    let id_needle = format!("\"id\":\"{bead_id}\"");
+    for line in text.lines() {
+        if line.trim().is_empty() || !line.contains(&id_needle) {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
-        if body.is_empty() {
-            missing = true;
+        if value.get("id").and_then(|id| id.as_str()) != Some(bead_id) {
             continue;
         }
-        if !names_file_rs_line(body) {
-            coarse.get_or_insert_with(|| body.to_owned());
+        let created = value.get("created_at").and_then(|stamp| stamp.as_str())?;
+        let day: String = created.chars().take(10).collect();
+        if day.len() == 10 {
+            return Some(day);
+        }
+        return None;
+    }
+    None
+}
+
+fn is_grandfathered(repo: &Path, bead_id: &str) -> bool {
+    match bead_created_day(repo, bead_id) {
+        Some(day) => day.as_str() < MUTATION_SITE_CUTOFF,
+        None => false,
+    }
+}
+
+fn reject_coarse_mutation_clause(
+    bead: &str,
+    acceptance: &str,
+    repo: &Path,
+) -> Result<(), PacketError> {
+    match classify_mutation_clause(acceptance) {
+        MutationClauseClass::None | MutationClauseClass::NamedSite => Ok(()),
+        MutationClauseClass::Missing => Err(PacketError::MutationClauseMissing {
+            bead: bead.to_owned(),
+        }),
+        MutationClauseClass::Coarse(detail) => {
+            if is_grandfathered(repo, bead) {
+                Ok(())
+            } else {
+                Err(PacketError::MutationClauseTooCoarse {
+                    bead: bead.to_owned(),
+                    detail,
+                })
+            }
         }
     }
-    if missing {
-        return Err(PacketError::MutationClauseMissing {
-            bead: bead.to_owned(),
-        });
-    }
-    if let Some(detail) = coarse {
-        return Err(PacketError::MutationClauseTooCoarse {
-            bead: bead.to_owned(),
-            detail,
-        });
-    }
-    Ok(())
 }
 
 fn assignee_pane(assignee: &str) -> Option<&str> {
@@ -413,10 +529,10 @@ pub fn render_with_pane(
         });
     }
     let objective = format!("Complete bead {bead}: {}", snapshot.title().trim());
-    let target = target.display().to_string();
     let scope = scope(snapshot);
     let acceptance = acceptance(snapshot).ok_or(PacketError::PacketFieldMissing("acceptance"))?;
-    reject_coarse_mutation_clause(bead, &acceptance)?;
+    reject_coarse_mutation_clause(bead, &acceptance, target)?;
+    let target = target.display().to_string();
     let stop = "when acceptance is met, when blocked on a named external, or when the packet contradicts the bead — say which";
     let done =
         explicit_done_signal(bead, &acceptance).ok_or(PacketError::PacketFieldMissing("done"))?;
@@ -841,5 +957,89 @@ mod tests {
         assert_ne!(missing.code(), coarse.code());
         assert_eq!(missing.code(), "MUTATION_CLAUSE_MISSING");
         assert_eq!(coarse.code(), "MUTATION_CLAUSE_TOO_COARSE");
+    }
+
+    #[test]
+    fn unwired_and_uncalled_are_not_mutation_demands() {
+        for acceptance in [
+            "(unwired gates) left (census); expect exit 0",
+            "another uncalled crate is not a demand; expect exit 0",
+            "UNWIRED is a documented runner status, not an instruction; expect exit 0",
+        ] {
+            packet_for_acceptance(acceptance)
+                .unwrap_or_else(|error| panic!("{acceptance} must stay admissible: {error}"));
+        }
+    }
+
+    #[test]
+    fn unwire_as_its_own_word_is_still_too_coarse() {
+        let error = packet_for_acceptance("un-wire the hook with no file.rs:N")
+            .expect_err("whole-word un-wire without a site is still a demand");
+        assert_eq!(error.code(), "MUTATION_CLAUSE_TOO_COARSE");
+    }
+
+    fn write_ledger(root: &Path, id: &str, created: &str) {
+        fs::create_dir_all(root.join(".beads")).unwrap();
+        fs::write(
+            root.join(".beads/issues.jsonl"),
+            format!(r#"{{"id":"{id}","created_at":"{created}","status":"open","title":"t"}}"#),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn pre_cutoff_coarse_is_grandfathered_at_render() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_ledger(tmp.path(), "old-bead", "2026-09-11T12:00:00Z");
+        let packet = render(
+            &BeadSnapshot::new_with_acceptance(
+                "old-bead",
+                "packet fixture",
+                "body",
+                "Mutation: un-call the validator",
+                "open",
+                None,
+            ),
+            tmp.path(),
+            None,
+            None,
+        )
+        .expect("pre-cutoff coarse must not refuse dispatch");
+        assert!(packet.contains("un-call the validator"));
+    }
+
+    #[test]
+    fn post_cutoff_coarse_still_refuses_at_render() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_ledger(tmp.path(), "new-bead", "2026-09-12T12:00:00Z");
+        let error = render(
+            &BeadSnapshot::new_with_acceptance(
+                "new-bead",
+                "packet fixture",
+                "body",
+                "Mutation: un-call the validator",
+                "open",
+                None,
+            ),
+            tmp.path(),
+            None,
+            None,
+        )
+        .expect_err("post-cutoff coarse must still refuse");
+        assert_eq!(error.code(), "MUTATION_CLAUSE_TOO_COARSE");
+    }
+
+    #[test]
+    fn contains_ascii_word_rejects_unwired_and_uncalled() {
+        assert!(contains_ascii_word("un-call the validator", "un-call"));
+        assert!(contains_ascii_word("uncall the validator", "uncall"));
+        assert!(!contains_ascii_word("unwired gates", "unwire"));
+        assert!(!contains_ascii_word("uncalled crate", "uncall"));
+        assert!(contains_ascii_word("unwire the hook", "unwire"));
+        assert!(!contains_ascii_word("delete the caller", "delete the call"));
+        assert!(contains_ascii_word(
+            "delete the call from decide()",
+            "delete the call"
+        ));
     }
 }
