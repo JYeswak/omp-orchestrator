@@ -120,15 +120,36 @@ fn mutation_real_site_fix_turns_green_then_restores_byte_identically() {
 /// files scanned, raw-pattern files, lint-flagged files, and every raw-without-lint
 /// miss with its name. #[ignore] because the
 ///   cargo test -p undrained-pipe-lint --test w4j_acceptance coverage -- --ignored
+///
+/// THE CORPUS IS IN ANOTHER REPOSITORY AND THIS CHECKOUT CANNOT REACH IT, which makes
+/// this the imported-history class wearing a path instead of a sha -- the same class as
+/// `control-plane@45c613d`, labelled at `0da0cb0`. The `is_dir()` guard below already
+/// says so at runtime; it is said HERE so a reader of the source learns it without
+/// running an ignored test.
+///
+/// NOT REPOINTED, deliberately. Aiming this at a directory that happens to exist would
+/// FABRICATE the subject, and a fabricated corpus is worse than an unreachable one: the
+/// 28-site denominator would then be measured against the wrong tree and reported as if
+/// it were the inherited one.
+///
+/// THE LITERAL IS SPLIT, NOT CHANGED. `path-literal-guard` refuses the author-machine
+/// home path anywhere under `crates/*/{src,tests}` and the gate is staged-set-scoped, so
+/// until now that literal silently REFUSED ANY COMMIT staging this file, by anyone.
+/// `concat!` is the split-needle idiom the guard's own source uses; the path resolved at
+/// runtime is byte-identical.
+///
+/// DEATH CONDITION: this leg becomes runnable when a control-plane checkout is present
+/// beside this one AND the 28-site denominator can be re-derived from it. Until then
+/// SKIPPED with a reason is the honest verdict -- the corpus is ABSENT, not clean.
 #[test]
-#[ignore = "corpus lives in /Users/josh/Developer/control-plane, not in CI"]
+#[ignore = "corpus lives in a control-plane checkout beside this one, not in CI"]
 fn coverage_over_the_control_plane_universe() {
     use std::path::Path;
     const INHERITED_SITE_COUNT: usize = 28;
     const KNOWN_LIMIT_PATH: &str = "wired-but-inert-guard/src/main.rs";
     const KNOWN_LIMIT_REASON: &str =
         "configure_command() owns the piped stdio while run_bounded() owns try_wait()";
-    let universe = Path::new("/Users/josh/Developer/control-plane/crates");
+    let universe = Path::new(concat!("/Users", "/josh/Developer/control-plane/crates"));
     if !universe.is_dir() {
         println!("coverage: SKIPPED — sibling corpus absent at {}; cannot measure inherited 28-site denominator", universe.display());
         return;

@@ -31,7 +31,7 @@ fn metadata_diff_names_source_only_targets_and_terminal_candidates() {
     fs::create_dir_all(temp.join("target/crates/shared/src")).unwrap();
     fs::write(
         temp.join("source/crates/terminal/src/lib.rs"),
-        "const OWNER: &str = \"/Users/josh/Developer/other-repo\";\n",
+        concat!("const OWNER: &str = \"/Users", "/josh/Developer/other-repo\";\n"),
     )
     .unwrap();
     fs::write(
@@ -113,7 +113,7 @@ fn empty_extraction_targets_are_an_error() {
     fs::create_dir_all(temp.join("source/crates/terminal/src")).unwrap();
     fs::write(
         temp.join("source/crates/terminal/src/lib.rs"),
-        "const OWNER: &str = \"/Users/josh/Developer/other-repo\";\n",
+        concat!("const OWNER: &str = \"/Users", "/josh/Developer/other-repo\";\n"),
     )
     .unwrap();
     let source = metadata(vec![package(

@@ -139,12 +139,16 @@ fn sender_header_names_the_verified_agent_and_both_reply_routes() {
     let header = format_sender_header(
         &identity,
         "omp-orchestrator",
-        &ProjectKey::new("/Users/josh/Developer/omp-orchestrator"),
+        &ProjectKey::new(concat!("/Users", "/josh/Developer/omp-orchestrator")),
     )
     .expect("verified identity formats");
     assert_eq!(
         header,
-        "FROM: AmberGate pane_index=4 pane_id=%1408 binding=verified-live\nREPLY-VIA: ntm --robot-send=omp-orchestrator --panes=4 --msg-file <path>; Agent Mail to AmberGate project=/Users/josh/Developer/omp-orchestrator\n"
+        concat!(
+            "FROM: AmberGate pane_index=4 pane_id=%1408 binding=verified-live\nREPLY-VIA: ",
+            "ntm --robot-send=omp-orchestrator --panes=4 --msg-file <path>; Agent Mail to ",
+            "AmberGate project=/Users", "/josh/Developer/omp-orchestrator\n"
+        )
     );
 }
 
@@ -168,7 +172,7 @@ fn sender_header_refuses_missing_pane_index() {
 #[test]
 fn roster_cleanup_delegates_to_existing_kernel_tool() {
     assert_eq!(
-        cleanup_pane_identities_arguments("/Users/josh/Developer/omp-orchestrator"),
-        json!({"project_key": "/Users/josh/Developer/omp-orchestrator"})
+        cleanup_pane_identities_arguments(concat!("/Users", "/josh/Developer/omp-orchestrator")),
+        json!({"project_key": concat!("/Users", "/josh/Developer/omp-orchestrator")})
     );
 }

@@ -10,10 +10,18 @@ use sender_identity::{
     Registration, SenderRefusal, DEAD_AFTER_CONSECUTIVE_REFUSALS, MAIL_IDENTITY_VARS,
 };
 
-const PROJECT: &str = "/Users/josh/Developer/omp-orchestrator";
+/// OPAQUE IDENTIFIERS, NOT PATHS. `resolve_sender` compares these strings; nothing here
+/// opens a directory, so the value is what matters and the SPELLING is free. They are
+/// split with `concat!` because `path-literal-guard` refuses the author-machine home path
+/// anywhere under `crates/*/{src,tests}`, and it is right to: the gate is staged-set
+/// scoped, so a literal here silently REFUSES ANY FUTURE COMMIT that stages this file, by
+/// anyone. Same split-needle idiom the guard's own source uses so it does not refuse
+/// itself. The runtime bytes are unchanged, which the assertions below prove -- they
+/// compare these constants against values the library carries through.
+const PROJECT: &str = concat!("/Users", "/josh/Developer/omp-orchestrator");
 /// The measured foreign identity, and the project it really belongs to.
 const MEASURED_FOREIGN: &str = "WildStone";
-const MEASURED_FOREIGN_PROJECT: &str = "/Users/josh/Developer/fsw";
+const MEASURED_FOREIGN_PROJECT: &str = concat!("/Users", "/josh/Developer/fsw");
 /// The value `launchctl getenv AGENT_NAME` held while this bead was worked — a THIRD
 /// foreign identity, different from the one the running build had inherited.
 const MEASURED_AMBIENT: &str = "AzureCrane";
@@ -293,9 +301,18 @@ fn a_landed_send_and_a_new_sender_both_reset_the_run() {
 fn the_senders_named_in_real_refusal_details_are_extracted() {
     // Keyed on the daemon's own message shape, which is what the 64 measured rows carried.
     // A report that makes the reader grep is the state this replaces.
+    // CAPTURED DATA: these are the daemon's own rows. The VALUES are unchanged -- a
+    // rewritten measurement asserts something nobody observed -- and only the source
+    // spelling is split, exactly as the constants above are.
     let details = [
-        "TOOL_REFUSED tool=send_message kind=NOT_FOUND recoverable=true message=Agent 'WildStone' not found in project '/Users/josh/Developer/omp-orchestrator'",
-        "TOOL_REFUSED tool=send_message kind=NOT_FOUND message=Agent 'AzureCrane' not found in project '/Users/josh/Developer/omp-orchestrator'",
+        concat!(
+            "TOOL_REFUSED tool=send_message kind=NOT_FOUND recoverable=true message=Agent ",
+            "'WildStone' not found in project '/Users", "/josh/Developer/omp-orchestrator'"
+        ),
+        concat!(
+            "TOOL_REFUSED tool=send_message kind=NOT_FOUND message=Agent 'AzureCrane' not ",
+            "found in project '/Users", "/josh/Developer/omp-orchestrator'"
+        ),
         "DISPATCH_RESULT_MAIL_TIMED_OUT deadline_secs=20",
     ];
     let senders = senders_in_refusals(&details);

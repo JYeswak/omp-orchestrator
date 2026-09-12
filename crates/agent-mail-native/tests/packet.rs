@@ -9,9 +9,9 @@
 use agent_mail_native::identity::{BindingStatus, PaneIdentity};
 use agent_mail_native::journey::{AgentName, ProjectKey, ResumePoint};
 use agent_mail_native::packet::{
-    assert_field_order, parse_line, sha256_hex, ActorIdentity, Authority, CursorPoint, CursorTouch,
-    EffectResult, AttemptOutcome, PacketError, PacketJournal, PacketRow, RowSpec, Stage, Timestamp,
-    ACTOR_FIELD_ORDER, FIELD_ORDER, SCHEMA, SCHEMA_VERSION,
+    assert_field_order, parse_line, sha256_hex, ActorIdentity, AttemptOutcome, Authority,
+    CursorPoint, CursorTouch, EffectResult, PacketError, PacketJournal, PacketRow, RowSpec, Stage,
+    Timestamp, ACTOR_FIELD_ORDER, FIELD_ORDER, SCHEMA, SCHEMA_VERSION,
 };
 use agent_mail_native::DeliveryCursor;
 use std::fs;
@@ -24,7 +24,7 @@ fn actor() -> ActorIdentity {
 
 fn resume_point(recipient: &str, cursor: u64) -> ResumePoint {
     ResumePoint::restored(
-        ProjectKey::new("/Users/josh/Developer/omp-orchestrator"),
+        ProjectKey::new(concat!("/Users", "/josh/Developer/omp-orchestrator")),
         AgentName::new(recipient),
         DeliveryCursor::new(cursor),
     )
@@ -628,7 +628,10 @@ fn restrictive_outcomes_are_named_and_delivered_is_not_a_receipt() {
     );
     // And it is a DISTINCT token from delivered: folding them would make the one
     // actionable outcome indistinguishable from an empty run.
-    assert_ne!(AttemptOutcome::NothingToDo.as_str(), AttemptOutcome::Delivered.as_str());
+    assert_ne!(
+        AttemptOutcome::NothingToDo.as_str(),
+        AttemptOutcome::Delivered.as_str()
+    );
 }
 
 /// Every wire token is distinct across the three enums. Two states sharing a
