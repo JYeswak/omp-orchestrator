@@ -134,3 +134,38 @@ pub fn spawn_retain_wave_hash(
 ) -> Result<SpawnReceipt, SpawnWaveError> {
     generate_wave(&panes_from_list_panes(list_panes_stdout), dest)
 }
+
+/// L4-SPAWN (ol44): the `ntm spawn --assign --cass-context` gate.
+///
+/// Spawn proceeds only when the swarm is NotLive AND the HD-0010 row is
+/// decided. Both refusals are typed [`SpawnGate::Refused`] values carrying a
+/// named reason — never a silent skip, never an `Ok` with nothing behind it.
+/// `hd0010_decided` is the resolved decidedness of the HD-0010 ledger row
+/// (see `hd0009` for the resolution shape); this gate does not read the
+/// ledger itself, so it stays decidable on any lane, including a worker with
+/// no checkout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpawnGate {
+    /// Spawn may proceed.
+    Allowed,
+    /// Spawn is refused; `reason` names the bar that failed.
+    Refused { reason: String },
+}
+
+/// The single authority for whether a spawn may proceed.
+#[must_use]
+pub fn spawn_gate(verdict: &crate::liveness::LiveVerdict, hd0010_decided: bool) -> SpawnGate {
+    if verdict.is_live() {
+        return SpawnGate::Refused {
+            reason: "L4_SPAWN_REFUSED_LIVE — the swarm is live; spawn is the NotLive recovery path"
+                .to_owned(),
+        };
+    }
+    if !hd0010_decided {
+        return SpawnGate::Refused {
+            reason: "L4_SPAWN_REFUSED_HD0010_UNDECIDED — HD-0010 records no decided agent mix; refusing spawn without HD-0010"
+                .to_owned(),
+        };
+    }
+    SpawnGate::Allowed
+}

@@ -802,3 +802,54 @@ fn no_bool_tmux_source() {
         "empty-set error must be typed"
     );
 }
+
+/// L4-SPAWN (ol44): `ntm spawn --assign --cass-context` proceeds only when
+/// the swarm is NotLive AND the HD-0010 row is decided. Both refusals are
+/// typed `SpawnGate::Refused` values naming the bar — never a silent skip,
+/// never an `Ok` with nothing behind it.
+#[test]
+fn spawn_refused_without_hd0010() {
+    use ompo_start::spawn::{spawn_gate, SpawnGate};
+
+    // KNOWN-GOOD control first: NotLive + decided ALLOWS — the gate does not
+    // refuse everything, so the refusal below is load-bearing, not vacuous.
+    let mut ageless = source("agent-mail", &["%7"], true, true);
+    ageless.age_ms = None;
+    let not_live = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        ageless,
+    ])
+    .expect("complete source set");
+    assert_eq!(not_live.status(), "NOT_LIVE", "the control must be NotLive");
+    assert!(
+        matches!(spawn_gate(&not_live, true), SpawnGate::Allowed),
+        "NotLive + decided HD-0010 must allow spawn"
+    );
+
+    // TARGET: NotLive WITHOUT HD-0010 refuses, and the reason names HD-0010.
+    let refused = spawn_gate(&not_live, false);
+    println!("L4_SPAWN_NO_HD0010 gate={refused:?}");
+    let reason = match refused {
+        SpawnGate::Refused { reason } => reason,
+        SpawnGate::Allowed => panic!("spawn without HD-0010 must refuse, not allow"),
+    };
+    assert!(
+        reason.contains("HD-0010"),
+        "the refusal must name HD-0010, got {reason}"
+    );
+
+    // ONLY-WHEN-NOTLIVE: a Live swarm refuses even with HD-0010 decided —
+    // spawn is the NotLive recovery path, not a second launcher.
+    let live = classify(vec![
+        source("ntm", &["%7"], true, true),
+        source("tick-monitor", &["%7"], true, true),
+        source("agent-mail", &["%7"], true, true),
+    ])
+    .expect("complete source set");
+    assert_eq!(live.status(), "LIVE");
+    assert!(
+        matches!(spawn_gate(&live, true), SpawnGate::Refused { .. }),
+        "a Live swarm must refuse spawn even when HD-0010 is decided"
+    );
+}
