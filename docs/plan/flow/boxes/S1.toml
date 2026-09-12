@@ -180,22 +180,22 @@ measured = "1 matcher / 2 hooks. The prior row said '0 (today: zestgraph topolog
 [[box.hook]]
 id = "S1-HOOK-CODEX"
 event = "codex PreToolUse / PostToolUse"
-matcher = "UNMEASURED per matcher"
+matcher = "Pre x4: Bash, Bash, Edit|Write|apply_patch|MultiEdit, Bash. Post x2: Bash, Edit|Write|apply_patch|MultiEdit. Pane-1 re-parsed ~/.codex/hooks.json 2026-09-12 (us8j). Every row matcher+command filled."
 class = "gate + advisory"
-fail_mode = "UNMEASURED"
-binary = "UNMEASURED per hook"
+fail_mode = "per-hook, not this bead's acceptance. kernel-only-operator-hook closed (ebq5 --capabilities). dcg/recall/capture UNKNOWN (ebq5/39l5). spawn-cap.sh and journal.sh UNKNOWN beyond stated policy. Post cannot deny."
+binary = "Pre: /Users/josh/.local/bin/dcg; /Users/josh/Developer/control-plane/bin/zeststream-cast-spawn-cap.sh; /Users/josh/.local/bin/zestgraph-recall; /Users/josh/.local/bin/kernel-only-operator-hook --shadow --compare-predecessor ~/.claude/hooks/pretooluse-bash-tmux-agent-pane-gate.sh. Post: /Users/josh/Developer/control-plane/bin/codex-command-failure-journal.sh ~/.local/bin/ee; /Users/josh/.local/bin/zestgraph-capture"
 policy_file = "~/.codex/hooks.json"
 source_commit = ""
-language = "UNMEASURED"
+language = "rust Mach-O x4 (dcg, zestgraph-recall, kernel-only-operator-hook, zestgraph-capture) + bash x2 (spawn-cap, journal). Language from file(1)+prior probes; us8j measured matcher+binary."
 stage = "live"
 certified = "UNATTEMPTED"   # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. ZERO of 27 measured hook instances has entered /hook-certification.
 harm_class = "blocks a tool call"
-measured = "PreToolUse 4, PostToolUse 2 -- the prior row's '4 Pre / 2 Post' was CORRECT and is the only prior count that survived re-measurement"
+measured = "us8j pane-1 re-parse ~/.codex/hooks.json: Pre 4 Post 2, matcher+command filled, zero inferred. Independent of worker table. certified UNATTEMPTED. No hooks enabled."
 
 [[box.hook]]
 id = "S1-HOOK-OMP-PANES"
 event = "omp (pi) profile hooks"
-matcher = "extensions: key in the profile agent config; 9 TS factories present in the probed profile"
+matcher = "documented omp --hook=<value> (repeatable). config list names 10 TS files under ~/.omp/omp-extensions. --no-extensions is a no-op on config list (pane-1: both dumps sha256 45b33bbf, 25483 bytes) — that verb dumps saved config, not the live loaded set."
 class = "typescript_extension"   # NOT a Rust binary: the omp surface accepts a TS extension factory, which collides with the Rust-only hook doctrine
 fail_mode = "UNMEASURED"         # a TS factory's throw/timeout semantics on tool_call were not exercised; HD-0012 forbade installing a probe hook
 binary = "NONE — TypeScript factory, no binary entrypoint"
@@ -205,7 +205,7 @@ language = "typescript"
 stage = "measured"               # was `unmeasured`; the surface is now located and enumerated, which is stage 0 of /hook-certification, not certification
 certified = "UNATTEMPTED"        # pane 4 refuted `false`: it reads as considered-and-rejected; never-attempted is the honest value. Distinct from control-plane's registry-wide `false`, which means the Stage-4 soak is UNRUN — pane 4: "do not collapse", and it is right, they are two different bits.
 harm_class = "UNKNOWN"           # cannot be assigned before fail_mode is exercised
-measured = "MEASURED 2026-09-03 by pane 4 (SURFACES_PROBED=5, commit ed1eeeb). The omp hook table EXISTS at ~/.omp/profiles/<profile>/agent/config.yml under `extensions:`, carrying 9 TypeScript factories. EVENTS = tool_call, tool_result, session_start, user_bash. Project-level `.omp/hooks` is ABSENT. PROFILE_SCOPED=yes and the DEFAULT agent config has ZERO extensions — so all four panes in this session run with no omp-side hooks at all, which is the honest reason every field above read UNKNOWN. WRAPPER_HOLE=present, matching the measured timeout/nice/env/time/stdbuf/xargs bypass of a resolver that inspects only the command-position token. HOOK_LEVEL=0 BINARY_LEVEL=0 — a correct zero, because HD-0012 forbade installing a probe hook, so no interception evidence exists and none is claimed."
+measured = "j2vy pane-1 2026-09-12: omp --help documents --hook; omp config list extensions=10; omp --no-extensions config list BYTE-IDENTICAL. accepts_hooks=yes from documented flag. Live-vs-static UNPROVEN on config list. No field beads filed. certified UNATTEMPTED. Prior 2026-09-03 pane-4 row (9 factories, default profile zero) is SUPERSEDED on the count; HD-0012 still forbade installing a probe hook."
 note = "This row was UNKNOWN by design and is now MEASURED — the prior note (\"filling these fields by inference would be the fabricated-certificate failure this table exists to avoid\") did its job: the fields stayed empty until a probe ran. Pane 4's verdict on my UNKNOWN-vs-UNPROBEABLE question: UNPROBEABLE is reserved for a probe that RAN AND FAILED; this row was merely unprobed. THE OPEN DESIGN COLLISION, relayed to pane 2 (bead hook-design-contract-vnp2): our doctrine requires every live hook to be a Rust binary, asupersync-backed and cancel-correct, and this surface does not accept one. Three options, one must be CHOSEN rather than defaulted into: (a) TS shims that shell out to our Rust binaries — which puts an unbounded TS process on the critical path of every tool call and needs its own timeout story; (b) the Rust-only doctrine has a SCOPE it never stated, covering Claude and Codex tables only; (c) omp panes get no hooks, which is the current measured state and must therefore be a stated decision, not an accident."
 
 [[box.hook]]
