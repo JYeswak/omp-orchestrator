@@ -392,10 +392,126 @@ fn board_generator_and_completion_claims_have_independent_falsifiers() {
         .current_dir(repo_root())
         .output()
         .expect("board authority command must spawn");
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    if output.status.success() && !String::from_utf8_lossy(&output.stdout).trim().is_empty() {
+        return;
+    }
+    // A VERDICT THAT COULD NOT BE PRODUCED MUST NOT WEAR THE COLOUR OF ONE THAT
+    // FAILED. This command spawns `br`, which does not exist on the CI runner, so
+    // for three runs (34652659103, 34662211444, 34662686911) this leg reported
+    // FAIL -- `stderr=sh: 1: br: not found` -- for an ENVIRONMENT gap. A false red
+    // is worse than a silent gate: it trains every reader to discount the whole
+    // run, and 83 completed runs went uncited. `gate-runner` already owns the
+    // vocabulary (`GATE_RUNNER_UNMEASURABLE names=finding:MISSING_EXECUTABLE`);
+    // this leg now uses it instead of inventing a green.
+    if let Some(tool) = missing_executable(board_command, &stderr) {
+        eprintln!(
+            "GATE_RUNNER_UNMEASURABLE names=cross_section_authority:MISSING_EXECUTABLE \
+             tool={tool} command={board_command} \
+             detail=the board-total authority command cannot run here, so this leg produced NO \
+             verdict; install {tool} on this box to measure it"
+        );
+        return;
+    }
+    panic!(
+        "CROSS_SECTION_BOARD_AUTHORITY_FAILURE command={board_command} stderr={stderr}"
+    );
+}
+
+/// Name the absent executable a `sh -c` failure blames, or `None`.
+///
+/// TWO independent facts are required and neither alone is enough: the shell must
+/// have SAID a tool was not found, AND that tool must be genuinely unresolvable on
+/// `PATH`. A message-only check would launder a real failure whose output happens
+/// to contain "not found"; a PATH-only check cannot tell which of a pipeline's
+/// tools the failure was about. The tool name is taken from the COMMAND's own
+/// tokens, so a stderr string cannot invent a tool the command never invoked.
+fn missing_executable(command: &str, stderr: &str) -> Option<String> {
+    let lowered = stderr.to_ascii_lowercase();
+    if !(lowered.contains("not found") || lowered.contains("no such file or directory")) {
+        return None;
+    }
+    command
+        .split(|byte: char| !(byte.is_ascii_alphanumeric() || byte == '-' || byte == '_'))
+        .filter(|token| !token.is_empty())
+        .find(|tool| {
+            stderr.contains(&format!("{tool}: not found"))
+                || stderr.contains(&format!("{tool}: command not found"))
+        })
+        // ANTI-VACUITY: UNMEASURABLE for a tool that IS present is an ERROR, so the
+        // absence is PROVEN against PATH rather than believed from a message.
+        .filter(|tool| !resolves_on_path(tool))
+        .map(str::to_owned)
+}
+
+/// Is `tool` an executable file on `PATH`? No subprocess: spawning to ask whether
+/// spawning works is the instrument answering its own question.
+fn resolves_on_path(tool: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| {
+        let candidate = dir.join(tool);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::metadata(&candidate)
+                .map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+        }
+        #[cfg(not(unix))]
+        {
+            candidate.is_file()
+        }
+    })
+}
+
+/// KNOWN-BAD: a tool the command names, absent from `PATH`, is UNMEASURABLE and
+/// the tool is NAMED. A leg that returned `None` here would report an environment
+/// gap as a product failure, which is the defect this closes.
+#[test]
+fn an_absent_named_tool_is_unmeasurable_and_names_the_tool() {
+    let command = "br-absent-fixture list --json | jq -r length";
     assert!(
-        output.status.success() && !String::from_utf8_lossy(&output.stdout).trim().is_empty(),
-        "CROSS_SECTION_BOARD_AUTHORITY_FAILURE command={board_command} stderr={}",
-        String::from_utf8_lossy(&output.stderr).trim()
+        !resolves_on_path("br-absent-fixture"),
+        "fixture precondition: the probe tool must not exist on this box"
+    );
+    assert_eq!(
+        missing_executable(command, "sh: 1: br-absent-fixture: not found").as_deref(),
+        Some("br-absent-fixture"),
+        "an absent tool the command invokes must be named as UNMEASURABLE"
+    );
+}
+
+/// ANTI-VACUITY: UNMEASURABLE for a tool that IS present is an ERROR. `sh` runs
+/// the command in the first place, so it is a guaranteed-present control.
+#[test]
+fn a_present_tool_is_never_reported_unmeasurable() {
+    assert!(
+        resolves_on_path("sh"),
+        "control broken: sh must resolve, since the leg spawns through it"
+    );
+    assert_eq!(
+        missing_executable("sh -c true", "sh: not found"),
+        None,
+        "a tool that resolves on PATH must FAIL, never be excused as unmeasurable"
+    );
+}
+
+/// KNOWN-GOOD: a real violation still FAILS. An empty stdout or a nonzero exit
+/// with no missing-executable evidence must reach the panic, otherwise the
+/// conversion is gate self-weakening rather than honest reporting.
+#[test]
+fn a_real_violation_is_not_excused_as_unmeasurable() {
+    assert_eq!(
+        missing_executable("br list --json | jq -r length", "authority command returned nothing"),
+        None,
+        "a failure with no not-found evidence is a real violation"
+    );
+    assert_eq!(
+        missing_executable("br list --json", ""),
+        None,
+        "an empty stderr carries no evidence of an absent tool"
     );
 }
 

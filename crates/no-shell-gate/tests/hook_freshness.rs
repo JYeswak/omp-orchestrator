@@ -246,21 +246,23 @@ const LANDED_HOOK_LITERALS: &[(&str, &str)] = &[
 /// **It must shrink.** A row whose literal is now PRESENT fails
 /// [`the_installed_hook_matches_the_content_of_the_source_it_enforces`], so wiring
 /// the gate FORCES the row's deletion and nobody has to remember.
-const ACCEPTED_STALENESS: &[(&str, &str, &str)] = &[
-    (
-        "GATE_SECTION_HELD",
-        "omp-orchestrator-g5e0",
-        "SnowyCanyon 2026-09-03 ~02:0xZ: HEAD's hook makes GATE 7 build each touched \
-         crate LOCALLY on every commit. Joshua 01:5xZ: local rust builds destroy the \
-         machine, builds only on contabo. The gate-section gap is accepted OVER a \
-         local build per commit. Unblocks when g5e0 acceptance 2 lands.",
-    ),
-    (
-        "STAGED_BUILD_GATE_REFUSED",
-        "omp-orchestrator-g5e0",
-        "Same ruling: this literal IS gate 7, the local-build gate itself.",
-    ),
-];
+/// DRAINED 2026-09-12 (`omp-orchestrator-g5e0`). Both rows are deleted because
+/// both literals are NOW PRESENT in the installed hook, which is exactly the
+/// condition leg 3 below refuses:
+///
+/// ```text
+/// gate.yml 34662211444 + 34662686911 (clean checkouts):
+///   STALE ALLOWANCE ROW: "GATE_SECTION_HELD" is NOW PRESENT in the installed hook
+/// .git/hooks/pre-commit, byte count, this lane:
+///   NOTHING_TO_CHECK 4 · GATE_SECTION_HELD 1 · STAGED_BUILD_GATE_REFUSED 3 · mode-gate: REFUSED 1
+/// wired at crates/no-shell-gate/src/bin/pre-commit-gate.rs:129 and :1545
+/// ```
+///
+/// The list is EMPTY, and empty is the terminal state this doc demanded ("it
+/// must shrink"), never a bypass: with no rows, every absent literal is
+/// UNDECLARED and fails. Deleting a row whose reason is gone is adjudication;
+/// raising a bound would be amnesty, and nothing here was widened to absorb it.
+const ACCEPTED_STALENESS: &[(&str, &str, &str)] = &[];
 
 /// Is `needle` present in `haystack`? Byte search, so it works on a Mach-O.
 fn contains_bytes(haystack: &[u8], needle: &str) -> bool {

@@ -425,7 +425,28 @@ fn ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal() {
     assert!(String::from_utf8_lossy(&cherry.stdout).lines().any(|line| line.trim_start().starts_with('-')), "branch commit must be already represented by patch-id: {:?}", String::from_utf8_lossy(&cherry.stdout));
     let branch_tip = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "ci/fence-16l-13ca3f5"], "read duplicate branch tip").stdout).trim().to_owned();
     run_git(&dir, &["update-ref", "refs/branch-rationalization-backup/ci-fence-16l-13ca3f5", &branch_tip], "record branch backup ref");
-    run_git(&dir, &["merge", "--no-commit", "--no-ff", "ci/fence-16l-13ca3f5"], "create ancestry-only merge");
+    // FIXTURE IDENTITY IS EXPLICIT (2026-09-12). A merge and its commit both
+    // WRITE objects, so both need an author; CI runners carry no global
+    // `user.name`/`user.email`, and without these the leg died in `run_git` with
+    // "Committer identity unknown" -- an ENVIRONMENT gap reported as a gate
+    // FAILURE for three runs (34652659103, 34662211444, 34662686911). Every other
+    // commit in this file already passes them, so this is the file's own
+    // convention applied, NOT a skip: measured beats unmeasurable, and every
+    // assertion below is untouched.
+    run_git(
+        &dir,
+        &[
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "merge",
+            "--no-commit",
+            "--no-ff",
+            "ci/fence-16l-13ca3f5",
+        ],
+        "create ancestry-only merge",
+    );
 
     assert!(dir.join(".git/MERGE_HEAD").is_file(), "the live merge state must exist");
     for filter in ["ACMR", "D"] {
@@ -445,7 +466,7 @@ fn ancestry_only_merge_runs_gate_and_preserves_empty_index_refusal() {
     let bundle = dir.join("ci-fence-16l-13ca3f5.bundle");
     let bundle_path = bundle.to_str().expect("bundle path is UTF-8");
     run_git(&dir, &["bundle", "create", bundle_path, "main", "ci/fence-16l-13ca3f5"], "create object bundle");
-    run_git(&dir, &["commit", "--no-edit", "-q"], "commit ancestry-only merge");
+    run_git(&dir, &["-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid", "commit", "--no-edit", "-q"], "commit ancestry-only merge");
     run_git(&dir, &["branch", "-d", "ci/fence-16l-13ca3f5"], "safe-delete merged branch");
     let backup = String::from_utf8_lossy(&run_git(&dir, &["rev-parse", "refs/branch-rationalization-backup/ci-fence-16l-13ca3f5"], "resolve backup ref").stdout).trim().to_owned();
     assert_eq!(backup, branch_tip, "backup ref must preserve the deleted branch tip");
