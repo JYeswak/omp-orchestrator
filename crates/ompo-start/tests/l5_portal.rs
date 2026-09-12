@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use ompo_start::inception::{write_atomic_observed, AtomicWriteEffect};
+use ompo_start::inception::{read_inception, write_atomic_observed, AtomicWriteEffect};
 use ompo_start::liveness::SourceVerdict;
 use ompo_start::portal::{
     data_hash_without_self, gates_verdict, observability, parse_gates_aggregate, queue_depth, seal,
@@ -622,4 +622,29 @@ fn inception_durability_sequence_is_exactly_five_ordered_effects() {
     // v809's law, re-read here rather than trusted: staging is in the SAME
     // directory as the destination, so the publish is a same-filesystem rename.
     assert_eq!(from.parent(), destination.parent());
+}
+
+/// L5-READBACK (3tek): after a write, required keys must be present on
+/// readback. A missing key is REFUSE, never a success token (not S2_OK).
+#[test]
+fn write_zero_readback_fail_refuses() {
+    let dir = tempfile::tempdir().expect("fixture directory");
+    let destination = dir.path().join("inception.json");
+    let incomplete = br#"{"schema_version":"inception.v1"}"#;
+    write_atomic_observed(&destination, incomplete).expect("bytes land");
+    let error = read_inception(&destination).expect_err(
+        "missing required keys after write must REFUSE, not succeed",
+    );
+    let detail = error.to_string();
+    let detail_upper = detail.to_ascii_uppercase();
+    assert!(
+        detail_upper.contains("READBACK")
+            || detail.contains("project_id")
+            || detail.contains("schema_version"),
+        "refusal must name the missing key or readback class, got {detail}"
+    );
+    assert!(
+        !detail.contains("S2_OK"),
+        "a readback miss must not render as S2_OK: {detail}"
+    );
 }
