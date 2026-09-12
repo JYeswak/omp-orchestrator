@@ -1,4 +1,4 @@
-//! ENV PARITY CONTRACT for the omp-idle-dispatch Rust port (cp-79am1).
+//! ENV PARITY CONTRACT for the omp-idle-dispatch Rust port (control-plane#cp-79am1).
 //!
 //! bin/omp-idle-dispatch.sh — deleted by the Rust port, restored here from git
 //! (45c613d^, lines 25-27) — exported, in order:
