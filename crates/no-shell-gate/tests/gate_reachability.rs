@@ -158,6 +158,22 @@ fn empty_gate_set_is_typed_error_exit_two() {
     fs::remove_dir_all(root).expect("fixture cleanup");
 }
 
+// THIS LEG PINS `serde_yaml_ng`'s BEHAVIOUR, NOT OURS -- mirrored from the flow twin below
+// (`omp-orchestrator-aposg`). The local BLOCK scanner that used to pin `duplicate mapping key`
+// was DELETED at 51dd393 because no block-mapping duplicate existed that serde accepted: across
+// two independent censuses, 27 specimens, the keep-condition "serde ACCEPTS one the scanner
+// REJECTS" fired ZERO times. The scanner was in fact strictly WEAKER -- it accepted four forms
+// serde refuses (`"a"` vs `a`, `'a'` vs `a`, a duplicate inside a sequence item, and a duplicate
+// in a flow mapping on a block line), because it compared raw text between the indent and the
+// first colon.
+//
+// ⛔ SO DO NOT RE-ADD A LOCAL SCANNER WHEN THIS LEG SURPRISES YOU. If it fails, serde's
+// duplicate-key behaviour changed; that is the subject, and the remedy is upstream, not a
+// hand-rolled pre-check that would be weaker than what it guards.
+//
+// KNOWN RESIDUAL, and it argues FOR the deletion rather than against it: `1: a` beside `"1": b`
+// is ACCEPTED -- an int key and a string key, one key to any human reading gate.yml. The deleted
+// scanner did not cover it either.
 #[test]
 fn duplicate_yaml_is_strict_parse_error_exit_one() {
     let root = fixture_root("duplicate-yaml");
