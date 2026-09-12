@@ -185,3 +185,81 @@ pub fn fixture_steps() -> Vec<Step> {
         },
     ]
 }
+
+/// L3-ARTIFACT (a5kd): the STEPS array itself as an artifact with readback.
+///
+/// One array feeds both renderers (`tui_ordered_ids`, `json_ordered_ids`),
+/// so the artifact is that array serialised — not a rendering of it. After
+/// L3 runs, the file exists and every row carries the keys the renderers
+/// read (`id`, plus a `status` spelling the `StepStatus` vocabulary knows).
+/// A missing file, zero-byte or unparseable bytes, a non-array document, an
+/// empty array, and a row without `id`/`status` are all typed refusals:
+/// an empty array in particular must not read as "zero steps ran fine".
+/// Closed vocabulary pin below: keep in sync with `StepStatus` — a new
+/// variant with no row there refuses otherwise-valid rows.
+const STEP_STATUSES: &[&str] = &[
+    "Pending",
+    "Ready",
+    "Passed",
+    "Failed",
+    "Blocked",
+    "Skipped",
+    "NotApplicable",
+];
+
+/// Write `steps.json` under `dir` and return its path.
+pub fn write_steps_artifact(
+    dir: &std::path::Path,
+    steps: &[Step],
+) -> Result<std::path::PathBuf, String> {
+    let array: Vec<serde_json::Value> = steps
+        .iter()
+        .map(|step| serde_json::to_value(step).expect("Step serializes"))
+        .collect();
+    let bytes =
+        serde_json::to_vec(&array).expect("a JSON array of steps serializes");
+    let path = dir.join("steps.json");
+    crate::inception::write_atomic_observed(&path, &bytes)
+        .map_err(|error| error.to_string())?;
+    Ok(path)
+}
+
+/// Read a STEPS artifact back as row values. Every refusal below is typed;
+/// nothing here defaults, skips, or reads absence as success.
+pub fn read_steps_artifact(path: &std::path::Path) -> Result<Vec<serde_json::Value>, String> {
+    let bytes = std::fs::read(path).map_err(|error| {
+        format!(
+            "L3_STEPS_MISSING path={} detail={error}",
+            path.display()
+        )
+    })?;
+    let rows: Vec<serde_json::Value> = serde_json::from_slice(&bytes).map_err(|error| {
+        format!(
+            "L3_STEPS_MALFORMED path={} detail={error}",
+            path.display()
+        )
+    })?;
+    if rows.is_empty() {
+        return Err("L3_STEPS_EMPTY — a steps artifact with zero rows proves nothing".to_owned());
+    }
+    for (index, row) in rows.iter().enumerate() {
+        let object = row.as_object().ok_or_else(|| {
+            format!("L3_STEPS_ROW_NOT_OBJECT index={index}")
+        })?;
+        let id = object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| format!("L3_STEPS_ROW_MISSING_ID index={index}"))?;
+        let status = object
+            .get("status")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("L3_STEPS_ROW_MISSING_STATUS id={id}"))?;
+        if !STEP_STATUSES.contains(&status) {
+            return Err(format!(
+                "L3_STEPS_ROW_BAD_STATUS id={id} status={status}"
+            ));
+        }
+    }
+    Ok(rows)
+}

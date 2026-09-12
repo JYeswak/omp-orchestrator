@@ -356,3 +356,51 @@ fn divergent_ids_floor_zero() {
         "production parity gate must agree with the floor"
     );
 }
+
+/// L3-ARTIFACT (a5kd): the STEPS array itself round-trips through an
+/// artifact file. After the write lands, the file exists and readback of
+/// the renderer keys (`id`, `status`) succeeds in order. A zero-byte write
+/// and a missing file both FAIL readback — neither is an empty success.
+#[test]
+fn steps_artifact_write_readback() {
+    use ompo_start::{read_steps_artifact, write_steps_artifact};
+
+    // KNOWN-GOOD control: post-predicate fixture steps write and read back
+    // with ids and statuses intact and in order.
+    let mut steps = fixture_steps();
+    apply_predicates(&mut steps, false, false, false);
+    let dir = tempfile::tempdir().expect("scratch");
+    let path = write_steps_artifact(dir.path(), &steps).expect("artifact writes");
+    assert!(path.exists(), "the artifact must exist after the write");
+    let rows = read_steps_artifact(&path).expect("artifact reads back");
+    let ids: Vec<&str> = rows
+        .iter()
+        .map(|row| row.get("id").and_then(Value::as_str).expect("id reads"))
+        .collect();
+    assert_eq!(
+        ids,
+        ordered_ids(&steps),
+        "the artifact array must be the steps array, in order"
+    );
+    println!("L3_STEPS_OK rows={} first={}", ids.len(), ids[0]);
+
+    // ZERO-BYTE write FAILS readback: empty bytes are not an empty success.
+    let zero = dir.path().join("zero-steps.json");
+    std::fs::write(&zero, b"").expect("zero bytes land");
+    let error = read_steps_artifact(&zero).expect_err(
+        "a zero-byte artifact must FAIL readback, not succeed",
+    );
+    println!("L3_STEPS_ZERO refusal={error}");
+
+    // MISSING file FAILS readback: absence is not a row either.
+    let missing = dir.path().join("never-written.json");
+    assert!(!missing.exists());
+    let error = read_steps_artifact(&missing).expect_err(
+        "a missing artifact must FAIL readback, not succeed",
+    );
+    println!("L3_STEPS_MISSING refusal={error}");
+    assert!(
+        error.contains("never-written.json"),
+        "the refusal must name the missing path, got {error}"
+    );
+}
