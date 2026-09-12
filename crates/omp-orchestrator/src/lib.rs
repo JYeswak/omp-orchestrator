@@ -424,7 +424,12 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("named-test-filter-gate", "instrument limitation: source caller scan cannot see its gate-runner manifest check; owner=pane=%19; dies_when=reachability consumes gate metadata or the crate gains an in-tree source caller"),
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
-    ("cargo-lane-budget", "invoked by fast-dispatch admission via Command::new(FD_BUDGET else ~/.local/bin/cargo-lane-budget) --check (fast-dispatch/src/main.rs:855-858); env-resolved spawns from non-gate binaries are outside the probed surfaces; entered census 2026-09-11 by derived membership. Dies when a spawn probe exists or it gains runnable gate checks."),
+    // 2026-09-12: cargo-lane-budget row DELETED. Death condition was "Dies when a spawn
+    // probe exists or it gains runnable gate checks." Probe exists:
+    // no-shell-gate/tests/wired_lanes.rs `a_crate_named_in_prose_is_not_a_caller_and_a_quoted_spawn_still_is`
+    // asserts is_invocation on Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget")).
+    // Site confirmed at crates/fast-dispatch/src/main.rs:994 (was cited :855-858, drifted).
+    // A mention in loop-coverage TypedEdgeCase is NOT an invocation; the spawn is.
     // 73w7w: contabo-reclaim deleted with s1-coverage. Same CI REACHABLE (`-p` in
     // contabo-reclaim.yml). Acknowledgement not owed for the same reason.
     ("dispatcher-deadman", "Rust bin selftest/differential-only; every live reference resolves to bin/dispatcher-deadman.sh, absent from this checkout (loop-tick/src/lib.rs:1002-1006). Dies when the shell oracle lands in-repo or the Rust bin gains a caller."),
