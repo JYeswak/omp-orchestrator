@@ -569,6 +569,63 @@ fn every_linked_path_dep_is_watched_or_declared_unwatched() {
     }
 }
 
+/// omp-orchestrator-9yf5s answer (c): the spawned crate-atom-gate binary's freshness is an
+/// ACCEPTED GAP, named out loud, until the gate is armed.
+///
+/// DETERMINED FIRST: default commits never spawn it (`OMP_CRATE_ATOM_GATE` must be `1`).
+/// When that env IS set, `crate_atom_gate_on_commit_path` pushes onto `refusals` and a
+/// nonempty `refusals` is `PreCommitOutcome::Violation` -- load-bearing. Today it is not.
+///
+/// ANTI-VACUITY: BINARY_ABSENT already exists, so a missing binary is NOT evidence a
+/// freshness check works. This leg asserts the opposite claim: a PRESENT AND STALE
+/// spawned binary is UNDETECTABLE, and hook_digest MUST NOT cover crate-atom-gate src
+/// (TIER 3, zero library refs -- covering it is stamp churn for zero decision signal).
+///
+/// KNOWN-BAD: deleting `PRESENT AND STALE` from the exemption reason reddens this leg.
+/// Deleting the env-flag pin from pre-commit-gate.rs also reddens (death of (c)).
+/// BINARY_ABSENT cannot discriminate this mutant -- it is a different arm.
+#[test]
+fn crate_atom_gate_spawned_binary_freshness_is_an_accepted_gap() {
+    assert!(
+        !HOOK_SOURCE_CRATES.contains(&"crate-atom-gate"),
+        "RULE 9yf5s_no_widen: do not stamp crate-atom-gate src into hook_digest; it is TIER 3"
+    );
+    let row = no_shell_gate::hook_digest::DELIBERATELY_UNWATCHED
+        .iter()
+        .find(|(name, _)| *name == "crate-atom-gate")
+        .expect("crate-atom-gate must stay a named unwatched row, not silent");
+    let reason = row.1;
+    for needle in [
+        "DISARMED",
+        "OMP_CRATE_ATOM_GATE",
+        "PRESENT AND STALE",
+        "UNDETECTABLE",
+        "BINARY_ABSENT",
+        "WATCH IT THE DAY IT IS ARMED",
+        "answer (c)",
+    ] {
+        assert!(
+            reason.contains(needle),
+            "RULE 9yf5s_accepted_out_loud: exemption reason must contain {needle:?}; got {reason}"
+        );
+    }
+
+    let bin = std::fs::read_to_string(
+        repo_root().join("crates/no-shell-gate/src/bin/pre-commit-gate.rs"),
+    )
+    .expect("pre-commit-gate.rs readable");
+    assert!(
+        bin.contains("if std::env::var(\"OMP_CRATE_ATOM_GATE\").as_deref() == Ok(\"1\")"),
+        "RULE 9yf5s_still_disarmed: (c) dies the day this env gate is removed; re-arming \
+         without stamping the spawned binary is the defect this bead named"
+    );
+    assert!(
+        bin.contains("crate_atom_gate_on_commit_path"),
+        "RULE 9yf5s_spawn_site: the disarmed call must still exist so the death condition is real"
+    );
+}
+
+
 /// ACCEPTANCE 5's `Unreadable` ARM, PROVED WITHOUT A `chmod` — the ROOT-class workaround.
 ///
 /// ⛔ A `chmod`-unreadable fixture IS READABLE AS ROOT, and the lane workers run as root, so a

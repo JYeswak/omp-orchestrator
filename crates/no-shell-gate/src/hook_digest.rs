@@ -125,10 +125,16 @@ pub const DELIBERATELY_UNWATCHED: &[(&str, &str)] = &[
     ),
     (
         "crate-atom-gate",
-        "ZERO library references in this crate's src: the hook reaches it ONLY by SPAWNING an \
-         external binary (pre-commit-gate.rs:1403-1406, with its own BINARY_ABSENT arm), so \
-         covering its src would be churn against an artifact this digest does not describe. Its \
-         freshness is a real question about a DIFFERENT artifact and has its own bead",
+        "DISARMED: its call site is behind `OMP_CRATE_ATOM_GATE=1` (pre-commit-gate.rs:632), \
+         so a default commit never spawns the binary and cannot refuse. ZERO library \
+         references (`crate_atom_gate::`) in this crate's src: the hook reaches it ONLY by \
+         SPAWNING target/debug/crate-atom-gate or ~/.local/bin/crate-atom-gate \
+         (pre-commit-gate.rs:1403-1406, BINARY_ABSENT arm). hook_digest does not stamp that \
+         second artifact. A PRESENT AND STALE spawned binary is UNDETECTABLE -- BINARY_ABSENT \
+         is a different arm and is not evidence of freshness. When ARMED, refusals.push feeds \
+         PreCommitOutcome::Violation so the verdict IS load-bearing; WATCH IT THE DAY IT IS \
+         ARMED and then stamp that binary (9yf5s (a) or (b)). omp-orchestrator-9yf5s answer (c) \
+         until then",
     ),
     (
         "convergence-stamp",
