@@ -258,7 +258,41 @@ fn main() -> ExitCode {
     // `path-literal-guard --repo-wide .` still cover the whole tree. Only the
     // hook is scoped, because only the hook must not refuse for reasons
     // outside the change.
-    let pl_report = path_literal_guard::scan_paths(&repo_root, &staged);
+    //
+    // AND IT NOW READS THE STAGED BLOBS (omp-orchestrator-249hz, seventh instance, and the
+    // same repair GATE 4 got one commit earlier). `scan_paths` selected the STAGED SET and
+    // then read each file from the WORKTREE, so a literal that IS staged but already
+    // repaired in the worktree passed this gate and LANDED. Same helper as every other
+    // reader in this binary; same two-absences rule as GATE 4: no index entry means a
+    // staged DELETION and is skipped, anything else unreadable or non-UTF-8 is a REFUSAL
+    // naming the path, never a silent skip.
+    let mut pl_sources: Vec<(String, String)> = Vec::new();
+    for staged_file in &staged {
+        if !path_literal_guard::is_in_scan_scope(Path::new(staged_file)) {
+            continue;
+        }
+        match staged_blob(&repo_root, staged_file) {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(source) => pl_sources.push((staged_file.clone(), source)),
+                Err(_) => refusals.push(format!(
+                    "path-literal-guard: staged blob for {staged_file} is not UTF-8 -- an \
+                     undecodable staged file is a REFUSAL, never a skip"
+                )),
+            },
+            Err(why) if staged_path_is_deleted(&repo_root, staged_file) => {
+                let _ = writeln!(
+                    io::stderr(),
+                    "path-literal-guard: skipping {staged_file} -- staged DELETION, no index \
+                     entry to scan ({why})"
+                );
+            }
+            Err(why) => refusals.push(format!(
+                "path-literal-guard: cannot read STAGED blob for {staged_file}: {why} -- an \
+                 unreadable staged file is a REFUSAL, never a pass"
+            )),
+        }
+    }
+    let pl_report = path_literal_guard::scan_sources(&pl_sources);
     match pl_report.verdict() {
         path_literal_guard::Verdict::Violation => {
             // ONE refusal PER HIT, each naming file:line. The old boundary

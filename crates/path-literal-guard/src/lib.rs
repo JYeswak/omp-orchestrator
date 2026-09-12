@@ -578,6 +578,61 @@ pub fn scan_paths<P: AsRef<Path>>(root: &Path, paths: &[P]) -> ScanReport {
     finish(ScanMode::StagedPaths, scanned, skipped, hits, lines)
 }
 
+/// Scan STAGED BLOBS: the bytes the commit is made of, supplied by the caller.
+///
+/// THE DEFECT THIS CLOSES (`omp-orchestrator-249hz`, seventh instance, and GATE 3's copy
+/// of the one GATE 4 closed at `4bf0d0a`). [`scan_paths`] selects the STAGED SET and then
+/// reads each file from the WORKTREE. In a twelve-agent shared checkout the two trees
+/// diverge constantly and both directions are real: a home-path literal that IS staged
+/// but already repaired in the worktree passes the gate and LANDS -- the false green, and
+/// it needs nothing exotic, only `git add`, keep fixing, then a pathless `git commit` --
+/// while one present only in the unstaged worktree refuses a commit that does not contain
+/// it.
+///
+/// The caller supplies `(repo-relative name, source)` read with `git show :<path>`, so
+/// this function touches no filesystem and cannot read the wrong tree. Scope is still
+/// decided HERE by [`is_in_scan_scope`], so the staged and repo-wide modes cannot drift
+/// apart on which files count; `staged_mode_over_the_whole_tree_equals_repo_wide` remains
+/// the standing proof.
+///
+/// AN OUT-OF-SCOPE PATH IS STILL RECORDED as `SkipReason::OutOfScope`, because a green
+/// that silently implies coverage is this gate's other failure mode. There is no `Absent`
+/// arm here: absence from the INDEX is a staged deletion, which the caller detects before
+/// it ever has bytes to hand over.
+///
+/// [`scan_paths`] survives for `path-literal-guard --staged <paths>` and the repo-wide
+/// sweep, where the WORKTREE is the subject the operator asked about. The commit path is
+/// not that caller.
+pub fn scan_sources<N: AsRef<str>, S: AsRef<str>>(sources: &[(N, S)]) -> ScanReport {
+    let mut scanned = Vec::new();
+    let mut skipped = Vec::new();
+    let mut hits = Vec::new();
+    let mut lines = Vec::new();
+
+    for (name, source) in sources {
+        let relative = Path::new(name.as_ref());
+        if !is_in_scan_scope(relative) {
+            skipped.push(Skipped {
+                file: relative.to_path_buf(),
+                reason: SkipReason::OutOfScope,
+            });
+            continue;
+        }
+        scanned.push(relative.to_path_buf());
+        for (index, line) in source.as_ref().lines().enumerate() {
+            if FORBIDDEN_LITERALS.iter().any(|needle| line.contains(needle)) {
+                hits.push(Hit {
+                    file: relative.to_path_buf(),
+                    line: index + 1,
+                });
+                lines.push(line.to_owned());
+            }
+        }
+    }
+
+    finish(ScanMode::StagedPaths, scanned, skipped, hits, lines)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
