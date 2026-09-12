@@ -37,8 +37,8 @@ use omp_orchestrator::{
     census_gates, crates_on_disk, CensusDisposition, GateCensus, GateReachability,
     ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX, ADVISORY_RATCHET,
     untriaged_amnesty_rows,
-    advisory_ratchet_overdue, ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER,
-    PRE_LEHT_BLOCKING_ROWS,
+    advisory_ratchet_overdue, quoted_in_call_position, rust_line_invokes,
+    ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER, PRE_LEHT_BLOCKING_ROWS,
 };
 use std::path::PathBuf;
 use std::fs;
@@ -267,9 +267,17 @@ fn every_advisory_unreachable_row_is_named_in_the_allowance() {
         .advisory_gates()
         .iter()
         .filter(|r| {
-            !ADVISORY_ALLOWANCE
-                .iter()
-                .any(|(name, _)| *name == r.gate.as_str()) && is_tracked(&root, &r.gate)
+            // ⛔ AN UNDETERMINED CRATE OWES NOTHING (tzz74). `has_remote` is an input this host
+            // may not supply; when it is absent the census says UNDETERMINED rather than
+            // inventing `Unreachable`, and you cannot demand an acknowledgement for a fact
+            // nobody measured. The stale-allowance leg is symmetric by construction — it keys
+            // on `is_reachable()`, so it does not FORBID a row either. Neither obligation
+            // attaches to an unmeasured verdict.
+            r.reachability.is_determined()
+                && !ADVISORY_ALLOWANCE
+                    .iter()
+                    .any(|(name, _)| *name == r.gate.as_str())
+                && is_tracked(&root, &r.gate)
         })
         .map(|r| &r.gate)
         .collect();
@@ -416,6 +424,10 @@ fn the_ratchet_deadline_is_a_real_number_and_not_a_sentiment() {
     let unacknowledged: Vec<&str> = census
         .advisory_gates()
         .iter()
+        // SAME RULE AS THE NAMING LEG (tzz74): an UNDETERMINED verdict is an unsupplied input,
+        // not a finding, so it cannot owe an acknowledgement. Without this the worker demands
+        // a row that CI forbids, which is the contradiction the variant exists to end.
+        .filter(|row| row.reachability.is_determined())
         .map(|row| row.gate.as_str())
         .filter(|gate| !named.contains(gate))
         .collect();
@@ -568,5 +580,117 @@ fn disposition_decides_whether_a_verdict_stops_the_fleet() {
         advisory.advisory_gates().len(),
         1,
         "and it must still be COUNTED -- advisory means reported, not ignored"
+    );
+}
+
+// ── tzz74: THE CENSUS CONSUMES THE SPAWN PROBE, AND A MENTION IS STILL NOT A CALLER ────────
+
+/// POSITIVE CONTROL: the census now sees an env-resolved `Command::new` spawn.
+///
+/// `cargo-lane-budget` is spawned ONLY from Rust — `fast-dispatch/src/main.rs:994`,
+/// `Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"))`. No workflow names
+/// it, so the workflow/manifest census called it Unreachable while `wired_lanes`' probe could
+/// already see it. Two judgements about one question, and the CONSUMING oracle held the
+/// weaker one.
+#[test]
+fn the_census_classifies_a_rust_only_spawn_target_reachable() {
+    let census = census_gates(&repo_root());
+    let row = census
+        .rows
+        .iter()
+        .find(|r| r.gate == "cargo-lane-budget")
+        .expect("RULE spawn_probe_non_vacuous: cargo-lane-budget must have a census row at all");
+    assert!(
+        row.reachability.is_reachable(),
+        "RULE spawn_probe_consumed: cargo-lane-budget is spawned at \
+         fast-dispatch/src/main.rs:994 and must classify Reachable; got {:?}",
+        row.reachability
+    );
+}
+
+/// ⛔ KNOWN-BAD DIRECTION: A MENTION IS NOT A CALLER — the leg that stops this fix from being
+/// a `contains`.
+///
+/// `loop-coverage/src/lib.rs:212` carries the literal `cargo-lane-budget` inside a
+/// `TypedEdgeCase` DESCRIPTION. A substring scan reports that as an invocation, and acting on
+/// it would DELETE A CORRECT ALLOWANCE ROW — strictly worse than the red it was chasing.
+/// The rule is POSITION, so it is asserted directly on the predicate over the real lines.
+#[test]
+fn a_described_crate_is_not_a_caller_but_a_quoted_spawn_is() {
+    let described =
+        r#"        "controller-tick refused on code != Some(0); cargo-lane-budget 77 means UNKNOWN","#;
+    assert!(
+        !rust_line_invokes(described, "cargo-lane-budget", "cargo_lane_budget"),
+        "RULE mention_is_not_invocation: a description field naming the crate must NOT count \
+         as a caller, or the census deletes correct allowance rows"
+    );
+    let allowance_row =
+        r#"    ("cargo-lane-budget", "instrument limitation: census_gates does not see it"),"#;
+    assert!(
+        !rust_line_invokes(allowance_row, "cargo-lane-budget", "cargo_lane_budget"),
+        "RULE tuple_is_not_invocation: an allowance ROW naming the crate must not make it \
+         Reachable -- that would be the registry certifying itself out of existence"
+    );
+    let spawn =
+        r#"    let mut budget_cmd = Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"));"#;
+    assert!(
+        rust_line_invokes(spawn, "cargo-lane-budget", "cargo_lane_budget"),
+        "RULE spawn_is_invocation: the real spawn site must count, or the fix is a no-op"
+    );
+}
+
+/// ANTI-VACUITY ON THE PREDICATE ITSELF.
+///
+/// An empty needle matches every line, which would make EVERY crate Reachable and silently
+/// empty the advisory registry — the inverse of a never-matching needle, and the more
+/// dangerous direction because it presents as a clean-up.
+#[test]
+fn an_empty_needle_never_reports_an_invocation() {
+    assert!(
+        !rust_line_invokes("anything at all", "", ""),
+        "RULE empty_needle_non_vacuous: an empty needle must never report an invocation"
+    );
+    assert!(
+        !quoted_in_call_position("no parens here", 3),
+        "RULE position_requires_a_paren: a line with no call cannot be a call position"
+    );
+}
+
+/// ⛔ ANTI-VACUITY ON `Undetermined` ITSELF, AND IT IS NOT OPTIONAL (tzz74 ruling item 4).
+///
+/// `Undetermined` releases a crate from BOTH obligations — the naming leg may not demand a row
+/// and the stale-allowance leg may not forbid one. That is correct for a crate whose input was
+/// missing, and CATASTROPHIC if it becomes the residual for everything: a remote-less host
+/// would silently satisfy both legs and we would have rebuilt the very defect the variant was
+/// introduced to fix — an absent input producing no verdict, and no verdict being
+/// indistinguishable from a pass.
+///
+/// So the escape hatch is bounded from inside: the Undetermined set must be a STRICT SUBSET,
+/// and at least one crate must be POSITIVELY classified. A census that determined nothing is
+/// an ERROR, never a green.
+#[test]
+fn undetermined_is_a_strict_subset_and_never_the_whole_census() {
+    let census = census_gates(&repo_root());
+    assert!(
+        !census.rows.is_empty(),
+        "RULE undetermined_non_vacuous: an empty census cannot certify anything about \
+         Undetermined; the scan itself is broken"
+    );
+    let undetermined = census
+        .rows
+        .iter()
+        .filter(|r| !r.reachability.is_determined())
+        .count();
+    assert!(
+        undetermined < census.rows.len(),
+        "RULE undetermined_bounded: ALL {} census rows are Undetermined -- an absent input has \
+         become the residual for the whole census, which makes a remote-less host satisfy every \
+         obligation leg by measuring nothing. That is an ERROR, not a pass",
+        census.rows.len()
+    );
+    assert!(
+        census.rows.iter().any(|r| r.reachability.is_determined()),
+        "RULE undetermined_has_a_control: at least one crate must be POSITIVELY classified, or \
+         the census has no positive control and its greens mean nothing"
     );
 }

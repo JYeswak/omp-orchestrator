@@ -286,11 +286,41 @@ pub enum GateReachability {
     /// the actual problem — the same wrong-next-action defect that forced
     /// `NotExtracted` to become its own variant.
     Unprobed { reason: String },
+    /// An INPUT the verdict depends on was not supplied by this host, so reachability is
+    /// UNDETERMINED — not negative.
+    ///
+    /// ⛔ THE DEFECT THIS CLOSES (`omp-orchestrator-tzz74`). `has_remote` is probed by spawning
+    /// `git remote` in the repo root. On an `rch` worker there is no `.git`, so the input is
+    /// ABSENT — and the census used `Unreachable` as the RESIDUAL for that missing input. A
+    /// crate that CI classifies Reachable therefore read Unreachable on every worker, and two
+    /// legs then disagreed about what that obliged: the naming leg DEMANDED an allowance row
+    /// while the stale-allowance leg FORBADE one. Neither leg was defective; both were reading
+    /// a verdict that was never earned.
+    ///
+    /// THE STANDING RULE IT RESTORES: a denied, errored, empty or unreadable probe is UNKNOWN,
+    /// NEVER a negative result. EVERY ARM ASSERTS ITS OWN PRECONDITION AND THE RESIDUAL IS THE
+    /// UNKNOWN, NEVER A VERDICT. The same shape as a three-valued classifier whose fallthrough
+    /// was `COVERED`, so a session that never ran classified as covered.
+    ///
+    /// The reason MUST name the ABSENT INPUT, so a reader can tell "we looked and it is
+    /// unwired" from "we could not look". An Undetermined crate obliges NEITHER leg: you
+    /// cannot owe an acknowledgement for a fact nobody measured, and you cannot be forbidden
+    /// one either.
+    Undetermined { missing_input: String },
 }
 
 impl GateReachability {
     pub fn is_reachable(&self) -> bool {
         matches!(self, GateReachability::Reachable { .. })
+    }
+
+    /// Was reachability MEASURED on this host at all?
+    ///
+    /// `false` only for [`Self::Undetermined`]. Callers that oblige a row — either by
+    /// demanding one or by forbidding one — must check this FIRST: an unmeasured crate owes
+    /// nothing and is owed nothing.
+    pub fn is_determined(&self) -> bool {
+        !matches!(self, GateReachability::Undetermined { .. })
     }
 
     /// The action that can actually satisfy this state.
@@ -307,6 +337,10 @@ impl GateReachability {
             Self::NotInstalled => "install-gate",
             Self::NotExtracted { .. } => "extract-crate-from-control-plane",
             Self::Unprobed { .. } => "repair-the-crate-manifest",
+            // The remedy is to supply the INPUT, never to wire the crate: sending an operator
+            // to `repair-gate-trigger` here is the wrong-next-action defect that forced
+            // `NotExtracted` and `Unprobed` into their own variants.
+            Self::Undetermined { .. } => "run-where-the-input-exists",
         }
     }
 
@@ -319,9 +353,11 @@ impl GateReachability {
             Self::NotInstalled => "NOT_INSTALLED",
             Self::NotExtracted { .. } => "NOT_EXTRACTED",
             Self::Unprobed { .. } => "UNPROBED",
+            Self::Undetermined { .. } => "UNDETERMINED",
         }
     }
 }
+
 /// Whether a row's verdict may STOP THE FLEET, or is reported and does not.
 ///
 /// # Why this is a separate axis from reachability (`leht`, and an amendment)
@@ -424,12 +460,18 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("named-test-filter-gate", "instrument limitation: source caller scan cannot see its gate-runner manifest check; owner=pane=%19; dies_when=reachability consumes gate metadata or the crate gains an in-tree source caller"),
     ("salvage-taxonomy", "instrument limitation: source caller scan cannot see its terminal operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
     ("worker-tag-gate", "instrument limitation: source caller scan cannot see its operator trigger; owner=pane=%19; dies_when=reachability consumes operator-trigger metadata or the crate gains an in-tree source caller"),
-    // 2026-09-12 %45: DELETION REVERTED. Spawn probe EXISTS (wired_lanes.rs
-    // a_crate_named_in_prose_is_not_a_caller_and_a_quoted_spawn_still_is;
-    // site fast-dispatch/src/main.rs:994). census_gates still Unreachable:
-    // 5d30ee5 reddened the_ratchet_deadline unacknowledged cargo-lane-budget
-    // (+ contabo-reclaim, s1-coverage HOST). 73w7w: naming red -> STOP, no amnesty.
-    ("cargo-lane-budget", "instrument limitation: census_gates does not see env-resolved Command::new at fast-dispatch/src/main.rs:994; a spawn probe exists in wired_lanes.rs and is NOT this census. Dies when census_gates classifies it Reachable"),
+    // 2026-09-12 tzz74: `cargo-lane-budget` ROW DELETED, and its OWN death condition is what
+    // deleted it: "Dies when census_gates classifies it Reachable". It now does — the census
+    // consumes the spawn probe (see `rust_source_invokes`) and resolves the env-resolved
+    // `Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"))` at
+    // fast-dispatch/src/main.rs:994. A row is not deleted because it is inconvenient; it is
+    // deleted because the condition it wrote for itself came true.
+    //
+    // ⛔ THE EARLIER DELETION WAS CORRECTLY REVERTED AND THAT REVERT WAS NOT A MISTAKE. %45
+    // removed the row while the census still said Unreachable, so the naming leg reddened and
+    // the row went back. The difference now is not appetite, it is that the INSTRUMENT changed:
+    // deleting a row whose condition has not fired is amnesty, and deleting one whose condition
+    // HAS fired is the ratchet working.
     // 73w7w: contabo-reclaim deleted with s1-coverage. Same CI REACHABLE (`-p` in
     // contabo-reclaim.yml). Acknowledgement not owed for the same reason.
     ("dispatcher-deadman", "Rust bin selftest/differential-only; every live reference resolves to bin/dispatcher-deadman.sh, absent from this checkout (loop-tick/src/lib.rs:1002-1006). Dies when the shell oracle lands in-repo or the Rust bin gains a caller."),
@@ -782,6 +824,194 @@ fn hook_invokes(hook_path: &Path, gate: &str) -> bool {
     };
     // Scan the raw bytes: the hook may be Mach-O, a script, or a shim.
     bytes.windows(gate.len()).any(|w| w == gate.as_bytes())
+}
+
+/// Is the quoted needle sitting in a CALL ARGUMENT position on this line?
+///
+/// ⛔ THE SECOND OPINION THIS REPLACES. `census_gates` used to judge reachability from
+/// workflows and manifests alone, and its own `Unreachable` reason NAMED the gap it was
+/// leaving: "UNPROBED: ... Command::new spawns from non-gate binaries". Meanwhile
+/// `no-shell-gate`'s `wired_lanes` leg had a strictly more capable probe that DID see those
+/// spawns. Two judgements about one question, and the consuming oracle held the weaker one —
+/// so a death condition keyed on the spawn probe was unsatisfiable by construction for the
+/// census that had to honour it (`omp-orchestrator-tzz74`). This is that probe, moved to where
+/// the CONSUMER lives so there is one implementation rather than two opinions.
+///
+/// ⛔ AND A TOKEN LIST IS THE WRONG RULE, measured 2026-09-12 before this shape was reached. A
+/// `SPAWN_TOKENS` list (`Command::new`, `configured_rust_binary`, `.arg(`) was refused by four
+/// fixtures in one run: a planted caller spells its invocation `invoke("planted-lane")`, and
+/// `invoke` is on nobody's list. A hand-maintained list of "words that mean invocation" is the
+/// registry class again, one layer inside the leg that catches it.
+///
+/// THE GENERAL PROPERTY IS POSITION: a string that is an argument to a CALL is a use of the
+/// thing it names; a string sitting in a data row is prose. The innermost unclosed `(` before
+/// the quote is found, and the character before that paren decides — an identifier character
+/// means `ident(`, a call; anything else (`,`, `[`, `=`, line start) means a tuple or
+/// collection literal, which is data.
+///
+/// | line | verdict |
+/// |---|---|
+/// | `invoke("planted-lane")` | call — `e(` |
+/// | `Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"))` | call — `y(` |
+/// | `("cargo-lane-budget", "instrument limitation: ...")` | tuple — `(` after whitespace |
+/// | `// 5d30ee5 reddened ... cargo-lane-budget` | comment — stripped before this runs |
+#[must_use]
+pub fn quoted_in_call_position(line: &str, quote_start: usize) -> bool {
+    let mut depth = 0i32;
+    for (index, byte) in line[..quote_start].char_indices().rev() {
+        match byte {
+            ')' => depth += 1,
+            '(' if depth > 0 => depth -= 1,
+            '(' => {
+                return line[..index]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '!');
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Does this RUST line INVOKE the named crate, or merely NAME it?
+///
+/// ⛔ MASKING STRING LITERALS WOULD BE THE OPPOSITE MISTAKE. Sibling lints mask string
+/// contents wholesale, which is right when the subject is CODE and wrong here: A SPAWN NAMES
+/// ITS BINARY AS A STRING, so `Command::new("cargo-lane-budget")` is the most literal
+/// invocation there is. Masking would trade a false positive for a false negative and call it
+/// a fix. The discriminator is POSITION, not quoting — outside quotes it is code (a `use`, a
+/// path, an identifier); inside quotes it counts only in call-argument position.
+///
+/// RUST ONLY. In a workflow a quoted string IS the command (`run: cargo test -p some-crate`),
+/// so there is no prose/invocation distinction to draw and drawing one invents false
+/// negatives. This rule was derived from a Rust fixture table and is scoped to that surface.
+#[must_use]
+pub fn rust_line_invokes(line: &str, needle_hyphen: &str, _needle_underscore: &str) -> bool {
+    // ⛔ TWO NARROWINGS, BOTH FORCED BY MEASUREMENT RATHER THAN CHOSEN. This function asks a
+    // NARROWER question than `wired_lanes`' probe of the same shape, and the difference is the
+    // whole correctness of the arm.
+    //
+    // NARROWING 1 — HYPHEN FORM ONLY. Accepting the UNDERSCORE form outside quotes, the way
+    // `wired_lanes` does, flipped THIRTEEN crates to Reachable in one run, because
+    // `use fleet_monitor::…` is a LIBRARY EDGE and the census already answers that in its
+    // FIRST arm (`manifest dependency (N caller(s))`). A second answer to an answered question
+    // is the duplicate-authority defect this bead exists to remove. A hyphen cannot appear in
+    // a Rust identifier, so the hyphen needle is string-only by construction.
+    //
+    // ⛔ NARROWING 2 — THE LINE MUST ACTUALLY SPAWN, and this is the one that matters.
+    // Call-argument POSITION alone means "this string is an argument to SOME function", which
+    // is not invocation. Measured on this tree, position-only still produced ELEVEN false
+    // Reachables and EVERY ONE was a non-spawn:
+    //     join("bin/dispatcher-deadman.sh")            a path to a SHELL script, not the bin
+    //     format!(".../fast-dispatch.lock")            a LOCK FILE path
+    //     stderr.contains("fuzz-build-gate")           a substring CHECK
+    //     ledger.write("refill-idle-panes", saga)      a ledger KEY
+    //     crate_with("crate-soundness-verify", …)      a fixture TABLE builder
+    //     unwrap_or_else(|_| "reap-finished-panes"…)   a DEFAULT VALUE
+    // Deleting eleven correct allowance rows on that evidence would have been far worse than
+    // the red it was chasing. The subject is a PROCESS SPAWN, so the predicate names the
+    // spawn constructor: `Command::new`. That is ONE structural token defining the subject,
+    // not a hand-maintained list of words that might mean invocation — and it is exactly the
+    // surface the census's own Unreachable reason used to list as UNPROBED.
+    //
+    // BOUND, STATED: a resolver assigned to a variable and passed to `Command::new` on a LATER
+    // line is missed. That is a FALSE NEGATIVE — the safe direction, since it can only leave
+    // an allowance row standing, never delete a correct one.
+    if needle_hyphen.trim().is_empty() || !line.contains("Command::new") {
+        return false;
+    }
+    let mut from = 0usize;
+    while let Some(offset) = line[from..].find(needle_hyphen) {
+        let at = from + offset;
+        // Must be INSIDE a string literal: an odd number of quotes precedes it.
+        if line[..at].matches('"').count() % 2 == 1 {
+            if let Some(quote_start) = line[..at].rfind('"') {
+                if quoted_in_call_position(line, quote_start) {
+                    return true;
+                }
+            }
+        }
+        from = at + needle_hyphen.len();
+    }
+    false
+}
+
+/// Strip `//` line comments so a crate NAMED in prose is never read as a caller.
+///
+/// Deliberately line-comments only: this feeds a per-line position rule, and a block-comment
+/// state machine would be a second parser to keep correct. A crate mentioned inside `/* */`
+/// reads as a caller, which is the SAFE direction here — it can only make a row Reachable,
+/// i.e. delete an allowance, never invent an Unreachable.
+fn strip_line_comments(source: &str) -> String {
+    source
+        .lines()
+        .map(|line| match line.find("//") {
+            Some(at) if line[..at].matches('"').count() % 2 == 0 => &line[..at],
+            _ => line,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A Rust spawn/use site for `crate_name` anywhere in the workspace OUTSIDE its own crate.
+///
+/// A crate naming ITSELF is not wiring, so its own directory is skipped. Returns the first
+/// `path:line` found, which becomes the reachability TRIGGER — a reader gets the site, not
+/// just the verdict.
+fn rust_source_invokes(repo_root: &Path, crate_name: &str) -> Option<String> {
+    let needle_underscore = crate_name.replace('-', "_");
+    let own_prefix = repo_root.join("crates").join(crate_name);
+    let crates_dir = repo_root.join("crates");
+    let mut stack = vec![crates_dir];
+    let mut scanned = 0usize;
+    let mut hit = None;
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path != own_prefix {
+                    stack.push(path);
+                }
+                continue;
+            }
+            // PRODUCTION SOURCES ONLY. A spawn inside a crate's own test fixtures is not a
+            // production invocation site, and counting it would let a test wire a lane — the
+            // same reason `wired_lanes` strips tests before it scans.
+            if path.extension().and_then(|s| s.to_str()) != Some("rs")
+                || !path.components().any(|c| c.as_os_str() == "src")
+            {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            scanned += 1;
+            if hit.is_some() {
+                continue;
+            }
+            for (index, line) in strip_line_comments(&text).lines().enumerate() {
+                if rust_line_invokes(line, crate_name, &needle_underscore) {
+                    hit = Some(format!(
+                        "{}:{}",
+                        path.strip_prefix(repo_root).unwrap_or(&path).display(),
+                        index + 1
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+    // ANTI-VACUITY: a scan that read NO files cannot report "no caller". An empty scan set is
+    // an absent measurement, and reporting it as absence of invocation would delete allowance
+    // rows on the strength of a broken walk.
+    if scanned == 0 {
+        return None;
+    }
+    hit
 }
 
 /// Is this gate declared in a workflow that a remote could run?
@@ -1280,11 +1510,44 @@ pub fn crate_reachability(
                 row.surface, row.schedule, row.executor
             ),
         }
+    } else if let (true, Some(site)) = (has_bin, rust_source_invokes(repo_root, crate_name)) {
+        // AFTER every other reachable arm, for the same reason the scheduler arm is: it may
+        // only turn an Unreachable row Reachable and must never re-attribute a row an earlier
+        // arm already explained.
+        //
+        // ⭐ THIS ARM IS THE WHOLE OF `omp-orchestrator-tzz74`. The census used to stop at
+        // workflows and manifests while `wired_lanes` could already see `Command::new` spawns,
+        // so a crate spawned only from Rust read Unreachable to the CONSUMING oracle and its
+        // ADVISORY_ALLOWANCE death condition ("Dies when census_gates classifies it Reachable")
+        // was unsatisfiable by construction. Measured specimen: `cargo-lane-budget`, spawned at
+        // `fast-dispatch/src/main.rs:994` via `Command::new(configured_rust_binary("FD_BUDGET",
+        // "cargo-lane-budget"))` — an env-resolved binary name no workflow grep can see.
+        //
+        // ⛔ AND IT IS NOT A `contains`. A crate NAMED in prose is not a caller: the position
+        // rule refuses `loop-coverage/src/lib.rs:212`, where the same string sits in a
+        // `TypedEdgeCase` description. That distinction is the difference between deleting a
+        // stale row and deleting a CORRECT one.
+        GateReachability::Reachable {
+            trigger: format!("rust spawn/use site {site}"),
+        }
+    } else if has_bin && !has_remote && workflow_invokes(repo_root, crate_name) {
+        // ⛔ THE INPUT IS ABSENT, SO THERE IS NO VERDICT TO GIVE (`omp-orchestrator-tzz74`).
+        // A workflow DOES name this crate, and the only thing standing between that and
+        // `Reachable` is `has_remote` — an input this host did not supply. Reporting
+        // `Unreachable` here would be a measurement we did not take, and it is what made the
+        // naming leg and the stale-allowance leg contradict each other on every worker.
+        GateReachability::Undetermined {
+            missing_input: format!(
+                "no git remote in this checkout, so workflow reachability for \
+                 `.github/workflows` could not be evaluated; surfaces probed [{}]",
+                probed_surfaces(hook_path, has_remote, scheduler)
+            ),
+        }
     } else if has_bin {
         GateReachability::Unreachable {
             reason: format!(
-                "no invocation site on the surfaces probed [{}]; UNPROBED: system launchd, \
-                 shell-wrapped cron commands, and Command::new spawns from non-gate binaries",
+                "no invocation site on the surfaces probed [{}]; UNPROBED: system launchd and \
+                 shell-wrapped cron commands",
                 probed_surfaces(hook_path, has_remote, scheduler)
             ),
         }
