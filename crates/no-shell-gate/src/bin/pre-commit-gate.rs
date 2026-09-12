@@ -1394,7 +1394,12 @@ fn crate_atom_gate_on_commit_path(repo_root: &Path, staged: &[String], refusals:
         return;
     };
     let mut command = std::process::Command::new(&binary);
-    command.current_dir(repo_root).arg("check");
+    // `--attribute-staged` (omp-orchestrator-nu8lc): the census keeps every refusal for CI
+    // and `--repo .`, but on the COMMIT path a finding about a crate this commit does not
+    // touch is REPORTED by the binary, not refused. Foreign rows are still printed.
+    command
+        .current_dir(repo_root)
+        .args(["check", "--attribute-staged"]);
     match subprocess_contract::bounded_output(&mut command, std::time::Duration::from_secs(180)) {
         subprocess_contract::BoundedOutcome::Completed(output) => {
             let text = format!(

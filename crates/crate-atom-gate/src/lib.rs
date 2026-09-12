@@ -580,6 +580,71 @@ pub fn verdict(rows: &[Row], scanned_crates: usize, allowances: &Allowances) -> 
     }
 }
 
+/// Split a verdict's refusal reasons into the ones THIS COMMIT is responsible for and the
+/// ones it is not, keyed on whether any staged path lies under the named crate.
+///
+/// THE DEFECT THIS CLOSES (`omp-orchestrator-nu8lc`). On the commit path this gate can
+/// REFUSE A COMMIT FOR A CRATE THE COMMIT NEVER TOUCHES. The tree carried 75 dirty files
+/// tonight; a peer's in-flight crate is enough to refuse your unrelated commit, and a
+/// false red against the committer is worse than a silent gate because it trains every
+/// reader to discount the verdict.
+///
+/// NOT AN INDEX READER, and that distinction is the bead. The surface is CORRECT: this
+/// gate's subject is a census -- is the repo's crate set atomic -- and
+/// `measure_untracked_members` reconciles disk against HEAD against the staged set on
+/// purpose, because an untracked member is invisible to any index read BY DEFINITION.
+/// Classifying by instrument ("it touches the filesystem") instead of by subject ("what
+/// question is it answering") is how the first statement of this defect was wrong, and it
+/// was withdrawn. What is wrong is ATTRIBUTION, and attribution is what this fixes.
+///
+/// FOREIGN IS REPORTED, NEVER SILENCED. The caller must print the foreign reasons, typed
+/// distinctly, and only then exit 0. Folding them into the pass is the actual weakening --
+/// this function hands both halves back and decides nothing.
+///
+/// CRATE GRANULARITY, stated as the limit: a reason is attributable when a staged path
+/// lies under `crates/<name>/`. That is the granularity at which rows are produced, so it
+/// cannot be refined without per-evidence provenance the assessor does not carry. A row
+/// produced from a registry file OUTSIDE the crate's directory is attributed to the crate,
+/// which is conservative in the REFUSING direction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagedPartition {
+    /// Reasons naming a crate this commit touches. These REFUSE.
+    pub attributable: Vec<String>,
+    /// Reasons naming a crate this commit does not touch. These are REPORTED.
+    pub foreign: Vec<String>,
+}
+
+/// True when any staged path lies under `crates/<crate_name>/`.
+pub fn commit_touches_crate(crate_name: &str, staged: &[String]) -> bool {
+    let prefix = format!("crates/{crate_name}/");
+    staged.iter().any(|path| path.starts_with(&prefix))
+}
+
+/// Partition `reasons` by staged membership. A reason whose crate cannot be identified is
+/// ATTRIBUTABLE: an unparsed reason must never become a silent foreign row.
+pub fn partition_by_staged(reasons: &[String], staged: &[String]) -> StagedPartition {
+    let mut attributable = Vec::new();
+    let mut foreign = Vec::new();
+    for reason in reasons {
+        match crate_named_in_reason(reason) {
+            Some(name) if !commit_touches_crate(name, staged) => foreign.push(reason.clone()),
+            _ => attributable.push(reason.clone()),
+        }
+    }
+    StagedPartition {
+        attributable,
+        foreign,
+    }
+}
+
+/// The crate name inside a `MISSING <crate> part<N> ...` reason, if the shape matches.
+///
+/// Keyed on the shape `verdict` itself emits, never on a hand list of crate names: a hand
+/// list is how a census went stale at 27 while the tree held 51.
+fn crate_named_in_reason(reason: &str) -> Option<&str> {
+    reason.strip_prefix("MISSING ")?.split_whitespace().next()
+}
+
 /// Ceiling arithmetic, in both directions.
 ///
 /// A live count ABOVE the ceiling is a regression: a new crate widened a known gap.

@@ -106,6 +106,57 @@ fn main() -> ExitCode {
         },
     };
     outcome = fold_untracked(outcome, measure_untracked_members(&repo));
+
+    // COMMIT-PATH ATTRIBUTION (omp-orchestrator-nu8lc), OPT-IN and only here.
+    //
+    // A census invocation -- CI, `--repo .`, a human audit -- must keep every refusal: its
+    // subject is the whole repo. A COMMIT's subject is the commit, and on a tree carrying
+    // 75 dirty files this gate would otherwise refuse your commit for a peer's in-flight
+    // crate. A false red against the committer is worse than a silent gate, because it
+    // trains every reader to discount the verdict.
+    //
+    // FOREIGN IS PRINTED, NEVER SILENCED, and it is printed BEFORE the exit code is
+    // decided, so a reader of a green run still sees what the census found.
+    if args.iter().any(|a| a == "--attribute-staged") {
+        if let GateVerdict::Refused { reasons } = &outcome {
+            match git_name_only(&repo, &["diff", "--cached", "--name-only"]) {
+                // AN UNREADABLE STAGED SET IS NOT AN EMPTY ONE. Without it every reason
+                // would look foreign and the gate would soften itself into silence, so the
+                // refusal stands untouched and says why.
+                Err(reason) => {
+                    eprintln!(
+                        "crate-atom-gate: ATTRIBUTION_UNAVAILABLE detail={reason} -- the \
+                         staged set could not be read, so every refusal stands"
+                    );
+                }
+                Ok(staged) => {
+                    let split = crate_atom_gate::partition_by_staged(reasons, &staged);
+                    for foreign in &split.foreign {
+                        eprintln!(
+                            "crate-atom-gate: FOREIGN_NOT_ATTRIBUTABLE staged_paths={} \
+                             reason={foreign} -- a census finding about a crate this commit \
+                             does not touch. REPORTED, not refused; fix it in its own commit.",
+                            staged.len()
+                        );
+                    }
+                    outcome = if split.attributable.is_empty() {
+                        eprintln!(
+                            "crate-atom-gate: ATTRIBUTED_CLEAN staged_paths={} foreign={} \
+                             attributable=0 -- every census finding belongs to a crate this \
+                             commit does not touch",
+                            staged.len(),
+                            split.foreign.len()
+                        );
+                        GateVerdict::Pass
+                    } else {
+                        GateVerdict::Refused {
+                            reasons: split.attributable,
+                        }
+                    };
+                }
+            }
+        }
+    }
     emit(&outcome, &rows, want_json)
 }
 
