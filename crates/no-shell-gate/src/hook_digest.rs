@@ -51,12 +51,46 @@ use sha2::{Digest, Sha256};
 ///
 /// `commit_ratchets` consumes this rather than declaring a second copy, and
 /// `the_ratchet_and_the_digest_cover_the_same_source_set` asserts that they cannot drift.
+///
+/// ⭐ WIDENED 2026-09-12 (`omp-orchestrator-p3eu5`, DEFECT B) FROM FIVE CRATES / 24 FILES TO
+/// NINE / 30, AND THE SELECTION RULE IS INFLUENCE-TIMES-CHURN, NOT LINKAGE.
+///
+/// The four added crates are the ones for which a commit EXISTS that changed their `src/`
+/// alongside a change to the hook's own decision code:
+///   `pre-delete-citation-check`  f194a01 — the close-reason gate's INDEX-vs-worktree fix
+///   `text-structure`             6fbb5fa — the masking recogniser
+///   `subprocess-contract`        4fc649a — and its FAILURE MODE IS ITSELF A VERDICT: a
+///                                `bounded_output` timeout returns `GateError::GitFailed`
+///                                (`lib.rs:159-170`), so its deadline decides REFUSE vs HANG
+///   `doctrine-retirement-gate`   7325930 — changed what the gate refuses
+///
+/// ⛔ AND FOUR CANDIDATES WERE REFUSED FOR REASONS WORTH KEEPING, because each is the sort of
+/// argument the next author will otherwise re-litigate:
+///   `omp-inventory-map`   QUALIFIES ON INFLUENCE (c26cd3e) AND FAILS ON ECONOMICS. 11 files at
+///       34 commits/7d, which MORE THAN DOUBLES the fleet's heal rate by itself. Revisit below
+///       ~5 commits/7d, or cover an isolable subset of its drift API.
+///   `staged-build-gate`   DISARMED behind `OMP_STAGED_BUILD_GATE=1` (`pre-commit-gate.rs:616`).
+///   `r1-breadth-gate`     DISARMED behind `OMP_R1_BREADTH_GATE=1` (`:228`).
+///       Both have REAL verdict-changing commits (41cafbb, 9f9a994) whose verdicts DO NOT FIRE.
+///       Compiled in, so a change moves the artifact; disarmed, so it does not move the
+///       decision. THEY BECOME WATCHED THE DAY THEY ARE ARMED.
+///   `preregistration-gate` UNMEASURED, not exempt-on-merit: its imported symbols ARE used in
+///       the hook bin and ZERO co-commits exist. A quiet crate and a dead one look identical
+///       over any window.
+///
+/// EVERY COMMIT TO A COVERED SOURCE IS ONE FLEET-WIDE `STALE_HEALING` EVENT. That is the cost
+/// this list is priced in: 24 files / 42 commits-per-7d before, 30 / 58 after. A widening is
+/// never free and the denominator is printed on every run as `covered_sources=N`.
 pub const HOOK_SOURCE_CRATES: &[&str] = &[
     "no-shell-gate",
     "state-wildcard-lint",
     "path-literal-guard",
     "orchestration-tick-gate",
     "undrained-pipe-lint",
+    "pre-delete-citation-check",
+    "text-structure",
+    "subprocess-contract",
+    "doctrine-retirement-gate",
 ];
 
 /// Path deps LINKED INTO the hook binary that are deliberately NOT covered by the digest, each
@@ -86,49 +120,47 @@ pub const HOOK_SOURCE_CRATES: &[&str] = &[
 pub const DELIBERATELY_UNWATCHED: &[(&str, &str)] = &[
     (
         "finding",
-        "a typed record format the gate emits INTO; it carries no decision the hook makes",
+        "a typed record format the gate emits INTO; it carries no decision the hook makes, and \
+         zero `finding::` references exist anywhere in this crate's src",
     ),
     (
         "crate-atom-gate",
-        "reconciles disk against git for crate membership; its subject is the repo, not the hook",
+        "ZERO library references in this crate's src: the hook reaches it ONLY by SPAWNING an \
+         external binary (pre-commit-gate.rs:1403-1406, with its own BINARY_ABSENT arm), so \
+         covering its src would be churn against an artifact this digest does not describe. Its \
+         freshness is a real question about a DIFFERENT artifact and has its own bead",
     ),
     (
         "convergence-stamp",
-        "stamps convergence artifacts after a decision is taken, never inside one",
+        "stamps convergence artifacts after a decision is taken, never inside one; zero \
+         `convergence_stamp::` references in this crate's src",
     ),
     (
         "preregistration-gate",
-        "guards preregistration documents, a surface the commit path does not consult",
-    ),
-    (
-        "pre-delete-citation-check",
-        "WATCHED-ADJACENT: measured to alter hook behaviour at f194a01, so its src is covered \
-         transitively by no-shell-gate's own bin; listed to record that the coupling is known",
-    ),
-    (
-        "subprocess-contract",
-        "bounded spawn plumbing; a change alters HOW a child is run, not WHICH verdict is reached",
+        "UNMEASURED, NOT EXEMPT ON MERIT: its imported symbols ARE used in the hook bin, and no \
+         commit exists in which its src moved alongside a hook decision change. A quiet crate \
+         and a dead one look identical over any window, so this row records ignorance, not \
+         innocence -- promote it the moment a co-commit appears",
     ),
     (
         "omp-inventory-map",
-        "an inventory surface consumed by reporting lanes, not by the commit-path ratchets",
+        "QUALIFIES ON INFLUENCE (c26cd3e moved commit_ratchets::omp_drift) AND FAILS ON \
+         ECONOMICS: 11 src files at 34 commits/7d, which MORE THAN DOUBLES the fleet's \
+         STALE_HEALING rate on its own. Revisit below ~5 commits/7d, or cover an isolable \
+         subset of its version_drift API",
     ),
     (
         "staged-build-gate",
-        "its refusal is reached through the bin's own logic, which IS covered by the digest",
+        "DISARMED: its call site is behind `OMP_STAGED_BUILD_GATE=1` (pre-commit-gate.rs:616), \
+         so 41cafbb's real verdict change does not fire on a default commit. Compiled in, so a \
+         change moves the artifact; disarmed, so it does not move the decision. WATCH IT THE \
+         DAY IT IS ARMED",
     ),
     (
         "r1-breadth-gate",
-        "breadth adjudication over findings; no commit-path ratchet calls into it",
-    ),
-    (
-        "doctrine-retirement-gate",
-        "sweeps AGENTS.md doctrine rows; scoped to a document the commit path does not gate on",
-    ),
-    (
-        "text-structure",
-        "WATCHED-ADJACENT: measured at 6fbb5fa to change masking behaviour; recorded rather than \
-         silently exempt, and its callers in this crate ARE covered",
+        "DISARMED: its call site is behind `OMP_R1_BREADTH_GATE=1` (pre-commit-gate.rs:228), so \
+         9f9a994's commit-path verdict partition does not fire on a default commit. WATCH IT \
+         THE DAY IT IS ARMED",
     ),
     // NO ROWS FOR REGISTRY CRATES OR DEV-DEPENDENCIES, ON PURPOSE. `serde`/`sha2` are registry
     // deps, and `asupersync-conformance`/`omp-orchestrator` appear only under

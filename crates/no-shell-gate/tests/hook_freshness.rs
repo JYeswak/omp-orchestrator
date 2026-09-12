@@ -602,3 +602,77 @@ fn an_unreadable_covered_source_is_a_typed_refusal_not_a_pass() {
         ),
     }
 }
+
+// ── p3eu5: THE DEFECT B WIDENING, AND THE LEG THAT STOPS IT BEING A NO-OP ──────────────────
+
+/// ANTI-VACUITY FOR THE WIDENING ITSELF.
+///
+/// ⛔ A WIDENING THAT LEAVES `hook_source_files()` THE SAME LENGTH IS A NO-OP DRESSED AS A FIX,
+/// and it would be INVISIBLE BEHIND A GREEN: every other leg in this file passes just as well
+/// over 24 files as over 30. The only thing that distinguishes "we widened the covered set"
+/// from "we edited a comment" is the DENOMINATOR, so the denominator is asserted.
+///
+/// The count is pinned as a FLOOR plus an exact-membership check rather than a bare integer: a
+/// bare `== 30` breaks every time an unrelated crate gains a source file, which trains people
+/// to bump the number without reading it — the ratchet-rot this whole bead is about.
+#[test]
+fn the_widened_covered_set_is_strictly_larger_and_names_its_new_crates() {
+    let root = repo_root();
+    let covered = no_shell_gate::hook_digest::hook_source_files(&root);
+    assert!(
+        !covered.is_empty(),
+        "RULE widening_non_vacuous: an empty covered set would satisfy every comparison below \
+         while measuring nothing"
+    );
+    // 24 was the pre-widening figure, measured and printed by the live hook as
+    // `covered_sources=24`. The widened set must be STRICTLY larger or the change did nothing.
+    assert!(
+        covered.len() > 24,
+        "RULE widening_grew: the covered set is {} files, not more than the pre-widening 24 — a \
+         widening that does not grow the denominator is a no-op",
+        covered.len()
+    );
+
+    // MEMBERSHIP, not just size: growth could come from an unrelated crate gaining a file.
+    for promoted in [
+        "crates/pre-delete-citation-check/src/",
+        "crates/text-structure/src/",
+        "crates/subprocess-contract/src/",
+        "crates/doctrine-retirement-gate/src/",
+    ] {
+        assert!(
+            covered.iter().any(|path| {
+                path.strip_prefix(&root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .starts_with(promoted)
+            }),
+            "RULE widening_named: {promoted} was promoted out of DELIBERATELY_UNWATCHED and must \
+             contribute at least one covered source; growth from some other crate is not this \
+             widening"
+        );
+    }
+
+    // And the held-back crates must STILL be absent, or the widening quietly overshot its
+    // ruling. `omp-inventory-map` is the expensive one: 11 files at 34 commits/7d.
+    for held in [
+        "crates/omp-inventory-map/src/",
+        "crates/staged-build-gate/src/",
+        "crates/r1-breadth-gate/src/",
+        "crates/preregistration-gate/src/",
+        "crates/crate-atom-gate/src/",
+    ] {
+        assert!(
+            !covered.iter().any(|path| {
+                path.strip_prefix(&root)
+                    .unwrap_or(path)
+                    .to_string_lossy()
+                    .replace('\\', "/")
+                    .starts_with(held)
+            }),
+            "RULE widening_scoped: {held} was HELD BACK by the p3eu5 ruling and must not be \
+             covered; every covered source is a recurring fleet-wide STALE_HEALING cost"
+        );
+    }
+}
