@@ -35,11 +35,11 @@ use subprocess_contract::{bounded_output, bounded_output_stdin, bounded_status, 
 mod scheduled_lane_telemetry;
 
 use fleet_monitor::{
-    attention_end_cursor, attention_wake_reason, invoker_from_chain, json_escape, lock,
-    ntm_list_census_line, ntm_list_is_empty, observe_scan_set, pane_liveness, parse_ancestor_rows,
-    publish_failure_detail, publish_invocation, raw_open_count, resolve_self_session, safe_panes,
-    FleetMonitorInvoker, LivenessState, ObserveRules, ObserveScan, RunDeadline, SelfScope,
-    EXIT_CANNOT_OBSERVE,
+    admission_disclosure, attention_end_cursor, attention_wake_reason, invoker_from_chain,
+    json_escape, lock, ntm_list_census_line, ntm_list_is_empty, observe_scan_set, pane_admission,
+    pane_liveness, parse_ancestor_rows, publish_failure_detail, publish_invocation,
+    raw_open_count, resolve_self_session, safe_panes, FleetMonitorInvoker, LivenessState,
+    ObserveRules, ObserveScan, PaneAdmission, RunDeadline, SelfScope, EXIT_CANNOT_OBSERVE,
 };
 
 const USAGE: &str = "usage: fleet-monitor [status [--json]|why [--json]|capabilities [--json]|robot-docs guide|--all|--self] [--dispatch|--report-only] [--selftest] [--topology-only]";
@@ -526,19 +526,22 @@ fn main() -> ExitCode {
     ));
 
     // ── 2. IDLE PANES WITH READY WORK ──────────────────────────────────────────────────────
-    let (found, liveness_blocked) = idle_scan(&cfg, &repos);
+    let (found, liveness_blocked, unmeasured) = idle_scan(&cfg, &repos);
 
     if found == 0 {
-        if liveness_blocked > 0 {
+        if liveness_blocked > 0 || unmeasured > 0 {
             say(&format!(
-                "[{}] no live idle-pane/ready-work pairs; liveness blocked {liveness_blocked} candidate pane(s).",
+                "[{}] no live idle-pane/ready-work pairs; liveness blocked {liveness_blocked} candidate pane(s), rate-limit census did not measure {unmeasured}.",
                 ts()
             ));
             cfg.log(
                 "fleet_liveness_blocked",
-                &format!(r#""panes":{liveness_blocked}"#),
+                &format!(r#""panes":{liveness_blocked},"unmeasured":{unmeasured}"#),
             );
         } else {
+            // ONLY REACHABLE WHEN EVERY WITHHOLDING WAS MEASURED. An unmeasured pane can never
+            // reach this line, because "genuinely drained" is a claim about panes that were
+            // looked at.
             say(&format!(
                 "[{}] no idle-pane/ready-work pairs. Fleet is either busy or genuinely drained.",
                 ts()
@@ -1070,13 +1073,19 @@ fn attention_wait(cfg: &Cfg) -> String {
     attention_wake_reason(&att)
 }
 
-fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
+/// Returns `(actionable_repos, liveness_blocked_panes, unmeasured_panes)`.
+///
+/// The third element is NOT folded into the second: "liveness refused this pane" and "nothing
+/// measured this pane" are different facts, and a fleet reporting zero capacity must be able to
+/// say which one it is holding.
+fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64, u64) {
     say(&format!(
         "[{}] scanning for idle panes beside ready work:",
         ts()
     ));
     let mut found = 0u64;
     let mut liveness_blocked = 0u64;
+    let mut fleet_unmeasured = 0u64;
 
     for repo in repos {
         if cfg.deadline.expired() {
@@ -1130,6 +1139,7 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
         let mut busy = 0u64;
         let mut wedged = 0u64;
         let mut unproven = 0u64;
+        let mut unmeasured = 0u64;
         // ⛔ ae4x8: A RATE-LIMITED AGENT STILL PAINTS ITS PROMPT FOOTER, so `pane_liveness`
         // -- which reads PAINT -- returns LIVE for a pane blocked for days. Measured
         // 2026-09-11: two panes carried `is_rate_limited: true` with "Try again in ~5211 min"
@@ -1157,78 +1167,83 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
                     .arg("-20"),
             );
             let l = pane_liveness(&text);
-            match l.state {
-                // Three-valued on purpose. `Some(true)` is a MEASURED block. `None` is
-                // UNMEASURED -- the verb refused or never named this pane -- and is counted as
-                // idle so a dead `ntm` cannot zero the fleet's capacity, which is the
-                // fleet-blocking shape this repo has already paid for once today. The bound is
-                // disclosed rather than hidden, so a reader knows which coverage produced the
-                // number.
-                LivenessState::Live => match rate_limits.is_rate_limited(pane) {
-                    Some(true) => {
-                        liveness_blocked += 1;
-                        say(&format!(
-                            "  RATE-LIMITED {repo} pane {pane}: present at a prompt and cannot \
-                             continue; NOT capacity ({})",
-                            rate_limits.bound()
-                        ));
-                        cfg.log(
-                            "pane_rate_limited",
-                            &format!(
-                                r#""repo":"{}","pane":"{}","bound":"{}""#,
-                                json_escape(repo),
-                                json_escape(pane),
-                                json_escape(&rate_limits.bound())
-                            ),
-                        );
-                    }
-                    _ => idle += 1,
-                },
-                LivenessState::Busy => {
+            // THE DECISION IS A PURE FUNCTION and the ruling on its UNMEASURED arm lives with
+            // it in `fleet_monitor::pane_admission`. It is not inlined here because inlining it
+            // in this tmux loop is precisely why it had zero legs while the parse it consumes
+            // had fifteen.
+            let admission = pane_admission(l.state, rate_limits.is_rate_limited(pane));
+            // ⛔ DISCLOSURE AND ITS LOG SIT OUTSIDE THE MATCH ON PURPOSE. The defect being
+            // fixed was a `bound()` call reachable from ONE arm, so the coverage went unstated
+            // in exactly the case it existed for. Keyed on the verdict instead of the branch,
+            // no census-derived verdict can be recorded without the bound it was produced
+            // under, and the event name has one source rather than one per arm.
+            if let Some(line) = admission_disclosure(admission, repo, pane, &rate_limits.bound()) {
+                say(&line);
+            }
+            if let Some(event) = admission.log_event() {
+                let detail = if admission.discloses_census_bound() {
+                    format!(
+                        r#""repo":"{}","pane":"{}","bound":"{}""#,
+                        json_escape(repo),
+                        json_escape(pane),
+                        json_escape(&rate_limits.bound())
+                    )
+                } else {
+                    format!(
+                        r#""repo":"{}","pane":"{}","reason":"{}""#,
+                        json_escape(repo),
+                        json_escape(pane),
+                        l.reason
+                    )
+                };
+                cfg.log(event, &detail);
+            }
+            match admission {
+                PaneAdmission::Idle => idle += 1,
+                PaneAdmission::RateLimited => liveness_blocked += 1,
+                // WITHHELD, NOT BLOCKED, AND NOT CAPACITY. Deliberately kept out of
+                // `liveness_blocked`: that counter means "liveness measured this pane and
+                // refused it", and folding an UNMEASURED pane into it would report a
+                // measurement that was never taken. Its own tally, so the repo line below can
+                // say WHY the capacity is missing rather than going quiet.
+                PaneAdmission::Unmeasured => unmeasured += 1,
+                PaneAdmission::Busy => {
                     busy += 1;
                     liveness_blocked += 1;
                     say(&format!("  BUSY        {repo} pane {pane}: {}", l.reason));
-                    cfg.log(
-                        "pane_busy",
-                        &format!(
-                            r#""repo":"{}","pane":"{}","reason":"{}""#,
-                            json_escape(repo),
-                            json_escape(pane),
-                            l.reason
-                        ),
-                    );
                 }
-                LivenessState::Wedged => {
+                PaneAdmission::Wedged => {
                     wedged += 1;
                     liveness_blocked += 1;
                     say(&format!("  WEDGED      {repo} pane {pane}: {}", l.reason));
-                    cfg.log(
-                        "pane_wedged",
-                        &format!(
-                            r#""repo":"{}","pane":"{}","reason":"{}""#,
-                            json_escape(repo),
-                            json_escape(pane),
-                            l.reason
-                        ),
-                    );
                 }
-                LivenessState::Unproven => {
+                PaneAdmission::Unproven => {
                     unproven += 1;
                     liveness_blocked += 1;
                     say(&format!("  UNPROVEN    {repo} pane {pane}: {}", l.reason));
-                    cfg.log(
-                        "pane_liveness_unproven",
-                        &format!(
-                            r#""repo":"{}","pane":"{}","reason":"{}""#,
-                            json_escape(repo),
-                            json_escape(pane),
-                            l.reason
-                        ),
-                    );
                 }
             }
         }
+        fleet_unmeasured += unmeasured;
         if idle == 0 {
+            // A REPO THAT REPORTS NO CAPACITY MUST SAY WHETHER IT MEASURED NONE OR MEASURED
+            // NOTHING. Skipping silently here is the shape of the 2026-08-26 false zero: the
+            // lane went quiet and the refusals downstream carried no cause.
+            if unmeasured > 0 {
+                say(&format!(
+                    "  UNMEASURED  {repo}: 0 idle pane(s) — {unmeasured} live pane(s) WITHHELD \
+                     because the rate-limit census did not measure them ({})",
+                    rate_limits.bound()
+                ));
+                cfg.log(
+                    "repo_capacity_unmeasured",
+                    &format!(
+                        r#""repo":"{}","withheld":{unmeasured},"bound":"{}""#,
+                        json_escape(repo),
+                        json_escape(&rate_limits.bound())
+                    ),
+                );
+            }
             continue;
         }
 
@@ -1249,9 +1264,9 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
         let parked = raw.saturating_sub(ready);
 
         if ready > 0 {
-            if parked > 0 || busy > 0 || wedged > 0 || unproven > 0 {
+            if parked > 0 || busy > 0 || wedged > 0 || unproven > 0 || unmeasured > 0 {
                 say(&format!(
-                    "  ACTIONABLE  {repo}: {idle} live idle pane(s), {ready} dispatchable ({parked} parked, {busy} busy, {wedged} wedged, {unproven} unproven)"
+                    "  ACTIONABLE  {repo}: {idle} live idle pane(s), {ready} dispatchable ({parked} parked, {busy} busy, {wedged} wedged, {unproven} unproven, {unmeasured} unmeasured)"
                 ));
             } else {
                 say(&format!(
@@ -1261,7 +1276,7 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
             cfg.log(
                 "idle_with_work",
                 &format!(
-                    r#""repo":"{}","idle_panes":{idle},"dispatchable":{ready},"parked":{parked},"wedged":{wedged},"unproven":{unproven}"#,
+                    r#""repo":"{}","idle_panes":{idle},"dispatchable":{ready},"parked":{parked},"wedged":{wedged},"unproven":{unproven},"unmeasured":{unmeasured}"#,
                     json_escape(repo)
                 ),
             );
@@ -1282,7 +1297,7 @@ fn idle_scan(cfg: &Cfg, repos: &[String]) -> (u64, u64) {
             ));
         }
     }
-    (found, liveness_blocked)
+    (found, liveness_blocked, fleet_unmeasured)
 }
 
 /// Count dispatchable beads through THE SHARED policy filter (installed binary preferred, the

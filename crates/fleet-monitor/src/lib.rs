@@ -226,6 +226,141 @@ pub fn pane_liveness(text: &str) -> FleetMonitorLiveness {
     }
 }
 
+/// What the OBSERVE lane does with ONE pane once liveness AND the rate-limit census have both
+/// answered. Liveness alone cannot decide: a rate-limited agent still paints its prompt footer,
+/// so `LivenessState::Live` means PRESENT, not DISPATCHABLE (bead ae4x8, two panes blocked ~3.6
+/// days while the scraper called both LIVE).
+///
+/// ⛔ THE THREE CENSUS ANSWERS ARE THREE DISPOSITIONS, NOT TWO. The shape this replaces matched
+/// `Some(true)` and collapsed `Some(false) | None` into one `_ => idle += 1` arm, so an
+/// UNMEASURED pane was counted as free capacity — fabricating dispatchable capacity in exactly
+/// the moment the oracle that would have refused it was unreachable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaneAdmission {
+    /// Live, and the census MEASURED this pane as not rate-limited. The only free capacity.
+    Idle,
+    /// Live, and the census MEASURED this pane as rate-limited: present and unable to continue.
+    RateLimited,
+    /// Live, and the census DID NOT MEASURE this pane — it refused, or it answered without
+    /// naming this pane. **NOT** "not rate-limited".
+    Unmeasured,
+    /// Liveness itself withheld the pane; the census is not consulted.
+    Busy,
+    Wedged,
+    Unproven,
+}
+
+impl PaneAdmission {
+    /// The ONE question the dispatch gate asks. Anything that is not a measured-free live pane
+    /// answers `false`.
+    #[must_use]
+    pub fn counts_as_idle(self) -> bool {
+        matches!(self, PaneAdmission::Idle)
+    }
+
+    /// Whether this verdict was PRODUCED BY THE CENSUS and therefore must name the coverage it
+    /// was produced under.
+    ///
+    /// ⛔ THE MITIGATION THE OLD COMMENT CLAIMED WAS UNREACHABLE. `bound()` was called only
+    /// inside the `Some(true)` arm, so the census bound was printed exactly when the census had
+    /// answered and never when it had not — a disclosure that went silent in the one case it
+    /// existed for. Disclosure is a property of the verdict, not of one branch, so it is carried
+    /// here where every census-derived arm inherits it.
+    #[must_use]
+    pub fn discloses_census_bound(self) -> bool {
+        matches!(self, PaneAdmission::RateLimited | PaneAdmission::Unmeasured)
+    }
+
+    /// The structured-log event for this verdict, or `None` where the lane logs nothing.
+    #[must_use]
+    pub fn log_event(self) -> Option<&'static str> {
+        match self {
+            PaneAdmission::Idle => None,
+            PaneAdmission::RateLimited => Some("pane_rate_limited"),
+            PaneAdmission::Unmeasured => Some("pane_rate_limit_unmeasured"),
+            PaneAdmission::Busy => Some("pane_busy"),
+            PaneAdmission::Wedged => Some("pane_wedged"),
+            PaneAdmission::Unproven => Some("pane_liveness_unproven"),
+        }
+    }
+}
+
+/// THE ADMISSION DECISION, PURE.
+///
+/// It was inline in a tmux capture loop, which is why it had ZERO test legs while the parse it
+/// consumes had fifteen: the decision could not be exercised without a live fleet. Every argument
+/// is now a value, so the matrix below is a unit test.
+///
+/// ── RULING ON THE `None` (UNMEASURED) ARM ──────────────────────────────────────────────────
+/// UNMEASURED IS WITHHELD FROM IDLE AND SAID OUT LOUD. It is NOT counted as capacity and it is
+/// NOT silently swallowed. Both failure directions were weighed and they are not symmetric:
+///
+///   ADMIT-ON-UNMEASURED dispatches real work into a pane that cannot run it. The work is
+///   CONSUMED — claimed, sent, never executed — and nothing downstream distinguishes that from an
+///   agent that is merely slow. It is the defect this bead exists to close, and it re-opens
+///   precisely when the oracle that would have refused the pane is unreachable, i.e. it fails in
+///   the correlated case rather than the independent one.
+///
+///   WITHHOLD-ON-UNMEASURED costs one tick of capacity. The next tick with a live census recovers
+///   it automatically and there is no state to repair. The error is self-healing; the other is
+///   not.
+///
+/// ⛔ AND THE FLEET-WIDE FALSE ZERO IS A REAL FAILURE CLASS THIS REPO HAS PAID FOR — but SILENCE
+/// is what made it lethal, not the zero. On 2026-08-26 a frozen standing verdict refused 147 of
+/// 191 ticks on `no_fresh_standing_pass` with no line naming a cause. A withheld pane that PRINTS
+/// its own bound (`UNKNOWN agent-health timed_out`) beside the repo and pane index is not that
+/// failure: it is a reported bound an operator can act on within one tick.
+///
+/// THEREFORE THE DISCLOSURE IS NOT DECORATION, IT IS THE TERM THAT MAKES WITHHOLDING SAFE. An
+/// undisclosed fail-closed and an undisclosed fail-open are the same defect pointed in opposite
+/// directions; only the disclosure separates a bounded verdict from a fabricated one.
+///
+/// NO-CLAIM: this rules the DISPOSITION of an unmeasured pane. It does not make the census more
+/// available, and it cannot tell a refusing verb from a verb that answered and omitted the pane —
+/// `is_rate_limited` returns `None` for both. That distinction survives only in the census
+/// `bound()` carried into the disclosure, which is why the disclosure is mandatory here.
+#[must_use]
+pub fn pane_admission(state: LivenessState, rate_limited: Option<bool>) -> PaneAdmission {
+    match state {
+        LivenessState::Live => match rate_limited {
+            Some(true) => PaneAdmission::RateLimited,
+            Some(false) => PaneAdmission::Idle,
+            None => PaneAdmission::Unmeasured,
+        },
+        LivenessState::Busy => PaneAdmission::Busy,
+        LivenessState::Wedged => PaneAdmission::Wedged,
+        LivenessState::Unproven => PaneAdmission::Unproven,
+    }
+}
+
+/// The line a census-derived verdict MUST print beside itself, naming the coverage that produced
+/// it. `None` for verdicts the census did not produce.
+///
+/// Pure so the disclosure can be asserted without a tmux session — the reason the previous
+/// unreachable disclosure was never caught.
+#[must_use]
+pub fn admission_disclosure(
+    admission: PaneAdmission,
+    repo: &str,
+    pane: &str,
+    census_bound: &str,
+) -> Option<String> {
+    match admission {
+        PaneAdmission::RateLimited => Some(format!(
+            "  RATE-LIMITED {repo} pane {pane}: present at a prompt and cannot continue; \
+             NOT capacity ({census_bound})"
+        )),
+        PaneAdmission::Unmeasured => Some(format!(
+            "  UNMEASURED  {repo} pane {pane}: live, but the rate-limit census did not measure \
+             it; WITHHELD from capacity rather than assumed free ({census_bound})"
+        )),
+        PaneAdmission::Idle
+        | PaneAdmission::Busy
+        | PaneAdmission::Wedged
+        | PaneAdmission::Unproven => None,
+    }
+}
+
 fn ready_footer_re() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| regex::Regex::new(r"(?i)(^|[\s│])Ready([\s│]|$)").expect("static regex"))
@@ -802,6 +937,134 @@ mod tests {
             LivenessState::Unproven,
             "RULE liveness_unproven: absence of a marker is UNPROVEN, never LIVE"
         );
+    }
+
+    // ── ADMISSION DECISION (liveness × rate-limit census) ──────────────────────────────────
+    // These are the legs that DID NOT EXIST. All fifteen rate-limit legs in the tree test the
+    // PARSE in `ntm-kernel`; the DECISION that consumes it was inline in a tmux capture loop and
+    // had none.
+    #[test]
+    fn rule_admission_matrix_over_the_three_census_answers() {
+        // MATRIX. The three census answers must produce THREE dispositions. Collapsing
+        // `Some(false)` and `None` into one arm — the shape this replaces — reddens a row here
+        // whichever way it is collapsed: `_ => Idle` breaks the UNMEASURED row, `_ => Unmeasured`
+        // breaks the measured-free row.
+        let matrix = [
+            (Some(true), PaneAdmission::RateLimited, false),
+            (Some(false), PaneAdmission::Idle, true),
+            (None, PaneAdmission::Unmeasured, false),
+        ];
+        assert!(
+            !matrix.is_empty(),
+            "RULE admission_matrix_non_vacuous: an empty matrix must never read as a pass"
+        );
+        for (census, expected, idle) in matrix {
+            let got = pane_admission(LivenessState::Live, census);
+            assert_eq!(
+                got, expected,
+                "RULE admission_three_valued: a LIVE pane with census {census:?} is {expected:?}, \
+                 never a collapsed two-way verdict"
+            );
+            assert_eq!(
+                got.counts_as_idle(),
+                idle,
+                "RULE admission_capacity: only a MEASURED-free live pane is capacity; \
+                 census {census:?} must not fabricate it"
+            );
+        }
+    }
+
+    #[test]
+    fn rule_unmeasured_arm_discloses_its_census_bound() {
+        // The defect the old code shipped: `bound()` was reachable ONLY from the `Some(true)`
+        // arm, so an UNMEASURED verdict printed nothing at all. The disclosure must exist on the
+        // arm it was written for.
+        let unmeasured = pane_admission(LivenessState::Live, None);
+        assert!(
+            unmeasured.discloses_census_bound(),
+            "RULE unmeasured_discloses: an UNMEASURED verdict must name the coverage that \
+             produced it; an undisclosed withholding is the false-zero class"
+        );
+        let line = admission_disclosure(unmeasured, "omp-orchestrator", "7", "UNKNOWN agent-health timed_out")
+            .expect("RULE unmeasured_discloses: the UNMEASURED arm must render a disclosure line");
+        assert!(
+            line.contains("UNKNOWN agent-health timed_out"),
+            "RULE unmeasured_bound_verbatim: the disclosure must carry the census bound verbatim, got {line}"
+        );
+        assert!(
+            line.contains("omp-orchestrator") && line.contains("pane 7"),
+            "RULE unmeasured_addressed: the disclosure must name the repo and pane it withheld, got {line}"
+        );
+        assert_eq!(
+            unmeasured.log_event(),
+            Some("pane_rate_limit_unmeasured"),
+            "RULE unmeasured_logged: the withholding must reach the structured log, not stdout only"
+        );
+    }
+
+    #[test]
+    fn rule_known_empty_census_is_not_unknown() {
+        // ANTI-VACUITY. `ntm-kernel` keeps ABSENCE OF EVIDENCE distinct from EVIDENCE OF ABSENCE;
+        // a consumer that flattens them throws the distinction away. Per pane BOTH answer `None`
+        // — which is exactly why the disposition alone is not enough and the BOUND must ship
+        // with it.
+        let answered_about_nobody = ntm_kernel::RateLimitCensus::Known(Default::default());
+        let refused = ntm_kernel::RateLimitCensus::Unknown("agent-health timed_out".to_owned());
+
+        assert_eq!(
+            answered_about_nobody.is_rate_limited("7"),
+            None,
+            "RULE empty_scan_not_free: a census that named ZERO panes has not measured pane 7"
+        );
+        assert_eq!(refused.is_rate_limited("7"), None);
+        for census in [&answered_about_nobody, &refused] {
+            assert_eq!(
+                pane_admission(LivenessState::Live, census.is_rate_limited("7")),
+                PaneAdmission::Unmeasured,
+                "RULE empty_scan_withheld: an empty scan set is WITHHELD, never a pass"
+            );
+        }
+        assert_ne!(
+            answered_about_nobody.bound(),
+            refused.bound(),
+            "RULE bound_distinguishes: KNOWN-about-nobody and UNKNOWN must not render the same \
+             bound, or the disclosure loses the only surviving distinction"
+        );
+        let known_line = admission_disclosure(
+            PaneAdmission::Unmeasured,
+            "r",
+            "7",
+            &answered_about_nobody.bound(),
+        )
+        .expect("disclosure");
+        assert!(
+            known_line.contains("KNOWN panes=0"),
+            "RULE bound_distinguishes: a zero-pane KNOWN census must disclose as KNOWN, got {known_line}"
+        );
+    }
+
+    #[test]
+    fn rule_census_never_promotes_a_non_live_pane() {
+        // The census answers a NARROWER question than liveness and must never widen it: a BUSY
+        // pane measured "not rate-limited" is still busy. Guards the inverse regression of the
+        // one being fixed.
+        for state in [
+            LivenessState::Busy,
+            LivenessState::Wedged,
+            LivenessState::Unproven,
+        ] {
+            let got = pane_admission(state, Some(false));
+            assert!(
+                !got.counts_as_idle(),
+                "RULE census_does_not_promote: liveness {state:?} withholds the pane regardless \
+                 of the census, got {got:?}"
+            );
+            assert!(
+                !got.discloses_census_bound(),
+                "RULE census_scope: a verdict liveness produced must not claim a census bound it \
+                 did not consult, got {got:?}"
+            );
+        }
     }
 
     // ── ACTIVITY PARSING ───────────────────────────────────────────────────────────────────
