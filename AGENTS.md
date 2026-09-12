@@ -656,6 +656,57 @@ multi-GB figure is the WORKER's compiled pool; the reclaim log's leading `/Users
 is **the worker's replica of the Mac layout**, which this file already warns about. **Acting on the
 original wording would have been 320 MB of work against a 42 GB problem.**
 
+### ⛔ A CONFIG EDIT IS AUTHORISED **ONLY IF PROVEN** — and the first candidate was PROVEN UNSAFE
+
+Joshua, 2026-09-12: **"we can update .config/ … rch"** followed by **"but only if proven."** So an
+`~/.config/rch/*` edit is no longer categorically forbidden — it requires a proof, and **the proof
+can refute the edit, which is what happened on the first try.**
+
+**THE CANDIDATE:** exclude `AGENTS.md`. It is **480 KB shipped on every build, 2.4% of payload**, and
+the conductor asserted *"no test reads it as a file."*
+
+⛔ **THAT ASSERTION WAS FALSE AND THE PROOF KILLED THE EDIT:**
+
+```
+crates/no-shell-gate/tests/gate.rs:377
+    for sentinel in ["AGENTS.md", "Cargo.toml", "crates/no-shell-gate/src/lib.rs"] {
+crates/no-shell-gate/src/bin/gate-reachability.rs:282
+    let mut paths = vec![root.join("README.md"), root.join("AGENTS.md"), root.join("CLAUDE.md")];
+```
+
+**`AGENTS.md` IS A TEST INPUT — a gate SENTINEL and a read by the reachability census.** Excluding it
+would have made both UNMEASURABLE on every worker, which is precisely the trap recorded above, walked
+into by its own author within the hour.
+
+⭐ **AND THE MECHANISM OF THE WRONG ASSERTION IS THE REUSABLE PART: A MENTION COUNT CANNOT
+DISTINGUISH A CITATION FROM A READ.**
+
+```
+212  total `AGENTS.md` mentions in crates/
+150  inside // /// //! comments -- CITATIONS of doctrine, not reads
+ 24  as a join()/sentinel/path literal -- REAL file access
+```
+
+**This is the mention-vs-invocation rule (see rule 9) aimed at a DOCUMENT instead of a binary**, and
+it is why 210-of-212 prose hits read as "obviously nobody opens this file." **Strip comments and
+match `join(…)` / path-literal forms before concluding a doc is inert.**
+
+**THE BAR FOR ANY FUTURE `rch` CONFIG EDIT, therefore:**
+
+1. **Grep the crates for path literals under the pattern, COMMENT-STRIPPED**, and separate citations
+   from `join()`/sentinel/read forms. A mention count is not evidence.
+2. **Run a negative control on the search** — a needle that cannot match must return 0 — **and a
+   positive control**: a doc known to be read (`gate-roster.txt` → 8 hits) must come back nonzero.
+3. **Prove it after, not only before:** a real remote run showing `Selected worker:` +
+   `Remote command finished: exit=0` + the tool's own result line, per `/zeststream-rch`. A client
+   zero is not proof; some RCH refusals return zero.
+4. **One row, surgically.** `~/.config/rch/workers.toml` already carries 8 backups and `config.toml`
+   4, several of them the same knob toggled back and forth in a single day. **Churn in that file is
+   itself a measured defect.**
+
+**NO EDIT WAS MADE.** The proof refuted the change, which is a successful outcome of the gate and not
+a failure to deliver one.
+
 ## ⛔ RECLAIM THE BOXES YOURSELF. THIS IS A STANDING DEMAND, NOT A PERMISSION. (Joshua, 2026-09-08)
 
 Joshua, verbatim: **"agents are declaring contabos not usable because why - because we're not
