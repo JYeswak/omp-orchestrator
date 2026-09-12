@@ -328,6 +328,13 @@ why = "typed fleet actions and approval waves; classifies, does not send"
 instead_we = "get_state is single-session and cannot classify a fleet"
 negative_evidence = "classification from tmux/ntm truth, not from a cached label"
 
+[crates.ntm-kernel]
+classification = "a"
+omp_surface = "none reachable for CROSS-PANE ntm invocation"
+why = "the ONE owner of `ntm` invocation, by its own header: three crates were each hand-building a Command::new(\"ntm\") and each had to re-learn the SAME FIVE payload traps with nothing checking that it did. The traps are why the wrapper is a crate and not a helper -- a not-found payload carries POPULATED, ZEROED objects so a failed call yields a plausible answer; `error_code` is not a classifier (agent-health emits PANE_NOT_FOUND where dialogs emits INVALID_FLAG for the identical condition); motion fields are not monotonic; `total_panes` is the AGENT count, so a pane denominator derived from it silently drops non-agent panes; and `critical_count` INVERTS, a dead pane reading 1 and a nonexistent pane 0"
+instead_we = "route every ntm call through NtmCall/NtmVerb so the five traps are handled once; --mode=rpc is a SINGLE-SESSION transport and cannot address a third-party pane, which is the same REVISION 2 finding that made cross-pane dispatch (a) rather than (b)"
+negative_evidence = "exit status first, never the payload: a zeroed object from a failed call is the false-answer class this crate exists to prevent, and a verb that does not honour a targeting flag must refuse rather than answer about pane 0"
+
 [crates.omp-idle-dispatch]
 classification = "a"
 omp_surface = "none reachable for IDLE-DISPATCH DECISIONS"

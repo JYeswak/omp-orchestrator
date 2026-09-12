@@ -458,10 +458,122 @@ fn remove_advisory_registry(mut source: String) -> String {
     source
 }
 
+/// Is the quoted needle sitting in a CALL ARGUMENT position on this line?
+///
+/// # Why a token list was the wrong answer, measured 2026-09-12
+///
+/// The first cut of this carried a `SPAWN_TOKENS` list — `Command::new`,
+/// `configured_rust_binary`, `.arg(` — and four fixtures refused it in one run.
+/// `planted_unwired_lane_is_red_then_green_in_one_run` plants its real caller as
+/// `fn run() { invoke("planted-lane"); }`, and `invoke` is on nobody's list of
+/// spawn tokens. A hand-maintained list of "words that mean invocation" is the
+/// registry class AGAIN, one layer down, inside the very leg that catches it —
+/// it would have gone stale the first time a crate spawned through a helper
+/// nobody thought of.
+///
+/// The general property is POSITION: a string that is an argument to a CALL is
+/// a use of the thing it names; a string sitting in a data row is prose. So the
+/// innermost unclosed `(` before the quote is found, and the character before
+/// that paren decides — an identifier character means `ident(` , which is a
+/// call; anything else (`,`, `[`, `=`, line start) means a tuple or collection
+/// literal, which is data.
+///
+/// | line | verdict |
+/// |---|---|
+/// | `invoke("planted-lane")` | call — `e(` |
+/// | `Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"))` | call — `y(` |
+/// | `("note", "cargo-lane-budget is described here"),` | tuple — `(` after whitespace |
+/// | `        "…; cargo-lane-budget 77 means UNKNOWN",` | prose — no paren at all |
+fn quoted_in_call_position(line: &str, quote_start: usize) -> bool {
+    let mut depth = 0i32;
+    for (index, byte) in line[..quote_start].char_indices().rev() {
+        match byte {
+            ')' => depth += 1,
+            '(' if depth > 0 => depth -= 1,
+            '(' => {
+                return line[..index]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '!');
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Does this line INVOKE the lane, or merely NAME it?
+///
+/// # The defect this replaces, measured 2026-09-12
+///
+/// The scan was `line.contains(needle)` over comment-stripped source, and it
+/// reported `cargo-lane-budget IS now invoked by crates/loop-coverage/src/lib.rs:212`.
+/// That line is a DESCRIPTION FIELD in a `TypedEdgeCase` fixture table:
+/// `"controller-tick refused on code != Some(0); cargo-lane-budget 77 means UNKNOWN"`.
+/// A mention is not an invocation — the rule this repo already records after a
+/// `grep -c` returned 62 against a true zero, and after bin kernels were counted
+/// as triggered because a markdown file named them. Acting on that false hit
+/// would have deleted a CORRECT allowance row and left a real blind spot
+/// undocumented, which is strictly worse than the red.
+///
+/// # Why masking every string literal would be the opposite mistake
+///
+/// The sibling gates mask string contents wholesale. That is right for a lint
+/// whose subject is CODE, and wrong here: a spawn names its binary as a STRING,
+/// so `Command::new("cargo-lane-budget")` is the most literal invocation there
+/// is. Masking strings would trade a false positive for a false negative and
+/// call it a fix. The discriminator is therefore POSITION, not quoting: outside
+/// quotes it is code (a `use`, a path, an identifier); inside quotes it counts
+/// only when the line also carries a spawn token.
+///
+/// # RUST ONLY, and the fixtures are what taught me that, 2026-09-12
+///
+/// Applying this to every source kind broke three legs at once, and they were
+/// right: `workflow_comments_are_removed_without_breaking_quoted_values` exists
+/// precisely to assert that a QUOTED value in a workflow stays searchable. In a
+/// `.yml` a quoted string IS the command — `run: cargo test -p some-crate`,
+/// `args: "-p some-crate"` — so there is no prose/command distinction to draw
+/// and drawing one invents false negatives. The prose-vs-invocation problem is
+/// specific to RUST source, where fixture tables and message strings live beside
+/// the code. A rule is only as good as the surface it was derived from, and this
+/// one was derived from a Rust fixture table.
+fn is_invocation(
+    line: &str,
+    kind: SourceKind,
+    needle_hyphen: &str,
+    needle_underscore: &str,
+) -> bool {
+    let contains = line.contains(needle_hyphen) || line.contains(needle_underscore);
+    if kind != SourceKind::Rust {
+        return contains;
+    }
+    for needle in [needle_hyphen, needle_underscore] {
+        let mut from = 0usize;
+        while let Some(offset) = line[from..].find(needle) {
+            let at = from + offset;
+            let quotes_before = line[..at].matches('"').count();
+            if quotes_before % 2 == 0 {
+                // Outside quotes: a `use`, a path, an identifier — code.
+                return true;
+            }
+            // Inside quotes: only a CALL ARGUMENT is a use of the name. The
+            // opening quote is the last `"` before the needle.
+            if let Some(quote_start) = line[..at].rfind('"') {
+                if quoted_in_call_position(line, quote_start) {
+                    return true;
+                }
+            }
+            from = at + needle.len();
+        }
+    }
+    false
+}
+
 /// Find a production caller for one lane, skipping the lane's own crate: a lane
 /// naming ITSELF is not wiring. Both real caller forms are searched — the hyphen
 /// name (CI jobs, `-p` flags, subprocess invocations) and the underscore name
-/// (`use` statements from other crates).
+/// (`use` statements from other crates) — and each candidate line must pass
+/// [`is_invocation`], so a crate NAMED in prose is not counted as a caller.
 fn find_caller(
     lane: &Lane,
     sources: &[CallerSource],
@@ -484,9 +596,18 @@ fn find_caller(
             continue;
         }
         let cleaned = cleaned_source(source, strip_tests);
-        if let Some((line, _)) = cleaned.lines().enumerate().find(|(_, line)| {
-            line.contains(&lane.needle_hyphen) || line.contains(&lane.needle_underscore)
-        }) {
+        if let Some((line, _)) = cleaned
+            .lines()
+            .enumerate()
+            .find(|(_, line)| {
+                is_invocation(
+                    line,
+                    source.kind,
+                    &lane.needle_hyphen,
+                    &lane.needle_underscore,
+                )
+            })
+        {
             return Ok(Some(CallerHit {
                 path: source.path.clone(),
                 line: line + 1,
@@ -1099,17 +1220,19 @@ fn every_crate_declares_the_forbid_lint() {
 // ── LEG 5: NO PUBLIC-TYPE-NAME COLLISIONS ──────────────────────────────────
 const COLLISION_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
     ("Finding", "finding and finding-dispatch both model a scan result; unification is -232 scope, not this gate", "type-vocabulary-owner", "when omp-types owns the shared type"),
-    ("LintReport", "state-wildcard-lint and path-literal-guard predate the shared crate; same -232 scope", "type-vocabulary-owner", "when omp-types owns the shared type"),
-    ("Violation", "three gate crates declare it; aliasing to a shared type is a cross-crate refactor owned by the integrator", "type-vocabulary-owner", "when omp-types owns the shared type"),
+    // LintReport and Violation were deleted 2026-09-12: every live collision of
+    // both names is adjudicated in omp_inventory_map::types_inventory::
+    // ALLOWED_COLLISIONS with the crate PAIR named, so the rows here pardoned
+    // nothing that was not already adjudicated more precisely -- and a weaker
+    // duplicate pardon is the one that decides. The new REDUNDANT COLLISION
+    // ALLOWANCE leg is what found them, and it will find the next one.
     ("Observation", "REQUIRES A DECISION not an allowance: tick-monitor produces what omp-orchestrator consumes and each declares an incompatible struct — the free_capacity seam (filter FIXED -oco; seam still open, 09 M1)", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("GateError", "no-shell-gate declares GitFailed/empty-scan for a FILE-EXTENSION scan; \
      porting-gate declares EmptyCandidates/InvalidCandidate/Io/Metadata for a CRATE-ARRIVAL \
      check. Same name, disjoint domains, no shared caller. Dies when a workspace error trait \
      exists; until then unifying them would couple two gates that share nothing but a suffix", "type-vocabulary-owner", "when omp-types owns the shared type"),
-    ("DispatchIntent", "dispatch-claim-fence declares an enum (Bead/Broadcast/Correction) for the fence; ack-spine declares a struct (bead_id/pane_id/session) for the ledger — different domains, same name. Dies when omp-types provides the shared vocabulary", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("AllowRow", "path-literal-guard and state-wildcard-lint each own an allowlist row type; dies when a shared allowance schema lands", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("Candidate", "sender-identity and silent-success-census name unrelated candidates; dies when omp-types owns Candidate", "type-vocabulary-owner", "when omp-types owns the shared type"),
-    ("Config", "cargo-lane-budget and crate-soundness-verify configs are disjoint; dies when a workspace Config type exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("ConfigError", "admission-reason and inbox-monitor parse different configs; dies when a shared error trait exists", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("Decision", "decision-ledger / kernel-only-operator-hook / refill-idle-panes; HD row vs hook decision vs refill decision. Dies when omp-types Decision lands", "type-vocabulary-owner", "when omp-types owns the shared type"),
     ("EventPage", "agent-mail-native and inbox-monitor page different event stores; dies when mail EventPage is canonical", "type-vocabulary-owner", "when omp-types owns the shared type"),
@@ -1138,6 +1261,12 @@ const COLLISION_ALLOWANCE: &[(&str, &str, &str, &str)] = &[
     ("CheckError", "decision-ledger, r1-breadth-gate, and response-envelope-check have disjoint check domains", "type-vocabulary-owner", "when omp-types owns a shared check error"),
     ("Classification", "bead-availability, salvage-taxonomy, silent-success-census, and worker-oracle-gate classify different evidence", "type-vocabulary-owner", "when omp-types owns classification vocabulary"),
     ("ClosedBead", "grader-attribution-gate and pre-delete-citation-check consume different closed-bead projections", "type-vocabulary-owner", "when omp-types owns the closed-bead schema"),
+    // ONE ROW, and it is the one that names all three crates. A second `Config`
+    // row shipped above until 2026-09-12 saying "cargo-lane-budget and
+    // crate-soundness-verify" while this one says "cargo-lane-budget,
+    // crate-soundness-verify, and omp-orchestrator" -- same name, two reasons,
+    // and nothing said which was operative. The narrower one is deleted because
+    // it is the one whose statement is FALSE about the live collision set.
     ("Config", "cargo-lane-budget, crate-soundness-verify, and omp-orchestrator configs are disjoint boundaries", "type-vocabulary-owner", "when omp-types owns workspace Config"),
     ("CrateVerdict", "gate-runner and staged-build-gate verdicts cover different execution scopes", "type-vocabulary-owner", "when omp-types owns a shared crate verdict"),
     ("GateCensus", "no-shell-gate and omp-orchestrator census rows have different gate authorities", "type-vocabulary-owner", "when omp-types owns GateCensus"),
@@ -1198,18 +1327,78 @@ fn no_public_type_name_collisions_across_crates() {
             }
         }
     }
+    // ONE REGISTRY, TWO READERS -- and the authoritative one is the crate-pair
+    // scoped table in omp-inventory-map, not this file's name-only list.
+    //
+    // Measured 2026-09-12 under omp-orchestrator-f5otl: this leg and
+    // `omp_inventory_map::types_inventory` census the SAME population with two
+    // pardon semantics. A row here pardons a NAME between ANY pair of crates;
+    // a row there names the exact pair, so `Config` colliding between two new
+    // crates is still refused there and silently pardoned here. This leg is
+    // therefore the LENIENT reader of a population it shares, which is the
+    // worst way for two censuses to disagree: a reader comparing two greens
+    // concludes agreement.
+    //
+    // Consuming the pair-scoped table does not widen anything -- it only
+    // recognises adjudications that were already made, with reasons, in the
+    // registry that carries the ratchet. `GuardDecision`, `Authority` and
+    // `Resolution` are adjudicated there with their variant sets cited, and
+    // each lowered that crate's ceiling in the same edit.
+    let pair_scoped_allowed = |name: &str, a: &str, b: &str| {
+        let mut pair = [a, b];
+        pair.sort_unstable();
+        let key = pair.join("+");
+        omp_inventory_map::types_inventory::ALLOWED_COLLISIONS
+            .iter()
+            .any(|(row_name, row_pair, _)| *row_name == name && *row_pair == key)
+    };
     let allowed: std::collections::HashSet<_> = COLLISION_ALLOWANCE
         .iter()
         .map(|(n, _, _, _)| n.to_owned())
         .collect();
     let unallowed: Vec<_> = collisions
         .iter()
-        .filter(|(n, _, _)| !allowed.contains(n.as_str()))
+        .filter(|(n, a, b)| !allowed.contains(n.as_str()) && !pair_scoped_allowed(n, a, b))
         .collect();
     assert!(
         unallowed.is_empty(),
         "PUBLIC TYPE NAME COLLISION (not in allowance): {:?} — two crates declaring the same pub type is a seam bug; add an allowance row WITH A REASON or unify the type",
         unallowed
+    );
+
+    // THE DUPLICATE REGISTRY MUST SHRINK, NEVER FREEZE. A row here whose name
+    // is fully covered by the pair-scoped table for every live collision of
+    // that name is REDUNDANT, and a redundant pardon is how the lenient copy
+    // stays alive after the strict one has adjudicated the same thing.
+    let redundant: Vec<&str> = COLLISION_ALLOWANCE
+        .iter()
+        .map(|(n, _, _, _)| *n)
+        .filter(|name| {
+            let live: Vec<_> = collisions.iter().filter(|(n, _, _)| n == name).collect();
+            !live.is_empty()
+                && live
+                    .iter()
+                    .all(|(n, a, b)| pair_scoped_allowed(n.as_str(), a.as_str(), b.as_str()))
+        })
+        .collect();
+    assert!(
+        redundant.is_empty(),
+        "REDUNDANT COLLISION ALLOWANCE: {redundant:?} — every live collision of these names is \
+         already adjudicated in omp_inventory_map::types_inventory::ALLOWED_COLLISIONS, with the \
+         crate pair named. Delete the row here; two pardons for one collision means the weaker \
+         one decides."
+    );
+
+    // DUPLICATE ROWS INSIDE THIS TABLE are the same defect one layer in: two
+    // `Config` rows with different reasons shipped here until 2026-09-12, and
+    // the row validator did not look.
+    let mut names: Vec<&str> = COLLISION_ALLOWANCE.iter().map(|(n, _, _, _)| *n).collect();
+    names.sort_unstable();
+    let duplicates: Vec<&str> = names.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
+    assert!(
+        duplicates.is_empty(),
+        "DUPLICATE ALLOWANCE ROW: {duplicates:?} — one collision, two reasons, and nothing says \
+         which is operative"
     );
 }
 
@@ -1736,7 +1925,13 @@ mod ipg18_leg1_mutation {
         };
         let test_only = rust_source(
             "src/mutation.rs",
-            "#[cfg(test)]\nmod tests { fn fake() { let _ = \"mutation-lane\"; } }\n",
+            // The caller shape must be one the probe RECOGNISES, or this leg
+            // measures `is_invocation` instead of the stripping predicate it
+            // exists for. It read `let _ = "mutation-lane";` -- a bare string,
+            // which is a MENTION and no longer counts as a caller, so with
+            // stripping off the fixture stayed red and the leg could not tell
+            // its two arms apart. A call argument keeps the subject the strip.
+            "#[cfg(test)]\nmod tests { fn fake() { invoke(\"mutation-lane\"); } }\n",
         );
         let red = check_wiring(&[lane.clone()], &[test_only.clone()], &[], STRIP_TEST_CODE)
             .expect_err("leg1 known-bad test-only caller must be red");
@@ -2403,5 +2598,114 @@ fn allowance_rows_require_owner_and_dies_when() {
     assert!(
         validate_allowance_rows(&reasonless, "xm0n.8").is_err(),
         "reason length below eight must remain refused"
+    );
+}
+
+/// A MENTION IS NOT AN INVOCATION, and a SPAWN IS ONE EVEN THOUGH IT IS QUOTED.
+///
+/// Both directions are asserted because each is a real failure this predicate
+/// has to survive, and fixing either one alone produces the other:
+///
+/// * The line that caused it: `crates/loop-coverage/src/lib.rs:212` is a
+///   `TypedEdgeCase` DESCRIPTION field reading
+///   `"controller-tick refused on code != Some(0); cargo-lane-budget 77 means
+///   UNKNOWN"`. The old scan was `line.contains(needle)` and reported
+///   `cargo-lane-budget IS now invoked by ...:212`. Acting on that would have
+///   deleted a CORRECT allowance row and left a real blind spot undocumented.
+/// * The line that forbids the obvious fix: `crates/fast-dispatch/src/main.rs`
+///   spawns `Command::new(configured_rust_binary("FD_BUDGET",
+///   "cargo-lane-budget"))`. Masking string literals wholesale — what the
+///   sibling lints do, correctly, for a subject that is CODE — would blind the
+///   probe to the most literal invocation there is.
+#[test]
+fn a_crate_named_in_prose_is_not_a_caller_and_a_quoted_spawn_still_is() {
+    let hyphen = "cargo-lane-budget";
+    let underscore = "cargo_lane_budget";
+
+    // KNOWN-BAD: the exact line that produced the false hit.
+    let prose = r#"        "controller-tick refused on code != Some(0); cargo-lane-budget 77 means UNKNOWN","#;
+    assert!(
+        !is_invocation(prose, SourceKind::Rust, hyphen, underscore),
+        "a crate named inside a fixture description is not a caller: {prose}"
+    );
+
+    // KNOWN-GOOD 1: the real spawn, quoted, through an env-resolved helper.
+    let spawn = r#"    let mut budget_cmd = Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"));"#;
+    assert!(
+        is_invocation(spawn, SourceKind::Rust, hyphen, underscore),
+        "a quoted binary name in command position IS an invocation: {spawn}"
+    );
+
+    // KNOWN-GOOD 2: code position, no quotes at all.
+    assert!(
+        is_invocation("use cargo_lane_budget::Report;", SourceKind::Rust, hyphen, underscore),
+        "a use statement is an invocation site"
+    );
+
+    // KNOWN-GOOD 3, AND IT IS THE ONE THE FIXTURES TAUGHT ME: in a workflow a
+    // quoted value IS the command, so the Rust-only prose rule must not reach
+    // it. Applying the rule to every kind reddened
+    // `workflow_comments_are_removed_without_breaking_quoted_values`, which
+    // exists to assert exactly this.
+    let workflow = r#"        run: cargo test -p "cargo-lane-budget""#;
+    assert!(
+        is_invocation(workflow, SourceKind::Workflow, hyphen, underscore),
+        "a quoted workflow value must stay searchable: {workflow}"
+    );
+    assert!(
+        !is_invocation(workflow, SourceKind::Rust, hyphen, underscore),
+        "and the Rust rule must be the thing that differs, or this control proves nothing"
+    );
+
+    // ANTI-VACUITY: the predicate must be capable of saying no for a reason
+    // other than "the needle is absent", and capable of saying yes at all.
+    assert!(
+        !is_invocation("nothing to see here", SourceKind::Rust, hyphen, underscore),
+        "an absent needle is not a hit"
+    );
+    assert!(
+        is_invocation(r#"cmd.arg("cargo-lane-budget");"#, SourceKind::Rust, hyphen, underscore),
+        "an argument position is a spawn token too"
+    );
+
+    // The discriminator is POSITION, not the presence of quotes anywhere on the
+    // line: a prose string sitting beside unrelated quoted text stays prose.
+    let prose_with_quotes = r#"        ("note", "cargo-lane-budget is described here"),"#;
+    assert!(
+        !is_invocation(prose_with_quotes, SourceKind::Rust, hyphen, underscore),
+        "quotes alone do not make a command position: {prose_with_quotes}"
+    );
+
+    // KNOWN-GOOD 4, AND IT IS WHY THE TOKEN LIST HAD TO GO: an ordinary helper
+    // call. `planted_unwired_lane_is_red_then_green_in_one_run` plants exactly
+    // this as its "real production caller", and a list of known spawn words
+    // does not contain `invoke` — nor could any hand list contain the next one.
+    assert!(
+        is_invocation(
+            r#"fn run() { invoke("cargo-lane-budget"); }"#,
+            SourceKind::Rust,
+            hyphen,
+            underscore
+        ),
+        "a quoted name passed to ANY call is a use of that name"
+    );
+
+    // And the property directly, on the four shapes that decide it.
+    let call = r#"invoke("cargo-lane-budget")"#;
+    assert!(quoted_in_call_position(call, call.find('"').expect("quote")));
+    let nested = r#"Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"))"#;
+    assert!(quoted_in_call_position(
+        nested,
+        nested.rfind('"').map(|end| nested[..end].rfind('"').expect("open quote")).expect("quote")
+    ));
+    let tuple = r#"("note", "cargo-lane-budget")"#;
+    assert!(
+        !quoted_in_call_position(tuple, tuple.rfind("\"cargo").expect("quote")),
+        "a tuple literal is data, not a call"
+    );
+    let bare = r#"        "cargo-lane-budget in prose","#;
+    assert!(
+        !quoted_in_call_position(bare, bare.find('"').expect("quote")),
+        "a row with no paren at all is data"
     );
 }
