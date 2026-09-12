@@ -419,7 +419,6 @@ pub struct GateCensus {
 pub const POSITIVE_CONTROL_FAILED_UNWIRED: &str =
     "POSITIVE_CONTROL_FAILED: no independently reachable gate in this census";
 
-
 /// Advisory rows that are allowed to be non-`Reachable` without stopping the loop,
 /// each with the reason it is not yet blocking.
 ///
@@ -449,8 +448,9 @@ pub const ADVISORY_ALLOWANCE: &[(&str, &str)] = &[
     ("response-envelope-check", "STILL-LIVE oracle=census_gates: library, 0 manifest callers. Entered 2026-09-02 derived membership. Dies when census_gates classifies it Reachable"),
     // ⛔ 2026-09-12 (73w7w / 83cb804): s1-coverage row DELETED. CI run 34666855450
     // classified it REACHABLE (`gate.yml` `-p s1-coverage`). Acknowledgement is NOT
-    // owed: `advisory_gates()` is `!is_reachable()`, so a Reachable crate cannot
-    // appear on the naming/ratchet legs. Restoring the row re-reds stale-allowance
+    // owed: `advisory_gates()` is determined non-reachable non-blocking, so a
+    // Reachable crate cannot appear, and neither can an Undetermined crate.
+    // Restoring the row re-reds stale-allowance
     // wherever `git remote` is non-empty. A host with no remote (rch worker) still
     // classifies it Unreachable -- `workflow_invokes && has_remote`, a HOST question
     // about a REPO trigger, not a missing `Dies when`. Do not restore to silence rch.
@@ -535,7 +535,8 @@ impl AdvisoryRatchetAnchor {
 /// classified `s1-coverage` REACHABLE via `.github/workflows/gate.yml` `-p s1-coverage`
 /// (and `contabo-reclaim` via `contabo-reclaim.yml`). The 2026-09-11 same-census
 /// contradiction DISSOLVED when CI's reachability flipped; it was not overridden.
-/// Acknowledgement is not owed: `advisory_gates()` only contains Unreachable crates.
+/// Acknowledgement is not owed: `advisory_gates()` contains determined non-reachable
+/// non-blocking rows. Reachable and Undetermined crates cannot appear there.
 /// Restoring the rows re-reds `an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails`
 /// on any host with `git remote`.
 ///
@@ -647,34 +648,19 @@ pub fn untriaged_amnesty_rows() -> Vec<&'static str> {
         .collect()
 }
 
-/// The MOST rows `census_gates` may leave UNDETERMINED before the census stops being a
-/// measurement (`omp-orchestrator-tzz74`).
+/// Absolute Undetermined ceiling on a host that SUPPLIES a git remote (CI).
 ///
-/// ⛔ WHY A CEILING AND NOT JUST "NOT ALL OF THEM". My first anti-vacuity leg asserted only
-/// that Undetermined was a STRICT SUBSET and that something was positively classified — and a
-/// mutation making Undetermined the residual for EVERY BIN CRATE left the suite GREEN, because
-/// library crates still classified Unreachable and kept the subset strict. THE LEG WAS
-/// NECESSARY AND INSUFFICIENT, which is the same shape as a known-bad that pins
-/// `description != caller` and fails to pin `argument == spawn`.
+/// `omp-orchestrator-q0fgq` item B: the conductor's `UNDETERMINED_CEILING = 2` was
+/// a rule-10 exception that assumed the population "must be 0 with a remote and
+/// does not grow with the workspace". The worker arm (`has_bin && !has_remote &&
+/// workflow_invokes`) GROWS with every new workflow-triggered bin crate. An
+/// absolute count of 2 cannot tell that growth from a defect.
 ///
-/// `Undetermined` releases a crate from BOTH obligation legs, so its population is the exact
-/// quantity that must not grow quietly. 2 is the measured worker value (`contabo-reclaim`,
-/// `s1-coverage` — the two crates a workflow names while this host supplies no git remote) and
-/// 0 is the value on any host that HAS a remote. LOWER IT WHEN THE INPUT BECOMES AVAILABLE;
-/// raising it is how an unmeasured census becomes a passing one.
-///
-/// ⛔ AN ABSOLUTE COUNT, AND THAT IS A DELIBERATE EXCEPTION TO THE RULE AGAINST THEM. A ratchet
-/// keyed on an absolute count normally cannot tell growth from regression and goes red by
-/// construction the next time the counted thing legitimately changes. It is accepted HERE
-/// because the correct value is ZERO wherever the input exists, and because the bounded
-/// quantity is THE POPULATION RELEASED FROM BOTH OBLIGATION LEGS — which must not grow with
-/// the workspace. It grows only when a genuinely new host-shaped crate appears, and that is
-/// precisely the event a human should review rather than absorb.
-///
-/// DIES WHEN: the census runs on a host that supplies a git remote, where the only admissible
-/// value is 0. At that point delete this constant and the ceiling clause with it — the leg's
-/// strict-subset and positive-control assertions stand on their own.
-pub const UNDETERMINED_CEILING: usize = 2;
+/// Bound the PROPERTY on a remote-less host (every Undetermined row is
+/// workflow-triggered and its `missing_input` names the remote). Keep an absolute
+/// ceiling ONLY here, keyed to a host that has a remote, where 0 is the only
+/// correct value — the Undetermined arm cannot fire when `has_remote` is true.
+pub const UNDETERMINED_CEILING: usize = 0;
 
 /// Compatibility projection from the single ratchet anchor.
 pub const ADVISORY_CEILING: usize = ADVISORY_RATCHET.ceiling();
@@ -794,37 +780,64 @@ impl GateCensus {
             .map(|r| r.gate.as_str())
     }
 
-    /// Rows that are not reachable AND may stop the fleet.
+    /// Rows that are MEASURED unreachable AND may stop the fleet.
     ///
     /// `leht`: this used to return every non-reachable row, over a hand-listed
     /// membership of 25. Derivation took membership to every crate on disk, so an
     /// unscoped version of this would have converted one blocker into forty — which
     /// is refusing on absence of evidence rather than evidence of absence, and is
     /// the reason the ruling was advisory-first.
+    ///
+    /// `q0fgq`: an [`GateReachability::Undetermined`] row is not a measurement, so
+    /// it cannot refuse — even when [`disposition_for`] labelled it Blocking
+    /// because the crate is on [`CURATED_BLOCKING_ROSTER`]. Disposition is triage;
+    /// obligation requires a determined verdict.
     pub fn unwired_gates(&self) -> Vec<&GateCensusRow> {
         self.rows
             .iter()
-            .filter(|r| !r.reachability.is_reachable() && r.disposition.is_blocking())
+            .filter(|r| {
+                r.reachability.is_determined()
+                    && !r.reachability.is_reachable()
+                    && r.disposition.is_blocking()
+            })
             .collect()
     }
 
-    /// Non-reachable rows that are REPORTED and do not gate. This is the triage
-    /// queue, and the number the ratchet is measured on.
+    /// MEASURED non-reachable rows that are REPORTED and do not gate. This is the
+    /// triage queue, and the number the ratchet is measured on.
+    ///
+    /// Undetermined rows are excluded: an unmeasured crate owes no acknowledgement.
     pub fn advisory_gates(&self) -> Vec<&GateCensusRow> {
         self.rows
             .iter()
-            .filter(|r| !r.reachability.is_reachable() && !r.disposition.is_blocking())
+            .filter(|r| {
+                r.reachability.is_determined()
+                    && !r.reachability.is_reachable()
+                    && !r.disposition.is_blocking()
+            })
             .collect()
     }
 
-    /// Whether every BLOCKING row is reachable.
+    /// Rows whose reachability was NEVER MEASURED on this host.
+    ///
+    /// The third obligation bucket (`omp-orchestrator-q0fgq`). These rows sit in
+    /// neither [`Self::unwired_gates`] nor [`Self::advisory_gates`].
+    pub fn undetermined_gates(&self) -> Vec<&GateCensusRow> {
+        self.rows
+            .iter()
+            .filter(|r| !r.reachability.is_determined())
+            .collect()
+    }
+
+    /// Whether every DETERMINED BLOCKING row is reachable.
     ///
     /// Deliberately says nothing about advisory rows: that is the ruling, and
     /// naming it here keeps a caller from reading this as "the tree is wired".
+    /// Undetermined blocking rows do not make this false — they were not measured.
     pub fn all_reachable(&self) -> bool {
         self.rows
             .iter()
-            .filter(|r| r.disposition.is_blocking())
+            .filter(|r| r.disposition.is_blocking() && r.reachability.is_determined())
             .all(|r| r.reachability.is_reachable())
     }
 
@@ -1403,7 +1416,12 @@ fn launchd_executor(text: &str) -> Option<String> {
 /// Which launchd keys make the job fire, named rather than interpreted.
 fn launchd_schedule(text: &str) -> String {
     let mut keys = Vec::new();
-    for key in ["RunAtLoad", "StartInterval", "StartCalendarInterval", "KeepAlive"] {
+    for key in [
+        "RunAtLoad",
+        "StartInterval",
+        "StartCalendarInterval",
+        "KeepAlive",
+    ] {
         if text.contains(&format!("<key>{key}</key>")) {
             keys.push(key);
         }
@@ -1534,10 +1552,7 @@ pub fn crate_reachability(
         // it can never re-attribute a row that some earlier arm already explained. A repair that
         // rewrites verdicts it was not asked about is indistinguishable from widening.
         GateReachability::Reachable {
-            trigger: format!(
-                "{} row ({}) -> {}",
-                row.surface, row.schedule, row.executor
-            ),
+            trigger: format!("{} row ({}) -> {}", row.surface, row.schedule, row.executor),
         }
     } else if let (true, Some(site)) = (has_bin, rust_source_invokes(repo_root, crate_name)) {
         // AFTER every other reachable arm, for the same reason the scheduler arm is: it may
@@ -1661,7 +1676,8 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             gate: "worker-oracle-gate".to_owned(),
             reachability,
             disposition: CensusDisposition::Advisory {
-                reason: "worker-bound test oracle is checked again by admission before dispatch".to_owned(),
+                reason: "worker-bound test oracle is checked again by admission before dispatch"
+                    .to_owned(),
             },
         });
     }
@@ -1681,8 +1697,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             // The hook stays first (proven to bite); the stanza covers trees
             // where the hook is not installed (fresh clones, lanes).
             GateReachability::Reachable {
-                trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
-                    .into(),
+                trigger:
+                    "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                        .into(),
             }
         } else {
             GateReachability::Unreachable {
@@ -1713,8 +1730,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                 // runner discovers the crate (path-literal-guard gained its
                 // stanza this unit). Last: never re-attributes a workflow row.
                 GateReachability::Reachable {
-                    trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
-                        .into(),
+                    trigger:
+                        "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                            .into(),
                 }
             } else {
                 GateReachability::Unreachable {
@@ -1824,8 +1842,9 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
                 // re-attribute a row an earlier arm already explained. Uses
                 // the same detector and trigger string as crate_reachability.
                 GateReachability::Reachable {
-                    trigger: "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
-                        .into(),
+                    trigger:
+                        "[package.metadata.gate] -> gate-runner --run -> .github/workflows/gate.yml"
+                            .into(),
                 }
             } else {
                 GateReachability::Unreachable {
@@ -1848,11 +1867,7 @@ pub fn census_gates(repo_root: &Path) -> GateCensus {
             // uldvu: the SAME probe the derived rows use. These eleven were special-cased past
             // it and got an existence check instead, which no crate on disk could fail.
             reachability: crate_reachability(
-                repo_root,
-                crate_name,
-                &hook_path,
-                has_remote,
-                &scheduler,
+                repo_root, crate_name, &hook_path, has_remote, &scheduler,
             ),
             // CURATED, therefore BLOCKING: this row was triaged before `leht`.
             disposition: CensusDisposition::Blocking,
@@ -1958,6 +1973,10 @@ pub fn disposition_for(crate_name: &str) -> CensusDisposition {
     // KNOWN-GOOD FIRST: a triaged row keeps its blocking disposition no matter how
     // it is now produced. Without this, derivation would silently demote all six
     // roster crates to advisory, which is a membership fix changing verdicts.
+    //
+    // Blocking here is TRIAGE, not a fleet-stop. `unwired_gates` requires
+    // `is_determined()` (`q0fgq`), so an Undetermined roster crate does not refuse.
+    // Do not fold reachability into this function: the axes stay separate.
     if CURATED_BLOCKING_ROSTER.contains(&crate_name) {
         return CensusDisposition::Blocking;
     }
@@ -2119,7 +2138,6 @@ pub fn crate_ships_a_bin(repo_root: &Path, crate_name: &str) -> bool {
 }
 
 pub use finding_dispatch::SupervisorDecision;
-
 
 /// First check of `decide()`, also used by the resident cycle to skip reap on GATE_UNWIRED.
 pub fn gate_census_decision(census: &Option<GateCensus>) -> Option<SupervisorDecision> {
@@ -2797,7 +2815,9 @@ mod tests {
         match decide_ready(census) {
             SupervisorDecision::GateUnwired { unwired } => {
                 assert!(
-                    unwired.iter().any(|u| u.contains("POSITIVE_CONTROL_FAILED")),
+                    unwired
+                        .iter()
+                        .any(|u| u.contains("POSITIVE_CONTROL_FAILED")),
                     "empty census must name POSITIVE_CONTROL_FAILED, got {unwired:?}"
                 );
             }
@@ -2821,7 +2841,9 @@ mod tests {
         match decide_ready(census) {
             SupervisorDecision::GateUnwired { unwired } => {
                 assert!(
-                    unwired.iter().any(|u| u.contains("POSITIVE_CONTROL_FAILED")),
+                    unwired
+                        .iter()
+                        .any(|u| u.contains("POSITIVE_CONTROL_FAILED")),
                     "got {unwired:?}"
                 );
             }

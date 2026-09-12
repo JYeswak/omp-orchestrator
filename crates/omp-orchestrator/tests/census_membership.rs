@@ -34,14 +34,14 @@
 //! Leg 3 is the ratchet. Without it, legs 1 and 2 permit permanent silence.
 
 use omp_orchestrator::{
-    census_gates, crates_on_disk, CensusDisposition, GateCensus, GateReachability,
+    advisory_ratchet_overdue, census_gates, crates_on_disk, quoted_in_call_position,
+    rust_line_invokes, untriaged_amnesty_rows, CensusDisposition, GateCensus, GateReachability,
     ADVISORY_ALLOWANCE, ADVISORY_CEILING, ADVISORY_CEILING_RECORDED_AT_UNIX, ADVISORY_RATCHET,
-    untriaged_amnesty_rows,
-    advisory_ratchet_overdue, quoted_in_call_position, rust_line_invokes, UNDETERMINED_CEILING,
     ADVISORY_RATCHET_DEADLINE_TICKS, CURATED_BLOCKING_ROSTER, PRE_LEHT_BLOCKING_ROWS,
+    UNDETERMINED_CEILING,
 };
-use std::path::PathBuf;
 use std::fs;
+use std::path::PathBuf;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -99,7 +99,8 @@ fn every_crate_on_disk_has_exactly_one_census_row() {
     // exist is the `NotExtracted` case, which the curated sites handle explicitly.
     for row in &census.rows {
         assert!(
-            disk.contains(&row.gate) || matches!(row.reachability, GateReachability::NotExtracted { .. }),
+            disk.contains(&row.gate)
+                || matches!(row.reachability, GateReachability::NotExtracted { .. }),
             "census row `{}` names no directory and is not NotExtracted",
             row.gate
         );
@@ -208,6 +209,7 @@ fn derivation_did_not_convert_one_blocker_into_forty_three() {
     let census = census_gates(&repo_root());
     let refusing = census.unwired_gates();
     let advisory = census.advisory_gates();
+    let undetermined = census.undetermined_gates();
     assert!(
         refusing.len() <= 1,
         "the refusal set grew to {}: {:?}. Only rows that refused BEFORE leht may refuse now.",
@@ -224,14 +226,14 @@ fn derivation_did_not_convert_one_blocker_into_forty_three() {
          broken, and this test cannot tell those apart"
     );
     assert_eq!(
-        refusing.len() + advisory.len(),
+        refusing.len() + advisory.len() + undetermined.len(),
         census
             .rows
             .iter()
             .filter(|r| !r.reachability.is_reachable())
             .count(),
-        "every non-reachable row must be either refusing or advisory -- a row that is \
-         neither is invisible, which is the defect this bead reported"
+        "every non-reachable row must be refusing, advisory, OR undetermined -- a row \
+         in none of the three is invisible, which is the defect this bead reported"
     );
 }
 
@@ -539,9 +541,7 @@ fn unprobed_is_distinct_from_unreachable_in_both_label_and_remedy() {
 /// even when today's census happens to contain only one of them.
 #[test]
 fn disposition_decides_whether_a_verdict_stops_the_fleet() {
-    let bad = || GateReachability::Unreachable {
-        reason: "x".into(),
-    };
+    let bad = || GateReachability::Unreachable { reason: "x".into() };
     let blocking = GateCensus {
         rows: vec![
             omp_orchestrator::GateCensusRow {
@@ -583,6 +583,44 @@ fn disposition_decides_whether_a_verdict_stops_the_fleet() {
     );
 }
 
+/// q0fgq KNOWN-BAD: an Undetermined CURATED_BLOCKING_ROSTER crate must NOT refuse.
+///
+/// `disposition_for("finding")` returns Blocking regardless of how the row was
+/// produced. Before the accessor filter, that row sat in `unwired_gates()` and
+/// would stop the fleet. Constructed so the predicate is proven even when today's
+/// live census has no such row.
+#[test]
+fn undetermined_roster_crate_is_not_a_refusing_gate() {
+    let census = GateCensus {
+        rows: vec![omp_orchestrator::GateCensusRow {
+            gate: "finding".into(),
+            reachability: GateReachability::Undetermined {
+                missing_input: "no git remote in this checkout, so workflow reachability for \
+                                `.github/workflows` could not be evaluated"
+                    .into(),
+            },
+            disposition: CensusDisposition::Blocking,
+        }],
+    };
+    assert!(
+        census.unwired_gates().is_empty(),
+        "RULE undetermined_roster_does_not_refuse: unmeasured CURATED_BLOCKING_ROSTER crate \
+         `finding` must not appear in unwired_gates -- that is a fleet-stopping verdict \
+         nobody earned, got {:?}",
+        census
+            .unwired_gates()
+            .iter()
+            .map(|r| &r.gate)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(census.undetermined_gates().len(), 1);
+    assert!(census.advisory_gates().is_empty());
+    assert!(
+        census.all_reachable(),
+        "an unmeasured blocking row must not make all_reachable false"
+    );
+}
+
 // ── tzz74: THE CENSUS CONSUMES THE SPAWN PROBE, AND A MENTION IS STILL NOT A CALLER ────────
 
 /// POSITIVE CONTROL: the census now sees an env-resolved `Command::new` spawn.
@@ -617,8 +655,7 @@ fn the_census_classifies_a_rust_only_spawn_target_reachable() {
 /// The rule is POSITION, so it is asserted directly on the predicate over the real lines.
 #[test]
 fn a_described_crate_is_not_a_caller_but_a_quoted_spawn_is() {
-    let described =
-        r#"        "controller-tick refused on code != Some(0); cargo-lane-budget 77 means UNKNOWN","#;
+    let described = r#"        "controller-tick refused on code != Some(0); cargo-lane-budget 77 means UNKNOWN","#;
     assert!(
         !rust_line_invokes(described, "cargo-lane-budget", "cargo_lane_budget"),
         "RULE mention_is_not_invocation: a description field naming the crate must NOT count \
@@ -631,8 +668,7 @@ fn a_described_crate_is_not_a_caller_but_a_quoted_spawn_is() {
         "RULE tuple_is_not_invocation: an allowance ROW naming the crate must not make it \
          Reachable -- that would be the registry certifying itself out of existence"
     );
-    let spawn =
-        r#"    let mut budget_cmd = Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"));"#;
+    let spawn = r#"    let mut budget_cmd = Command::new(configured_rust_binary("FD_BUDGET", "cargo-lane-budget"));"#;
     assert!(
         rust_line_invokes(spawn, "cargo-lane-budget", "cargo_lane_budget"),
         "RULE spawn_is_invocation: the real spawn site must count, or the fix is a no-op"
@@ -670,30 +706,50 @@ fn an_empty_needle_never_reports_an_invocation() {
 /// an ERROR, never a green.
 #[test]
 fn undetermined_is_a_strict_subset_and_never_the_whole_census() {
-    let census = census_gates(&repo_root());
+    let root = repo_root();
+    let census = census_gates(&root);
     assert!(
         !census.rows.is_empty(),
         "RULE undetermined_non_vacuous: an empty census cannot certify anything about \
          Undetermined; the scan itself is broken"
     );
-    let undetermined = census
-        .rows
-        .iter()
-        .filter(|r| !r.reachability.is_determined())
-        .count();
-    // ⛔ THE CLAUSE THAT ACTUALLY BITES. "Strict subset" alone is NECESSARY AND INSUFFICIENT:
-    // a mutation making Undetermined the residual for EVERY BIN CRATE left this leg green,
-    // because library crates kept the subset strict. The population released from both
-    // obligation legs is the quantity that must not grow quietly, so it is ratcheted.
+    let undetermined = census.undetermined_gates();
+    for row in &undetermined {
+        let GateReachability::Undetermined { missing_input } = &row.reachability else {
+            panic!(
+                "undetermined_gates returned a determined row `{}`",
+                row.gate
+            );
+        };
+        let lower = missing_input.to_ascii_lowercase();
+        assert!(
+            lower.contains("remote") && lower.contains("workflow"),
+            "RULE undetermined_property: `{}` is Undetermined but missing_input does not \
+             name both the remote and the workflow trigger (the only production arm). \
+             got: {missing_input}",
+            row.gate
+        );
+    }
+    let has_remote = std::process::Command::new("git")
+        .args(["remote"])
+        .current_dir(&root)
+        .output()
+        .map(|output| {
+            output.status.success() && !String::from_utf8_lossy(&output.stdout).trim().is_empty()
+        })
+        .unwrap_or(false);
+    if has_remote {
+        assert_eq!(
+            undetermined.len(),
+            UNDETERMINED_CEILING,
+            "RULE undetermined_ceiling_on_remote_host: a host that supplies a git remote \
+             cannot fire the Undetermined arm, so the count must be {UNDETERMINED_CEILING}, \
+             got {}. This is the CI-keyed absolute; it is not a workspace-growth ratchet",
+            undetermined.len()
+        );
+    }
     assert!(
-        undetermined <= UNDETERMINED_CEILING,
-        "RULE undetermined_ceiling: {undetermined} rows are Undetermined, above the ceiling of \
-         {UNDETERMINED_CEILING} -- an absent input is becoming the residual for the census, \
-         which releases that many crates from BOTH obligation legs at once. Lower the ceiling \
-         when the input becomes available; never raise it to absorb a spreading unknown"
-    );
-    assert!(
-        undetermined < census.rows.len(),
+        undetermined.len() < census.rows.len(),
         "RULE undetermined_bounded: ALL {} census rows are Undetermined -- an absent input has \
          become the residual for the whole census, which makes a remote-less host satisfy every \
          obligation leg by measuring nothing. That is an ERROR, not a pass",
