@@ -171,6 +171,49 @@ pub fn decisions_owed_delta() -> serde_json::Value {
     })
 }
 
+/// L4-METRIC-HOME (87iq): the expectation verdict for the L4 sources
+/// agreement metric (agreement rate over required sources, spawn-to-agreed
+/// latency). There is no xkr6 row shipping a ratio- or duration-capable
+/// threshold for this metric, so no numeric delta can be honestly computed:
+/// any number here would be a homeless green. The verdict is therefore
+/// UNMEASURABLE with the missing home named, in xkr6's own row vocabulary
+/// (`metric`, `unit`, `expected`, `threshold`, `delta`, `verdict`). When xkr6
+/// ships the row, this function is where its expected/threshold land — not a
+/// parallel schema beside it, and not an `expected_duration` on any row type.
+#[must_use]
+pub fn sources_agreement_delta() -> serde_json::Value {
+    serde_json::json!({
+        "metric": "sources_agreement_rate",
+        "unit": "ratio",
+        "expected": null,
+        "threshold": null,
+        "delta": "UNMEASURABLE",
+        "verdict": "UNMEASURABLE",
+        "reason": "no xkr6 expectation row ships a ratio- or duration-capable threshold for L4 source agreement; refusing a numeric delta without a home",
+    })
+}
+
+/// L3-METRIC-HOME (jg1t): the expectation verdict for the steps-identity
+/// metric (share of STEPS rows identical across the TUI and JSON renderers).
+/// There is no xkr6 row shipping a ratio-capable threshold for this metric,
+/// so no numeric delta can be honestly computed: any percent here would be
+/// a homeless green. The verdict is therefore UNMEASURABLE with the missing
+/// home named, in xkr6's own row vocabulary. When xkr6 ships the row, this
+/// function is where its expected/threshold land — not a parallel schema
+/// beside it, and not an `expected_duration` on any row type.
+#[must_use]
+pub fn steps_identity_delta() -> serde_json::Value {
+    serde_json::json!({
+        "metric": "steps_identity_across_modes",
+        "unit": "ratio",
+        "expected": null,
+        "threshold": null,
+        "delta": "UNMEASURABLE",
+        "verdict": "UNMEASURABLE",
+        "reason": "no xkr6 expectation row ships a ratio-capable threshold for steps identity; refusing a numeric delta without a home",
+    })
+}
+
 fn answer_targets(row: &decision_ledger::Row) -> Vec<String> {
     match row.value.get("answers") {
         Some(serde_json::Value::String(target)) if !target.is_empty() => vec![target.clone()],

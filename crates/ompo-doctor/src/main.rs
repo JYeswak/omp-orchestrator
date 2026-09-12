@@ -597,6 +597,8 @@ fn run_portal(rest: &[String]) -> ExitCode {
         "gates": ompo_start::portal::gates_verdict(&repo),
         "decisions_owed": ompo_start::portal::decisions_owed_from_repo(&repo, now_millis() / 1000),
         "decisions_owed_delta": ompo_start::portal::decisions_owed_delta(),
+        "steps_identity_delta": ompo_start::portal::steps_identity_delta(),
+        "sources_agreement_delta": ompo_start::portal::sources_agreement_delta(),
     });
     let row = match ompo_start::portal::seal(row) {
         Ok(row) => row,

@@ -404,3 +404,31 @@ fn steps_artifact_write_readback() {
         "the refusal must name the missing path, got {error}"
     );
 }
+
+/// L3-METRIC-HOME (jg1t): the steps-identity metric carries an
+/// UNMEASURABLE delta verdict, never a numeric green without a home. There
+/// is no xkr6 expectation row for this metric, so no threshold exists to
+/// compute a delta against; a percent here would green forever.
+#[test]
+fn steps_identity_delta_unmeasurable_without_home() {
+    use ompo_start::portal::steps_identity_delta;
+
+    let verdict = steps_identity_delta();
+    println!("L3_METRIC_HOME verdict={verdict}");
+    assert_eq!(
+        verdict["metric"], serde_json::json!("steps_identity_across_modes"),
+        "the label must name the metric it homes, got {verdict}"
+    );
+    assert_eq!(verdict["verdict"], serde_json::json!("UNMEASURABLE"));
+    assert_eq!(verdict["delta"], serde_json::json!("UNMEASURABLE"));
+    assert!(
+        verdict["expected"].is_null() && verdict["threshold"].is_null(),
+        "no fabricated threshold may stand in for the missing xkr6 row, got {verdict}"
+    );
+    assert!(
+        verdict["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("xkr6")),
+        "the label must name the missing home, got {verdict}"
+    );
+}
