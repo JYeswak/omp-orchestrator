@@ -40,6 +40,26 @@
 //! and `the_old_and_new_predicates_disagree_on_this_workspace` is tightened, because its
 //! assertions (`new <= old`, plus a ban on a substring the old trigger never contained) all held
 //! under a literal revert of the coverage path.
+//!
+//! # THIRD PASS — the specimen went stale the day after it was chosen
+//!
+//! The second pass chose `fleet-composite` as the scheduler arm's specimen because its verdict
+//! *"turns on ONE input"*. **That premise was falsified by `8cfeac1` (2026-09-11, one day later),
+//! which added a `[package.metadata.gate]` stanza to `crates/fleet-composite/Cargo.toml`.** The
+//! gate arm fires AHEAD of the scheduler arm — deliberately, see the ordering comment at the
+//! scheduler arm in `crate_reachability` — so the census now cites the gate stanza and the two
+//! legs pinning the cron citation failed. Nothing regressed: the production predicate did exactly
+//! what its comment promises, which is refuse to re-attribute a row an earlier arm explained.
+//!
+//! So this is a PREMISE-FALSE repair, not a behaviour change. Three moves, no assertion dropped:
+//!
+//! - the scheduler arm's decisive specimen becomes SYNTHETIC, for the reason the known-bad
+//!   already is — a real crate's trigger set is a peer's edit away from changing under it;
+//! - the non-re-attribution ordering contract, which `8cfeac1` made load-bearing and which
+//!   nothing asserted, gets its own leg on the real tree, still proving the cron row is on the
+//!   surface for `fleet-composite`;
+//! - the by-name pin in the disagreement leg becomes a by-SET pin, so a future specimen going
+//!   stale is reported as a membership change instead of surviving as an unchanged count.
 
 use omp_orchestrator::{
     census_gates, crate_bin_names, crate_reachability, GateReachability, SchedulerSurfaces,
@@ -76,6 +96,15 @@ const MEASURED_CRONTAB: &str = concat!(
     "*/10 * * * * cd /usr/local/src/omp-orchestrator && /usr/bin/true\n",
     "#0 * * * * /usr/local/bin/kernel-only-operator-hook\n",
 );
+
+/// The crontab body for the SYNTHETIC scheduler specimen.
+///
+/// Kept separate from [`MEASURED_CRONTAB`], which documents a row observed on a real machine and
+/// must not grow invented rows. The schedule is deliberately a DIFFERENT minute set
+/// (`7,27,47` against the measured `6,26,46`) so that a leg asserting the synthetic citation
+/// cannot be satisfied by the measured fixture being passed in by mistake.
+const SCHEDULED_GHOST_CRONTAB: &str =
+    "7,27,47 * * * * GHOST_INVOKER=SCHEDULED /usr/local/bin/ghost-scheduled\n";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -169,34 +198,48 @@ fn passes_known_good() {
 
 /// THE SCHEDULER IS A TRIGGER SURFACE — acceptance leg 2's fourth class, and its known-bad.
 ///
-/// `fleet-composite` has no manifest caller, is not named by the hook, declares no
-/// `[package.metadata.gate]` and appears in no workflow. Every one of those is true and the crate
-/// still runs every twenty minutes. The whole verdict therefore turns on ONE input, which is what
-/// makes the known-bad exact: remove the cron row from the probe's input and the row must go back
-/// to Unreachable.
+/// The specimen is SYNTHETIC and the reason is written in the third-pass note above: the previous
+/// real-tree specimen acquired a second trigger overnight and took this leg red with it. A crate
+/// that exists only inside this function cannot acquire a manifest caller, a hook line, a gate
+/// stanza or a workflow entry, so the claim *"the whole verdict turns on ONE input"* stays true
+/// for as long as the leg exists. That is the same argument [`fires_on_known_bad`] already makes
+/// for its ghost crate, applied to the positive direction.
+///
+/// `src/main.rs` is what makes it a BIN: the scheduler arm is gated on `has_bin`, and a library
+/// with a cron row would be measuring nothing.
 #[test]
-fn the_scheduler_surface_decides_fleet_composite() {
-    let root = repo_root();
-    let hook = root.join(".git/hooks/pre-commit");
+fn the_scheduler_surface_decides_a_crate_with_no_other_trigger() {
+    let temp = std::env::temp_dir().join(format!("uldvu-scheduled-{}", std::process::id()));
+    let crate_dir = temp.join("crates").join("ghost-scheduled");
+    std::fs::create_dir_all(crate_dir.join("src")).expect("create fixture");
+    std::fs::write(
+        crate_dir.join("Cargo.toml"),
+        "[package]\nname = \"ghost-scheduled\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .expect("write fixture manifest");
+    std::fs::write(crate_dir.join("src/main.rs"), "fn main() {}\n").expect("write fixture src");
+    let hook = temp.join(".git/hooks/pre-commit");
 
-    let with_cron = SchedulerSurfaces::from_crontab_text(MEASURED_CRONTAB);
-    let verdict = crate_reachability(&root, "fleet-composite", &hook, true, &with_cron);
+    let with_cron = SchedulerSurfaces::from_crontab_text(SCHEDULED_GHOST_CRONTAB);
+    let verdict = crate_reachability(&temp, "ghost-scheduled", &hook, true, &with_cron);
     let GateReachability::Reachable { trigger } = &verdict else {
+        std::fs::remove_dir_all(&temp).ok();
         panic!(
-            "FALSE UNREACHABLE: fleet-composite is executed by a live cron row and the census \
-             said {verdict:?}"
+            "FALSE UNREACHABLE: ghost-scheduled is executed by a cron row and the census said \
+             {verdict:?}"
         );
     };
     assert!(
-        trigger.starts_with("crontab row (6,26,46 * * * *)")
-            && trigger.ends_with("/fleet-composite"),
+        trigger.starts_with("crontab row (7,27,47 * * * *)")
+            && trigger.ends_with("/ghost-scheduled"),
         "the trigger must CITE the row that fires it, not merely assert reachability: {trigger}"
     );
 
     // KNOWN-BAD: the same crate, the same tree, the cron row removed from the probe's input.
     let without_cron = SchedulerSurfaces::empty();
-    let verdict = crate_reachability(&root, "fleet-composite", &hook, true, &without_cron);
+    let verdict = crate_reachability(&temp, "ghost-scheduled", &hook, true, &without_cron);
     let GateReachability::Unreachable { reason } = &verdict else {
+        std::fs::remove_dir_all(&temp).ok();
         panic!("VACUOUS SCHEDULER ARM: with no scheduler surface at all, {verdict:?}");
     };
     assert!(
@@ -207,6 +250,44 @@ fn the_scheduler_surface_decides_fleet_composite() {
         !reason.contains("no invocation site:"),
         "the old reason string asserted absence in the confident voice; it must not come back: \
          {reason}"
+    );
+
+    std::fs::remove_dir_all(&temp).ok();
+}
+
+/// AN EARLIER ARM IS NOT RE-ATTRIBUTED — the ordering contract `8cfeac1` made load-bearing.
+///
+/// The scheduler arm is LAST of the reachable arms on purpose: its comment in `crate_reachability`
+/// says it *"can only turn an Unreachable row Reachable; it can never re-attribute a row that some
+/// earlier arm already explained"*, because a repair that rewrites verdicts it was not asked about
+/// is indistinguishable from widening. Nothing asserted that until the day a real crate acquired
+/// both triggers at once and turned the contract into an observable.
+///
+/// `fleet-composite` is that crate, and this leg keeps the real-tree evidence the old specimen
+/// carried: the cron row IS on the surface, the census cites the gate stanza anyway, and the two
+/// facts are asserted together so neither can drift out silently.
+#[test]
+fn an_earlier_arm_is_not_re_attributed_by_the_scheduler() {
+    let root = repo_root();
+    let hook = root.join(".git/hooks/pre-commit");
+    let scheduler = SchedulerSurfaces::from_crontab_text(MEASURED_CRONTAB);
+
+    // The surface still sees it. This is the second pass's finding, unchanged and still measured.
+    let row = scheduler
+        .invoker_of(&crate_bin_names(&root, "fleet-composite"))
+        .expect("the measured crontab row invokes fleet-composite by basename");
+    assert_eq!(row.schedule, "6,26,46 * * * *", "the row's schedule moved");
+    assert_eq!(row.executor_name(), "fleet-composite");
+
+    // And the census cites the EARLIER arm regardless, because that is the one that explains it.
+    let verdict = crate_reachability(&root, "fleet-composite", &hook, true, &scheduler);
+    let GateReachability::Reachable { trigger } = &verdict else {
+        panic!("fleet-composite has two live triggers and the census said {verdict:?}");
+    };
+    assert!(
+        trigger.starts_with("[package.metadata.gate]"),
+        "RE-ATTRIBUTION: the scheduler arm overwrote an explanation an earlier arm already owned. \
+         fleet-composite declares a gate stanza since 8cfeac1 and must cite it: {trigger}"
     );
 }
 
@@ -327,8 +408,10 @@ fn the_positive_control_is_not_satisfiable_by_existence() {
 /// discrimination.
 ///
 /// Three changes: the count comparison is STRICT, the ban covers the old trigger's actual text,
-/// and the rows that move are pinned BY NAME so the leg cannot be satisfied by a different row
-/// happening to drop out.
+/// and the rows that move are pinned BY SET so the leg cannot be satisfied by a different row
+/// happening to drop out. The set pin replaced a pair of by-name pins in the third pass, after
+/// one of the two names (`fleet-composite`) changed which arm explains it and the leg had no way
+/// to say whether that was a stale specimen or a widening.
 #[test]
 fn the_old_and_new_predicates_disagree_on_this_workspace() {
     let root = repo_root();
@@ -382,22 +465,34 @@ fn the_old_and_new_predicates_disagree_on_this_workspace() {
          new={new_reachable}\n{}",
         rows.join("\n")
     );
-    // THE TWO ROWS THAT MOVE, PINNED BY NAME. A count alone cannot tell "the scheduler arm
-    // rescued fleet-composite and kernel-only-operator-hook is genuinely dead" apart from any
-    // other 10/11 split.
+    // THE ROW THAT MOVES, PINNED BY SET RATHER THAN BY COUNT. A count cannot tell "exactly the
+    // one genuinely-dead binary was refused" apart from any other 10/11 split, and a single
+    // by-name assertion cannot tell a specimen going stale (which is what happened to
+    // fleet-composite in `8cfeac1`) from a real widening.
+    let unreachable: Vec<&str> = COVERAGE_WAVE_OUTPUT_CRATES
+        .iter()
+        .copied()
+        .filter(|name| !crate_reachability(&root, name, &hook, true, &scheduler).is_reachable())
+        .collect();
+    assert_eq!(
+        unreachable,
+        vec!["kernel-only-operator-hook"],
+        "the rows the repaired predicate refuses are a MEMBERSHIP, not a count: \
+         kernel-only-operator-hook has no trigger on any probed surface and is the census's one \
+         genuine BUILT != WIRED finding. Any other membership means the predicate moved a row it \
+         was not asked about:\n{}",
+        rows.join("\n")
+    );
+    // fleet-composite is the row the scheduler arm RESCUED in the second pass. It has since
+    // gained a gate stanza and is explained by an earlier arm; that the cron row is still on the
+    // surface is asserted in [`an_earlier_arm_is_not_re_attributed_by_the_scheduler`]. What this
+    // leg still owes is that it is reachable for a NAMED arm and not by existence.
     let fleet = crate_reachability(&root, "fleet-composite", &hook, true, &scheduler);
     let GateReachability::Reachable { trigger } = &fleet else {
-        panic!("fleet-composite must be Reachable via its scheduler row, got {fleet:?}");
+        panic!("fleet-composite has a gate stanza and a cron row and yet {fleet:?}");
     };
     assert!(
-        trigger.starts_with("crontab row "),
-        "fleet-composite must cite the cron row, not some other arm: {trigger}"
-    );
-    let hook_crate = crate_reachability(&root, "kernel-only-operator-hook", &hook, true, &scheduler);
-    assert!(
-        !hook_crate.is_reachable(),
-        "kernel-only-operator-hook has no trigger on any probed surface and is the census's one \
-         genuine BUILT != WIRED finding; a predicate that calls it reachable has widened back to \
-         existence: {hook_crate:?}"
+        trigger.starts_with("[package.metadata.gate]"),
+        "fleet-composite must cite the first arm that explains it: {trigger}"
     );
 }
