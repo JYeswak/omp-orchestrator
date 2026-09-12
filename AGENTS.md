@@ -598,6 +598,64 @@ grep 'Remote command finished: exit=<N>'   AND   grep '^test result:'
 **Both present or it did not run.** `$?` cannot tell you: a refusal hands you a zero, and a
 background task reports *"completed (exit code 0)"* over a refusal. **Measured twice in one night.**
 
+## WHAT THE LANE ACTUALLY SHIPS — and the waste is 350× the payload (Joshua, 2026-09-12)
+
+Joshua's directive: **"lets make sure we are ONLY moving what is NEEDED to contabo and not sending
+all kinds of unneeded cruft from our local systems."** Measured before tightening anything:
+
+```
+tracked total              40,928 KB
+  .beads/     13,796 KB    ALREADY EXCLUDED  (.beads/ and *.jsonl, both in exclude_patterns)
+  .flywheel/   7,112 KB    ALREADY EXCLUDED
+SHIPPED                    20,020 KB
+  crates/     11,672 KB    789 files -- the compile, needed
+  docs/        7,152 KB    268 files -- PARTLY needed, see below
+  root files   ~1,200 KB   AGENTS.md alone is 480 KB
+```
+
+**`exclude_patterns` already carries 60 entries and the two biggest local items are in it. The lane
+is not shipping local cruft** — re-derive with `git ls-files | xargs du -ck` before proposing a trim.
+
+⛔ **AND `docs/` IS NOT CRUFT: 88 distinct `docs/` paths are read by test code** (`docs/plan` 65
+references, `docs/PLAN.md` 26, `docs/plan/FINDINGS.jsonl` 20, `docs/decisions.jsonl` 20).
+**Excluding it would convert passing legs into UNMEASURABLE.**
+
+⛔⛔ **THE GENERAL TRAP, AND IT IS ALREADY COSTING US: AN `rch` EXCLUSION THAT INTERSECTS A TEST'S
+ASSERTED PATHS MAKES THAT LEG PERMANENTLY UNMEASURABLE, AND NOTHING DETECTS IT.** Measured
+2026-09-12 — **5 exclusions intersect 20 test-asserted literals:**
+
+```
+.flywheel   12 asserted paths   <- cross_section_authority asserts .flywheel/grade-evidence/kxe5-*.md.gz,
+                                   BOTH TRACKED AND PRESENT (1105 B, 1448 B), and the worker is
+                                   CONFIGURED never to receive them. That leg is red on every worker.
+.beads       4   .git 2   scratch 1   target 1
+```
+
+**So a trimmed payload buys a permanently red leg, and the red looks like a product defect.** Before
+adding an exclusion, grep the crates for path literals under it. **The two configs have no shared
+checker; that is a gate nobody has built.**
+
+⭐ **AND THE PAYLOAD IS NOT WHERE THE WASTE IS — IT IS 350× SMALLER THAN THE RESIDUE:**
+
+```
+payload per build              20 MB
+compiled pool per export path  1,200 - 7,500 MB   -- 1 to 11 per box
+2026-09-12                     3 of 4 boxes critical -> admission refused EVERY build (rc=103),
+                               a grading pane BLOCKED, 42,074 MB reclaimed by hand
+```
+
+**Every grade mints a NEW export path, which mints a NEW pool hash that no later grade reuses.** The
+three-clause export standard (commit first, export, `EXPORT == HEAD` by hash, mutate the export
+only) is CORRECT and has **no disposal clause** — tracked as `4ftow`. **Optimising the 20 MB payload
+is rounding error; the pools are the whole problem**, and `rch gc`'s 12-hour idle window means an
+active fleet never self-reclaims them.
+
+⛔ **AND THE MAC SIDE IS NOT THE LEAK — the conductor filed that premise and it was wrong within two
+minutes.** Mac-side export trees are **16 dirs × 40 MB = 320 MB, against 178 GB free.** The
+multi-GB figure is the WORKER's compiled pool; the reclaim log's leading `/Users/josh/Developer/...`
+is **the worker's replica of the Mac layout**, which this file already warns about. **Acting on the
+original wording would have been 320 MB of work against a 42 GB problem.**
+
 ## ⛔ RECLAIM THE BOXES YOURSELF. THIS IS A STANDING DEMAND, NOT A PERMISSION. (Joshua, 2026-09-08)
 
 Joshua, verbatim: **"agents are declaring contabos not usable because why - because we're not
@@ -2764,6 +2822,35 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
 
    **The tell is two instruments disagreeing**, which is why `%20` caught it and a single grep would
    not have. **Same family as `8o`:** a text count answering a different question than the one asked.
+
+8r. **`grep -c` AND `grep -o | wc -l` ANSWER DIFFERENT QUESTIONS, SO TWO HONEST AGENTS CAN
+   "DISAGREE" ABOUT A FILE THEY BOTH MEASURED CORRECTLY.** Measured 2026-09-12 on
+   `crates/no-shell-gate/tests/hook_freshness.rs` at one tree (`e098ad7^`): `modified|mtime` is
+   **28 LINES and 42 OCCURRENCES.** Two panes published 28 and 42; **the conductor retracted the 28
+   as an error and it was not one** — it was a unit mismatch, and the retraction taught the fleet a
+   false lesson about a correct measurement. **State the UNIT with every count.**
+   **And a RETRACTED figure and a STALE figure are different states with different remedies:** a
+   retraction says the method was wrong; staleness says the tree moved. The 28 is now dead for the
+   second reason (39/50 at HEAD), not the first.
+
+8s. **A PATTERN MATCHING BOTH TEST ROWS AND SUMMARY ROWS MEASURES THE CLOCK.** Measured 2026-09-12:
+   `^test .* FAILED` swept in `test result: FAILED … finished in 0.28s`, which **carries a timing
+   and therefore differs every run**, fabricating **11 newly-red and 11 newly-green** out of an
+   empty difference. **A set difference over timing-bearing lines is GUARANTEED to look like a
+   finding**, and a symmetric result is the shape that reads as real. Caught mid-measurement by the
+   agent holding it, which is why it never shipped.
+
+8t. **AN ENVIRONMENT CLASS IS A PROPERTY OF `(leg, box)`, NOT OF THE LEG.** Measured 2026-09-12 when
+   two independent partitions of the SAME 14 lane reds disagreed on two rows — one calling them
+   ABSENT, the other FOSSIL — **and both were right about their own box**: `contabo-3` has no
+   `.git` at all, `contabo-1` has one with a stale 85-path index. The identical assertion is ABSENT
+   where there is no object database and FOSSIL where there is one lacking the history.
+   **So a class NEVER transfers across boxes.** A lane ROOT-class verdict (worker runs as root, so a
+   `chmod`-unreadable fixture is readable anyway) says NOTHING about the same leg in CI. **Any
+   taxonomy assigning one class per leg is wrong by construction; the cell is per box.**
+   ⭐ **And the ROOT class has a fix rather than a disclaimer: replace `chmod` with a DANGLING
+   SYMLINK** — `read` fails `ENOENT` for every uid, so the error is injected where privilege cannot
+   bypass it. That converts an environment-blocked leg into a real one.
 
 8p. **EVERY DISPATCH REQUIRES A CALLBACK, BECAUSE A WORKER HAS NO WAKE TRIGGER.** Joshua's call,
    2026-09-07, fleet-wide. Landed in the dispatch template and synced to
