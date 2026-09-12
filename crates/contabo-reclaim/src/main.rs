@@ -1,218 +1,131 @@
 #![forbid(unsafe_code)]
 
 use asupersync::runtime::RuntimeBuilder;
+use asupersync::types::Budget;
 use asupersync::Cx;
-use contabo_reclaim::probe::Config;
 use contabo_reclaim::{
-    run_all_workers, worker_by_id, FleetReport, ReclaimError, ReclaimMode, ReclaimReport,
-    WorkerSelection,
+    consume, parse_args, recover_terminal_response, render_cli_error, request_json, CliError,
+    ConsumerError, OWNER_MACHINERY_EXIT,
 };
-use std::path::PathBuf;
+use std::io::Write;
 use std::process::ExitCode;
 
-fn usage() -> &'static str {
-    "usage: contabo-reclaim (--worker contabo-N | --all-workers) --base ABSOLUTE_PATH [--apply] [--json] (or CONTABO_RECLAIM_BASE)"
-}
-
-fn parse_args() -> Result<(WorkerSelection, PathBuf, ReclaimMode, bool), ReclaimError> {
-    let mut selection = None;
-    let mut base = None;
-    let mut mode = ReclaimMode::DryRun;
-    let mut json = false;
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let mut index = 0;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--worker" => {
-                if selection.is_some() {
-                    return Err(ReclaimError::MultipleWorkers);
-                }
-                index += 1;
-                let worker = args.get(index).ok_or(ReclaimError::MissingSelection)?;
-                selection = Some(WorkerSelection::One(worker_by_id(worker)?));
-            }
-            value if value.starts_with("--worker=") => {
-                if selection.is_some() {
-                    return Err(ReclaimError::MultipleWorkers);
-                }
-                selection = Some(WorkerSelection::One(worker_by_id(&value[9..])?));
-            }
-            "--all-workers" => {
-                if selection.is_some() {
-                    return Err(ReclaimError::MultipleWorkers);
-                }
-                selection = Some(WorkerSelection::All);
-            }
-            "--base" => {
-                index += 1;
-                base = Some(PathBuf::from(args.get(index).ok_or_else(|| {
-                    ReclaimError::InvalidBase {
-                        detail: "--base requires an absolute path".to_owned(),
-                    }
-                })?));
-            }
-            value if value.starts_with("--base=") => base = Some(PathBuf::from(&value[7..])),
-            "--apply" => mode = ReclaimMode::Apply,
-            "--json" => json = true,
-            "--help" | "-h" => {
-                println!("{}", usage());
-                std::process::exit(0);
-            }
-            other => {
-                return Err(ReclaimError::InvalidBase {
-                    detail: format!("unknown argument={other}; {}", usage()),
-                })
-            }
-        }
-        index += 1;
-    }
-    let selection = selection.ok_or(ReclaimError::MissingSelection)?;
-    let base = base
-        .or_else(|| std::env::var_os("CONTABO_RECLAIM_BASE").map(PathBuf::from))
-        .ok_or_else(|| ReclaimError::InvalidBase {
-            detail: "BASE_REQUIRED: pass --base or CONTABO_RECLAIM_BASE".to_owned(),
-        })?;
-    Ok((selection, base, mode, json))
-}
-
-enum CliReport {
-    Single(ReclaimReport),
-    Fleet(FleetReport),
-}
-
-fn print_error(error: &ReclaimError, json: bool) {
+fn print_consumer_error(error: &ConsumerError, json: bool) {
     if json {
-        let value = serde_json::json!({
+        let envelope = serde_json::json!({
             "schema": "contabo-reclaim/report-v1",
             "outcome": "ERROR",
+            "class": "OWNER_MACHINERY",
+            "reason": error.reason().as_str(),
+            "request_id": error.request_id(),
             "error": error.to_string(),
         });
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&value)
-                .unwrap_or_else(|_| "{\"outcome\":\"ERROR\"}".to_owned())
-        );
+        eprintln!("{}", envelope);
     } else {
         eprintln!("{error}");
     }
 }
 
-fn print_single_human(report: &ReclaimReport) {
-    println!(
-        "CONTABO_RECLAIM outcome={:?} worker={} host={} mode={:?} bytes={} directories={} active_build_ids={:?} detail={}",
-        report.outcome,
-        report.worker,
-        report.host,
-        report.mode,
-        report.bytes,
-        report.directories,
-        report.active_build_ids,
-        report.detail
-    );
-    for guard in &report.guards {
-        println!("GUARD {guard}");
-    }
-    for candidate in &report.candidates {
-        println!("CANDIDATE {candidate}");
-    }
-    for refusal in &report.refused {
-        println!("{refusal}");
-    }
+fn print_cli_error(error: &CliError, json: bool) {
+    eprintln!("{}", render_cli_error(error, json));
 }
 
-fn print_fleet_human(report: &FleetReport) {
-    println!(
-        "CONTABO_RECLAIM_FLEET outcome={:?} mode={:?} workers={} deferred_active_workers={} incomplete_workers={} detail={}",
-        report.outcome,
-        report.mode,
-        report.workers.len(),
-        report.deferred_active_workers,
-        report.incomplete_workers,
-        report.detail
+async fn forward_response(
+    recovery_cx: &Cx,
+    response: contabo_reclaim::OwnerForwardedResponse,
+    request_id: &str,
+    response_mode: contabo_reclaim::OwnerMode,
+    json: bool,
+) -> ExitCode {
+    let output_error = {
+        let mut stdout = std::io::stdout().lock();
+        match stdout.write_all(&response.raw_stdout) {
+            Err(error) => Some(format!("forwarding owner stdout failed: {error}")),
+            Ok(()) => stdout
+                .flush()
+                .err()
+                .map(|error| format!("flushing owner stdout failed: {error}")),
+        }
+    };
+    let Some(output_error) = output_error else {
+        return ExitCode::from(response.exit_code);
+    };
+    // Local stdout is lost but the owner may hold the terminal response in
+    // its durable journal; recover it there rather than inventing bytes.
+    let recovery = recover_terminal_response(recovery_cx, request_id, response_mode).await;
+    let recovery_detail = match recovery {
+        Ok(recovered) => format!(
+            "durable terminal response recovered; exit_code={}",
+            recovered.exit_code
+        ),
+        Err(error) => format!("durable recovery unavailable: {error}"),
+    };
+    let refusal = ConsumerError::recovery_needed(
+        request_id.to_owned(),
+        format!("{output_error}; {recovery_detail}"),
     );
-    for (index, worker) in report.workers.iter().enumerate() {
-        println!(
-            "WORKER index={} outcome={:?} worker={} host={} active_build_ids={:?} bytes={} directories={} detail={}",
-            index,
-            worker.outcome,
-            worker.worker,
-            worker.host,
-            worker.active_build_ids,
-            worker.bytes,
-            worker.directories,
-            worker.detail
-        );
-        for guard in &worker.guards {
-            println!("WORKER_GUARD index={} {guard}", index);
-        }
-        for refusal in &worker.refused {
-            println!("WORKER_REFUSAL index={} {refusal}", index);
-        }
-    }
+    print_consumer_error(&refusal, json);
+    ExitCode::from(OWNER_MACHINERY_EXIT)
 }
 
 fn main() -> ExitCode {
-    let (selection, base, mode, json) = match parse_args() {
-        Ok(value) => value,
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    let requested_json = request_json(&arguments);
+    let parsed = match parse_args(&arguments) {
+        Ok(parsed) => parsed,
+        Err(error) if error.is_help() => {
+            println!("{}", contabo_reclaim::usage());
+            return ExitCode::from(0);
+        }
         Err(error) => {
-            print_error(&error, false);
+            print_cli_error(&error, requested_json);
             return ExitCode::from(2);
         }
     };
     let runtime = match RuntimeBuilder::current_thread().build() {
         Ok(runtime) => runtime,
         Err(error) => {
-            let error = ReclaimError::Runtime {
-                detail: error.to_string(),
-            };
-            print_error(&error, json);
-            return ExitCode::from(2);
+            let refusal = ConsumerError::owner_machinery(
+                contabo_reclaim::OwnerMachineryReason::OwnerWait,
+                format!("runtime construction failed: {error}"),
+            );
+            print_consumer_error(&refusal, parsed.json);
+            return ExitCode::from(OWNER_MACHINERY_EXIT);
         }
     };
-    let result = runtime.block_on(async {
-        let cx = Cx::current().ok_or_else(|| ReclaimError::Runtime {
-            detail: "no ambient Cx".to_owned(),
-        })?;
-        match selection {
-            WorkerSelection::One(worker) => {
-                let config = Config { worker, base, mode };
-                contabo_reclaim::run(&cx, &config)
-                    .await
-                    .map(CliReport::Single)
+    // Recovery runs on its own request context, reserved BEFORE the RUN
+    // starts: after caller cancellation or outer expiry this Cx is still
+    // live, so CANCEL/STATUS/drain proceed under explicit bounds instead of
+    // tripping the cancelled caller context immediately. Bounded by the
+    // consumer outer deadline, not by budget counters.
+    let recovery_cx = runtime.request_cx_with_budget(Budget::INFINITE);
+    runtime.block_on(async {
+        let cx = match Cx::current() {
+            Some(cx) => cx,
+            None => {
+                let refusal = ConsumerError::owner_machinery(
+                    contabo_reclaim::OwnerMachineryReason::Cancelled,
+                    "owner consumer has no ambient Cx",
+                );
+                print_consumer_error(&refusal, parsed.json);
+                return ExitCode::from(OWNER_MACHINERY_EXIT);
             }
-            WorkerSelection::All => run_all_workers(&cx, &base, mode)
+        };
+        match consume(&cx, &recovery_cx, &parsed.request_id, parsed.mode).await {
+            Ok(response) => {
+                forward_response(
+                    &recovery_cx,
+                    response,
+                    &parsed.request_id,
+                    parsed.mode,
+                    parsed.json,
+                )
                 .await
-                .map(CliReport::Fleet),
-        }
-    });
-    match result {
-        Ok(CliReport::Single(report)) => {
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&report)
-                        .unwrap_or_else(|_| "{\"outcome\":\"ERROR\"}".to_owned())
-                );
-            } else {
-                print_single_human(&report);
             }
-            ExitCode::from(report.outcome.exit_code())
-        }
-        Ok(CliReport::Fleet(report)) => {
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&report)
-                        .unwrap_or_else(|_| "{\"outcome\":\"ERROR\"}".to_owned())
-                );
-            } else {
-                print_fleet_human(&report);
+            Err(error) => {
+                print_consumer_error(&error, parsed.json);
+                ExitCode::from(OWNER_MACHINERY_EXIT)
             }
-            ExitCode::from(report.exit_code())
         }
-        Err(error) => {
-            print_error(&error, json);
-            ExitCode::from(2)
-        }
-    }
+    })
 }
