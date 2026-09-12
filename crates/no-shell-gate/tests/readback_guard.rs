@@ -197,3 +197,69 @@ fn the_truncated_listing_hazard_is_recorded_beside_the_clause() {
         "the truncated-listing hazard must be stated in the doctrine, not only in a callback"
     );
 }
+
+/// THE PROOF-LINE PRESCRIPTION MUST NOT REVERT TO THE FORM THAT WORKED BY LUCK.
+///
+/// `AGENTS.md`'s "PROVE IT RAN" block is the single most-copied command in this repo, and until
+/// 2026-09-12 it prescribed `grep '^test result:'`. That anchor is safe ONLY because cargo happens
+/// not to colourise that one line — an upstream formatting decision nobody knew they depended on.
+/// Measured the same day: `^ *Compiling` matched 0 by default and 2 under `--color=never`, because
+/// `rch` emits ANSI escapes even when stderr is a file rather than a TTY.
+///
+/// This leg pins the three load-bearing parts. It is a DOCTRINE leg, not a behaviour leg: the
+/// hazard has ZERO in-tree code consumers — measured, no crate parses `rch` output — so the only
+/// place it can be enforced is the text agents copy from. A gate over code would find nothing.
+#[test]
+fn the_proof_line_prescription_keeps_its_three_load_bearing_parts() {
+    let doctrine = std::fs::read_to_string(repo_root().join("AGENTS.md"))
+        .unwrap_or_else(|error| panic!("AGENTS.md must be readable: {error}"));
+    assert!(
+        !doctrine.trim().is_empty(),
+        "ANTI-VACUITY: an empty AGENTS.md would make every needle below trivially absent"
+    );
+    // ANTI-VACUITY, POSITIVE CONTROL: the block this leg guards must exist at all. Without this,
+    // deleting the whole section would satisfy every "must NOT contain" assertion below.
+    assert!(
+        doctrine.contains("## PROVE IT RAN — A REFUSED BUILD EXITS 0"),
+        "the PROVE IT RAN block must EXIST; its absence would make the negative assertions vacuous"
+    );
+    for required in [
+        "--color=never",
+        "2>&1",
+        "grep 'Remote command finished: exit='",
+        "grep 'test result:'",
+    ] {
+        assert!(
+            doctrine.contains(required),
+            "the proof-line prescription must keep this part verbatim; missing: {required}"
+        );
+    }
+    // ⛔ SCOPED TO THE FENCED COMMAND BLOCK, NOT THE WHOLE FILE -- and that is a bug this leg
+    // already caught in its own author's first draft. A whole-file `!contains("grep '^test
+    // result:'")` FAILS, because the prose immediately below the block QUOTES the anchored form
+    // in order to warn against it. THE REMEDIATION'S OWN DOCUMENTATION ENTERS THE CORPUS IT
+    // SEARCHES -- the same class as a doc comment holding the needle it warns about. The needle
+    // is not wrong; its SCAN SET was.
+    let block = doctrine
+        .split_once("## PROVE IT RAN — A REFUSED BUILD EXITS 0")
+        .expect("asserted present above")
+        .1
+        .split_once("\n```\n")
+        .expect("the prescription's fenced block must open")
+        .1
+        .split_once("```")
+        .expect("the prescription's fenced block must close")
+        .0;
+    assert!(
+        !block.is_empty(),
+        "ANTI-VACUITY: an empty command block would satisfy the negative assertion below by \
+         containing nothing at all"
+    );
+    assert!(
+        !block.contains("^test result:"),
+        "the ANCHORED form must NOT be PRESCRIBED in the command block: it returns zero against \
+         coloured output and a zero match reads as ABSENCE, which is the failure this block \
+         exists to prevent. Quoting it in the PROSE as a warning is fine; here it is an \
+         instruction. Block was:\n{block}"
+    );
+}

@@ -592,11 +592,35 @@ evening."*
 ## PROVE IT RAN — A REFUSED BUILD EXITS 0
 
 ```
-grep 'Remote command finished: exit=<N>'   AND   grep '^test result:'
+RCH_REQUIRE_REMOTE=1 rch exec -- cargo test --color=never …   2>&1
+grep 'Remote command finished: exit='   AND   grep 'test result:'
 ```
 
 **Both present or it did not run.** `$?` cannot tell you: a refusal hands you a zero, and a
 background task reports *"completed (exit code 0)"* over a refusal. **Measured twice in one night.**
+
+⛔ **AND THREE PARTS OF THAT COMMAND ARE LOAD-BEARING, EACH MEASURED 2026-09-12 — the older form
+`grep '^test result:'` WORKED ONLY BY LUCK.**
+
+1. **`2>&1`, NEVER `2>/dev/null`.** `rch` delivers ALL remote output — **including the remote
+   program's own stdout** — on the LOCAL STDERR stream. Measured in one invocation with the streams
+   captured separately: local stdout **0 bytes**, all four `test result:` lines on stderr.
+   **`2>/dev/null` therefore yields ZERO BYTES and `exit=0`, which reads as "ran clean, said
+   nothing" and is indistinguishable from "did not run".**
+2. **`--color=never`.** `rch` output carries ANSI escapes **even when stderr is a file or a pipe,
+   not a TTY**, so the hazard is CONSTANT rather than intermittent. A line that renders as
+   `warning: …` is really `\e[1m\e[33mwarning\e[0m: …`, so **`^`-anchored patterns silently return
+   zero** — and a zero match reads as ABSENCE. Measured: `^ *Compiling` matched **0** by default and
+   **2** under `--color=never`, while the unanchored pattern matched 2 both times. **The anchored
+   and unanchored counts agreeing is the free self-test.**
+3. **NO `^` ANCHOR, even with the flag.** `--color=never` is a CARGO flag and cannot reach `rch`'s
+   OWN tracing emitter, which stays coloured — so `Remote command finished:` is itself bracketed by
+   escapes. **Match MESSAGE TEXT, never structure**; any pattern reaching from a log level or target
+   INTO the message crosses an escape and returns zero.
+
+⭐ **`test result:` is uncoloured by ACCIDENT, not by design** — cargo simply does not colourise that
+line. The fleet's habit survived on an upstream formatting decision nobody knew they were relying
+on. **The flag converts that luck into a property.**
 
 ## WHAT THE LANE ACTUALLY SHIPS — and the waste is 350× the payload (Joshua, 2026-09-12)
 
