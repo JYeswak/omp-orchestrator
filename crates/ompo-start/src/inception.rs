@@ -74,6 +74,14 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// Init refused over a CLAUDE.md whose stamp report is not Stamped:
+    /// the L2 trust flow requires the stamped control file before any
+    /// trust-dependent continuation. No opt-in override exists on the
+    /// gated entry by design -- stamp the file.
+    UntrustedClaudeMd {
+        path: PathBuf,
+        status: AgentsStampStatus,
+    },
     /// Init refused over an AGENTS.md that carries no repo ownership stamp.
     /// Explicit opt-in (`trusted_init`) is the only override.
     UntrustedAgentsMd { path: PathBuf },
@@ -130,6 +138,11 @@ impl fmt::Display for InceptionError {
             Self::IdentityUnavailable { field, detail } => write!(
                 formatter,
                 "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
+            ),
+            Self::UntrustedClaudeMd { path, status } => write!(
+                formatter,
+                "HUMAN_HALT refusing init over {status:?} CLAUDE.md path={} (stamp it with the project token to opt in; no flag bypasses this)",
+                path.display()
             ),
             Self::UntrustedAgentsMd { path } => write!(
                 formatter,
@@ -346,12 +359,12 @@ fn git_marker(repo_root: &Path) -> Result<String, InceptionError> {
 /// guessed path. The L1 git leg pins the same mapping test-locally; this
 /// is the production function the L2 flow adopts.
 ///
-/// INERT BY DESIGN (rule 9): no caller yet. Wiring this into shared
-/// `initialize`/`build_manifest` would re-route doctor repair too, whose
-/// kyng-class legs run green on non-git fixtures on workers WITH a `.git`
-/// upward and would newly refuse on workers WITHOUT one --
-/// environment-divergent breakage for zero new capability. The L2 entry
-/// owns adoption; until then this stays available, not invoked.
+/// WIRED (rule 9): sole production caller is [`initialize_gated`], the L2
+/// operator entry. It is deliberately NOT wired into shared
+/// `initialize`/`build_manifest`, which would re-route doctor repair too,
+/// whose kyng-class legs run green on non-git fixtures on workers WITH a
+/// `.git` upward and would newly refuse on workers WITHOUT one --
+/// environment-divergent breakage for zero new capability.
 pub fn git_repo_toplevel(repo: &Path) -> Result<PathBuf, InceptionError> {
     let mut command = Command::new("git");
     // Ceiling the upward search at the argument's parent keeps this
@@ -1413,9 +1426,12 @@ pub struct AgentsStampReport {
     pub status: AgentsStampStatus,
 }
 
-/// Probe the AGENTS.md stamp and the live source revision.
-pub fn agents_stamp_report(repo: &Path) -> AgentsStampReport {
-    let stamped = fs::read_to_string(repo.join("AGENTS.md"))
+/// Probe a control-file stamp and the live source revision: the shared
+/// core behind [`agents_stamp_report`] and [`claude_stamp_report`]. One
+/// token, one join rule, two filenames -- a second copy would agree with
+/// the subject by construction.
+pub fn stamp_report(repo: &Path, filename: &str) -> AgentsStampReport {
+    let stamped = fs::read_to_string(repo.join(filename))
         .is_ok_and(|text| text.contains(PROJECT_AGENTS_OWNERSHIP_STAMP));
     let source_revision = source_revision(repo).ok();
     let status = match (stamped, &source_revision) {
@@ -1430,6 +1446,18 @@ pub fn agents_stamp_report(repo: &Path) -> AgentsStampReport {
     }
 }
 
+/// Probe the AGENTS.md stamp and the live source revision.
+pub fn agents_stamp_report(repo: &Path) -> AgentsStampReport {
+    stamp_report(repo, "AGENTS.md")
+}
+
+/// Probe the CLAUDE.md stamp and the live source revision. Same token,
+/// same join rule as [`agents_stamp_report`]: no second stamp
+/// vocabulary, no copied file contents, no pinned line counts.
+pub fn claude_stamp_report(repo: &Path) -> AgentsStampReport {
+    stamp_report(repo, "CLAUDE.md")
+}
+
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     initialize_inner(repo_root, output, false)
 }
@@ -1441,16 +1469,26 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 }
 
 /// L2 entry for operator-driven init: the repository check gates before
-/// any downstream L2 state continues. A real repository proceeds with its
-/// canonical root; a non-repo, unspawned, timed-out, killed, or unreadable
-/// git observation halts with the typed identity-unavailable
-/// reason/remediation. This lives beside -- never inside -- shared
-/// [`initialize`]: doctor repair flows tolerate non-git checkouts by
-/// design (git identity degrades to "missing"), and gating them would
-/// trade measured-green repair legs for zero new capability. The output
-/// path stays caller-chosen; only the root canonicalizes.
+/// any downstream L2 state continues, and the CLAUDE.md stamp check
+/// gates before trust-dependent continuation. A real repository with a
+/// stamped control file proceeds with its canonical root; any other
+/// stamp state refuses typed before `initialize` runs. This lives
+/// beside -- never inside -- shared [`initialize`]: doctor repair flows
+/// tolerate non-git checkouts by design (git identity degrades to
+/// "missing"), and gating them would trade measured-green repair legs
+/// for zero new capability. The output path stays caller-chosen; only
+/// the root canonicalizes.
 pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     let top = git_repo_toplevel(repo_root)?;
+    match claude_stamp_report(&top).status {
+        AgentsStampStatus::Stamped => {}
+        status => {
+            return Err(InceptionError::UntrustedClaudeMd {
+                path: top.join("CLAUDE.md"),
+                status,
+            })
+        }
+    }
     initialize(&top, output)
 }
 

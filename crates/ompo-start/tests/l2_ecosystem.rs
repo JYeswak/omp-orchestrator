@@ -798,6 +798,11 @@ fn gated_entry_requires_git_repo() {
     use ompo_start::inception::initialize_gated;
     // Healthy: a real repository proceeds with actions recorded.
     let repository = repository_fixture();
+    // qruz companion: the gated entry now also requires a stamped
+    // CLAUDE.md. Stamp it so this leg keeps measuring the git gate,
+    // not the stamp gate.
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
     let output = repository
         .path()
         .join(".omp-orchestrator/inception.json");
@@ -920,6 +925,97 @@ fn agents_stamp_reports_identity_revision_and_status() {
         report.stamp_present && report.source_revision.is_none(),
         "non-git stamp keeps identity without revision, got {report:?}"
     );
+    assert_eq!(
+        report.status,
+        AgentsStampStatus::GitUnavailable,
+        "stamp without git is GitUnavailable"
+    );
+}
+
+/// L2-TEST-CLAUDE-STAMP (bead qruz): the reachable L2 trust-flow entry
+/// admits a stamped CLAUDE.md and refuses every other stamp state
+/// before trust-dependent continuation. Uses the real
+/// `initialize_gated` entry end to end -- never a copy of its arms:
+/// a copy would agree with the subject by construction.
+///
+/// KNOWN-BAD: bypass the stamp gate at the entry (proceed regardless)
+/// and the restrictive arms below pass silently: unstamped trust would
+/// advance with no evidence anything was required. Message AND exit
+/// are pinned on the mutation run.
+#[test]
+fn claude_stamp_gates_trust_entry() {
+    use ompo_start::inception::{claude_stamp_report, initialize_gated, AgentsStampStatus};
+    // Healthy: stamped CLAUDE.md in a live repo reaches the trust
+    // branch -- initialize runs and writes the artifact.
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/init-gated.json");
+    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    assert!(
+        output.exists(),
+        "a trusted entry writes its artifact"
+    );
+    // Restrictive matrix: every non-Stamped state refuses typed before
+    // initialize runs, with the file and the remedy named.
+    let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
+        ("empty", Box::new(|root| {
+            std::fs::write(root.join("CLAUDE.md"), b"").expect("empty file");
+        })),
+        ("foreign", Box::new(|root| {
+            std::fs::write(root.join("CLAUDE.md"), b"foreign stuff\n").expect("foreign file");
+        })),
+        ("unreadable", Box::new(|root| {
+            // Hermetic: a previous arm may have left a directory here.
+            let path = root.join("CLAUDE.md");
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).expect("clear dir");
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+            std::fs::create_dir(&path).expect("directory mask");
+        })),
+        ("missing", Box::new(|root| {
+            let path = root.join("CLAUDE.md");
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).expect("clear dir");
+            } else {
+                std::fs::remove_file(&path).expect("remove file");
+            }
+        })),
+    ];
+    for (name, arrange) in cases {
+        arrange(repository.path());
+        let output = repository
+            .path()
+            .join(format!(".omp-orchestrator/init-gated-{name}.json"));
+        let error =
+            initialize_gated(repository.path(), &output).expect_err("unstamped must refuse");
+        let text = error.to_string();
+        assert!(
+            text.contains("HUMAN_HALT") && text.contains("CLAUDE.md"),
+            "{name} refusal must be typed and name the file, got: {text}"
+        );
+        assert!(
+            text.contains("remedy:") || text.contains("stamp it"),
+            "{name} refusal must carry remediation, got: {text}"
+        );
+        assert!(
+            !output.exists(),
+            "a refused entry must write nothing, found {}",
+            output.display()
+        );
+    }
+    // GitUnavailable is a report-level state: a stamped file with no
+    // usable git observes identity without revision.
+    let nogit = tempfile::tempdir().expect("no-git fixture");
+    std::fs::write(nogit.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped non-repo file");
+    std::fs::write(nogit.path().join(".git"), b"gitdir: /nonexistent/qruz\n")
+        .expect("broken gitdir");
+    let report = claude_stamp_report(nogit.path());
     assert_eq!(
         report.status,
         AgentsStampStatus::GitUnavailable,
