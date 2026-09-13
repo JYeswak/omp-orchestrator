@@ -107,6 +107,16 @@ pub enum InstallError {
         reason: String,
         outcomes: Vec<AgentOutcome>,
     },
+    /// L0-B12: a PARTIAL input manifest cannot seal -- the bound it names
+    /// is not the full input set.
+    PartialInputManifest {
+        bound_kind: String,
+        bound_value: usize,
+        source: String,
+    },
+    /// L0-B12: a REFUSED input manifest cannot seal -- the named reason
+    /// withheld an input.
+    RefusedInputManifest { reason: String },
     /// Unsupported host tuple for the L0 artifact resolver.
     PlatformTripleUnsupported {
         os: String,
@@ -233,6 +243,18 @@ impl fmt::Display for InstallError {
             Self::ArtifactUnavailable { triple, detail } => write!(
                 formatter,
                 "L0-PLATFORM-TRIPLE artifact unavailable for {triple}: {detail}"
+            ),
+            Self::PartialInputManifest {
+                bound_kind,
+                bound_value,
+                source,
+            } => write!(
+                formatter,
+                "L0_INPUT_MANIFEST_PARTIAL bound={bound_kind} value={bound_value} source={source}: partial input cannot seal"
+            ),
+            Self::RefusedInputManifest { reason } => write!(
+                formatter,
+                "L0_INPUT_MANIFEST_REFUSED reason={reason}: refused input cannot seal"
             ),
             Self::DestinationNotOurs { path, detail } => write!(
                 formatter,
@@ -1015,6 +1037,129 @@ pub fn seal_install_report(
         });
     }
     Ok(report)
+}
+
+/// L0-B12 input manifest: what input set a sealed report closed over.
+/// FULL carries the verified artifact digest (B03's value gets a home
+/// here: the manifest attests the full input set including the digest the
+/// report was sealed over). PARTIAL names its bound; REFUSED names its
+/// reason. Non-FULL manifests never seal -- they refuse distinctly below.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InputManifest {
+    Full { digest: String },
+    Partial {
+        bound_kind: String,
+        bound_value: usize,
+        source: String,
+    },
+    Refused { reason: String },
+}
+
+impl std::fmt::Display for InputManifest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Full { digest } => write!(formatter, "FULL digest={digest}"),
+            Self::Partial {
+                bound_kind,
+                bound_value,
+                source,
+            } => write!(
+                formatter,
+                "PARTIAL bound={bound_kind} value={bound_value} source={source}"
+            ),
+            Self::Refused { reason } => write!(formatter, "REFUSED reason={reason}"),
+        }
+    }
+}
+
+/// Canonical durable location of the sealed install report, under the
+/// install repo root (explicit, never HOME).
+pub const INSTALL_REPORT_ARTIFACT: &str = ".omp-orchestrator/install/report.txt";
+
+/// The durably sealed report: content, artifact path, and readback proof.
+/// `readback_bytes` is nonzero exactly when the artifact read back --
+/// mirroring the doctor readback discipline, not a second report type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SealedInstallReport {
+    pub report: InstallReport,
+    pub artifact: PathBuf,
+    pub readback_bytes: usize,
+}
+
+/// L0-B12 assembly choke point: validate every required input, seal
+/// through [`seal_install_report`] (no second report type), persist the
+/// artifact, and read it back. Each missing/failing input is a distinct
+/// typed refusal: manifest state, empty scan, missing family, missing
+/// field, write failure, readback mismatch. The caller keeps its own
+/// outcome copies for preservation; this takes borrows and clones small
+/// values.
+pub fn assemble_install_report(
+    repo_root: &Path,
+    scan: &AgentScan,
+    outcomes: &[AgentOutcome],
+    backups: &[PathBuf],
+    path_hits: &[PathBuf],
+    identity: &IdentityCheck,
+    manifest: &InputManifest,
+) -> Result<SealedInstallReport, InstallError> {
+    match manifest {
+        InputManifest::Full { digest } if !digest.is_empty() => {}
+        InputManifest::Full { .. } => {
+            return Err(InstallError::IncompleteInstallReport {
+                missing: vec!["digest".to_owned()],
+            });
+        }
+        InputManifest::Partial {
+            bound_kind,
+            bound_value,
+            source,
+        } => {
+            return Err(InstallError::PartialInputManifest {
+                bound_kind: bound_kind.clone(),
+                bound_value: *bound_value,
+                source: source.clone(),
+            });
+        }
+        InputManifest::Refused { reason } => {
+            return Err(InstallError::RefusedInputManifest {
+                reason: reason.clone(),
+            });
+        }
+    }
+    let report = seal_install_report(
+        scan,
+        outcomes.to_vec(),
+        backups.to_vec(),
+        path_hits.to_vec(),
+        identity.clone(),
+    )?;
+    let artifact = repo_root.join(INSTALL_REPORT_ARTIFACT);
+    if let Some(parent) = artifact.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| InstallError::IoError {
+            path: parent.display().to_string(),
+            detail: format!("report dir failed: {error}"),
+        })?;
+    }
+    let document = format!("{report}\nmanifest={manifest}\n");
+    std::fs::write(&artifact, document.as_bytes()).map_err(|error| InstallError::IoError {
+        path: artifact.display().to_string(),
+        detail: format!("report write failed: {error}"),
+    })?;
+    let readback = std::fs::read_to_string(&artifact).map_err(|error| InstallError::IoError {
+        path: artifact.display().to_string(),
+        detail: format!("report readback failed: {error}"),
+    })?;
+    if readback != document {
+        return Err(InstallError::IoError {
+            path: artifact.display().to_string(),
+            detail: "report readback mismatch: artifact bytes differ from sealed bytes".to_owned(),
+        });
+    }
+    Ok(SealedInstallReport {
+        report,
+        artifact,
+        readback_bytes: readback.len(),
+    })
 }
 
 /// Local git reads are network-free but a foreign host can still hang them

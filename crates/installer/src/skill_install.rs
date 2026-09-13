@@ -63,9 +63,13 @@ pub fn skill_manifest_bytes(binary_name: &str, head_sha: &str) -> Vec<u8> {
 
 /// The sealed phase result run_install consumes: per-family outcomes plus
 /// the seal digest proving the report closed over exactly those outcomes.
+/// The scan and backup records travel alongside so the summary assembly
+/// reuses them instead of re-deriving either.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillPhaseReport {
+    pub scan: super::AgentScan,
     pub outcomes: Vec<AgentOutcome>,
+    pub backups: Vec<PathBuf>,
     pub digest: String,
 }
 
@@ -74,15 +78,16 @@ pub struct SkillPhaseReport {
 /// inputs, no subprocess execution anywhere inside (filesystem writes under
 /// explicit roots plus pure seal computation), no live-binary restart, no
 /// duplicated detector, no test-only branch. Identity is caller-constructed
-/// (run_install probes the installed binary via `verify_identity`; tests
-/// pass a fixture): the phase never executes an operator binary, which is
-/// what makes it hermetic by construction rather than by fixture luck.
-/// Observed is the full ratified roster (the install provisions the
-/// supported set; per-machine narrowing needs a machine-scan surface no
-/// bead specifies). The detector still runs, so an emptied roster refuses
-/// EmptyAgentScan structurally rather than installing nothing cleanly.
-/// Any failed family, or a seal refusal, is a typed refusal carrying every
-/// per-family outcome -- never success, never silent.
+/// (run_install passes the installed identity; tests pass a fixture): the
+/// phase never executes an operator binary, which is what makes it hermetic
+/// by construction rather than by fixture luck. Observed is the full
+/// ratified roster (the install provisions the supported set; per-machine
+/// narrowing needs a machine-scan surface no bead specifies). The detector
+/// still runs, so an emptied roster refuses EmptyAgentScan structurally
+/// rather than installing nothing cleanly. Any failed family, or a seal
+/// refusal, is a typed refusal carrying every per-family outcome -- never
+/// success, never silent. The scan and backup records travel in the report
+/// so the summary assembly reuses them instead of re-deriving either.
 pub fn install_skills_phase(
     repo_root: &Path,
     binary_name: &str,
@@ -113,12 +118,14 @@ pub fn install_skills_phase(
     let sealed = super::seal_install_report(
         &scan,
         install.outcomes.clone(),
-        Vec::new(),
+        install.backups.clone(),
         Vec::new(),
         identity,
     )?;
     Ok(SkillPhaseReport {
+        scan,
         outcomes: install.outcomes,
+        backups: install.backups,
         digest: sealed.digest,
     })
 }
@@ -130,6 +137,10 @@ pub fn install_skills_phase(
 pub struct SkillInstallReport {
     pub outcomes: Vec<AgentOutcome>,
     pub success: bool,
+    /// Backup files merge_hooks wrote for rewritten families (created and
+    /// already rows take no backup). Real per-install records the summary
+    /// report carries; empty when nothing was rewritten.
+    pub backups: Vec<PathBuf>,
 }
 
 /// Install one skill file for every detected family.
@@ -149,16 +160,25 @@ pub fn install_agent_skills(
         return Err(InstallError::EmptyAgentScan);
     }
     let mut outcomes = Vec::with_capacity(scan.families.len());
+    let mut backups = Vec::new();
     for family in &scan.families {
-        outcomes.push(install_one_family(
+        let (row, backup) = install_one_family(
             family,
             skill_roots.get(family),
             skill_name,
             skill_bytes,
-        ));
+        );
+        if let Some(path) = backup {
+            backups.push(path);
+        }
+        outcomes.push(row);
     }
     let success = outcomes.iter().all(|row| row.outcome != "failed");
-    Ok(SkillInstallReport { outcomes, success })
+    Ok(SkillInstallReport {
+        outcomes,
+        success,
+        backups,
+    })
 }
 
 fn failed(family: &str) -> AgentOutcome {
@@ -173,7 +193,7 @@ fn install_one_family(
     root: Option<&PathBuf>,
     skill_name: &str,
     skill_bytes: &[u8],
-) -> AgentOutcome {
+) -> (AgentOutcome, Option<PathBuf>) {
     let row = |outcome: &str| AgentOutcome {
         family: family.to_owned(),
         outcome: outcome.to_owned(),
@@ -182,22 +202,22 @@ fn install_one_family(
     // root, or an embedded separator that could escape the root reports
     // failed with no write attempted anywhere.
     let Some(root) = root else {
-        return failed(family);
+        return (failed(family), None);
     };
     if !root.is_absolute() {
-        return failed(family);
+        return (failed(family), None);
     }
     if skill_name.is_empty() || skill_name.contains('/') {
-        return failed(family);
+        return (failed(family), None);
     }
     let dest = root.join(skill_name);
     // Identical bytes present: already, untouched (no write, no backup).
     match std::fs::read(&dest) {
-        Ok(current) if current == skill_bytes => return row("already"),
+        Ok(current) if current == skill_bytes => return (row("already"), None),
         _ => {}
     }
     if std::fs::create_dir_all(root).is_err() {
-        return failed(family);
+        return (failed(family), None);
     }
     let existed = std::fs::symlink_metadata(&dest).is_ok();
     // Stage under the destination root (same filesystem), then verify the
@@ -208,9 +228,9 @@ fn install_one_family(
         && std::fs::read(&stage).is_ok_and(|staged| staged == skill_bytes);
     if !staged_ok {
         let _ = std::fs::remove_file(&stage);
-        return failed(family);
+        return (failed(family), None);
     }
-    let outcome = match merge_hooks(
+    let outcome: Option<(&str, Option<PathBuf>)> = match merge_hooks(
         &[HookWrite {
             path: dest.clone(),
             merged: skill_bytes.to_vec(),
@@ -221,8 +241,15 @@ fn install_one_family(
             // Post-write readback: the destination must carry the staged
             // bytes. A mismatch restores from merge_hooks' own backup
             // record (existed -> copy back; new -> delete) and fails.
+            // The backup record travels onward only when a backup file
+            // really exists (rewritten families, never created ones).
             if std::fs::read(&dest).is_ok_and(|landed| landed == skill_bytes) {
-                Some(if existed { "merged" } else { "created" })
+                let word = if existed { "merged" } else { "created" };
+                let backup = backups
+                    .first()
+                    .filter(|record| record.existed)
+                    .map(|record| record.backup.clone());
+                Some((word, backup))
             } else {
                 let backup = &backups[0];
                 if backup.existed {
@@ -237,8 +264,8 @@ fn install_one_family(
     };
     let _ = std::fs::remove_file(&stage);
     match outcome {
-        Some(word) => row(word),
-        None => failed(family),
+        Some((word, backup)) => (row(word), backup),
+        None => (failed(family), None),
     }
 }
 

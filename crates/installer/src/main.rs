@@ -317,16 +317,22 @@ fn run_install(
             return ExitCode::from(1);
         }
     };
-    match installer::verify_sha256_before_install(&source, expected_sha256, || {
+    // `check` binds here (not inside the Ok arm) because the skills phase
+    // and the summary report below both consume the installed identity.
+    // First-aid scoping by pane=%49 for an active peer hunk; logic untouched.
+    let check = match installer::verify_sha256_before_install(&source, expected_sha256, || {
         installer::install_binary(&source, bin_dir, &head, &ownership)
     }) {
-        Ok(check) => println!("  INSTALLED {binary_name}: {check}"),
+        Ok(check) => {
+            println!("  INSTALLED {binary_name}: {check}");
+            check
+        }
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
             let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_VERIFY_REFUSED");
             return ExitCode::from(1);
         }
-    }
+    };
     match installer::restart_and_verify(
         binary_name,
         &bin_dir.join(binary_name),
@@ -341,28 +347,29 @@ fn run_install(
         }
     }
     // L0-B11: per-family skill installation gates install success. Identity
-    // is probed here (the operator entry owns execution); the phase itself
-    // executes nothing. Any skills/seal failure refuses with a typed
-    // reason; per-family outcomes print on every path so partial progress
-    // survives refusal.
-    let skills_identity =
-        installer::verify_identity(&bin_dir.join(binary_name), &head, &ownership);
-    match installer::skill_install::install_skills_phase(
+    // is the installed identity `check` above (the operator entry owns
+    // execution); the phase itself executes nothing. Any skills/seal
+    // failure refuses with a typed reason; per-family outcomes print on
+    // every path so partial progress survives refusal.
+    let phase = match installer::skill_install::install_skills_phase(
         repo_root,
         binary_name,
         &head,
-        skills_identity,
+        check.clone(),
     ) {
-        Ok(phase) => println!(
-            "  SKILLS families={} digest={}",
+        Ok(phase) => {
+            println!(
+                "  SKILLS families={} digest={}",
+                phase
+                    .outcomes
+                    .iter()
+                    .map(|row| format!("{}={}", row.family, row.outcome))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                phase.digest
+            );
             phase
-                .outcomes
-                .iter()
-                .map(|row| format!("{}={}", row.family, row.outcome))
-                .collect::<Vec<_>>()
-                .join(","),
-            phase.digest
-        ),
+        }
         Err(error) => {
             eprintln!("INSTALLER SKILLS REFUSED: {error}");
             if let installer::InstallError::SkillInstallFailed { outcomes, .. } = &error {
@@ -371,6 +378,47 @@ fn run_install(
                 }
             }
             let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_SKILLS_REFUSED");
+            return ExitCode::from(1);
+        }
+    };
+    // L0-B12: durable summary report gates install success. Every input is
+    // produced above (skills outcomes/backups, installed identity) or read
+    // here (verified digest re-read at report time, read-only PATH scan
+    // recorded but never refused). Any assembly failure refuses typed with
+    // the per-family outcomes preserved on the refusal path.
+    let digest_hex = match installer::verify_sha256(&source, expected_sha256) {
+        Ok(hex) => hex,
+        Err(error) => {
+            eprintln!("INSTALLER REPORT REFUSED: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_REPORT_REFUSED");
+            return ExitCode::from(1);
+        }
+    };
+    let path_hits = installer::path_collision_hits(
+        binary_name,
+        &std::env::var("PATH").unwrap_or_default(),
+    );
+    let manifest = installer::InputManifest::Full { digest: digest_hex };
+    match installer::assemble_install_report(
+        repo_root,
+        &phase.scan,
+        &phase.outcomes,
+        &phase.backups,
+        &path_hits,
+        &check,
+        &manifest,
+    ) {
+        Ok(assembled) => println!(
+            "  REPORT digest={} artifact={}",
+            assembled.report.digest,
+            assembled.artifact.display()
+        ),
+        Err(error) => {
+            eprintln!("INSTALLER REPORT REFUSED: {error}");
+            for row in &phase.outcomes {
+                eprintln!("  REPORT {}={}", row.family, row.outcome);
+            }
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_REPORT_REFUSED");
             return ExitCode::from(1);
         }
     }

@@ -2095,3 +2095,225 @@ fn skill_install_phase_gates_install_success() {
         "seal refusal must name identity, got: {noseal}"
     );
 }
+
+/// L0-B12 (bead rmr2): the summary report seals complete production
+/// inputs and persists durably. The scan comes from the real B09
+/// detector, the outcomes from the real B11 executor (one family
+/// pre-planted different so its row merges with a real backup file),
+/// the digest from the real sha256 verifier -- synthetic inputs prove
+/// only the pure classifier, so every input here is produced, never
+/// hand-written.
+///
+/// KNOWN-BAD: skipping persistence (reporting success over an unwritten
+/// artifact) keeps the seal green and reds the artifact assertions
+/// below: an unpersisted report is the defect this row exists to
+/// prevent.
+#[test]
+fn install_report_seals_complete_production_inputs() {
+    use installer::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
+    use installer::skill_install::install_agent_skills;
+    use installer::{assemble_install_report, InputManifest};
+    let base = TempDir::new("rmr2-report");
+    let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .collect();
+    let scan = detect_agent_families(&observed).expect("ten named families must scan");
+    let mut roots: BTreeMap<String, PathBuf> = scan
+        .families
+        .iter()
+        .map(|family| {
+            let dir = base.path().join("roots").join(family);
+            std::fs::create_dir_all(&dir).expect("fixture root");
+            (family.clone(), dir)
+        })
+        .collect();
+    // One family carries different bytes so its row merges with a backup.
+    std::fs::write(roots["amp"].join("SKILL.md"), b"# stale skill\n").expect("stale skill");
+    let install = install_agent_skills(&scan, &roots, "SKILL.md", b"# skill\n")
+        .expect("install over ten roots");
+    assert!(install.success, "ten writable roots must succeed");
+    assert!(
+        !install.backups.is_empty(),
+        "a rewritten family must leave a backup record"
+    );
+    // Verified digest from the real verifier over a real fixture file.
+    // The expected hex is a known-answer constant for fixed bytes (B03
+    // precedent): if it ever drifts, the verifier itself refuses below.
+    const FIXTURE_HEX: &str =
+        "59bd16dfc39e768f82bb8ec74467e571e80ed284683b586f077dbf1aa2483ecd";
+    let subject = base.path().join("artifact.bin");
+    std::fs::write(&subject, b"artifact bytes\n").expect("fixture artifact");
+    let hex = installer::verify_sha256(&subject, Some(FIXTURE_HEX)).expect("verifier reads the digest");
+    assert_eq!(hex, FIXTURE_HEX, "verifier must return the known hex");
+    let repo = TempDir::new("rmr2-repo");
+    let assembled = assemble_install_report(
+        repo.path(),
+        &scan,
+        &install.outcomes,
+        &install.backups,
+        &[subject.clone()],
+        &sample_identity(),
+        &InputManifest::Full {
+            digest: hex.clone(),
+        },
+    )
+    .expect("complete inputs must seal and persist");
+    assert!(
+        !assembled.report.digest.is_empty(),
+        "a sealed report carries a digest"
+    );
+    assert!(
+        assembled.readback_bytes > 0,
+        "persistence must read back"
+    );
+    let text = std::fs::read_to_string(&assembled.artifact).expect("artifact readable");
+    assert!(
+        text.contains(&assembled.report.digest),
+        "artifact must carry the sealed digest"
+    );
+    assert!(
+        text.contains(&hex),
+        "artifact must carry the verified digest"
+    );
+    assert!(
+        text.contains("manifest=FULL"),
+        "artifact must carry its manifest, got: {text}"
+    );
+}
+
+/// L0-B12 restrictive classes: every missing/failing input is a distinct
+/// typed refusal -- never success, never a shared generic error. Each arm
+/// below names its exact reason; the production mutant (skipped
+/// persistence) reddens the artifact assertions of the companion leg.
+#[test]
+fn install_report_refuses_restrictive_classes() {
+    use installer::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
+    use installer::{assemble_install_report, AgentScan, InputManifest};
+    let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .collect();
+    let scan = detect_agent_families(&observed).expect("ten named families must scan");
+    let good_outcomes: Vec<installer::AgentOutcome> = scan
+        .families
+        .iter()
+        .map(|family| installer::AgentOutcome {
+            family: family.clone(),
+            outcome: "created".to_owned(),
+        })
+        .collect();
+    let full = InputManifest::Full {
+        digest: "abc123".to_owned(),
+    };
+    let repo = TempDir::new("rmr2-restrictive");
+    // Empty scan refuses before anything else is consulted.
+    let empty = AgentScan {
+        families: Vec::new(),
+    };
+    let error = assemble_install_report(
+        repo.path(),
+        &empty,
+        &[],
+        &[],
+        &[],
+        &sample_identity(),
+        &full,
+    )
+    .expect_err("empty scan must refuse");
+    assert_eq!(
+        error.to_string(),
+        "L0_EMPTY_SCAN: zero agents is ERROR, never a success report",
+        "got: {error}"
+    );
+    // Dropped family names the missing family.
+    let mut dropped = good_outcomes.clone();
+    let missing = dropped.pop().expect("ten outcomes to drop one from");
+    let error = assemble_install_report(
+        repo.path(),
+        &scan,
+        &dropped,
+        &[],
+        &[],
+        &sample_identity(),
+        &full,
+    )
+    .expect_err("a dropped family must refuse");
+    assert!(
+        error.to_string().contains(&missing.family),
+        "refusal must name {}, got: {error}",
+        missing.family
+    );
+    // Missing digest is a missing field, not a seal pass.
+    let error = assemble_install_report(
+        repo.path(),
+        &scan,
+        &good_outcomes,
+        &[],
+        &[],
+        &sample_identity(),
+        &InputManifest::Full {
+            digest: String::new(),
+        },
+    )
+    .expect_err("an empty digest must refuse");
+    assert!(
+        error.to_string().contains("digest"),
+        "missing field must name digest, got: {error}"
+    );
+    // Non-FULL manifests refuse distinctly.
+    let error = assemble_install_report(
+        repo.path(),
+        &scan,
+        &good_outcomes,
+        &[],
+        &[],
+        &sample_identity(),
+        &InputManifest::Partial {
+            bound_kind: "families".to_owned(),
+            bound_value: 9,
+            source: "fixture".to_owned(),
+        },
+    )
+    .expect_err("a partial manifest must refuse");
+    assert_eq!(
+        error.to_string(),
+        "L0_INPUT_MANIFEST_PARTIAL bound=families value=9 source=fixture: partial input cannot seal",
+        "got: {error}"
+    );
+    let error = assemble_install_report(
+        repo.path(),
+        &scan,
+        &good_outcomes,
+        &[],
+        &[],
+        &sample_identity(),
+        &InputManifest::Refused {
+            reason: "fixture-withheld".to_owned(),
+        },
+    )
+    .expect_err("a refused manifest must refuse");
+    assert_eq!(
+        error.to_string(),
+        "L0_INPUT_MANIFEST_REFUSED reason=fixture-withheld: refused input cannot seal",
+        "got: {error}"
+    );
+    // Unwritable repo root (a regular file: ENOTDIR on every uid)
+    // refuses the persistence step with its path named.
+    let blocker = repo.path().join("not-a-directory");
+    std::fs::write(&blocker, b"block\n").expect("blocker file");
+    let error = assemble_install_report(
+        &blocker,
+        &scan,
+        &good_outcomes,
+        &[],
+        &[],
+        &sample_identity(),
+        &full,
+    )
+    .expect_err("an unwritable root must refuse persistence");
+    assert!(
+        error.to_string().contains("report"),
+        "persistence failure must name the report, got: {error}"
+    );
+}
