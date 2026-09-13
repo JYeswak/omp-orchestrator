@@ -272,6 +272,17 @@ fn emit_s1_l4_verdict(repo: &std::path::Path, spawn: &serde_json::Value) {
     }
 }
 
+fn spawn_after_remote_policy(
+    session: &str,
+    repo: &std::path::Path,
+    agents: &[(String, String)],
+    persona_a: bool,
+) -> Result<liveness::SpawnReport, String> {
+    ompo_start::inception::remote_policy_for_shared_dispatch(repo, persona_a)
+        .map_err(|error| error.to_string())?;
+    liveness::spawn(session, repo, agents)
+}
+
 fn run_start(rest: &[String]) -> ExitCode {
     let mut repo = match current_repo() {
         Ok(path) => path,
@@ -363,7 +374,7 @@ fn run_start(rest: &[String]) -> ExitCode {
         eprintln!("ompo start: L4_SPAWN_REFUSED reason=HD-0010_UNDECIDED");
         return ExitCode::from(EXIT_BAD_INVOCATION);
     } else {
-        match liveness::spawn(&session, &repo, &agents) {
+        match spawn_after_remote_policy(&session, &repo, &agents, persona_a) {
             Ok(report) => json!({
                 "status": if report.exit_code == Some(0) { "EXECUTED" } else { "FAILED" },
                 "command": report.command,

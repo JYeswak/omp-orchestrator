@@ -540,8 +540,9 @@ pub fn persona_remote_policy(
 /// Persona B/C variants exist in this tree; non-Persona-A records cover
 /// that population without inventing new persona types.
 ///
-/// INERT BY DESIGN (rule 9): no caller yet. Shared dispatch owns
-/// adoption; until then this stays available, not invoked.
+/// WIRED (rule 9): [`remote_policy_for_shared_dispatch`] is the sole
+/// production caller and applies this gate to the one observed
+/// [`PersonaRemote`] before the `ompo start --spawn` path can dispatch.
 pub fn require_remote_for_dispatch(
     policy: &PersonaRemote,
 ) -> Result<(), InceptionError> {
@@ -555,6 +556,20 @@ pub fn require_remote_for_dispatch(
             policy.reason_code
         ),
     })
+}
+
+/// Reachable L2 boundary for remote-dependent shared dispatch.
+///
+/// The policy observation is made exactly once, then the existing
+/// required-remote gate consumes that same record. The production
+/// `ompo start --spawn` path calls this before liveness or spawn work;
+/// non-dispatching start views do not need a remote.
+pub fn remote_policy_for_shared_dispatch(
+    repo: &Path,
+    persona_a: bool,
+) -> Result<(), InceptionError> {
+    let policy = persona_remote_policy(repo, persona_a)?;
+    require_remote_for_dispatch(&policy)
 }
 
 fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError> {

@@ -855,6 +855,32 @@ fn persona_bc_missing_remote_halts_dispatch() {
     );
 }
 
+/// mxro wiring rework: the shared-dispatch entry applies the existing
+/// required-remote gate to its one policy observation. The preceding
+/// `persona_bc_missing_remote_halts_dispatch` matrix owns the Persona A and
+/// remote-present known-good controls; keeping them there avoids a second copy.
+///
+/// KNOWN-BAD: bypass the enforcement call inside the entry while retaining
+/// the policy observation. Exactly this named leg fails, while the companion
+/// behavior matrix remains green. Message AND exit are pinned on mutation.
+#[test]
+fn required_remote_gate_is_wired_to_shared_dispatch_entry() {
+    use ompo_start::inception::remote_policy_for_shared_dispatch;
+
+    let repository = repository_fixture();
+    let error = remote_policy_for_shared_dispatch(repository.path(), false)
+        .expect_err("non-Persona-A without a remote must halt before dispatch");
+    let text = error.to_string();
+    assert!(
+        text.contains("REMOTE_REQUIRED"),
+        "shared-dispatch halt must name the required-remote branch, got: {text}"
+    );
+    assert!(
+        text.contains("remedy:") && text.contains("configure a remote"),
+        "shared-dispatch halt must carry named remediation, got: {text}"
+    );
+}
+
 /// L2-ENTRY-GIT-REPO (bead e0li rework): the L2 operator entry gates on
 /// the repository check before downstream state continues. A real
 /// repository proceeds through `initialize` (canonical root); a bare
