@@ -1995,3 +1995,121 @@ fn skill_install_marks_unwritable_failed_without_success() {
         "empty scan is EmptyAgentScan, got {error:?}"
     );
 }
+
+/// L0-B11 wiring (bead uegf): the production phase run_install calls --
+/// detector -> executor -> seal -- driven directly with hermetic fixture
+/// roots (a full run_install would build for real). Ten real families
+/// seal with a nonempty digest; a rerun is quiet; an unwritable family
+/// root refuses typed with all ten outcomes preserved; an empty binary
+/// name refuses at seal (identity missing).
+///
+/// KNOWN-BAD: skipping the seal (returning unsealed outcomes as success)
+/// keeps the per-family greens and reds the digest assertions below: a
+/// phase that reports success without a sealed report is the defect this
+/// row exists to prevent.
+#[test]
+fn skill_install_phase_gates_install_success() {
+    use installer::skill_install::{install_skills_phase, SKILL_FILE_NAME};
+    let base = TempDir::new("uegf-phase");
+    let binary = built_installer();
+    // Healthy phase: ten created outcomes sealed with a digest, files
+    // carrying the deterministic install manifest.
+    let phase = install_skills_phase(
+        base.path(),
+        "installer",
+        "abc123def",
+        &RepoOwnership::ThisRepo,
+        &binary,
+    )
+    .expect("ten writable roots must phase green");
+    assert_eq!(
+        phase.outcomes.len(),
+        10,
+        "exactly one outcome per family, got {:?}",
+        phase.outcomes
+    );
+    assert!(
+        !phase.digest.is_empty(),
+        "a sealed phase carries a digest"
+    );
+    let manifest =
+        installer::skill_install::skill_manifest_bytes("installer", "abc123def");
+    for row in &phase.outcomes {
+        assert_eq!(row.outcome, "created", "first phase creates, got {row:?}");
+        let landed = std::fs::read(
+            base.path()
+                .join(".omp-orchestrator")
+                .join("skills")
+                .join(&row.family)
+                .join(SKILL_FILE_NAME),
+        )
+        .expect("landed manifest readable");
+        assert_eq!(landed, manifest, "staged bytes verified on disk");
+    }
+    // Quiet rerun through the same phase: identical bytes are already.
+    let rerun = install_skills_phase(
+        base.path(),
+        "installer",
+        "abc123def",
+        &RepoOwnership::ThisRepo,
+        &binary,
+    )
+    .expect("identical rerun stays success");
+    for row in &rerun.outcomes {
+        assert_eq!(row.outcome, "already", "rerun is already, got {row:?}");
+    }
+    assert!(
+        !rerun.digest.is_empty(),
+        "a quiet rerun still seals, got empty digest"
+    );
+    // Unwritable family root (a regular file: ENOTDIR on every uid):
+    // typed refusal preserving all ten outcomes with one failed.
+    let blocked = TempDir::new("uegf-phase-blocked");
+    let victim_root = blocked
+        .path()
+        .join(".omp-orchestrator")
+        .join("skills")
+        .join("amp");
+    std::fs::create_dir_all(victim_root.parent().expect("skills dir")).expect("parents");
+    std::fs::write(&victim_root, b"block\n").expect("blocker file");
+    let error = install_skills_phase(
+        blocked.path(),
+        "installer",
+        "abc123def",
+        &RepoOwnership::ThisRepo,
+        &binary,
+    )
+    .expect_err("one failed family denies phase success");
+    match &error {
+        installer::InstallError::SkillInstallFailed { outcomes, .. } => {
+            assert_eq!(outcomes.len(), 10, "refusal preserves ten outcomes");
+            assert!(
+                outcomes
+                    .iter()
+                    .any(|row| row.family == "amp" && row.outcome == "failed"),
+                "amp must report failed, got {outcomes:?}"
+            );
+        }
+        other => panic!("unwritable root must be SkillInstallFailed, got {other:?}"),
+    }
+    assert!(
+        error.to_string().contains("L0_SKILLS_FAILED"),
+        "refusal carries its typed reason, got: {error}"
+    );
+    // Empty head sha: identity cannot seal, so the phase refuses at seal
+    // even though every family installed. (The binary name rides the
+    // installed path through verify_identity, so only an empty head
+    // deprives the seal of identity -- measured, not assumed.)
+    let noseal = install_skills_phase(
+        base.path(),
+        "installer",
+        "",
+        &RepoOwnership::ThisRepo,
+        &binary,
+    )
+    .expect_err("seal without identity must refuse");
+    assert!(
+        noseal.to_string().contains("identity"),
+        "seal refusal must name identity, got: {noseal}"
+    );
+}

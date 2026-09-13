@@ -340,6 +340,37 @@ fn run_install(
             return ExitCode::from(1);
         }
     }
+    // L0-B11: per-family skill installation gates install success. Any
+    // skills/seal failure refuses with a typed reason; per-family outcomes
+    // print on every path so partial progress survives refusal.
+    match installer::skill_install::install_skills_phase(
+        repo_root,
+        binary_name,
+        &head,
+        &ownership,
+        &bin_dir.join(binary_name),
+    ) {
+        Ok(phase) => println!(
+            "  SKILLS families={} digest={}",
+            phase
+                .outcomes
+                .iter()
+                .map(|row| format!("{}={}", row.family, row.outcome))
+                .collect::<Vec<_>>()
+                .join(","),
+            phase.digest
+        ),
+        Err(error) => {
+            eprintln!("INSTALLER SKILLS REFUSED: {error}");
+            if let installer::InstallError::SkillInstallFailed { outcomes, .. } = &error {
+                for row in outcomes {
+                    eprintln!("  SKILLS {}={}", row.family, row.outcome);
+                }
+            }
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_SKILLS_REFUSED");
+            return ExitCode::from(1);
+        }
+    }
     guard_success(
         emit_s1(
             repo_root,

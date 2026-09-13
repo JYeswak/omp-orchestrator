@@ -28,6 +28,96 @@ use super::{merge_hooks, AgentOutcome, AgentScan, HookWrite, InstallError};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// The installer-managed receipt each family root carries. Content is the
+/// installing binary plus HEAD (see [`skill_manifest_bytes`]) -- derived
+/// from the install itself, never invented bundle text.
+pub const SKILL_FILE_NAME: &str = "INSTALLER.md";
+
+/// Canonical per-family skill roots under an explicit install root. The
+/// repo root is a caller parameter (run_install passes its own); nothing
+/// here reads HOME or guesses a location.
+#[must_use]
+pub fn canonical_skill_roots(repo_root: &Path) -> BTreeMap<String, PathBuf> {
+    super::agent_families::SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| {
+            (
+                (*family).to_owned(),
+                repo_root
+                    .join(".omp-orchestrator")
+                    .join("skills")
+                    .join(family),
+            )
+        })
+        .collect()
+}
+
+/// Deterministic install-derived receipt bytes: the binary this install
+/// published plus the HEAD it built. Same install always yields same bytes,
+/// so reruns are `already` rather than churn.
+#[must_use]
+pub fn skill_manifest_bytes(binary_name: &str, head_sha: &str) -> Vec<u8> {
+    format!("# installer-managed agent skills\nbinary: {binary_name}\nhead: {head_sha}\n")
+        .into_bytes()
+}
+
+/// The sealed phase result run_install consumes: per-family outcomes plus
+/// the seal digest proving the report closed over exactly those outcomes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillPhaseReport {
+    pub outcomes: Vec<AgentOutcome>,
+    pub digest: String,
+}
+
+/// Production phase for run_install: detector -> executor -> seal.
+/// Observed is the full ratified roster (the install provisions the
+/// supported set; per-machine narrowing needs a machine-scan surface no
+/// bead specifies). The detector still runs, so an emptied roster refuses
+/// EmptyAgentScan structurally rather than installing nothing cleanly.
+/// Any failed family, or a seal refusal, is a typed refusal carrying every
+/// per-family outcome -- never success, never silent.
+pub fn install_skills_phase(
+    repo_root: &Path,
+    binary_name: &str,
+    head_sha: &str,
+    ownership: &super::RepoOwnership,
+    installed_binary: &Path,
+) -> Result<SkillPhaseReport, InstallError> {
+    use super::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
+    let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .collect();
+    let scan = detect_agent_families(&observed)?;
+    let roots = canonical_skill_roots(repo_root);
+    let manifest = skill_manifest_bytes(binary_name, head_sha);
+    let install = install_agent_skills(&scan, &roots, SKILL_FILE_NAME, &manifest)?;
+    if !install.success {
+        let failed: Vec<String> = install
+            .outcomes
+            .iter()
+            .filter(|row| row.outcome == "failed")
+            .map(|row| row.family.clone())
+            .collect();
+        return Err(InstallError::SkillInstallFailed {
+            reason: format!("families failed: {}", failed.join(",")),
+            outcomes: install.outcomes,
+        });
+    }
+    let identity = super::verify_identity(installed_binary, head_sha, ownership);
+    let sealed = super::seal_install_report(
+        &scan,
+        install.outcomes.clone(),
+        Vec::new(),
+        vec![installed_binary.to_path_buf()],
+        identity,
+    )?;
+    Ok(SkillPhaseReport {
+        outcomes: install.outcomes,
+        digest: sealed.digest,
+    })
+}
+
 /// Per-family outcomes plus the overall verdict. `success` is false when
 /// any family reports `failed`; the outcomes still carry every family so
 /// completeness is checkable downstream.

@@ -100,6 +100,13 @@ pub enum InstallError {
     IncompleteInstallReport {
         missing: Vec<String>,
     },
+    /// L0-B11 skill installation reached no all-agent success. Per-family
+    /// outcomes travel with the refusal so partial progress survives it;
+    /// seal-level incompleteness stays IncompleteInstallReport.
+    SkillInstallFailed {
+        reason: String,
+        outcomes: Vec<AgentOutcome>,
+    },
     /// Unsupported host tuple for the L0 artifact resolver.
     PlatformTripleUnsupported {
         os: String,
@@ -209,6 +216,15 @@ impl fmt::Display for InstallError {
                 formatter,
                 "L0-REPORT: incomplete; missing {}",
                 missing.join(",")
+            ),
+            Self::SkillInstallFailed { reason, outcomes } => write!(
+                formatter,
+                "L0_SKILLS_FAILED {reason} outcomes={}",
+                outcomes
+                    .iter()
+                    .map(|row| format!("{}={}", row.family, row.outcome))
+                    .collect::<Vec<_>>()
+                    .join(",")
             ),
             Self::PlatformTripleUnsupported { os, arch, libc } => write!(
                 formatter,
