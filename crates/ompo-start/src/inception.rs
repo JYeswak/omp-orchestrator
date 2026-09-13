@@ -413,6 +413,10 @@ pub fn git_repo_toplevel(repo: &Path) -> Result<PathBuf, InceptionError> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaRemote {
     pub remote_optional: bool,
+    /// The observed remote presence behind the verdict: `true` when
+    /// `git remote -v` listed at least one remote. Carried so the
+    /// dispatch gate below needs no second probe and no bool-passing.
+    pub remote_present: bool,
     pub reason_code: &'static str,
 }
 
@@ -447,15 +451,43 @@ pub fn persona_remote_policy(
     if persona_a && !present {
         Ok(PersonaRemote {
             remote_optional: true,
+            remote_present: present,
             reason_code: "PERSONA_A_LOCAL_ONLY",
         })
     } else {
         Ok(PersonaRemote {
             remote_optional: false,
+            remote_present: present,
             reason_code: "REMOTE_REQUIRED",
         })
     }
 }
+/// L2-BUILD-REMOTE-PERSONA-BC (bead mxro): fleet required-remote gate.
+///
+/// A non-optional policy without an observed remote halts shared dispatch
+/// with a named remediation; every other record passes through untouched.
+/// Persona A allowance and present remotes both continue -- the halt
+/// fires only for the restrictive branch with nothing behind it. No
+/// Persona B/C variants exist in this tree; non-Persona-A records cover
+/// that population without inventing new persona types.
+///
+/// INERT BY DESIGN (rule 9): no caller yet. Shared dispatch owns
+/// adoption; until then this stays available, not invoked.
+pub fn require_remote_for_dispatch(
+    policy: &PersonaRemote,
+) -> Result<(), InceptionError> {
+    if policy.remote_optional || policy.remote_present {
+        return Ok(());
+    }
+    Err(InceptionError::IdentityUnavailable {
+        field: "git_remote",
+        detail: format!(
+            "fleet dispatch requires a git remote ({}); remedy: configure a remote for this checkout, or run local-only as Persona A",
+            policy.reason_code
+        ),
+    })
+}
+
 fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError> {
     let canonical =
         repo_root

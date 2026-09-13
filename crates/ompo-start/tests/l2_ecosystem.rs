@@ -704,6 +704,7 @@ fn persona_a_local_only_remote_rule() {
         allowed,
         PersonaRemote {
             remote_optional: true,
+            remote_present: false,
             reason_code: "PERSONA_A_LOCAL_ONLY",
         },
         "Persona A with no remote must carry the explicit allowance"
@@ -729,5 +730,53 @@ fn persona_a_local_only_remote_rule() {
     assert_eq!(
         present.remote_optional, false,
         "a present remote needs no allowance"
+    );
+}
+
+/// L2-TEST-REMOTE-PERSONA-BC (bead mxro): a non-optional policy without
+/// an observed remote halts shared dispatch with a named remediation;
+/// every other record passes through. Reuses the nqac `PersonaRemote`
+/// policy -- no second remote detector, no new persona variants (none
+/// exist in this tree; non-Persona-A covers that population).
+///
+/// KNOWN-BAD: drop the halt (always continue) and the restrictive cell
+/// below passes silently: a fleet subject with no remote would advance
+/// with no evidence anything was required. Message AND exit are pinned
+/// on the mutation run.
+#[test]
+fn persona_bc_missing_remote_halts_dispatch() {
+    use ompo_start::inception::{persona_remote_policy, require_remote_for_dispatch};
+    let repository = repository_fixture();
+    // Allowance passes through: Persona A local-only continues.
+    let allowed = persona_remote_policy(repository.path(), true).expect("policy answers");
+    require_remote_for_dispatch(&allowed).expect("allowance continues");
+    // Present remote passes through on every persona.
+    run_git(
+        repository.path(),
+        &["remote", "add", "origin", "https://example.invalid/x.git"],
+    );
+    for persona_a in [true, false] {
+        let present = persona_remote_policy(repository.path(), persona_a)
+            .expect("policy answers");
+        require_remote_for_dispatch(&present).expect("a present remote continues");
+    }
+    // Restrictive branch with nothing behind it: non-Persona-A, no
+    // remote. Remove the remote again and require the named halt.
+    run_git(repository.path(), &["remote", "remove", "origin"]);
+    let required = persona_remote_policy(repository.path(), false).expect("policy answers");
+    assert_eq!(
+        required.remote_optional, false,
+        "non-Persona-A without remote stays restrictive"
+    );
+    let error =
+        require_remote_for_dispatch(&required).expect_err("missing remote must halt dispatch");
+    let text = error.to_string();
+    assert!(
+        text.contains("REMOTE_REQUIRED"),
+        "halt must name the required branch, got: {text}"
+    );
+    assert!(
+        text.contains("remedy:"),
+        "halt must carry remediation, got: {text}"
     );
 }
