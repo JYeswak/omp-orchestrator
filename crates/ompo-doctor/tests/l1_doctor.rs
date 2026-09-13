@@ -330,3 +330,98 @@ fn repair_records_before_hash_backup_after_hash() {
         "repair changed nothing"
     );
 }
+
+/// L1-TEST-PROBE-AGENT-MAIL (contract s1_l1_doctor.md `L1-BUILD-PROBE-AGENT-MAIL`):
+/// endpoint identity AND version, or typed absence. Uses the real
+/// `answered` authority and the real `probe_answer_metric`, never a copy:
+/// a copy would agree with the subject by construction.
+///
+/// KNOWN-BAD: a present endpoint with no version response must not be OK.
+/// Dropping the version conjunct from `answered` (presence alone suffices)
+/// greens the unresponsive endpoint below and this leg fails: a probe that
+/// answered nothing would count as answered, which is the false-green this
+/// row exists to prevent. Verdict AND reason code are pinned: one field
+/// alone cannot tell a refusal from a miscount.
+#[test]
+fn agent_mail_probe_is_scoped() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    fn decision(name: &str, status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: name.to_owned(),
+            status: status.to_owned(),
+            reason_code: format!("L1_PROBE_{}_SCOPED_FIXTURE", name.replace('-', "_").to_ascii_uppercase()),
+            detail: "agent-mail scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Healthy: endpoint identity plus version answers.
+    let healthy = decision("agent-mail", "OK", Some("/fixture/am"), Some("am 0.4.1"));
+    assert!(
+        answered(&healthy),
+        "identity plus version must answer"
+    );
+    // KNOWN-BAD shape, asserted directly: presence without version is not OK,
+    // even when the status string claims it is. The status string does not
+    // certify; the two signals do.
+    let present_no_version =
+        decision("agent-mail", "OK", Some("/fixture/am"), None);
+    assert!(
+        !answered(&present_no_version),
+        "a present endpoint with no version response must not be OK"
+    );
+    let absent = decision("agent-mail", "ABSENT_SPECIFIC", None, None);
+    assert!(
+        !answered(&absent),
+        "absence must not answer"
+    );
+    // Unresponsive endpoint: no observation at all is UNMEASURED with
+    // UNKNOWN_NO_RECORD, never a 0/N green.
+    let metric = probe_answer_metric(PROBES, &[]);
+    assert_eq!(
+        metric.verdict, "UNMEASURED",
+        "empty observation set must be UNMEASURED"
+    );
+    assert_eq!(
+        metric.reason_code, "UNKNOWN_NO_RECORD",
+        "empty observation set must name its reason"
+    );
+    assert!(
+        metric.ratio.is_none(),
+        "an unmeasured band must carry no ratio, not 0.0"
+    );
+    // The metric counts answers, not statuses: a full decision set whose
+    // agent-mail row lacks a version stays below floor with the row named.
+    let mut full: Vec<ProbeDecision> = PROBES
+        .iter()
+        .map(|spec| {
+            decision(
+                spec.name,
+                "OK",
+                Some("/fixture/bin"),
+                Some("fixture 1.0"),
+            )
+        })
+        .collect();
+    if let Some(row) = full.iter_mut().find(|row| row.name == "agent-mail") {
+        row.version = None;
+        row.status = "UNPROBEABLE".to_owned();
+    }
+    let metric = probe_answer_metric(PROBES, &full);
+    assert_eq!(
+        metric.verdict, "MEASURED_BELOW_FLOOR",
+        "one unanswered probe of {} must hold the metric below floor: {}",
+        PROBES.len(),
+        metric.reason_code
+    );
+    assert!(
+        metric.reason_code.contains(&format!("answered={}", PROBES.len() - 1)),
+        "below-floor reason must carry the count: {}",
+        metric.reason_code
+    );
+    assert!(
+        metric.unprobeable.contains(&"agent-mail".to_owned()),
+        "the unanswering probe must be named: {:?}",
+        metric.unprobeable
+    );
+}
