@@ -422,6 +422,22 @@ fn run_install(
             return ExitCode::from(1);
         }
     }
+    // L0-B15: the sealed report's event row must be observable, the
+    // artifact must re-verify, and the freshness gate must pass before
+    // any success verdict. Any stage refusing denies install success
+    // with its typed reason; per-family outcomes already printed above
+    // survive on this path too.
+    match installer::gate_observability(repo_root, &manifest) {
+        Ok(gate) => println!(
+            "  OBSERVE rows={} fresh={} manifest={manifest}",
+            gate.rows, gate.fresh
+        ),
+        Err(error) => {
+            eprintln!("INSTALLER OBSERVE REFUSED: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_OBSERVE_REFUSED");
+            return ExitCode::from(1);
+        }
+    }
     guard_success(
         emit_s1(
             repo_root,
@@ -529,6 +545,7 @@ fn guard_success(
         }
     }
 }
+
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;

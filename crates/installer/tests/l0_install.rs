@@ -2317,3 +2317,139 @@ fn install_report_refuses_restrictive_classes() {
         "persistence failure must name the report, got: {error}"
     );
 }
+
+/// L0-B15 observability writer (bead ucvv): report -> event -> monitor ->
+/// gate -> success, through the lib-published `gate_observability` the
+/// `run_install` call site consumes. Every arm below drives the real
+/// composition over hermetic fixture journals -- never a copy of its
+/// stages: a copy would agree with the subject by construction.
+///
+/// KNOWN-BAD per channel, each announced with its prediction before
+/// applying: blinding EVENT (artifact answers empty) reddens the
+/// empty/malformed arms; faking MONITOR (observation answers
+/// progressing) reddens the L0-empty arm; skipping GATE (freshness
+/// never consulted) reddens the stale/refused arms. A channel whose
+/// removal reddens nothing is decoration, and these three are not.
+/// Message AND exit are pinned on the mutation runs.
+#[test]
+fn observability_writer_gates_install_success() {
+    use installer::{gate_observability, InputManifest, ObserveStage};
+    fn journal(repo: &Path) -> PathBuf {
+        repo.join(".omp-orchestrator/work/s1/lifecycle.jsonl")
+    }
+    fn now_secs() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0)
+    }
+    fn row(reason: &str, outcome: &str, ts_unix: u64) -> String {
+        format!("{{\"layer\":\"L0\",\"outcome\":\"{outcome}\",\"reason_code\":\"{reason}\",\"ts_unix\":{ts_unix}}}")
+    }
+    fn write_journal(repo: &Path, rows: &[String]) {
+        let journal = journal(repo);
+        fs::create_dir_all(journal.parent().expect("journal parent")).expect("journal dirs");
+        fs::write(&journal, rows.join("\n") + "\n").expect("journal lands");
+    }
+    fn fixture(name: &str) -> TempDir {
+        TempDir::new(&format!("ucvv-observability-{name}"))
+    }
+    fn manifest() -> InputManifest {
+        InputManifest::Full {
+            digest: "ucvv-fixture".to_owned(),
+        }
+    }
+    // EVENT: no journal at all refuses (empty is ERROR, never a pass).
+    let repo = fixture("empty");
+    let error =
+        gate_observability(repo.path(), &manifest()).expect_err("empty journal must refuse");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Event,
+        "an empty journal refuses at EVENT"
+    );
+    assert!(
+        error.to_string().contains("INSTALLER_OBSERVE_REFUSED stage=EVENT"),
+        "refusal must name its stage, got: {error}"
+    );
+    // MONITOR: journal exists but carries no L0 row -- the artifact
+    // verifies while the L0 observation finds nothing.
+    let repo = fixture("no-l0");
+    write_journal(
+        repo.path(),
+        &[row("UCVV_L1", "emitted", now_secs()).replace("\"L0\"", "\"L1\"")],
+    );
+    let error =
+        gate_observability(repo.path(), &manifest()).expect_err("L0-empty journal must refuse");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Monitor,
+        "an L0-empty journal refuses at MONITOR"
+    );
+    assert!(
+        error.to_string().contains("INSTALLER_OBSERVE_REFUSED stage=MONITOR"),
+        "refusal must name its stage, got: {error}"
+    );
+    // GATE: stale and refused L0 rows both observe fine and both fail
+    // the freshness gate -- never success.
+    for (name, outcome, ts) in [("stale", "emitted", 1), ("refused", "refused", now_secs())] {
+        let repo = fixture(name);
+        write_journal(repo.path(), &[row("UCVV_GATE", outcome, ts)]);
+        let error =
+            gate_observability(repo.path(), &manifest()).expect_err("non-progressing row refuses");
+        assert_eq!(
+            error.stage,
+            ObserveStage::Gate,
+            "a {name} row refuses at GATE"
+        );
+        assert!(
+            error.to_string().contains("INSTALLER_OBSERVE_REFUSED stage=GATE"),
+            "refusal must name its stage, got: {error}"
+        );
+    }
+    // Manifest carriage: a broken journal under a non-FULL manifest
+    // refuses carrying that manifest's own rendering.
+    let repo = fixture("manifest");
+    let partial = InputManifest::Partial {
+        bound_kind: "ucvv".to_owned(),
+        bound_value: 1,
+        source: "fixture".to_owned(),
+    };
+    let error =
+        gate_observability(repo.path(), &partial).expect_err("broken journal must refuse");
+    assert!(
+        error.to_string().contains("manifest=PARTIAL"),
+        "refusal must carry the manifest it observed, got: {error}"
+    );
+    // Anti-vacuity: an unparseable journal and a reasonless row are
+    // EVENT refusals, never quiet passes and never a zero-row green.
+    let repo = fixture("malformed");
+    write_journal(repo.path(), &["not json".to_owned()]);
+    let error =
+        gate_observability(repo.path(), &manifest()).expect_err("malformed journal refuses");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Event,
+        "a malformed journal refuses at EVENT"
+    );
+    let repo = fixture("reasonless");
+    write_journal(
+        repo.path(),
+        &["{\"layer\":\"L0\",\"outcome\":\"emitted\",\"ts_unix\":1}".to_owned()],
+    );
+    let error =
+        gate_observability(repo.path(), &manifest()).expect_err("reasonless row refuses");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Event,
+        "a reasonless row refuses at EVENT"
+    );
+    // Positive control: full manifest plus one fresh emitted L0 row
+    // passes with one observed row, still fresh.
+    let repo = fixture("pass");
+    write_journal(repo.path(), &[row("UCVV_OK", "emitted", now_secs())]);
+    let gate =
+        gate_observability(repo.path(), &manifest()).expect("full manifest and fresh row pass");
+    assert_eq!(gate.rows, 1, "exactly the one written row is observed");
+    assert!(gate.fresh, "a just-written row is fresh");
+}

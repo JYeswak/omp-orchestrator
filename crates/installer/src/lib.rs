@@ -13,6 +13,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use sha2::{Digest, Sha256};
+use lifecycle_event::{default_repo_journal, Layer};
+use lifecycle_monitor::{gate_freshness_verdict, observe_layer, verify_artifact};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sha256FailureClass {
@@ -1159,6 +1161,105 @@ pub fn assemble_install_report(
         report,
         artifact,
         readback_bytes: readback.len(),
+    })
+}
+
+/// L0 observe stall bound: follows the 60s operator default used by the
+/// tick fleet and the resident supervisor. An emit that just landed reads
+/// back in milliseconds, so a row older than this at gate time is stale
+/// by observation, not by clock skew.
+pub const L0_OBSERVE_STALL_MS: u64 = 60_000;
+
+/// Which observability stage refused. The `Display` on
+/// [`ObserveGateError`] is the exact refusal reason the legs pin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObserveStage {
+    Event,
+    Monitor,
+    Gate,
+}
+
+impl ObserveStage {
+    /// Stable stage token for refusal messages.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Event => "EVENT",
+            Self::Monitor => "MONITOR",
+            Self::Gate => "GATE",
+        }
+    }
+}
+
+/// L0 rows observed with a fresh progressing verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ObserveGate {
+    pub rows: usize,
+    pub fresh: bool,
+}
+
+/// A refused observability gate: which stage refused and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObserveGateError {
+    pub stage: ObserveStage,
+    pub reason: String,
+}
+
+impl std::fmt::Display for ObserveGateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "INSTALLER_OBSERVE_REFUSED stage={} reason={}",
+            self.stage.as_str(),
+            self.reason
+        )
+    }
+}
+
+impl std::error::Error for ObserveGateError {}
+
+/// L0-B15 observability gate: event -> monitor -> gate verdict.
+///
+/// After the report seals, this re-reads the L0 journal through the
+/// existing monitor (`observe_layer`), independently re-verifies the
+/// artifact (`verify_artifact`), and consumes the freshness gate
+/// (`gate_freshness_verdict`) before any success verdict. Every stage
+/// names itself: journal/read failures blame EVENT; a non-progressing
+/// layer blames MONITOR; a failed freshness gate blames GATE. Nothing
+/// here duplicates an existing channel: the emit path stays in the
+/// installer's emitter, the metric path stays in `lifecycle-monitor`,
+/// and this is the only composition of the three. The manifest travels
+/// by reference so every channel observes the same declared input set.
+/// Called by `run_install` after the report seals; integration legs
+/// drive it directly with hermetic journals.
+pub fn gate_observability(
+    repo_root: &Path,
+    manifest: &InputManifest,
+) -> Result<ObserveGate, ObserveGateError> {
+    let journal = default_repo_journal(repo_root);
+    let manifest_text = manifest.to_string();
+    // EVENT: the sealed report's event row is durable and readable back.
+    let event_rows = verify_artifact(&journal).map_err(|error| ObserveGateError {
+        stage: ObserveStage::Event,
+        reason: format!("{error} manifest={manifest_text}"),
+    })?;
+    // MONITOR: the L0 layer observes with a fresh progressing verdict.
+    let verdict = observe_layer(&journal, Layer::L0, L0_OBSERVE_STALL_MS).map_err(|error| {
+        ObserveGateError {
+            stage: ObserveStage::Monitor,
+            reason: format!("{error} manifest={manifest_text}"),
+        }
+    })?;
+    // GATE: freshness consumes the verdict before any success verdict.
+    gate_freshness_verdict(std::slice::from_ref(&verdict)).map_err(|error| {
+        ObserveGateError {
+            stage: ObserveStage::Gate,
+            reason: format!("{error} manifest={manifest_text}"),
+        }
+    })?;
+    Ok(ObserveGate {
+        rows: event_rows,
+        fresh: verdict.fresh,
     })
 }
 
