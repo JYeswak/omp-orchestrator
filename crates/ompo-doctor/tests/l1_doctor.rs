@@ -341,6 +341,76 @@ fn repair_records_before_hash_backup_after_hash() {
     );
 }
 
+/// L1-TEST-UNDO (contract s1_l1_doctor.md `L1-BUILD-UNDO`): repair then
+/// undo restores the recorded before-hash bytes, and a tampered backup
+/// refuses instead of restoring falsely. Uses the real `repair` and the
+/// real `undo` against a stale fixture -- never a test-only restore path:
+/// a test-only path would agree with the subject by construction.
+///
+/// KNOWN-BAD: remove the integrity gate in `restore_backup` and the tamper
+/// arm below restores the tampered bytes (or reports success) instead of
+/// refusing: the artifact must never equal bytes the backup record
+/// disowns. Message AND exit are pinned on the mutation run.
+#[test]
+fn undo_restores_before_hash() {
+    use ompo_doctor::undo::{undo, UndoError};
+
+    // Cycle A, positive control: healthy repair then undo restores.
+    let (directory, artifact) = stale_repair_fixture();
+    let before_bytes = fs::read(&artifact).expect("stale bytes readable");
+    let before_hash = sha256_hex(&before_bytes);
+    repair(directory.path(), "inception", RepairMode::Apply).expect("repair applies");
+    let report = undo(directory.path(), "inception", RepairMode::Apply, None)
+        .expect("healthy undo restores");
+    assert_eq!(report.reason_code, "UNDO_APPLIED");
+    let restored = fs::read(&artifact).expect("restored bytes readable");
+    assert_eq!(
+        restored, before_bytes,
+        "undo must restore byte-identical content"
+    );
+    assert_eq!(
+        sha256_hex(&restored),
+        before_hash,
+        "restored bytes hash to the before-hash"
+    );
+
+    // Cycle B, tamper: repair again, corrupt the recorded backup file (the
+    // filename still claims the before-hash), undo must refuse and must not
+    // write the tampered bytes anywhere.
+    let repaired =
+        repair(directory.path(), "inception", RepairMode::Apply).expect("repair again");
+    let backup = repaired
+        .applied
+        .first()
+        .expect("second repair records its action")
+        .backup
+        .clone()
+        .expect("action carries its backup");
+    let mut tampered = fs::read(&backup).expect("backup readable");
+    tampered.extend_from_slice(b"tampered");
+    fs::write(&backup, &tampered).expect("tamper lands");
+    let error = undo(directory.path(), "inception", RepairMode::Apply, None)
+        .expect_err("a tampered backup must refuse");
+    assert!(
+        matches!(&error, UndoError::Chokepoint { .. }),
+        "tamper refusal must be typed, got: {error}"
+    );
+    assert!(
+        error.to_string().contains("backup integrity failed"),
+        "tamper refusal must name its reason, got: {error}"
+    );
+    assert_eq!(
+        error.exit_code(),
+        3,
+        "a corrupt-backup refusal is an instrument failure, never 0"
+    );
+    let artifact_after = fs::read(&artifact).expect("artifact readable after refusal");
+    assert_ne!(
+        artifact_after, tampered,
+        "refusal must not restore disowned bytes"
+    );
+}
+
 /// L1-TEST-PROBE-AGENT-MAIL (contract s1_l1_doctor.md `L1-BUILD-PROBE-AGENT-MAIL`):
 /// endpoint identity AND version, or typed absence. Uses the real
 /// `answered` authority and the real `probe_answer_metric`, never a copy:
