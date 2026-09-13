@@ -35,7 +35,7 @@
 //!   non-progressing source. Exit 1.
 //!
 //! A new error enum rather than [`MonitorError`] reuse is deliberate:
-//! `MonitorError::EmptyScan` carries a journal path and `MissingReason` a line
+//! `MonitorError::EmptyJournal` carries a journal path and `MissingReason` a line
 //! number, and neither exists for a snapshot object. Reusing them would be the
 //! dishonest-label defect this crate exists to prevent.
 
@@ -250,7 +250,9 @@ fn map_row(source: &str, row: &Value) -> Result<NtmSourceVerdict, NtmSourceError
             state,
             row_count: 1,
             last_reason: reason_code,
+            last_ts: None,
             age_ms,
+            freshness_threshold_ms: None,
             fresh,
         },
     })

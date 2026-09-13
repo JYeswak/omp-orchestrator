@@ -2661,6 +2661,13 @@ fn xic2_identity_stamps_emitted_row() {
 /// denominator below is nonzero by construction, so a vacuous pass is
 /// unrepresentable. Returns the guard exit, the gate rows, and the
 /// journal rows for the legs to pin.
+fn request_without_installed<'a>(
+    sealed: &'a installer::SealedInstallReport,
+    identity: &'a IdentityCheck,
+) -> installer::InstallObserveRequest<'a> {
+    installer::InstallObserveRequest::new(sealed, "installer", Path::new(""), "", identity)
+}
+
 fn fx3d_production_gate(
     repo: &Path,
     manifest: &installer::InputManifest,
@@ -2721,7 +2728,12 @@ fn fx3d_production_gate(
     )
     .expect("production emit must answer with readback");
     assert_eq!(readback.lines, 1, "one emit appends exactly one row");
-    let gate = installer::gate_correlated_observability(repo, manifest, correlated);
+    let gate = installer::gate_correlated_observability(
+        repo,
+        manifest,
+        correlated,
+        request_without_installed(&assembled, &report_identity),
+    );
     let gate_rows = gate.as_ref().expect("fresh row must gate").rows;
     let exit = installer::guard_observability_success(
         repo,
@@ -3114,9 +3126,14 @@ fn r19i_good_report_correlates_and_supplies_b15() {
         &manifest,
     )
     .expect("current lifecycle row lands");
-    let gate = installer::gate_correlated_observability(repo.path(), &manifest, report)
-        .expect("B15 consumes the correlated report");
-    assert!(gate.report_readback_bytes > 0, "gate carries report bytes");
+    let gate = installer::gate_correlated_observability(
+        repo.path(),
+        &manifest,
+        report,
+        request_without_installed(&sealed, &identity),
+    )
+    .expect("B15 consumes the correlated report");
+    assert!(gate.report.readback_bytes > 0, "gate carries report bytes");
     assert_eq!(gate.path_hits, 1, "gate carries the path-hit count");
     assert_eq!(gate.host_capabilities, 3, "gate carries host capabilities");
     assert!(gate.rows > 0 && gate.fresh, "journal gate is nonvacuous");
@@ -3423,4 +3440,291 @@ fn r19i_missing_host_capability_refuses() {
         error,
         installer::InstallReportCause::HostCapabilitiesInvalid { .. }
     ));
+}
+
+const MONITOR_HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+const MONITOR_OMPO_BYTES: &[u8] = b"build_id=0123456789abcdef0123456789abcdef01234567\n";
+const MONITOR_OMPO_SHA256: &str =
+    "7df29baafaf4834a9a8e6351c301675daf61b19174bb972aae52ae32b6357ff3";
+
+struct MonitorFixture {
+    repo: TempDir,
+    sealed: installer::SealedInstallReport,
+    correlated: installer::CorrelatedInstallReport,
+    identity: IdentityCheck,
+    attempt: installer::AttemptIdentity,
+    manifest: installer::InputManifest,
+    installed_path: PathBuf,
+    path_env: String,
+    readback: lifecycle_event::Readback,
+}
+
+fn make_executable(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(path).expect("artifact metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions).expect("artifact executable");
+    }
+}
+
+fn monitor_fixture(name: &str, stale: bool) -> MonitorFixture {
+    use lifecycle_event::{EmitOutcome, Layer};
+    let repo = TempDir::new(&format!("83pe-{name}"));
+    write_inception_host_capabilities(repo.path());
+    let bin_dir = repo.path().join("bin");
+    fs::create_dir_all(&bin_dir).expect("bin dir");
+    let installed_path = bin_dir.join("ompo");
+    fs::write(&installed_path, MONITOR_OMPO_BYTES).expect("installed ompo fixture");
+    make_executable(&installed_path);
+    assert_eq!(
+        installer::verify_sha256(&installed_path, Some(MONITOR_OMPO_SHA256))
+            .expect("fixture digest"),
+        MONITOR_OMPO_SHA256
+    );
+    let identity = IdentityCheck {
+        binary_name: "ompo".to_owned(),
+        repo_ownership: RepoOwnership::ThisRepo,
+        head_sha: MONITOR_HEAD.to_owned(),
+        build_id_in_binary: Some(MONITOR_HEAD.to_owned()),
+        version_output: None,
+        consistent: true,
+    };
+    let attempt = installer::AttemptIdentity {
+        pane: "83pe-pane".to_owned(),
+        incarnation: "1".to_owned(),
+        attempt: format!("83pe-{name}"),
+    };
+    let manifest = installer::InputManifest::Full {
+        digest: MONITOR_OMPO_SHA256.to_owned(),
+    };
+    let scan = installer::AgentScan {
+        families: vec!["83pe-probe".to_owned()],
+    };
+    let outcomes = vec![installer::AgentOutcome {
+        family: "83pe-probe".to_owned(),
+        outcome: "installed".to_owned(),
+    }];
+    let (sealed, correlated) = installer::assemble_and_correlate_install_report(
+        repo.path(),
+        &scan,
+        &outcomes,
+        &[],
+        &[],
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect("monitor report seals and correlates");
+    let readback = installer::emit_s1(
+        repo.path(),
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        "INSTALL_VERIFIED",
+        &attempt,
+        &manifest,
+    )
+    .expect("monitor lifecycle row");
+    if stale {
+        let journal = lifecycle_event::default_repo_journal(repo.path());
+        let text = fs::read_to_string(&journal).expect("journal read");
+        let mut row: serde_json::Value = serde_json::from_str(text.trim()).expect("journal row");
+        row["ts_unix"] = serde_json::json!(1);
+        fs::write(
+            &journal,
+            format!("{}\n", serde_json::to_string(&row).expect("row JSON")),
+        )
+        .expect("stale row");
+    }
+    MonitorFixture {
+        repo,
+        sealed,
+        correlated,
+        identity,
+        attempt,
+        manifest,
+        installed_path,
+        path_env: bin_dir.display().to_string(),
+        readback,
+    }
+}
+
+fn monitor_gate(
+    fixture: &MonitorFixture,
+) -> Result<installer::InstallObserveGate, installer::ObserveGateError> {
+    installer::gate_correlated_observability(
+        fixture.repo.path(),
+        &fixture.manifest,
+        fixture.correlated,
+        installer::InstallObserveRequest::new(
+            &fixture.sealed,
+            "ompo",
+            &fixture.installed_path,
+            &fixture.path_env,
+            &fixture.identity,
+        ),
+    )
+}
+
+#[test]
+fn monitor_good_fresh_report_and_installed_identity_reach_gate_ok() {
+    let fixture = monitor_fixture("good", false);
+    let gate = monitor_gate(&fixture).expect("fresh exact monitor passes");
+    assert!(gate.rows > 0 && gate.last_ts > 0, "{gate:?}");
+    assert!(
+        gate.age_ms <= gate.freshness_threshold_ms && gate.fresh,
+        "{gate:?}"
+    );
+    assert_eq!(gate.manifest_digest, MONITOR_OMPO_SHA256);
+    assert!(
+        gate.report.file_fsynced && gate.report.parent_fsynced,
+        "{gate:?}"
+    );
+    assert_eq!(gate.report.write_bytes, gate.report.readback_bytes);
+    assert!(
+        gate.report.inode.is_some() && !gate.report.sha256.is_empty(),
+        "{gate:?}"
+    );
+    let installed = gate.installed.as_ref().expect("ompo identity is mandatory");
+    assert_eq!(installed.path, fixture.installed_path);
+    assert!(
+        installed.inode.is_some() && installed.identity.consistent,
+        "{installed:?}"
+    );
+    assert_eq!(installed.sha256, MONITOR_OMPO_SHA256);
+    assert_eq!(
+        installer::guard_observability_success(
+            fixture.repo.path(),
+            &fixture.attempt,
+            &fixture.manifest,
+            fixture.readback,
+            Ok(gate),
+        ),
+        std::process::ExitCode::SUCCESS
+    );
+}
+
+#[test]
+fn monitor_stale_l0_row_refuses_freshness() {
+    let fixture = monitor_fixture("stale", true);
+    let error = monitor_gate(&fixture).expect_err("stale lifecycle row must refuse");
+    assert_eq!(error.stage, installer::ObserveStage::Gate, "{error}");
+    assert!(error.reason.contains("L0:silent"), "{error}");
+}
+
+#[test]
+fn monitor_missing_command_v_ompo_is_typed() {
+    let fixture = monitor_fixture("missing-installed", false);
+    let error = installer::gate_correlated_observability(
+        fixture.repo.path(),
+        &fixture.manifest,
+        fixture.correlated,
+        installer::InstallObserveRequest::new(
+            &fixture.sealed,
+            "ompo",
+            &fixture.installed_path,
+            "",
+            &fixture.identity,
+        ),
+    )
+    .expect_err("missing command-v ompo must refuse");
+    assert_eq!(error.stage, installer::ObserveStage::Artifact, "{error}");
+    assert!(
+        error.reason.contains("L0_INSTALLED_PATH_MISSING"),
+        "{error}"
+    );
+}
+
+#[test]
+fn monitor_installed_inode_mismatch_is_typed() {
+    let fixture = monitor_fixture("installed-inode", false);
+    let shadow_dir = fixture.repo.path().join("shadow");
+    fs::create_dir_all(&shadow_dir).expect("shadow dir");
+    let shadow = shadow_dir.join("ompo");
+    fs::write(&shadow, MONITOR_OMPO_BYTES).expect("shadow ompo");
+    make_executable(&shadow);
+    let error = installer::gate_correlated_observability(
+        fixture.repo.path(),
+        &fixture.manifest,
+        fixture.correlated,
+        installer::InstallObserveRequest::new(
+            &fixture.sealed,
+            "ompo",
+            &fixture.installed_path,
+            &shadow_dir.display().to_string(),
+            &fixture.identity,
+        ),
+    )
+    .expect_err("different command-v inode must refuse");
+    assert_eq!(error.stage, installer::ObserveStage::Artifact, "{error}");
+    assert!(
+        error.reason.contains("L0_INSTALLED_INODE_MISMATCH"),
+        "{error}"
+    );
+}
+
+#[test]
+fn monitor_installed_identity_mismatch_is_typed() {
+    let fixture = monitor_fixture("installed-identity", false);
+    let mut wrong = fixture.identity.clone();
+    wrong.head_sha = "fedcba9876543210fedcba9876543210fedcba98".to_owned();
+    wrong.build_id_in_binary = Some(wrong.head_sha.clone());
+    let error = installer::gate_correlated_observability(
+        fixture.repo.path(),
+        &fixture.manifest,
+        fixture.correlated,
+        installer::InstallObserveRequest::new(
+            &fixture.sealed,
+            "ompo",
+            &fixture.installed_path,
+            &fixture.path_env,
+            &wrong,
+        ),
+    )
+    .expect_err("installed identity mismatch must refuse");
+    assert_eq!(error.stage, installer::ObserveStage::Artifact, "{error}");
+    assert!(
+        error.reason.contains("L0_INSTALLED_IDENTITY_MISMATCH"),
+        "{error}"
+    );
+}
+
+#[test]
+fn monitor_report_inode_and_readback_mismatches_are_typed() {
+    let readback = monitor_fixture("report-readback", false);
+    fs::write(&readback.sealed.artifact, b"changed report bytes\n").expect("tamper report");
+    let error = monitor_gate(&readback).expect_err("changed report readback must refuse");
+    assert!(
+        error.reason.contains("L0_REPORT_READBACK_MISMATCH"),
+        "{error}"
+    );
+
+    let inode = monitor_fixture("report-inode", false);
+    let replacement = inode.repo.path().join("replacement-report.json");
+    let exact = fs::read(&inode.sealed.artifact).expect("report bytes");
+    fs::write(&replacement, exact).expect("replacement report");
+    fs::rename(&replacement, &inode.sealed.artifact).expect("replace report inode");
+    let error = monitor_gate(&inode).expect_err("replaced report inode must refuse");
+    assert!(error.reason.contains("L0_REPORT_INODE_MISMATCH"), "{error}");
+}
+
+#[test]
+fn monitor_writer_or_fsync_suppression_is_typed() {
+    let mut fixture = monitor_fixture("writer", false);
+    fixture.sealed.write_bytes = 0;
+    let error = monitor_gate(&fixture).expect_err("writer suppression must refuse");
+    assert!(
+        error.reason.contains("L0_REPORT_WRITE_SUPPRESSED"),
+        "{error}"
+    );
+
+    let mut fixture = monitor_fixture("fsync", false);
+    fixture.sealed.parent_fsynced = false;
+    let error = monitor_gate(&fixture).expect_err("fsync suppression must refuse");
+    assert!(
+        error.reason.contains("L0_REPORT_FSYNC_INCOMPLETE"),
+        "{error}"
+    );
 }

@@ -486,7 +486,7 @@ fn run_install(
             return installer::guard_success(Err(error), installer::GATE_OK_VERDICT)
         }
     };
-    let gate = installer::gate_correlated_observability(repo_root, &manifest, correlated);
+    let gate = assembled.gate_install(repo_root, &manifest, correlated, binary_name, bin_dir, &check);
     installer::guard_observability_success(repo_root, identity, &manifest, readback, gate)
 }
 

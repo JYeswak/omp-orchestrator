@@ -92,7 +92,10 @@ fn empty_l5_journal_is_typed_refusal() {
     let output = observe(&journal);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "{stderr}");
-    assert!(stderr.contains("LIFECYCLE_MONITOR_EMPTY_SCAN"), "{stderr}");
+    assert!(
+        stderr.contains("LIFECYCLE_MONITOR_EMPTY_JOURNAL"),
+        "{stderr}"
+    );
     assert!(!stderr.contains("state=silent"), "{stderr}");
 }
 

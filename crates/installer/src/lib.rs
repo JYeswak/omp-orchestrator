@@ -1251,7 +1251,19 @@ pub struct SealedInstallReport {
     pub report: InstallReport,
     pub artifact: PathBuf,
     pub write_bytes: usize,
+    pub file_fsynced: bool,
+    pub parent_fsynced: bool,
     pub readback_bytes: usize,
+    pub artifact_inode: Option<u64>,
+}
+#[cfg(unix)]
+fn metadata_inode(metadata: &std::fs::Metadata) -> Option<u64> {
+    Some(std::os::unix::fs::MetadataExt::ino(metadata))
+}
+
+#[cfg(not(unix))]
+fn metadata_inode(_metadata: &std::fs::Metadata) -> Option<u64> {
+    None
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1336,7 +1348,17 @@ fn install_report_document(report: &InstallReport, manifest: &InputManifest) -> 
     document
 }
 
-fn persist_install_report(artifact: &Path, document: &str) -> Result<usize, InstallError> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct InstallReportPersistence {
+    write_bytes: usize,
+    file_fsynced: bool,
+    parent_fsynced: bool,
+}
+
+fn persist_install_report(
+    artifact: &Path,
+    document: &str,
+) -> Result<InstallReportPersistence, InstallError> {
     let parent = artifact.parent().ok_or_else(|| InstallError::IoError {
         path: artifact.display().to_string(),
         detail: "report path has no parent".to_owned(),
@@ -1355,26 +1377,37 @@ fn persist_install_report(artifact: &Path, document: &str) -> Result<usize, Inst
             detail: format!("report open failed: {error}"),
         })?;
     file.write_all(document.as_bytes())
-        .and_then(|()| file.sync_all())
         .map_err(|error| InstallError::IoError {
             path: artifact.display().to_string(),
             detail: format!("report write failed: {error}"),
         })?;
-    std::fs::File::open(parent)
-        .and_then(|directory| directory.sync_all())
+    file.sync_all().map_err(|error| InstallError::IoError {
+        path: artifact.display().to_string(),
+        detail: format!("report fsync failed: {error}"),
+    })?;
+    let directory = std::fs::File::open(parent).map_err(|error| InstallError::IoError {
+        path: parent.display().to_string(),
+        detail: format!("report parent open failed: {error}"),
+    })?;
+    directory
+        .sync_all()
         .map_err(|error| InstallError::IoError {
             path: parent.display().to_string(),
             detail: format!("report parent sync failed: {error}"),
         })?;
-    Ok(document.len())
+    Ok(InstallReportPersistence {
+        write_bytes: document.len(),
+        file_fsynced: true,
+        parent_fsynced: true,
+    })
 }
 
 fn persist_and_read_install_report(
     artifact: &Path,
     document: &str,
-) -> Result<(usize, usize), InstallError> {
-    let write_bytes = persist_install_report(artifact, document)?;
-    if write_bytes == 0 {
+) -> Result<(InstallReportPersistence, usize), InstallError> {
+    let persistence = persist_install_report(artifact, document)?;
+    if persistence.write_bytes == 0 {
         return Err(InstallError::InstallReportRefused(
             InstallReportCause::WriterSuppressed {
                 path: artifact.to_owned(),
@@ -1402,7 +1435,30 @@ fn persist_and_read_install_report(
             },
         ));
     }
-    Ok((write_bytes, readback.len()))
+    Ok((persistence, readback.len()))
+}
+
+fn seal_persisted_report(
+    report: InstallReport,
+    artifact: PathBuf,
+    persistence: InstallReportPersistence,
+    readback_bytes: usize,
+) -> Result<SealedInstallReport, InstallError> {
+    let artifact_inode = std::fs::metadata(&artifact)
+        .map(|metadata| metadata_inode(&metadata))
+        .map_err(|error| InstallError::IoError {
+            path: artifact.display().to_string(),
+            detail: format!("report metadata failed: {error}"),
+        })?;
+    Ok(SealedInstallReport {
+        report,
+        artifact,
+        write_bytes: persistence.write_bytes,
+        file_fsynced: persistence.file_fsynced,
+        parent_fsynced: persistence.parent_fsynced,
+        readback_bytes,
+        artifact_inode,
+    })
 }
 
 pub fn assemble_install_report(
@@ -1449,14 +1505,9 @@ pub fn assemble_install_report(
     )?;
     let artifact = repo_root.join(INSTALL_REPORT_ARTIFACT);
     let document = install_report_document(&report, manifest);
-    let (write_bytes, readback_bytes) =
+    let (persistence, readback_bytes) =
         persist_and_read_install_report(&artifact, &document)?;
-    Ok(SealedInstallReport {
-        report,
-        artifact,
-        write_bytes,
-        readback_bytes,
-    })
+    seal_persisted_report(report, artifact, persistence, readback_bytes)
 }
 
 /// One B12 writer followed immediately by r19i correlation over the same
@@ -1628,6 +1679,15 @@ fn validate_sealed_report_receipts(
     if sealed.write_bytes == 0 {
         return Err(InstallReportCause::WriterSuppressed {
             path: canonical.to_owned(),
+        });
+    }
+    if !sealed.file_fsynced || !sealed.parent_fsynced {
+        return Err(InstallReportCause::ReadbackFailed {
+            path: canonical.to_owned(),
+            detail: format!(
+                "B12 fsync receipt incomplete file={} parent={}",
+                sealed.file_fsynced, sealed.parent_fsynced
+            ),
         });
     }
     if sealed.readback_bytes == 0 {
@@ -2157,42 +2217,123 @@ pub const L0_OBSERVE_STALL_MS: u64 = 60_000;
 
 /// Which observability stage refused. The `Display` on
 /// [`ObserveGateError`] is the exact refusal reason the legs pin.
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObserveStage {
     Event,
     Monitor,
+    Artifact,
     Gate,
 }
-
 impl ObserveStage {
     /// Stable stage token for refusal messages.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Event => "EVENT",
-            Self::Monitor => "MONITOR",
-            Self::Gate => "GATE",
-        }
+        const NAMES: [&str; 4] = ["EVENT", "MONITOR", "ARTIFACT", "GATE"];
+        NAMES[self as usize]
     }
 }
-
 /// L0 rows observed with a fresh progressing verdict.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObserveGate {
     pub rows: usize,
+    pub last_ts: u64,
+    pub age_ms: u64,
+    pub freshness_threshold_ms: u64,
     pub fresh: bool,
 }
 
-/// B15 gate result after consuming r19i's canonical report correlation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReportArtifactObservation {
+    pub path: PathBuf,
+    pub inode: Option<u64>,
+    pub sha256: String,
+    pub write_bytes: usize,
+    pub readback_bytes: usize,
+    pub file_fsynced: bool,
+    pub parent_fsynced: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledArtifactObservation {
+    pub path: PathBuf,
+    pub inode: Option<u64>,
+    pub sha256: String,
+    pub identity: IdentityCheck,
+}
+
+/// Installed-artifact authority consumed by the correlated L0 monitor.
+#[derive(Debug, Clone, Copy)]
+pub struct InstallObserveRequest<'a> {
+    pub sealed: &'a SealedInstallReport,
+    pub binary_name: &'a str,
+    pub expected_path: &'a Path,
+    pub path_env: &'a str,
+    pub expected_identity: &'a IdentityCheck,
+}
+
+impl<'a> InstallObserveRequest<'a> {
+    #[must_use]
+    pub const fn new(
+        sealed: &'a SealedInstallReport,
+        binary_name: &'a str,
+        expected_path: &'a Path,
+        path_env: &'a str,
+        expected_identity: &'a IdentityCheck,
+    ) -> Self {
+        Self {
+            sealed,
+            binary_name,
+            expected_path,
+            path_env,
+            expected_identity,
+        }
+    }
+}
+
+impl SealedInstallReport {
+    /// Gate a completed install against the artifact reached by this process's PATH.
+    pub fn gate_install(
+        &self,
+        repo_root: &Path,
+        manifest: &InputManifest,
+        report: CorrelatedInstallReport,
+        binary_name: &str,
+        bin_dir: &Path,
+        expected_identity: &IdentityCheck,
+    ) -> Result<InstallObserveGate, ObserveGateError> {
+        let expected_path = bin_dir.join(binary_name);
+        let path_env = std::env::var("PATH").unwrap_or_default();
+        gate_correlated_observability(
+            repo_root,
+            manifest,
+            report,
+            InstallObserveRequest::new(
+                self,
+                binary_name,
+                &expected_path,
+                &path_env,
+                expected_identity,
+            ),
+        )
+    }
+}
+
+/// B15 gate result after consuming r19i correlation, the durable report,
+/// lifecycle freshness, required manifest, and installed artifact identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallObserveGate {
-    pub report_readback_bytes: usize,
+    pub report: ReportArtifactObservation,
+    pub installed: Option<InstalledArtifactObservation>,
+    pub manifest_digest: String,
     pub path_hits: usize,
     pub host_capabilities: usize,
     pub rows: usize,
+    pub last_ts: u64,
+    pub age_ms: u64,
+    pub freshness_threshold_ms: u64,
     pub fresh: bool,
 }
-
 /// A refused observability gate: which stage refused and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObserveGateError {
@@ -2212,6 +2353,165 @@ impl std::fmt::Display for ObserveGateError {
 }
 
 impl std::error::Error for ObserveGateError {}
+
+fn artifact_observe_error(code: &str, detail: impl Into<String>) -> ObserveGateError {
+    ObserveGateError {
+        stage: ObserveStage::Artifact,
+        reason: format!("{code} detail={}", detail.into()),
+    }
+}
+
+#[cfg(unix)]
+fn is_executable(metadata: &std::fs::Metadata) -> bool {
+    std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn is_executable(_metadata: &std::fs::Metadata) -> bool {
+    true
+}
+
+fn full_observe_manifest_digest(manifest: &InputManifest) -> Result<&str, ObserveGateError> {
+    match manifest {
+        InputManifest::Full { digest } if !digest.trim().is_empty() => Ok(digest),
+        InputManifest::Full { .. } => Err(artifact_observe_error(
+            "L0_MONITOR_MANIFEST_EMPTY",
+            "FULL manifest digest is empty",
+        )),
+        InputManifest::Partial { .. } | InputManifest::Refused { .. } => Err(ObserveGateError {
+            stage: ObserveStage::Gate,
+            reason: format!("non-FULL manifest cannot gate: manifest={manifest}"),
+        }),
+    }
+}
+
+fn observe_report_artifact(
+    sealed: &SealedInstallReport,
+) -> Result<ReportArtifactObservation, ObserveGateError> {
+    if sealed.write_bytes == 0 {
+        return Err(artifact_observe_error(
+            "L0_REPORT_WRITE_SUPPRESSED",
+            sealed.artifact.display().to_string(),
+        ));
+    }
+    if !sealed.file_fsynced || !sealed.parent_fsynced {
+        return Err(artifact_observe_error(
+            "L0_REPORT_FSYNC_INCOMPLETE",
+            format!(
+                "file={} parent={}",
+                sealed.file_fsynced, sealed.parent_fsynced
+            ),
+        ));
+    }
+    let bytes = std::fs::read(&sealed.artifact).map_err(|error| {
+        artifact_observe_error(
+            "L0_REPORT_READBACK_FAILED",
+            format!("path={} error={error}", sealed.artifact.display()),
+        )
+    })?;
+    if bytes.len() != sealed.readback_bytes {
+        return Err(artifact_observe_error(
+            "L0_REPORT_READBACK_MISMATCH",
+            format!("expected={} actual={}", sealed.readback_bytes, bytes.len()),
+        ));
+    }
+    let metadata = std::fs::metadata(&sealed.artifact).map_err(|error| {
+        artifact_observe_error(
+            "L0_REPORT_METADATA_FAILED",
+            format!("path={} error={error}", sealed.artifact.display()),
+        )
+    })?;
+    let inode = metadata_inode(&metadata);
+    if inode != sealed.artifact_inode {
+        return Err(artifact_observe_error(
+            "L0_REPORT_INODE_MISMATCH",
+            format!("expected={:?} actual={inode:?}", sealed.artifact_inode),
+        ));
+    }
+    let file = std::fs::File::open(&sealed.artifact).map_err(|error| {
+        artifact_observe_error(
+            "L0_REPORT_READBACK_FAILED",
+            format!("path={} error={error}", sealed.artifact.display()),
+        )
+    })?;
+    let sha256 = hash_sha256_reader(&sealed.artifact, file)
+        .map_err(|error| artifact_observe_error("L0_REPORT_DIGEST_FAILED", error.to_string()))?;
+    Ok(ReportArtifactObservation {
+        path: sealed.artifact.clone(),
+        inode,
+        sha256,
+        write_bytes: sealed.write_bytes,
+        readback_bytes: sealed.readback_bytes,
+        file_fsynced: sealed.file_fsynced,
+        parent_fsynced: sealed.parent_fsynced,
+    })
+}
+
+/// Resolve the same first executable PATH hit that `command -v ompo` names,
+/// then prove it is the installed inode/content/identity already accepted by
+/// B12. Mtime is intentionally absent: ordering is not provenance.
+pub fn observe_installed_ompo(
+    path_env: &str,
+    expected_path: &Path,
+    expected_identity: &IdentityCheck,
+    manifest: &InputManifest,
+) -> Result<InstalledArtifactObservation, ObserveGateError> {
+    let digest = full_observe_manifest_digest(manifest)?;
+    let observed_path = path_collision_hits("ompo", path_env)
+        .into_iter()
+        .find(|path| std::fs::metadata(path).is_ok_and(|metadata| is_executable(&metadata)))
+        .ok_or_else(|| {
+            artifact_observe_error(
+                "L0_INSTALLED_PATH_MISSING",
+                "command-v ompo found no executable PATH entry",
+            )
+        })?;
+    let expected_metadata = std::fs::metadata(expected_path).map_err(|error| {
+        artifact_observe_error(
+            "L0_INSTALLED_EXPECTED_MISSING",
+            format!("path={} error={error}", expected_path.display()),
+        )
+    })?;
+    let observed_metadata = std::fs::metadata(&observed_path).map_err(|error| {
+        artifact_observe_error(
+            "L0_INSTALLED_METADATA_FAILED",
+            format!("path={} error={error}", observed_path.display()),
+        )
+    })?;
+    let expected_inode = metadata_inode(&expected_metadata);
+    let observed_inode = metadata_inode(&observed_metadata);
+    let same_path = expected_path.canonicalize().ok() == observed_path.canonicalize().ok();
+    if expected_inode != observed_inode || !same_path {
+        return Err(artifact_observe_error(
+            "L0_INSTALLED_INODE_MISMATCH",
+            format!(
+                "expected_path={} observed_path={} expected_inode={expected_inode:?} observed_inode={observed_inode:?}",
+                expected_path.display(),
+                observed_path.display()
+            ),
+        ));
+    }
+    let sha256 = verify_sha256(&observed_path, Some(digest)).map_err(|error| {
+        artifact_observe_error("L0_INSTALLED_CONTENT_MISMATCH", error.to_string())
+    })?;
+    let identity = verify_identity(
+        &observed_path,
+        &expected_identity.head_sha,
+        &expected_identity.repo_ownership,
+    );
+    if !identity.consistent || identity != *expected_identity {
+        return Err(artifact_observe_error(
+            "L0_INSTALLED_IDENTITY_MISMATCH",
+            format!("expected={expected_identity:?} actual={identity:?}"),
+        ));
+    }
+    Ok(InstalledArtifactObservation {
+        path: observed_path,
+        inode: observed_inode,
+        sha256,
+        identity,
+    })
+}
 
 /// L0-B15-obs-gate (bead fx3d): the exact success verdict line. Production
 /// prints this bare word and nothing else on the composed-gate success
@@ -2243,16 +2543,7 @@ pub fn gate_observability(
     // or REFUSED manifest refuses here with its own typed reason before
     // any channel is consulted -- verdicting over undeclared input would
     // launder it into a clean gate.
-    match manifest {
-        InputManifest::Full { .. } => {}
-        InputManifest::Partial { .. } | InputManifest::Refused { .. } => {
-            return Err(ObserveGateError {
-                stage: ObserveStage::Gate,
-                reason: format!("non-FULL manifest cannot gate: manifest={manifest}"),
-            })
-        }
-    }
-    // EVENT: the sealed report's event row is durable and readable back.
+    let _ = full_observe_manifest_digest(manifest)?;
     let event_rows = verify_artifact(&journal).map_err(|error| ObserveGateError {
         stage: ObserveStage::Event,
         reason: format!("{error} manifest={manifest_text}"),
@@ -2263,6 +2554,17 @@ pub fn gate_observability(
             reason: format!("{error} manifest={manifest_text}"),
         }
     })?;
+    let last_ts = verdict.last_ts.ok_or_else(|| ObserveGateError {
+        stage: ObserveStage::Monitor,
+        reason: "L0_MONITOR_TIMESTAMP_UNAVAILABLE".to_owned(),
+    })?;
+    let freshness_threshold_ms =
+        verdict
+            .freshness_threshold_ms
+            .ok_or_else(|| ObserveGateError {
+                stage: ObserveStage::Monitor,
+                reason: "L0_MONITOR_THRESHOLD_UNAVAILABLE".to_owned(),
+            })?;
     // GATE: freshness consumes the verdict before any success verdict.
     gate_freshness_verdict(std::slice::from_ref(&verdict)).map_err(|error| {
         ObserveGateError {
@@ -2272,6 +2574,9 @@ pub fn gate_observability(
     })?;
     Ok(ObserveGate {
         rows: event_rows,
+        last_ts,
+        age_ms: verdict.age_ms,
+        freshness_threshold_ms,
         fresh: verdict.fresh,
     })
 }
@@ -2283,13 +2588,31 @@ pub fn gate_correlated_observability(
     repo_root: &Path,
     manifest: &InputManifest,
     report: CorrelatedInstallReport,
+    request: InstallObserveRequest<'_>,
 ) -> Result<InstallObserveGate, ObserveGateError> {
     let gate = gate_observability(repo_root, manifest)?;
+    let report_artifact = observe_report_artifact(request.sealed)?;
+    let manifest_digest = full_observe_manifest_digest(manifest)?.to_owned();
+    let installed = if request.binary_name == "ompo" {
+        Some(observe_installed_ompo(
+            request.path_env,
+            request.expected_path,
+            request.expected_identity,
+            manifest,
+        )?)
+    } else {
+        None
+    };
     Ok(InstallObserveGate {
-        report_readback_bytes: report.readback_bytes,
+        report: report_artifact,
+        installed,
+        manifest_digest,
         path_hits: report.path_hits,
         host_capabilities: report.host_capabilities,
         rows: gate.rows,
+        last_ts: gate.last_ts,
+        age_ms: gate.age_ms,
+        freshness_threshold_ms: gate.freshness_threshold_ms,
         fresh: gate.fresh,
     })
 }
@@ -2304,14 +2627,41 @@ pub fn guard_observability_success(
     gate: Result<InstallObserveGate, ObserveGateError>,
 ) -> ExitCode {
     match gate {
-        Ok(gate) => println!(
-            "  OBSERVE report_bytes={} path_hits={} host_capabilities={} rows={} fresh={} manifest={manifest}",
-            gate.report_readback_bytes,
-            gate.path_hits,
-            gate.host_capabilities,
-            gate.rows,
-            gate.fresh,
-        ),
+        Ok(gate) => {
+            let (installed_path, installed_inode, installed_sha256, installed_identity) = gate
+                .installed
+                .as_ref()
+                .map(|installed| {
+                    (
+                        installed.path.display().to_string(),
+                        format!("{:?}", installed.inode),
+                        installed.sha256.as_str(),
+                        installed.identity.consistent,
+                    )
+                })
+                .unwrap_or_else(|| ("not-required".to_owned(), "None".to_owned(), "none", true));
+            println!(
+                "  OBSERVE rows={} last_ts={} age_ms={} freshness_threshold_ms={} fresh={} manifest_state=FULL manifest_digest={} report_path={} report_inode={:?} report_sha256={} report_bytes={} report_file_fsynced={} report_parent_fsynced={} path_hits={} host_capabilities={} installed_path={} installed_inode={} installed_sha256={} installed_identity={} ",
+                gate.rows,
+                gate.last_ts,
+                gate.age_ms,
+                gate.freshness_threshold_ms,
+                gate.fresh,
+                gate.manifest_digest,
+                gate.report.path.display(),
+                gate.report.inode,
+                gate.report.sha256,
+                gate.report.readback_bytes,
+                gate.report.file_fsynced,
+                gate.report.parent_fsynced,
+                gate.path_hits,
+                gate.host_capabilities,
+                installed_path,
+                installed_inode,
+                installed_sha256,
+                installed_identity,
+            );
+        }
         Err(error) => {
             eprintln!("INSTALLER OBSERVE REFUSED: {error}");
             let _ = emit_refusal(

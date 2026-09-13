@@ -44,13 +44,19 @@ pub struct LayerVerdict {
     pub state: LayerState,
     pub row_count: usize,
     pub last_reason: String,
+    /// Source timestamp when the carrier provides one. Journal observations
+    /// always set it; snapshot adapters that expose age only leave it unknown.
+    pub last_ts: Option<u64>,
     pub age_ms: u64,
+    /// The threshold that produced `fresh`. Journal observations always set it.
+    pub freshness_threshold_ms: Option<u64>,
     pub fresh: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MonitorError {
-    EmptyScan { path: PathBuf, layer: Option<Layer> },
+    EmptyJournal { path: PathBuf },
+    LayerAbsent { path: PathBuf, layer: Layer },
     Io { path: PathBuf, detail: String },
     Malformed { line: usize, detail: String },
     MissingReason { line: usize },
@@ -64,56 +70,95 @@ pub enum MonitorError {
 
 impl std::fmt::Display for MonitorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.fmt_detail(f)
+    }
+}
+
+impl MonitorError {
+    fn fmt_detail(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::EmptyScan { path, layer } => match layer {
-                Some(layer) => write!(
-                    f,
-                    "LIFECYCLE_MONITOR_EMPTY_SCAN path={} layer={} — empty is ERROR, never a pass",
-                    path.display(),
-                    layer.as_str()
-                ),
-                None => write!(
-                    f,
-                    "LIFECYCLE_MONITOR_EMPTY_SCAN path={} — empty is ERROR, never a pass",
-                    path.display()
-                ),
-            },
+            Self::EmptyJournal { path } => fmt_empty_journal(f, path),
+            Self::LayerAbsent { path, layer } => fmt_layer_absent(f, path, *layer),
             Self::Io { path, detail } => {
-                write!(f, "LIFECYCLE_MONITOR_IO path={} detail={detail}", path.display())
+                fmt_fields(f, "IO", format_args!("path={} detail={detail}", path.display()))
             }
             Self::Malformed { line, detail } => {
-                write!(f, "LIFECYCLE_MONITOR_MALFORMED line={line} detail={detail}")
+                fmt_fields(f, "MALFORMED", format_args!("line={line} detail={detail}"))
             }
-            Self::MissingReason { line } => write!(
-                f,
-                "LIFECYCLE_MONITOR_MISSING_REASON line={line} — idle and refused must stay distinguishable"
-            ),
+            Self::MissingReason { line } => fmt_missing_reason(f, *line),
             Self::MissingTimestamp { line } => {
-                write!(f, "LIFECYCLE_MONITOR_MISSING_TIMESTAMP line={line}")
+                fmt_fields(f, "MISSING_TIMESTAMP", format_args!("line={line}"))
             }
-            Self::MalformedTimestamp { line, detail } => write!(
+            Self::MalformedTimestamp { line, detail } => fmt_fields(
                 f,
-                "LIFECYCLE_MONITOR_MALFORMED_TIMESTAMP line={line} detail={detail}"
+                "MALFORMED_TIMESTAMP",
+                format_args!("line={line} detail={detail}"),
             ),
-            Self::ReadbackFailed { detail } => write!(
-                f,
-                "LIFECYCLE_MONITOR_READBACK_FAILED {detail} — the write succeeded is not evidence the artifact exists"
-            ),
+            Self::ReadbackFailed { detail } => fmt_readback_failed(f, detail),
             Self::MetricsMissing { path } => {
-                write!(f, "LIFECYCLE_MONITOR_METRICS_MISSING path={}", path.display())
+                fmt_fields(f, "METRICS_MISSING", format_args!("path={}", path.display()))
             }
-            Self::MetricsIncomplete { found } => write!(
-                f,
-                "LIFECYCLE_MONITOR_METRICS_INCOMPLETE found={found} expected=6"
-            ),
-            Self::StaleLayers { layers } => write!(
-                f,
-                "LIFECYCLE_MONITOR_STALE_LAYERS layers={} — stale is ERROR, never a pass",
-                layers.join(",")
-            ),
+            Self::MetricsIncomplete { found } => {
+                fmt_fields(f, "METRICS_INCOMPLETE", format_args!("found={found} expected=6"))
+            }
+            Self::StaleLayers { layers } => fmt_stale_layers(f, layers),
         }
     }
 }
+
+fn fmt_fields(
+    f: &mut std::fmt::Formatter<'_>,
+    code: &str,
+    fields: std::fmt::Arguments<'_>,
+) -> std::fmt::Result {
+    write!(f, "LIFECYCLE_MONITOR_{code} {fields}")
+}
+
+fn fmt_empty_journal(f: &mut std::fmt::Formatter<'_>, path: &Path) -> std::fmt::Result {
+    write!(
+        f,
+        "LIFECYCLE_MONITOR_EMPTY_JOURNAL path={} — empty journal is ERROR, never a pass",
+        path.display()
+    )
+}
+
+fn fmt_layer_absent(
+    f: &mut std::fmt::Formatter<'_>,
+    path: &Path,
+    layer: Layer,
+) -> std::fmt::Result {
+    write!(
+        f,
+        "LIFECYCLE_MONITOR_LAYER_ABSENT path={} layer={} — another layer cannot answer for this one",
+        path.display(),
+        layer.as_str()
+    )
+}
+
+fn fmt_missing_reason(f: &mut std::fmt::Formatter<'_>, line: usize) -> std::fmt::Result {
+    write!(
+        f,
+        "LIFECYCLE_MONITOR_MISSING_REASON line={line} — idle and refused must stay distinguishable"
+    )
+}
+
+fn fmt_readback_failed(f: &mut std::fmt::Formatter<'_>, detail: &str) -> std::fmt::Result {
+    write!(
+        f,
+        "LIFECYCLE_MONITOR_READBACK_FAILED {detail} — the write succeeded is not evidence the artifact exists"
+    )
+}
+
+fn fmt_stale_layers(f: &mut std::fmt::Formatter<'_>, layers: &[String]) -> std::fmt::Result {
+    write!(
+        f,
+        "LIFECYCLE_MONITOR_STALE_LAYERS layers={} — stale is ERROR, never a pass",
+        layers.join(",")
+    )
+}
+
+pub const EMPTY_JOURNAL_EXIT: u8 = 2;
+pub const LAYER_ABSENT_EXIT: u8 = 3;
 
 impl std::error::Error for MonitorError {}
 
@@ -226,9 +271,8 @@ fn parse_rows(path: &Path) -> Result<Vec<JournalRow>, MonitorError> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            return Err(MonitorError::EmptyScan {
+            return Err(MonitorError::EmptyJournal {
                 path: path.to_path_buf(),
-                layer: None,
             })
         }
         Err(err) => {
@@ -239,9 +283,8 @@ fn parse_rows(path: &Path) -> Result<Vec<JournalRow>, MonitorError> {
         }
     };
     if text.trim().is_empty() {
-        return Err(MonitorError::EmptyScan {
+        return Err(MonitorError::EmptyJournal {
             path: path.to_path_buf(),
-            layer: None,
         });
     }
     let mut rows = Vec::new();
@@ -289,9 +332,8 @@ fn parse_rows(path: &Path) -> Result<Vec<JournalRow>, MonitorError> {
         });
     }
     if rows.is_empty() {
-        return Err(MonitorError::EmptyScan {
+        return Err(MonitorError::EmptyJournal {
             path: path.to_path_buf(),
-            layer: None,
         });
     }
     Ok(rows)
@@ -313,9 +355,9 @@ pub fn observe_layer(
     let rows = parse_rows(journal)?;
     let filtered: Vec<&JournalRow> = rows.iter().filter(|r| r.layer == layer).collect();
     if filtered.is_empty() {
-        return Err(MonitorError::EmptyScan {
+        return Err(MonitorError::LayerAbsent {
             path: journal.to_path_buf(),
-            layer: Some(layer),
+            layer,
         });
     }
     let last = filtered.last().expect("non-empty");
@@ -333,7 +375,9 @@ pub fn observe_layer(
         state,
         row_count: filtered.len(),
         last_reason: last.reason.clone(),
+        last_ts: Some(last.ts_unix),
         age_ms,
+        freshness_threshold_ms: Some(stall_after_ms),
         fresh,
     })
 }
@@ -433,7 +477,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("lifecycle.jsonl");
         let err = observe_layer(&path, Layer::L0, 60_000).expect_err("empty");
-        assert!(matches!(err, MonitorError::EmptyScan { .. }));
+        assert!(matches!(err, MonitorError::EmptyJournal { .. }));
     }
 
     #[test]
@@ -444,7 +488,7 @@ mod tests {
         emit_one_host(&journal, event(Layer::L4, "OBSERVE_OK", EmitOutcome::Emitted)).unwrap();
         let err = observe_layer(&path, Layer::L0, 60_000).expect_err("no L0");
         match err {
-            MonitorError::EmptyScan { layer: Some(Layer::L0), .. } => {}
+            MonitorError::LayerAbsent { layer: Layer::L0, .. } => {}
             other => panic!("expected L0 empty, got {other:?}"),
         }
     }
@@ -542,7 +586,7 @@ mod tests {
         assert_eq!(n, 1);
         std::fs::write(&path, "").unwrap();
         let err = verify_artifact(&path).expect_err("empty after truncate");
-        assert!(matches!(err, MonitorError::EmptyScan { .. }));
+        assert!(matches!(err, MonitorError::EmptyJournal { .. }));
     }
 }
 

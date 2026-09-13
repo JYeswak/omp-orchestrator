@@ -143,7 +143,7 @@ fn empty_journal_is_typed_gate_refusal() {
         "empty scan must refuse: {stderr}"
     );
     assert!(
-        stderr.contains("LIFECYCLE_MONITOR_EMPTY_SCAN"),
+        stderr.contains("LIFECYCLE_MONITOR_EMPTY_JOURNAL"),
         "empty refusal must be typed: {stderr}"
     );
     let known_bad = gate(&journal, true);

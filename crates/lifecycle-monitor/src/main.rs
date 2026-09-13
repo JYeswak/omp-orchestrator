@@ -15,7 +15,8 @@ use lifecycle_monitor::ntm_sources::{
 };
 use lifecycle_monitor::{
     gate_claimed_write_readback, gate_freshness_verdict, journal_for_host, load_metrics,
-    observe_all, observe_layer, EXPECTED_METRIC_COUNT,
+    observe_all, observe_layer, LayerVerdict, EMPTY_JOURNAL_EXIT, EXPECTED_METRIC_COUNT,
+    LAYER_ABSENT_EXIT,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -43,6 +44,24 @@ async fn run(cx: &Cx, args: &[String]) -> Result<ExitCode, String> {
     }
 }
 
+fn optional_number(value: Option<u64>) -> String {
+    value.map_or_else(|| "unknown".to_owned(), |number| number.to_string())
+}
+
+fn print_verdict(verdict: &LayerVerdict) {
+    println!(
+        "layer={} state={} rows={} last_ts={} age_ms={} freshness_threshold_ms={} fresh={} reason={}",
+        verdict.layer.as_str(),
+        verdict.state.as_str(),
+        verdict.row_count,
+        optional_number(verdict.last_ts),
+        verdict.age_ms,
+        optional_number(verdict.freshness_threshold_ms),
+        verdict.fresh,
+        verdict.last_reason,
+    );
+}
+
 fn observe(args: &[String]) -> Result<(), String> {
     let journal = flag(args, "--journal")
         .map(PathBuf::from)
@@ -62,27 +81,11 @@ fn observe(args: &[String]) -> Result<(), String> {
             .map(|s| s.stall_after_ms)
             .ok_or_else(|| format!("no metric row for {}", layer.as_str()))?;
         let v = observe_layer(&journal, layer, stall).map_err(|e| e.to_string())?;
-        println!(
-            "layer={} state={} rows={} age_ms={} fresh={} reason={}",
-            v.layer.as_str(),
-            v.state.as_str(),
-            v.row_count,
-            v.age_ms,
-            v.fresh,
-            v.last_reason
-        );
+        print_verdict(&v);
     } else {
         let vs = observe_all(&journal, &specs).map_err(|e| e.to_string())?;
         for v in vs {
-            println!(
-                "layer={} state={} rows={} age_ms={} fresh={} reason={}",
-                v.layer.as_str(),
-                v.state.as_str(),
-                v.row_count,
-                v.age_ms,
-                v.fresh,
-                v.last_reason
-            );
+            print_verdict(&v);
         }
     }
     Ok(())
@@ -213,8 +216,10 @@ fn main() -> ExitCode {
 /// authority, pinned by freshness_gate/l5 legs). NTM errors never reach
 /// here: they convert through `ntm_source_exit_code` at the tail above.
 fn error_exit_code(error: &str) -> ExitCode {
-    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_SCAN") {
-        ExitCode::from(2)
+    if error.starts_with("LIFECYCLE_MONITOR_EMPTY_JOURNAL") {
+        ExitCode::from(EMPTY_JOURNAL_EXIT)
+    } else if error.starts_with("LIFECYCLE_MONITOR_LAYER_ABSENT") {
+        ExitCode::from(LAYER_ABSENT_EXIT)
     } else {
         ExitCode::from(1)
     }
