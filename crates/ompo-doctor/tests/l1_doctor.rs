@@ -572,3 +572,101 @@ fn bv_probe_emits_two_signals() {
         "an observed STALE row must be counted, not absorbed"
     );
 }
+
+/// L1-TEST-PROBE-DISK (contract s1_l1_doctor.md `L1-BUILD-PROBE-DISK`): measured
+/// capacity and remediation, never a guessed green. Uses the real `PROBES`
+/// declaration, the real `answered` authority, and the real metric -- never
+/// copies of their arms. No floor constant is invented here: there is no
+/// declared version floor for any probe, so this leg pins the shapes that
+/// exist (answered / typed absence / unmeasured) rather than pressure bands
+/// nobody specified.
+///
+/// KNOWN-BAD: dropping the version conjunct from `answered` greens the
+/// versionless `df` row below and this leg fails: a capacity reading nobody
+/// parsed would count as measured. Verdict AND reason code are pinned
+/// throughout: one field alone cannot tell a refusal from a miscount.
+/// Typed absence is none of OK, bare ABSENT, or UNRUN -- an observed absence
+/// is MEASURED (below floor), while no rows at all is UNMEASURED.
+#[test]
+fn disk_probe_reports_floor() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    let spec = PROBES
+        .iter()
+        .find(|spec| spec.name == "disk")
+        .expect("disk is a declared probe");
+    assert_eq!(spec.command, "df", "disk probe reads df");
+    assert_eq!(
+        spec.args,
+        &["-P", "."],
+        "disk probe reads portable output for the repo filesystem"
+    );
+    fn decision(status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: "disk".to_owned(),
+            status: status.to_owned(),
+            reason_code: "L1_PROBE_DISK_SCOPED_FIXTURE".to_owned(),
+            detail: "disk scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Healthy: a capacity reading with identity answers.
+    assert!(
+        answered(&decision("OK", Some("/bin/df"), Some("Filesystem 100G 10G 90G 10% /"))),
+        "measured capacity must answer"
+    );
+    // KNOWN-BAD shape, asserted directly: a df run with no parsable line is
+    // not measured capacity, even when the status string claims OK.
+    assert!(
+        !answered(&decision("OK", Some("/bin/df"), None)),
+        "an unread capacity reading must not be OK"
+    );
+    // Typed absence: an observed ABSENT_SPECIFIC row is measured below
+    // floor, never unmeasured and never a guessed green.
+    let absent = decision("ABSENT_SPECIFIC", None, None);
+    assert!(!answered(&absent), "absence must not answer");
+    let metric = probe_answer_metric(std::slice::from_ref(spec), &[absent]);
+    assert_ne!(
+        metric.verdict, "UNMEASURED",
+        "an observed absence is measured, never unmeasured: {}",
+        metric.reason_code
+    );
+    // UNRUN is not absence: no rows at all is UNMEASURED with a reason.
+    let unrun = probe_answer_metric(std::slice::from_ref(spec), &[]);
+    assert_eq!(unrun.verdict, "UNMEASURED", "no rows must be unmeasured");
+    assert_eq!(
+        unrun.reason_code, "UNKNOWN_NO_RECORD",
+        "no rows must name its reason"
+    );
+    // The live row, both lanes: OK implies both signals plus remediation
+    // correspondence both ways -- a non-OK disk without a remediation row
+    // would leave the operator with a verdict and no remedy, while a disk
+    // remediation row beside a healthy disk would cry wolf.
+    let repo = tempfile::tempdir().expect("disk fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    let row = summary
+        .probes
+        .iter()
+        .find(|probe| probe.name == "disk")
+        .expect("run_doctor must report a disk row");
+    if row.status == "OK" {
+        assert!(
+            row.presence.as_ref().is_some_and(|value| !value.is_empty())
+                && row.version.as_ref().is_some_and(|value| !value.is_empty()),
+            "an OK disk row must carry measured capacity: {row:?}"
+        );
+    } else {
+        assert!(
+            row.reason_code.starts_with("L1_PROBE_DISK_"),
+            "absence must carry a namespaced reason: {row:?}"
+        );
+    }
+    assert_eq!(
+        summary
+            .remediation
+            .iter()
+            .any(|line| line.contains("probe=disk")),
+        row.status != "OK",
+        "disk remediation must exist exactly when the disk row is non-OK"
+    );
+}
