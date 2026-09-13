@@ -670,3 +670,145 @@ fn disk_probe_reports_floor() {
         "disk remediation must exist exactly when the disk row is non-OK"
     );
 }
+
+/// L1-TEST-PROBE-FRANKENMERMAID (contract s1_l1_doctor.md
+/// `L1-BUILD-PROBE-FRANKENMERMAID`): presence plus required version. Uses the
+/// real `PROBES` declaration, the real `answered` authority, the real metric,
+/// and one live `run_doctor` row -- never copies of their arms.
+///
+/// KNOWN-BAD: dropping the version conjunct from `answered` greens the
+/// versionless `frankenmermaid` row below and this leg fails: presence alone
+/// would certify a probe that answered nothing. Verdict AND reason code are
+/// pinned throughout: one field alone cannot tell a refusal from a miscount.
+/// Typed absence is none of OK, bare ABSENT, or UNRUN -- each unrun shape
+/// carries its own status and reason.
+#[test]
+fn frankenmermaid_probe_emits_two_signals() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    let spec = PROBES
+        .iter()
+        .find(|spec| spec.name == "frankenmermaid")
+        .expect("frankenmermaid is a declared probe");
+    assert_eq!(
+        spec.command, "frankenmermaid",
+        "frankenmermaid probe runs frankenmermaid"
+    );
+    assert_eq!(
+        spec.args,
+        &["--version"],
+        "frankenmermaid probe reads the version surface"
+    );
+    fn decision(status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: "frankenmermaid".to_owned(),
+            status: status.to_owned(),
+            reason_code: "L1_PROBE_FRANKENMERMAID_SCOPED_FIXTURE".to_owned(),
+            detail: "frankenmermaid scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Healthy: endpoint identity plus version answers.
+    assert!(
+        answered(&decision("OK", Some("/fixture/frankenmermaid"), Some("frankenmermaid 1.0"))),
+        "identity plus version must answer"
+    );
+    // KNOWN-BAD shape, asserted directly: presence without version is not OK,
+    // even when the status string claims it is. The status string does not
+    // certify; the two signals do.
+    let present_no_version =
+        decision("OK", Some("/fixture/frankenmermaid"), None);
+    assert!(
+        !answered(&present_no_version),
+        "a present frankenmermaid with no version response must not be OK"
+    );
+    let absent = decision("ABSENT_SPECIFIC", None, None);
+    assert!(
+        !answered(&absent),
+        "absence must not answer"
+    );
+    // Unresponsive endpoint: no observation at all is UNMEASURED with
+    // UNKNOWN_NO_RECORD, never a 0/N green.
+    let metric = probe_answer_metric(PROBES, &[]);
+    assert_eq!(
+        metric.verdict, "UNMEASURED",
+        "empty observation set must be UNMEASURED"
+    );
+    assert_eq!(
+        metric.reason_code, "UNKNOWN_NO_RECORD",
+        "empty observation set must name its reason"
+    );
+    assert!(
+        metric.ratio.is_none(),
+        "an unmeasured band must carry no ratio, not 0.0"
+    );
+    // The metric counts answers, not statuses: a full decision set whose
+    // frankenmermaid row lacks a version stays below floor with the row named.
+    // (Rows are built inline: the fixture helper above hardcodes one name.)
+    let mut full: Vec<ProbeDecision> = PROBES
+        .iter()
+        .map(|spec| ProbeDecision {
+            name: spec.name.to_owned(),
+            status: "OK".to_owned(),
+            reason_code: "L1_PROBE_SCOPED_FIXTURE".to_owned(),
+            detail: "scoped fixture".to_owned(),
+            presence: Some("/fixture/bin".to_owned()),
+            version: Some("fixture 1.0".to_owned()),
+        })
+        .collect();
+    if let Some(row) = full.iter_mut().find(|row| row.name == "frankenmermaid") {
+        row.version = None;
+        row.status = "UNPROBEABLE".to_owned();
+    }
+    let metric = probe_answer_metric(PROBES, &full);
+    assert_eq!(
+        metric.verdict, "MEASURED_BELOW_FLOOR",
+        "one unanswered probe of {} must hold the metric below floor: {}",
+        PROBES.len(),
+        metric.reason_code
+    );
+    assert!(
+        metric.reason_code.contains(&format!("answered={}", PROBES.len() - 1)),
+        "below-floor reason must carry the count: {}",
+        metric.reason_code
+    );
+    assert!(
+        metric.unprobeable.contains(&"frankenmermaid".to_owned()),
+        "the unanswering probe must be named: {:?}",
+        metric.unprobeable
+    );
+    // The live row, both lanes: OK implies both signals; anything else
+    // is a typed absence with a namespaced reason -- never bare ABSENT and
+    // never an UNRUN reading as refusal or health.
+    let repo = tempfile::tempdir().expect("frankenmermaid fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    let row = summary
+        .probes
+        .iter()
+        .find(|probe| probe.name == "frankenmermaid")
+        .expect("run_doctor must report a frankenmermaid row");
+    if row.status == "OK" {
+        assert!(
+            row.presence.as_ref().is_some_and(|value| !value.is_empty())
+                && row.version.as_ref().is_some_and(|value| !value.is_empty()),
+            "an OK frankenmermaid row must carry both signals: {row:?}"
+        );
+    } else {
+        assert!(
+            [
+                "ABSENT_FAMILY",
+                "ABSENT_SPECIFIC",
+                "UNPROBEABLE",
+                "UNMEASURED",
+                "STALE",
+                "PAUSED"
+            ]
+            .contains(&row.status.as_str()),
+            "a non-OK frankenmermaid row must be typed absence, never bare ABSENT or UNRUN: {row:?}"
+        );
+        assert!(
+            row.reason_code.starts_with("L1_PROBE_FRANKENMERMAID_"),
+            "absence must carry a namespaced reason: {row:?}"
+        );
+    }
+}
