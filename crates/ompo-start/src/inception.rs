@@ -21,6 +21,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+// Reuse the hook's existing source-set, digest, manifest, and diff authority
+// without adding a cycle from ompo-start -> no-shell-gate -> ompo-start.
+#[path = "../../no-shell-gate/src/hook_digest.rs"]
+mod hook_digest_authority;
+
 pub const SCHEMA_VERSION: &str = "inception.v1";
 
 const REQUIRED_CONTROL_FILES: &[&str] = &[
@@ -74,6 +79,13 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// The installed pre-commit hook cannot prove it was built from the
+    /// repository's current source authority.
+    HookIdentityRefused {
+        path: PathBuf,
+        status: HookIdentityStatus,
+        detail: String,
+    },
     /// Init refused over a rust-toolchain.toml whose pin report is not
     /// Ready at the gated entry: the L2 trust flow requires the declared
     /// toolchain identity to match the active toolchain before
@@ -183,6 +195,14 @@ impl fmt::Display for InceptionError {
             Self::IdentityUnavailable { field, detail } => write!(
                 formatter,
                 "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
+            ),
+            Self::HookIdentityRefused { path, status, detail } => write!(
+                formatter,
+                "HUMAN_HALT {} hook={} detail={} remedy={}",
+                status.reason_code(),
+                path.display(),
+                detail,
+                status.remediation(),
             ),
             Self::AgentsStampRefused { path, status } => write!(
                 formatter,
@@ -347,35 +367,33 @@ fn identity_field(field: &'static str, value: &str) -> Result<String, InceptionE
     Ok(value.to_owned())
 }
 
+fn run_command_output(command: &mut Command) -> Result<std::process::Output, String> {
+    match subprocess_contract::bounded_output(command, IDENTITY_COMMAND_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
+            Ok(output)
+        }
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
+            "command exited {:?}: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(format!(
+            "command exceeded {}s",
+            IDENTITY_COMMAND_DEADLINE.as_secs()
+        )),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            Err(format!("command could not start: {error}"))
+        }
+    }
+}
+
 fn run_identity_command(
     command: &mut Command,
     field: &'static str,
 ) -> Result<String, InceptionError> {
-    match subprocess_contract::bounded_output(command, IDENTITY_COMMAND_DEADLINE) {
-        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
-            identity_field(field, &String::from_utf8_lossy(&output.stdout))
-        }
-        subprocess_contract::BoundedOutcome::Completed(output) => {
-            Err(InceptionError::IdentityUnavailable {
-                field,
-                detail: format!(
-                    "command exited {:?}: {}",
-                    output.status.code(),
-                    String::from_utf8_lossy(&output.stderr).trim()
-                ),
-            })
-        }
-        subprocess_contract::BoundedOutcome::TimedOut => Err(InceptionError::IdentityUnavailable {
-            field,
-            detail: format!("command exceeded {}s", IDENTITY_COMMAND_DEADLINE.as_secs()),
-        }),
-        subprocess_contract::BoundedOutcome::Unspawned(error) => {
-            Err(InceptionError::IdentityUnavailable {
-                field,
-                detail: format!("command could not start: {error}"),
-            })
-        }
-    }
+    let output = run_command_output(command)
+        .map_err(|detail| InceptionError::IdentityUnavailable { field, detail })?;
+    identity_field(field, &String::from_utf8_lossy(&output.stdout))
 }
 
 fn source_revision(repo_root: &Path) -> Result<String, InceptionError> {
@@ -570,6 +588,294 @@ pub fn remote_policy_for_shared_dispatch(
 ) -> Result<(), InceptionError> {
     let policy = persona_remote_policy(repo, persona_a)?;
     require_remote_for_dispatch(&policy)
+}
+
+/// Read-only verdict for the installed pre-commit hook's source identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+pub enum HookIdentityStatus {
+    ExactMatch,
+    MissingHook,
+    UnreadableHook,
+    SourceCommitAbsent,
+    SourceCommitUnresolvable,
+    ContentMismatch,
+    UnprovenArtifact,
+}
+
+const HOOK_IDENTITY_POLICIES: [(&str, &str); 7] = [
+    ("HOOK_IDENTITY_EXACT", "none"),
+    ("HOOK_IDENTITY_MISSING", "restore the repository's installed pre-commit hook"),
+    ("HOOK_IDENTITY_UNREADABLE", "restore read access to the installed pre-commit hook"),
+    ("HOOK_SOURCE_COMMIT_ABSENT", "restore the repository HEAD source authority"),
+    ("HOOK_SOURCE_COMMIT_UNRESOLVABLE", "repair the HEAD reference or object database"),
+    ("HOOK_IDENTITY_HEAD_MISMATCH", "stop and route hook refresh through the authorized hook path"),
+    ("HOOK_IDENTITY_UNPROVEN_ARTIFACT", "install a hook carrying the canonical source manifest stamp"),
+];
+
+impl HookIdentityStatus {
+    fn policy(self) -> (&'static str, &'static str) {
+        HOOK_IDENTITY_POLICIES[self as usize]
+    }
+
+    #[must_use]
+    pub fn reason_code(self) -> &'static str {
+        self.policy().0
+    }
+
+    #[must_use]
+    pub fn remediation(self) -> &'static str {
+        self.policy().1
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookIdentityReport {
+    pub status: HookIdentityStatus,
+    pub hook_path: PathBuf,
+    pub source_commit: Option<String>,
+    pub manifest_rows: usize,
+    pub detail: String,
+}
+
+fn hook_identity_report(
+    status: HookIdentityStatus,
+    hook_path: PathBuf,
+    source_commit: Option<String>,
+    manifest_rows: usize,
+    detail: impl Into<String>,
+) -> HookIdentityReport {
+    HookIdentityReport {
+        status,
+        hook_path,
+        source_commit,
+        manifest_rows,
+        detail: detail.into(),
+    }
+}
+
+fn manifest_path_shape(path: &str) -> bool {
+    path.starts_with("crates/")
+        && path.contains("/src/")
+        && path.ends_with(".rs")
+        && path.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'_' | b'-')
+        })
+}
+
+fn manifest_rows_in_string(line: &str) -> Vec<(String, String)> {
+    let mut rows = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative) = line[cursor..].find("crates/") {
+        let start = cursor + relative;
+        let Some(space_relative) = line[start..].find(' ') else {
+            break;
+        };
+        let space = start + space_relative;
+        let path = &line[start..space];
+        let digest_start = space + 1;
+        let digest_end = digest_start + 64;
+        let digest = line.get(digest_start..digest_end);
+        if manifest_path_shape(path)
+            && digest.is_some_and(|value| value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            rows.push((path.to_owned(), digest.expect("checked").to_ascii_lowercase()));
+            cursor = digest_end;
+        } else {
+            cursor = start + "crates/".len();
+        }
+    }
+    rows
+}
+
+fn stamped_hook_manifest(strings_output: &[u8]) -> Result<String, String> {
+    let text = String::from_utf8_lossy(strings_output);
+    let candidates: Vec<Vec<(String, String)>> = text
+        .lines()
+        .map(manifest_rows_in_string)
+        .filter(|rows| !rows.is_empty())
+        .collect();
+    if candidates.len() != 1 {
+        return Err(format!(
+            "expected exactly one embedded hook source manifest, found {}",
+            candidates.len()
+        ));
+    }
+    let rows = &candidates[0];
+    let unique: BTreeSet<_> = rows.iter().map(|(path, _)| path.as_str()).collect();
+    if unique.len() != rows.len() {
+        return Err("embedded hook source manifest contains duplicate paths".to_owned());
+    }
+    let mut manifest = String::new();
+    for (path, digest) in rows {
+        writeln!(manifest, "{path} {digest}").expect("writing to String cannot fail");
+    }
+    Ok(manifest)
+}
+
+fn head_hook_source_manifest(
+    repo: &Path,
+    source_commit: &str,
+) -> Result<String, String> {
+    let mut list = Command::new("git");
+    list.arg("-C")
+        .arg(repo)
+        .args(["ls-tree", "-r", "--name-only", source_commit, "--"]);
+    for crate_name in hook_digest_authority::HOOK_SOURCE_CRATES {
+        list.arg(format!("crates/{crate_name}/src"));
+    }
+    let output = run_command_output(&mut list)?;
+    let mut paths: Vec<String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|path| path.ends_with(".rs"))
+        .map(str::to_owned)
+        .collect();
+    paths.sort();
+    paths.dedup();
+
+    let mut manifest = String::new();
+    for path in paths {
+        let mut show = Command::new("git");
+        show.arg("-C")
+            .arg(repo)
+            .args(["show", &format!("{source_commit}:{path}")]);
+        let bytes = run_command_output(&mut show)?.stdout;
+        let mut digest = Sha256::new();
+        digest.update(&bytes);
+        writeln!(manifest, "{path} {}", hook_digest_authority::hex(&digest.finalize()))
+            .expect("writing to String cannot fail");
+    }
+    Ok(manifest)
+}
+
+/// Compare the installed hook's embedded source manifest with the source set
+/// at repository HEAD. No hook is executed and mtime is never consulted.
+#[must_use]
+pub fn hook_source_identity_report(repo: &Path) -> HookIdentityReport {
+    let hook_path = repo.join(".git/hooks/pre-commit");
+    let hook_bytes = match fs::read(&hook_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return hook_identity_report(
+                HookIdentityStatus::MissingHook,
+                hook_path,
+                None,
+                0,
+                "installed hook is absent",
+            );
+        }
+        Err(error) => {
+            return hook_identity_report(
+                HookIdentityStatus::UnreadableHook,
+                hook_path,
+                None,
+                0,
+                error.to_string(),
+            );
+        }
+    };
+    if hook_bytes.is_empty() {
+        return hook_identity_report(
+            HookIdentityStatus::UnprovenArtifact,
+            hook_path,
+            None,
+            0,
+            "installed hook is empty",
+        );
+    }
+
+    let mut strings = Command::new("strings");
+    strings.arg(&hook_path);
+    let strings_output = match run_command_output(&mut strings) {
+        Ok(output) => output,
+        Err(detail) => {
+            return hook_identity_report(
+                HookIdentityStatus::UnprovenArtifact,
+                hook_path,
+                None,
+                0,
+                detail,
+            );
+        }
+    };
+    let stamped = match stamped_hook_manifest(&strings_output.stdout) {
+        Ok(manifest) => manifest,
+        Err(detail) => {
+            return hook_identity_report(
+                HookIdentityStatus::UnprovenArtifact,
+                hook_path,
+                None,
+                0,
+                detail,
+            );
+        }
+    };
+    let row_count = hook_digest_authority::manifest_rows(&stamped).len();
+
+    if !repo.join(".git/HEAD").is_file() {
+        return hook_identity_report(
+            HookIdentityStatus::SourceCommitAbsent,
+            hook_path,
+            None,
+            row_count,
+            "repository HEAD source authority is absent",
+        );
+    }
+    let mut head = Command::new("git");
+    head.arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "--verify", "HEAD^{commit}"]);
+    let source_commit = match run_command_output(&mut head) {
+        Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        Err(detail) => {
+            return hook_identity_report(
+                HookIdentityStatus::SourceCommitUnresolvable,
+                hook_path,
+                None,
+                row_count,
+                detail,
+            );
+        }
+    };
+    if source_commit.is_empty() {
+        return hook_identity_report(
+            HookIdentityStatus::SourceCommitUnresolvable,
+            hook_path,
+            None,
+            row_count,
+            "git resolved an empty HEAD commit",
+        );
+    }
+
+    let current = match head_hook_source_manifest(repo, &source_commit) {
+        Ok(manifest) => manifest,
+        Err(detail) => {
+            return hook_identity_report(
+                HookIdentityStatus::SourceCommitUnresolvable,
+                hook_path,
+                Some(source_commit),
+                row_count,
+                detail,
+            );
+        }
+    };
+    let difference = hook_digest_authority::diff_manifests(&stamped, &current);
+    if !difference.is_empty() {
+        return hook_identity_report(
+            HookIdentityStatus::ContentMismatch,
+            hook_path,
+            Some(source_commit),
+            row_count,
+            difference.summary(),
+        );
+    }
+    hook_identity_report(
+        HookIdentityStatus::ExactMatch,
+        hook_path,
+        Some(source_commit),
+        row_count,
+        "installed hook source manifest matches repository HEAD",
+    )
 }
 
 fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError> {
@@ -1819,9 +2125,11 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 /// identity. The explicit Persona A remote policy is then observed and
 /// carried before `initialize` runs: no remote is an explicit local-only
 /// allowance, a present remote needs no allowance, and an unobservable probe
-/// refuses typed. A real repository with stamped control files, a ready
-/// tracker, and a satisfied pin proceeds with its canonical root; any
-/// other state refuses typed before `initialize` runs. This lives
+/// refuses typed. The installed pre-commit hook's canonical source manifest
+/// must then match the covered source bytes at repository HEAD; mtime is never
+/// consulted. A real repository with stamped control files, a ready tracker,
+/// a satisfied pin, and exact hook identity proceeds with its canonical root;
+/// any other state refuses typed before `initialize` runs. This lives
 /// beside -- never inside --
 /// shared [`initialize`]: doctor repair flows tolerate non-git checkouts
 /// by design (git identity degrades to "missing"), and gating them would
@@ -1871,6 +2179,14 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
     // the call site rather than inferred from ambient environment state. The
     // fleet-required policy remains owned by require_remote_for_dispatch.
     let persona_remote = persona_remote_policy(&top, true)?;
+    let hook_identity = hook_source_identity_report(&top);
+    if hook_identity.status != HookIdentityStatus::ExactMatch {
+        return Err(InceptionError::HookIdentityRefused {
+            path: hook_identity.hook_path,
+            status: hook_identity.status,
+            detail: hook_identity.detail,
+        });
+    }
     let mut report = initialize(&top, output)?;
     report.persona_remote = Some(persona_remote);
     Ok(report)

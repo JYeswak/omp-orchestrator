@@ -6,8 +6,8 @@
 //! repository fixture. It is invoked directly as Cargo's `--test l2_ecosystem` target.
 
 use ompo_start::inception::{
-    initialize, list_backups, read_inception, restore_backup, InceptionError,
-    PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
+    hook_source_identity_report, initialize, list_backups, read_inception, restore_backup,
+    HookIdentityStatus, InceptionError, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
 };
 use std::path::Path;
 use std::process::Command;
@@ -31,6 +31,41 @@ fn write_project_agents_stamp(root: &Path) {
     let stamp = format!("fixture {}\n", PROJECT_AGENTS_OWNERSHIP_STAMP);
     assert!(!stamp.trim().is_empty(), "canonical cbl7 project-agent stamp");
     std::fs::write(root.join("AGENTS.md"), stamp).expect("stamped AGENTS.md");
+}
+
+const HOOK_SOURCE_PATH: &str = "crates/agent-mail-native/src/lib.rs";
+const HOOK_SOURCE_BYTES: &[u8] = b"pub fn hook_fixture() {}\n";
+const HOOK_SOURCE_DIGEST: &str =
+    "5e336085e3231b40af66b75c24fc5af9a2a6d1747ff999165537001919632576";
+
+fn installed_hook(root: &Path) -> std::path::PathBuf {
+    root.join(".git/hooks/pre-commit")
+}
+
+fn write_hook_manifest(root: &Path, digest: &str) {
+    let hook = installed_hook(root);
+    std::fs::create_dir_all(hook.parent().expect("hook parent")).expect("hook directory");
+    // Real Mach-O `strings` glues the final digest to adjacent rodata. The
+    // fixture carries that boundary so exact-match does not depend on a newline.
+    std::fs::write(hook, format!("{HOOK_SOURCE_PATH} {digest}adjacent-rodata\n"))
+        .expect("hook manifest artifact");
+}
+
+fn commit_hook_source_change(root: &Path, bytes: &[u8]) {
+    std::fs::write(root.join(HOOK_SOURCE_PATH), bytes).expect("changed hook source");
+    run_git(root, &["add", HOOK_SOURCE_PATH]);
+    run_git(
+        root,
+        &[
+            "-c",
+            "user.name=ompo-start-test",
+            "-c",
+            "user.email=ompo-start-test@example.invalid",
+            "commit",
+            "-qm",
+            "hook source changed",
+        ],
+    );
 }
 
 fn repository_fixture() -> TempDir {
@@ -59,6 +94,10 @@ fn repository_fixture() -> TempDir {
     .expect("toolchain pin");
     std::fs::write(directory.path().join("docs/decisions.jsonl"), b"{}\n")
         .expect("decision ledger");
+    let hook_source = directory.path().join(HOOK_SOURCE_PATH);
+    std::fs::create_dir_all(hook_source.parent().expect("hook source parent"))
+        .expect("hook source directory");
+    std::fs::write(&hook_source, HOOK_SOURCE_BYTES).expect("hook source");
     run_git(directory.path(), &["init", "-q"]);
     run_git(directory.path(), &["add", "."]);
     run_git(
@@ -73,6 +112,7 @@ fn repository_fixture() -> TempDir {
             "fixture",
         ],
     );
+    write_hook_manifest(directory.path(), HOOK_SOURCE_DIGEST);
     directory
 }
 
@@ -879,6 +919,120 @@ fn required_remote_gate_is_wired_to_shared_dispatch_entry() {
         text.contains("remedy:") && text.contains("configure a remote"),
         "shared-dispatch halt must carry named remediation, got: {text}"
     );
+}
+
+/// tqs8 healthy selector: the artifact's canonical manifest equals the
+/// authoritative source set at the resolved HEAD commit.
+#[test]
+fn hook_identity_exact_manifest_matches_head() {
+    let report = hook_source_identity_report(repository_fixture().path());
+    match (report.status, report.source_commit, report.manifest_rows) {
+        (HookIdentityStatus::ExactMatch, Some(_), 1) => {}
+        other => panic!("exact identity must name one-row HEAD authority: {other:?}"),
+    }
+}
+
+/// tqs8 restrictive selector: absence is distinct from unreadable bytes.
+#[test]
+fn hook_identity_missing_hook_is_typed() {
+    let repository = repository_fixture();
+    std::fs::remove_file(installed_hook(repository.path())).expect("remove hook");
+    let report = hook_source_identity_report(repository.path());
+    assert_eq!(report.status, HookIdentityStatus::MissingHook, "{report:?}");
+    assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_MISSING");
+}
+
+/// tqs8 restrictive selector: an existing path that cannot be read is not a
+/// missing hook and never inherits the missing-hook remedy.
+#[test]
+fn hook_identity_unreadable_hook_is_typed() {
+    let repository = repository_fixture();
+    let hook = installed_hook(repository.path());
+    std::fs::remove_file(&hook).expect("remove hook file");
+    std::fs::create_dir(&hook).expect("directory mask is unreadable as a file");
+    let report = hook_source_identity_report(repository.path());
+    assert_eq!(report.status, HookIdentityStatus::UnreadableHook, "{report:?}");
+    assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_UNREADABLE");
+}
+
+/// tqs8 restrictive selector: the hook may exist while the repository has no
+/// HEAD authority at all.
+#[test]
+fn hook_identity_absent_source_commit_is_typed() {
+    let repository = tempfile::tempdir().expect("fixture directory");
+    write_hook_manifest(repository.path(), HOOK_SOURCE_DIGEST);
+    let report = hook_source_identity_report(repository.path());
+    assert_eq!(report.status, HookIdentityStatus::SourceCommitAbsent, "{report:?}");
+    assert_eq!(report.status.reason_code(), "HOOK_SOURCE_COMMIT_ABSENT");
+}
+
+/// tqs8 restrictive selector: a HEAD reference with no commit is present but
+/// unresolvable, not absent.
+#[test]
+fn hook_identity_unresolvable_source_commit_is_typed() {
+    let repository = tempfile::tempdir().expect("fixture directory");
+    run_git(repository.path(), &["init", "-q"]);
+    write_hook_manifest(repository.path(), HOOK_SOURCE_DIGEST);
+    let report = hook_source_identity_report(repository.path());
+    assert_eq!(
+        report.status,
+        HookIdentityStatus::SourceCommitUnresolvable,
+        "{report:?}"
+    );
+    assert_eq!(
+        report.status.reason_code(),
+        "HOOK_SOURCE_COMMIT_UNRESOLVABLE"
+    );
+}
+
+/// tqs8 restrictive selector: a valid artifact manifest naming different
+/// source bytes is a content mismatch, never an unproven artifact.
+#[test]
+fn hook_identity_content_mismatch_names_changed_source() {
+    let repository = repository_fixture();
+    commit_hook_source_change(repository.path(), b"pub fn hook_fixture_changed() {}\n");
+    let report = hook_source_identity_report(repository.path());
+    assert_eq!(report.status, HookIdentityStatus::ContentMismatch, "{report:?}");
+    assert!(report.detail.contains(HOOK_SOURCE_PATH), "{report:?}");
+    assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_HEAD_MISMATCH");
+}
+
+/// tqs8 restrictive selector: readable bytes with no canonical manifest do
+/// not establish any source identity.
+#[test]
+fn hook_identity_unproven_artifact_is_typed() {
+    let repository = repository_fixture();
+    std::fs::write(installed_hook(repository.path()), b"opaque artifact without a source stamp\n")
+        .expect("unstamped hook");
+    let report = hook_source_identity_report(repository.path());
+    assert_eq!(report.status, HookIdentityStatus::UnprovenArtifact, "{report:?}");
+    assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_UNPROVEN_ARTIFACT");
+}
+
+/// tqs8 wiring selector: the reachable gated entry consumes the hook verdict
+/// after the existing Persona A gate and before `initialize` can write trust.
+///
+/// KNOWN-BAD: bypassing the verdict match at `initialize_gated` makes this
+/// exact leg fail because mismatched source reaches a trust artifact. The
+/// report-level restrictive selectors above remain green.
+#[test]
+fn hook_identity_verdict_gates_reachable_l2_entry() {
+    use ompo_start::inception::initialize_gated;
+
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    commit_hook_source_change(repository.path(), b"pub fn hook_fixture_changed() {}\n");
+    let output = repository.path().join(".omp-orchestrator/hook-refused.json");
+    match initialize_gated(repository.path(), &output) {
+        Err(InceptionError::HookIdentityRefused {
+            status: HookIdentityStatus::ContentMismatch,
+            detail,
+            ..
+        }) => assert!(detail.contains(HOOK_SOURCE_PATH), "{detail}"),
+        other => panic!("mismatched hook must stop the gated entry: {other:?}"),
+    }
+    assert!(!output.exists(), "refusal must precede the trust write");
 }
 
 /// L2-ENTRY-GIT-REPO (bead e0li rework): the L2 operator entry gates on
