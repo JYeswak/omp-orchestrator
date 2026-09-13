@@ -411,6 +411,49 @@ fn undo_restores_before_hash() {
     );
 }
 
+/// L1-TEST-REPROBE-HALT (contract s1_l1_doctor.md `LAW-L1-REPROBE`): a
+/// repair cannot advance on its pre-repair verdict -- the same probe
+/// predicate must be re-run after repair, and a failed re-probe halts
+/// instead of advancing. Uses the real `repair` and the real inception
+/// readback -- never a test-only L2 gate: no L2 transition exists in
+/// this tree to invoke, so the boundary is pinned where it lives, at
+/// the re-verification that must precede any advance.
+///
+/// KNOWN-BAD: stop consulting the post-repair read (treat every artifact
+/// as already valid) and corrupted state advances as healthy-quiet: the
+/// re-probe assertions below stay green while the repair assertions go
+/// red carrying the quiet verdict. Message AND exit are pinned on the
+/// mutation run.
+#[test]
+fn failed_reprobe_blocks_l2() {
+    use ompo_start::inception::read_inception;
+
+    // Healthy branch, positive control: repair applies, and the
+    // post-repair readback -- the re-probe -- observes valid state.
+    let (directory, artifact) = stale_repair_fixture();
+    repair(directory.path(), "inception", RepairMode::Apply).expect("repair applies");
+    read_inception(&artifact).expect("post-repair readback observes valid state");
+
+    // Failed branch: corrupt the artifact so the post-repair readback
+    // disagrees with the write. The re-probe must refuse typed, and a
+    // repair over the corrupted state must reopen -- corrupted bytes must
+    // never read as healthy-quiet, which is the only advance this tree
+    // offers and the one that stays closed.
+    std::fs::write(&artifact, b"not json\n").expect("corruption lands");
+    let error = read_inception(&artifact).expect_err("corrupt state must fail re-probe");
+    assert!(
+        error.to_string().contains("INCEPTION_READBACK_MALFORMED"),
+        "failed re-probe must carry its exact reason, got: {error}"
+    );
+    let reopened =
+        repair(directory.path(), "inception", RepairMode::Apply).expect("repair runs");
+    assert!(
+        !reopened.applied.is_empty(),
+        "corrupted state must reopen the repair, never read healthy-quiet, got {}",
+        reopened.reason_code
+    );
+}
+
 /// L1-TEST-PROBE-AGENT-MAIL (contract s1_l1_doctor.md `L1-BUILD-PROBE-AGENT-MAIL`):
 /// endpoint identity AND version, or typed absence. Uses the real
 /// `answered` authority and the real `probe_answer_metric`, never a copy:
