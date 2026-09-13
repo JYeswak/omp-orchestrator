@@ -112,6 +112,64 @@ pub const PROBES: &[ProbeSpec] = &[
     },
 ];
 
+/// L1-BUILD-SCOPE (contract s1_l1_doctor.md): explicit probe-family scope.
+///
+/// A scope NAMES the probes it requests. `scope_probe_names` is the single
+/// authority both the runner and the legs read: adding a probe to PROBES
+/// without assigning it to a scope is a compile-clean drift the set-equality
+/// leg below refuses loudly, with the remedy in its message. The remedy is
+/// one line here, never a leg edit.
+#[must_use]
+pub fn scope_probe_names(scope: &str) -> Option<&'static [&'static str]> {
+    match scope {
+        "system" => Some(&[
+            "tmux",
+            "ntm",
+            "br",
+            "bv",
+            "agent-mail",
+            "socraticode",
+            "rch",
+            "git",
+            "disk",
+            "frankenmermaid",
+            "toolchain",
+        ]),
+        _ => None,
+    }
+}
+
+/// One declared probe's fate under a scope: run it, or emit an explicit
+/// skipped row. No third state (silently dropped) exists by construction.
+enum ScopeAction {
+    Run(&'static ProbeSpec),
+    Skip(ProbeDecision),
+}
+
+/// Partition every declared probe into run/skip for a scope. Skipped rows
+/// carry UNMEASURED with a scope-naming reason, so a narrowed scope reads as
+/// degraded-with-receipts, never as a smaller green. `run_doctor_system`
+/// consumes this; nothing else may partition.
+fn plan_scope(scope: &str, selected: &[&str]) -> Vec<ScopeAction> {
+    PROBES
+        .iter()
+        .map(|spec| {
+            if selected.contains(&spec.name) {
+                ScopeAction::Run(spec)
+            } else {
+                ScopeAction::Skip(ProbeDecision {
+                    name: spec.name.to_owned(),
+                    status: ProbeVerdict::Unmeasured.status().to_owned(),
+                    reason_code: reason_code(spec.name, ProbeVerdict::Unmeasured.status()),
+                    detail: format!("scope={scope} did not request probe={}", spec.name),
+                    presence: None,
+                    version: None,
+                })
+            }
+        })
+        .collect()
+}
+
 /// L1 probe verdicts (vv9h): seven distinct states, because collapsing them
 /// into ABSENT misnames live states with different remedies. `AbsentFamily`
 /// is the whole tool family missing (no probe of that kind can run);
@@ -727,7 +785,19 @@ pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError
 }
 fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
     let run_id = doctor_run_id();
-    let decisions: Vec<_> = PROBES.iter().map(run_probe).collect();
+    // The scope's declared set is authoritative; unselected probes surface as
+    // explicit skipped rows through the same decisions vector, so lifecycle
+    // events, metric, and exit code all see them. `expect` is load-bearing:
+    // `run_doctor` admits only scopes this module declares, so `None` here
+    // is an internal mismatch, never a user typo (those die UnsupportedScope).
+    let selected = scope_probe_names(scope).expect("run_doctor_system for a declared scope");
+    let decisions: Vec<ProbeDecision> = plan_scope(scope, selected)
+        .into_iter()
+        .map(|action| match action {
+            ScopeAction::Run(spec) => run_probe(spec),
+            ScopeAction::Skip(row) => row,
+        })
+        .collect();
     let exit_code = doctor_exit_code(&decisions)?;
     let status = if exit_code == 0 { "OK" } else { "DEGRADED" };
     let remediation = remediation_for(&decisions);
@@ -1149,6 +1219,95 @@ mod metric_tests {
                 metric.verdict
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    /// The system scope's declared set IS the declared probe set. A probe
+    /// added to PROBES without a scope assignment reds here LOUDLY instead
+    /// of silently joining (or silently missing) the system run. REMEDY:
+    /// add one line to `scope_probe_names`, never edit this leg.
+    #[test]
+    fn the_system_scope_declares_every_declared_probe() {
+        let declared: Vec<&str> = PROBES.iter().map(|spec| spec.name).collect();
+        let mut scoped: Vec<&str> =
+            scope_probe_names("system").expect("the system scope is declared").to_vec();
+        let mut declared_sorted = declared.clone();
+        declared_sorted.sort_unstable();
+        scoped.sort_unstable();
+        assert_eq!(
+            scoped, declared_sorted,
+            "scope/system set diverged from PROBES: assign the new probe a scope in scope_probe_names"
+        );
+    }
+
+    /// Unknown scopes declare nothing: a typo must die UnsupportedScope at
+    /// the dispatcher, never resolve to an empty run set here (an empty set
+    /// would read as a vacuous green downstream).
+    #[test]
+    fn an_unknown_scope_declares_no_probes() {
+        assert!(
+            scope_probe_names("zzz_no_such_scope_myw3").is_none(),
+            "an undeclared scope must resolve to None, never an empty set"
+        );
+    }
+
+    /// MECHANISM, roster-size-independent: a narrowed selection runs exactly
+    /// its set and every other declared probe surfaces as an explicit
+    /// UNMEASURED row naming the scope -- never silently dropped. Uses the
+    /// production `plan_scope`, so removing the skipped-row emission (the
+    /// known-bad) reds here.
+    #[test]
+    fn a_narrowed_scope_runs_its_set_and_names_every_other_row_skipped() {
+        let first = PROBES[0].name;
+        let plan = plan_scope("probe", &[first]);
+        let (mut ran, mut skipped) = (Vec::new(), Vec::new());
+        for action in plan {
+            match action {
+                ScopeAction::Run(spec) => ran.push(spec.name),
+                ScopeAction::Skip(row) => skipped.push(row),
+            }
+        }
+        assert_eq!(ran, vec![first], "exactly the selected probe runs");
+        assert_eq!(
+            skipped.len(),
+            PROBES.len() - 1,
+            "every other declared probe must surface, got {} of {}",
+            skipped.len(),
+            PROBES.len() - 1
+        );
+        for row in &skipped {
+            assert_eq!(
+                row.status,
+                ProbeVerdict::Unmeasured.status(),
+                "skipped row {} must be UNMEASURED, got {}",
+                row.name,
+                row.status
+            );
+            assert!(
+                row.reason_code.ends_with("UNMEASURED"),
+                "skipped row {} carries a scope reason, got {}",
+                row.name,
+                row.reason_code
+            );
+            assert!(
+                row.detail.contains("scope=probe"),
+                "skipped row {} names its scope, got {}",
+                row.name,
+                row.detail
+            );
+        }
+        // The full system selection plans zero skips: the runner's steady
+        // state is a complete run, and any future narrowing shows up here.
+        let system = scope_probe_names("system").expect("the system scope is declared");
+        let system_skips = plan_scope("system", system)
+            .into_iter()
+            .filter(|action| matches!(action, ScopeAction::Skip(_)))
+            .count();
+        assert_eq!(system_skips, 0, "the system scope currently skips nothing");
     }
 }
 
