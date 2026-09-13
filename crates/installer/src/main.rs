@@ -340,15 +340,18 @@ fn run_install(
             return ExitCode::from(1);
         }
     }
-    // L0-B11: per-family skill installation gates install success. Any
-    // skills/seal failure refuses with a typed reason; per-family outcomes
-    // print on every path so partial progress survives refusal.
+    // L0-B11: per-family skill installation gates install success. Identity
+    // is probed here (the operator entry owns execution); the phase itself
+    // executes nothing. Any skills/seal failure refuses with a typed
+    // reason; per-family outcomes print on every path so partial progress
+    // survives refusal.
+    let skills_identity =
+        installer::verify_identity(&bin_dir.join(binary_name), &head, &ownership);
     match installer::skill_install::install_skills_phase(
         repo_root,
         binary_name,
         &head,
-        &ownership,
-        &bin_dir.join(binary_name),
+        skills_identity,
     ) {
         Ok(phase) => println!(
             "  SKILLS families={} digest={}",

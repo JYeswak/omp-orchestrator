@@ -69,7 +69,14 @@ pub struct SkillPhaseReport {
     pub digest: String,
 }
 
-/// Production phase for run_install: detector -> executor -> seal.
+/// Production phase for run_install: detector -> executor -> seal. Follows
+/// the `install_binary_with_durability` seam shape: explicit deterministic
+/// inputs, no subprocess execution anywhere inside (filesystem writes under
+/// explicit roots plus pure seal computation), no live-binary restart, no
+/// duplicated detector, no test-only branch. Identity is caller-constructed
+/// (run_install probes the installed binary via `verify_identity`; tests
+/// pass a fixture): the phase never executes an operator binary, which is
+/// what makes it hermetic by construction rather than by fixture luck.
 /// Observed is the full ratified roster (the install provisions the
 /// supported set; per-machine narrowing needs a machine-scan surface no
 /// bead specifies). The detector still runs, so an emptied roster refuses
@@ -80,8 +87,7 @@ pub fn install_skills_phase(
     repo_root: &Path,
     binary_name: &str,
     head_sha: &str,
-    ownership: &super::RepoOwnership,
-    installed_binary: &Path,
+    identity: super::IdentityCheck,
 ) -> Result<SkillPhaseReport, InstallError> {
     use super::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
     let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
@@ -104,12 +110,11 @@ pub fn install_skills_phase(
             outcomes: install.outcomes,
         });
     }
-    let identity = super::verify_identity(installed_binary, head_sha, ownership);
     let sealed = super::seal_install_report(
         &scan,
         install.outcomes.clone(),
         Vec::new(),
-        vec![installed_binary.to_path_buf()],
+        Vec::new(),
         identity,
     )?;
     Ok(SkillPhaseReport {

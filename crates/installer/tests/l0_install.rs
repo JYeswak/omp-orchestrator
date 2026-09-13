@@ -1998,10 +1998,12 @@ fn skill_install_marks_unwritable_failed_without_success() {
 
 /// L0-B11 wiring (bead uegf): the production phase run_install calls --
 /// detector -> executor -> seal -- driven directly with hermetic fixture
-/// roots (a full run_install would build for real). Ten real families
-/// seal with a nonempty digest; a rerun is quiet; an unwritable family
-/// root refuses typed with all ten outcomes preserved; an empty binary
-/// name refuses at seal (identity missing).
+/// roots (a full run_install would build for real). Identity is an
+/// explicit input (run_install probes the installed binary; tests pass a
+/// fixture), so the phase executes nothing and stays hermetic by
+/// construction. Ten real families seal with a nonempty digest; a rerun
+/// is quiet; an unwritable family root refuses typed with all ten
+/// outcomes preserved; an identity without binary name refuses at seal.
 ///
 /// KNOWN-BAD: skipping the seal (returning unsealed outcomes as success)
 /// keeps the per-family greens and reds the digest assertions below: a
@@ -2010,18 +2012,13 @@ fn skill_install_marks_unwritable_failed_without_success() {
 #[test]
 fn skill_install_phase_gates_install_success() {
     use installer::skill_install::{install_skills_phase, SKILL_FILE_NAME};
+    use installer::IdentityCheck;
     let base = TempDir::new("uegf-phase");
-    let binary = built_installer();
+    let identity = sample_identity();
     // Healthy phase: ten created outcomes sealed with a digest, files
     // carrying the deterministic install manifest.
-    let phase = install_skills_phase(
-        base.path(),
-        "installer",
-        "abc123def",
-        &RepoOwnership::ThisRepo,
-        &binary,
-    )
-    .expect("ten writable roots must phase green");
+    let phase = install_skills_phase(base.path(), "installer", "abc123def", identity.clone())
+        .expect("ten writable roots must phase green");
     assert_eq!(
         phase.outcomes.len(),
         10,
@@ -2047,14 +2044,8 @@ fn skill_install_phase_gates_install_success() {
         assert_eq!(landed, manifest, "staged bytes verified on disk");
     }
     // Quiet rerun through the same phase: identical bytes are already.
-    let rerun = install_skills_phase(
-        base.path(),
-        "installer",
-        "abc123def",
-        &RepoOwnership::ThisRepo,
-        &binary,
-    )
-    .expect("identical rerun stays success");
+    let rerun = install_skills_phase(base.path(), "installer", "abc123def", identity.clone())
+        .expect("identical rerun stays success");
     for row in &rerun.outcomes {
         assert_eq!(row.outcome, "already", "rerun is already, got {row:?}");
     }
@@ -2072,14 +2063,8 @@ fn skill_install_phase_gates_install_success() {
         .join("amp");
     std::fs::create_dir_all(victim_root.parent().expect("skills dir")).expect("parents");
     std::fs::write(&victim_root, b"block\n").expect("blocker file");
-    let error = install_skills_phase(
-        blocked.path(),
-        "installer",
-        "abc123def",
-        &RepoOwnership::ThisRepo,
-        &binary,
-    )
-    .expect_err("one failed family denies phase success");
+    let error = install_skills_phase(blocked.path(), "installer", "abc123def", identity.clone())
+        .expect_err("one failed family denies phase success");
     match &error {
         installer::InstallError::SkillInstallFailed { outcomes, .. } => {
             assert_eq!(outcomes.len(), 10, "refusal preserves ten outcomes");
@@ -2096,18 +2081,15 @@ fn skill_install_phase_gates_install_success() {
         error.to_string().contains("L0_SKILLS_FAILED"),
         "refusal carries its typed reason, got: {error}"
     );
-    // Empty head sha: identity cannot seal, so the phase refuses at seal
-    // even though every family installed. (The binary name rides the
-    // installed path through verify_identity, so only an empty head
-    // deprives the seal of identity -- measured, not assumed.)
-    let noseal = install_skills_phase(
-        base.path(),
-        "installer",
-        "",
-        &RepoOwnership::ThisRepo,
-        &binary,
-    )
-    .expect_err("seal without identity must refuse");
+    // Identity without a binary name: the seal refuses even though every
+    // family installed. Identity is explicit input, so this is a direct
+    // probe of the seal gate rather than an environment accident.
+    let anonymous = IdentityCheck {
+        binary_name: String::new(),
+        ..sample_identity()
+    };
+    let noseal = install_skills_phase(base.path(), "installer", "abc123def", anonymous)
+        .expect_err("seal without identity must refuse");
     assert!(
         noseal.to_string().contains("identity"),
         "seal refusal must name identity, got: {noseal}"
