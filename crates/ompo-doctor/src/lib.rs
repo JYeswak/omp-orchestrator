@@ -801,6 +801,103 @@ pub fn run_doctor(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError
     summary.report = Some(write_report_with_readback(repo, &summary)?);
     Ok(summary)
 }
+/// L1-BUILD-PROBE-TOOLCHAIN (contract s1_l1_doctor.md): the pinned toolchain
+/// is read from the repo's rust-toolchain.toml and checked against the active
+/// `rustc --version`, because presence+version of *some* toolchain says
+/// nothing about whether it is the *pinned* one. A mismatch is STALE per the
+/// wrong-version precedent (cqib): present and versioned, but not the
+/// declared one -- never OK, never ABSENT. The remedy is TEXT in the row,
+/// never an executed install: the doctor observes, it does not provision.
+#[must_use]
+pub fn read_toolchain_channel(repo: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(repo.join("rust-toolchain.toml")).ok()?;
+    let mut in_toolchain = false;
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') {
+            in_toolchain = line == "[toolchain]";
+            continue;
+        }
+        if !in_toolchain {
+            continue;
+        }
+        let (key, value) = line.split_once('=')?;
+        if key.trim() != "channel" {
+            continue;
+        }
+        // TOML requires quotes; an unquoted channel is a malformed pin, not
+        // a pin. A trailing comment after the closing quote is tolerated.
+        let value = value.trim();
+        let quote = value.chars().next()?;
+        if quote != '"' && quote != '\'' {
+            return None;
+        }
+        let end = value[1..].find(quote)?;
+        return Some(value[1..1 + end].to_owned());
+    }
+    None
+}
+
+/// Whether an active `rustc --version` line satisfies a pinned channel.
+/// Stable has no marker word (its version core carries no pre-release tag);
+/// dated nightlies match on the date; semver pins match on the core prefix
+/// at a `.` boundary so "1.8" never matches "1.89.0".
+#[must_use]
+pub fn toolchain_matches_pin(channel: &str, active_version: &str) -> bool {
+    let core = active_version
+        .strip_prefix("rustc ")
+        .and_then(|rest| rest.split_whitespace().next())
+        .unwrap_or("");
+    // Fail closed: a version core that does not even start with a digit is
+    // not a version line, and must never satisfy any pin (caught by the
+    // matcher's own leg on garbage input).
+    if !core.starts_with(|b: char| b.is_ascii_digit()) {
+        return false;
+    }
+    match channel {
+        "stable" => !core.contains('-'),
+        "beta" => core.contains("-beta"),
+        "nightly" => core.contains("-nightly"),
+        dated if dated.starts_with("nightly-") => {
+            core.contains("-nightly") && active_version.contains(&dated["nightly-".len()..])
+        }
+        version => core == version || core.starts_with(&format!("{version}.")),
+    }
+}
+
+/// Post-pass over a completed system run: reclassify the live toolchain row
+/// against the repo pin. Match appends a pin receipt; mismatch reclassifies
+/// STALE with remedy text and preserves the version as evidence. Pinless
+/// repos and non-OK rows are untouched: with no pin there is nothing to
+/// judge against, and absence is already reported where it belongs.
+fn apply_toolchain_pin(repo: &Path, decisions: &mut [ProbeDecision]) {
+    let Some(pin) = read_toolchain_channel(repo) else {
+        return;
+    };
+    let Some(row) = decisions.iter_mut().find(|row| row.name == "toolchain") else {
+        return;
+    };
+    if row.status != "OK" {
+        return;
+    }
+    let Some(version) = row.version.clone() else {
+        return;
+    };
+    if toolchain_matches_pin(&pin, &version) {
+        row.detail.push_str(&format!("; pin={pin} matched"));
+    } else {
+        let reason = reason_code(&row.name, ProbeVerdict::Stale.status());
+        row.status = ProbeVerdict::Stale.status().to_owned();
+        row.reason_code = reason;
+        row.detail = format!(
+            "pin={pin} active={version} remedy: rustup toolchain install {pin} (advisory text; the doctor never provisions)"
+        );
+    }
+}
+
 fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorError> {
     let run_id = doctor_run_id();
     // The scope's declared set is authoritative; unselected probes surface as
@@ -809,13 +906,14 @@ fn run_doctor_system(repo: &Path, scope: &str) -> Result<DoctorSummary, DoctorEr
     // `run_doctor` admits only scopes this module declares, so `None` here
     // is an internal mismatch, never a user typo (those die UnsupportedScope).
     let selected = scope_probe_names(scope).expect("run_doctor_system for a declared scope");
-    let decisions: Vec<ProbeDecision> = plan_scope(scope, selected)
+    let mut decisions: Vec<ProbeDecision> = plan_scope(scope, selected)
         .into_iter()
         .map(|action| match action {
             ScopeAction::Run(spec) => run_probe(spec),
             ScopeAction::Skip(row) => row,
         })
         .collect();
+    apply_toolchain_pin(repo, &mut decisions);
     let exit_code = doctor_exit_code(&decisions)?;
     let status = if exit_code == 0 { "OK" } else { "DEGRADED" };
     let remediation = remediation_for(&decisions);
@@ -1326,6 +1424,152 @@ mod scope_tests {
             .filter(|action| matches!(action, ScopeAction::Skip(_)))
             .count();
         assert_eq!(system_skips, 0, "the system scope currently skips nothing");
+    }
+}
+
+#[cfg(test)]
+mod toolchain_tests {
+    use super::*;
+
+    fn pin_fixture(dir: &std::path::Path, body: &str) {
+        std::fs::write(dir.join("rust-toolchain.toml"), body).expect("fixture pin must land");
+    }
+
+    fn ok_row(version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: "toolchain".to_owned(),
+            status: "OK".to_owned(),
+            reason_code: "L1_PROBE_TOOLCHAIN_OK".to_owned(),
+            detail: "exit=0 rustc 1.89.0".to_owned(),
+            presence: Some("/fixture/rustc".to_owned()),
+            version: version.map(str::to_owned),
+        }
+    }
+
+    /// The pin is read from the repo's rust-toolchain.toml, and only from
+    /// its [toolchain] section: a missing file, a channel elsewhere, and a
+    /// commented channel are all "no pin", never a guessed one.
+    #[test]
+    fn the_pin_comes_from_the_toolchain_section_or_nowhere() {
+        let dir = tempfile::tempdir().expect("fixture repo");
+        assert!(
+            read_toolchain_channel(dir.path()).is_none(),
+            "a missing pin file is no pin"
+        );
+        pin_fixture(dir.path(), "[toolchain]\nchannel = \"stable\" # fleet pin\n");
+        assert_eq!(
+            read_toolchain_channel(dir.path()).as_deref(),
+            Some("stable"),
+            "a quoted channel with a trailing comment reads"
+        );
+        pin_fixture(dir.path(), "# channel = \"nightly\"\n[toolchain]\nprofile = \"minimal\"\n");
+        assert!(
+            read_toolchain_channel(dir.path()).is_none(),
+            "a commented channel is no pin"
+        );
+        pin_fixture(dir.path(), "[other]\nchannel = \"nightly\"\n");
+        assert!(
+            read_toolchain_channel(dir.path()).is_none(),
+            "a channel outside [toolchain] is no pin"
+        );
+        pin_fixture(dir.path(), "[toolchain]\nchannel = stable\n");
+        assert!(
+            read_toolchain_channel(dir.path()).is_none(),
+            "an unquoted channel is malformed, not a pin"
+        );
+    }
+
+    /// Matcher matrix: stable has no marker word, dated nightlies match on
+    /// the date, semver pins match at a `.` boundary, garbage never matches,
+    /// and anything else is a mismatch the enrichment must report.
+    #[test]
+    fn the_pin_matcher_covers_channel_shapes() {
+        let nightly = "rustc 1.89.0-nightly (b73c2a6f4 2025-08-01)";
+        let stable = "rustc 1.89.0 (29483883e 2025-08-04)";
+        assert!(toolchain_matches_pin("stable", stable));
+        assert!(!toolchain_matches_pin("stable", nightly));
+        assert!(toolchain_matches_pin("nightly", nightly));
+        assert!(!toolchain_matches_pin("nightly", stable));
+        assert!(toolchain_matches_pin("nightly-2025-08-01", nightly));
+        assert!(!toolchain_matches_pin("nightly-2025-08-02", nightly));
+        assert!(toolchain_matches_pin("1.89", stable));
+        assert!(toolchain_matches_pin("1.89.0", stable));
+        assert!(!toolchain_matches_pin("1.8", stable));
+        assert!(!toolchain_matches_pin("beta", stable));
+        assert!(!toolchain_matches_pin("stable", "rustc version query failed"));
+        assert!(!toolchain_matches_pin("stable", ""));
+    }
+
+    /// Enrichment: a match appends a pin receipt; a mismatch reclassifies
+    /// STALE with remedy text and keeps the version as evidence; non-OK
+    /// rows and pinless repos pass through untouched.
+    #[test]
+    fn enrichment_reports_a_mismatch_and_receipts_a_match() {
+        let dir = tempfile::tempdir().expect("fixture repo");
+        pin_fixture(dir.path(), "[toolchain]\nchannel = \"stable\"\n");
+        let mut matched = vec![ok_row(Some("rustc 1.89.0 (29483883e 2025-08-04)"))];
+        apply_toolchain_pin(dir.path(), &mut matched);
+        assert_eq!(matched[0].status, "OK");
+        assert!(
+            matched[0].detail.contains("pin=stable"),
+            "a match carries a pin receipt, got {}",
+            matched[0].detail
+        );
+
+        let mut mismatched = vec![ok_row(Some("rustc 1.89.0-nightly (b73c2a6f4 2025-08-01)"))];
+        apply_toolchain_pin(dir.path(), &mut mismatched);
+        assert_eq!(
+            mismatched[0].status, "STALE",
+            "a present wrong toolchain is STALE, never OK"
+        );
+        assert_eq!(mismatched[0].reason_code, "L1_PROBE_TOOLCHAIN_STALE");
+        assert!(
+            mismatched[0].detail.contains("remedy: rustup toolchain install stable"),
+            "a mismatch carries remedy text, got {}",
+            mismatched[0].detail
+        );
+        assert!(
+            mismatched[0].version.is_some(),
+            "the active version stays as evidence"
+        );
+
+        let mut absent = vec![ProbeDecision {
+            status: "ABSENT_SPECIFIC".to_owned(),
+            ..ok_row(None)
+        }];
+        apply_toolchain_pin(dir.path(), &mut absent);
+        assert_eq!(absent[0].status, "ABSENT_SPECIFIC", "absence is not rejudged");
+
+        let bare = tempfile::tempdir().expect("pinless repo");
+        let mut pinless = vec![ok_row(Some("rustc 1.89.0-nightly (b73c2a6f4 2025-08-01)"))];
+        apply_toolchain_pin(bare.path(), &mut pinless);
+        assert_eq!(pinless[0].status, "OK", "with no pin there is nothing to judge");
+    }
+
+    /// WIRING: a live system run against a repo pinned impossibly far in the
+    /// future reclassifies its own toolchain row STALE with remedy text --
+    /// wherever rustc runs. This is the leg that proves the enrichment is
+    /// called in the production path, not merely correct in isolation.
+    #[test]
+    fn a_live_system_run_enforces_its_repo_pin() {
+        let dir = tempfile::tempdir().expect("fixture repo");
+        pin_fixture(dir.path(), "[toolchain]\nchannel = \"nightly-2099-01-01\"\n");
+        let summary = run_doctor_system(dir.path(), "system").expect("system scope runs");
+        let row = summary
+            .probes
+            .iter()
+            .find(|row| row.name == "toolchain")
+            .expect("the toolchain row runs under the system scope");
+        assert_eq!(
+            row.status, "STALE",
+            "no lane runs nightly-2099-01-01: an impossible pin must reclassify, got {:?} (if rustc is absent on this lane the row cannot be judged -- that is environment, not a pass)",
+            row
+        );
+        assert!(
+            row.detail.contains("remedy: rustup toolchain install nightly-2099-01-01"),
+            "got {}",
+            row.detail
+        );
     }
 }
 
