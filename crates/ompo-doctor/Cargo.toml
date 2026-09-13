@@ -31,6 +31,7 @@ omp-orchestrator = { path = "../omp-orchestrator" }
 
 [dev-dependencies]
 tempfile = "3"
+sha2 = "0.11"
 
 # DECLARED CONSUMPTION of OMP's native `--mode=rpc` surface.
 #

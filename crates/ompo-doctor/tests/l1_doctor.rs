@@ -230,3 +230,103 @@ fn exit_bands_match_verdicts() {
         "empty-set refusal must name its code: {error}"
     );
 }
+
+use ompo_doctor::health_repair::{repair, RepairMode};
+use ompo_start::inception::required_control_files;
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::path::PathBuf;
+
+fn stale_repair_fixture() -> (tempfile::TempDir, PathBuf) {
+    let directory = tempfile::tempdir().expect("fixture");
+    for relative in required_control_files() {
+        let path = directory.path().join(relative);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("parent");
+        }
+        fs::write(path, "fixture\n").expect("control file");
+    }
+    // The ownership trust gate refuses init over an AGENTS.md without the
+    // project stamp. The fixture is this project's own test, so it carries it.
+    fs::write(
+        directory.path().join("AGENTS.md"),
+        "# omp-orchestrator fixture\n",
+    )
+    .expect("stamped AGENTS.md");
+    // STALE artifact: present but not the rendered manifest, so the
+    // chokepoint must snapshot it before writing.
+    let artifact = directory
+        .path()
+        .join(".omp-orchestrator")
+        .join("inception.json");
+    fs::create_dir_all(artifact.parent().expect("artifact parent")).expect("artifact dir");
+    fs::write(&artifact, b"stale artifact bytes\n").expect("stale artifact");
+    for args in [&["init", "-q"][..], &["add", "-A"][..]] {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(directory.path())
+            .args(args)
+            .status()
+            .expect("spawn git");
+        assert!(status.success(), "git {args:?} failed in fixture");
+    }
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(directory.path())
+        .args([
+            "-c",
+            "user.name=fixture",
+            "-c",
+            "user.email=fixture@local",
+            "commit",
+            "-qm",
+            "fixture",
+        ])
+        .status()
+        .expect("spawn git commit");
+    assert!(status.success(), "git commit failed in fixture");
+    (directory, artifact)
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// L1-BUILD-MUTATE (LAW-L1-MUTATE-AUDIT): a repair records run id, before
+/// hash, backup, after hash, and one action row. The backup is byte-compared
+/// against the pre-repair content: a chokepoint that writes without
+/// snapshotting first is unrecoverable by construction.
+#[test]
+fn repair_records_before_hash_backup_after_hash() {
+    let (directory, artifact) = stale_repair_fixture();
+    let before_bytes = fs::read(&artifact).expect("stale bytes readable");
+    let before_hash = sha256_hex(&before_bytes);
+    let report =
+        repair(directory.path(), "inception", RepairMode::Apply).expect("repair applies");
+    assert_eq!(
+        report.applied.len(),
+        1,
+        "exactly one action record, got {}",
+        report.applied.len()
+    );
+    assert_eq!(report.reason_code, "REPAIR_APPLIED");
+    let action = &report.applied[0];
+    let backup = action
+        .backup
+        .as_ref()
+        .expect("action carries its backup");
+    assert_eq!(
+        &fs::read(backup).expect("backup readable"),
+        &before_bytes,
+        "backup is verbatim pre-repair content"
+    );
+    let after_bytes = fs::read(&artifact).expect("after bytes readable");
+    assert_ne!(
+        sha256_hex(&after_bytes),
+        before_hash,
+        "repair changed nothing"
+    );
+}
