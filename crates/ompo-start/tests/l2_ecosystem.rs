@@ -6,13 +6,14 @@
 //! repository fixture. It is invoked directly as Cargo's `--test l2_ecosystem` target.
 
 use ompo_start::inception::{
-    hook_source_identity_report, initialize, list_backups, read_inception, restore_backup,
-    CargoWorkspaceError, HookIdentityStatus, InceptionError, PROJECT_AGENTS_OWNERSHIP_STAMP,
-    SCHEMA_VERSION,
+    hook_source_identity_report, initialize, initialize_gated, list_backups, read_inception,
+    restore_backup, CargoWorkspaceError, HookIdentityStatus, InceptionError, TrustedInitConsent,
+    TrustedInitDecision, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
 };
 use std::path::Path;
 use std::process::Command;
 use serde_json::Value;
+use sha2::{Digest as _, Sha256};
 use std::time::Duration;
 use tempfile::TempDir;
 use lifecycle_event::{
@@ -245,6 +246,58 @@ fn run_git(repo: &Path, args: &[&str]) {
         subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {}
         other => panic!("git fixture command failed: {other:?}"),
     }
+}
+
+fn explicit_trusted_init_consent(root: &Path, decision_id: &str) -> TrustedInitConsent {
+    let repository_scope = root.canonicalize().expect("canonical consent scope");
+    let mut command = Command::new("git");
+    command.current_dir(&repository_scope).args(["rev-parse", "HEAD"]);
+    let output = match subprocess_contract::bounded_output(&mut command, Duration::from_secs(10)) {
+        subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => output,
+        other => panic!("consent revision command failed: {other:?}"),
+    };
+    let source_revision = String::from_utf8(output.stdout)
+        .expect("UTF-8 consent revision")
+        .trim()
+        .to_owned();
+    let policy = std::fs::read(repository_scope.join("AGENTS.md"))
+        .expect("consent policy bytes");
+    let mut policy_sha256 = String::with_capacity(64);
+    for byte in Sha256::digest(policy) {
+        use std::fmt::Write as _;
+        write!(policy_sha256, "{byte:02x}").expect("write policy digest");
+    }
+    TrustedInitConsent::Explicit {
+        decision_id: decision_id.to_owned(),
+        repository_scope,
+        source_revision,
+        policy_sha256,
+    }
+}
+
+fn foreign_policy_fixture() -> TempDir {
+    let repository = repository_fixture();
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped CLAUDE.md");
+    std::fs::write(repository.path().join("AGENTS.md"), b"foreign policy\n")
+        .expect("foreign AGENTS.md");
+    repository
+}
+
+fn assert_no_init_residue(root: &Path, output: &Path) {
+    assert!(!output.exists(), "refusal wrote output {}", output.display());
+    assert!(
+        list_backups(output).expect("list refusal backups").is_empty(),
+        "refusal wrote backup residue for {}",
+        output.display()
+    );
+    assert!(
+        !default_repo_journal(root).exists(),
+        "refusal wrote lifecycle residue"
+    );
 }
 
 fn write_project_agents_stamp(root: &Path) {
@@ -1044,7 +1097,7 @@ fn persona_a_remote_policy_is_carried_by_gated_entry() {
     let remote_output = remote
         .path()
         .join(".omp-orchestrator/init-gated-remote-present.json");
-    let remote_report = initialize_gated(remote.path(), &remote_output)
+    let remote_report = initialize_gated(remote.path(), &remote_output, &TrustedInitConsent::Absent)
         .expect("remote-present Persona A proceeds");
     assert_eq!(
         remote_report.persona_remote,
@@ -1063,7 +1116,7 @@ fn persona_a_remote_policy_is_carried_by_gated_entry() {
     let local_output = local
         .path()
         .join(".omp-orchestrator/init-gated-local-only.json");
-    let local_report = initialize_gated(local.path(), &local_output)
+    let local_report = initialize_gated(local.path(), &local_output, &TrustedInitConsent::Absent)
         .expect("local-only Persona A proceeds");
     assert_eq!(
         local_report.persona_remote,
@@ -1254,7 +1307,7 @@ fn hook_identity_verdict_gates_reachable_l2_entry() {
         .expect("stamped claude");
     commit_hook_source_change(repository.path(), b"pub fn hook_fixture_changed() {}\n");
     let output = repository.path().join(".omp-orchestrator/hook-refused.json");
-    match initialize_gated(repository.path(), &output) {
+    match initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent) {
         Err(InceptionError::HookIdentityRefused {
             status: HookIdentityStatus::ContentMismatch,
             detail,
@@ -1290,7 +1343,7 @@ fn gated_entry_requires_git_repo() {
     let output = repository
         .path()
         .join(".omp-orchestrator/inception.json");
-    let report = initialize_gated(repository.path(), &output).expect("real repo proceeds");
+    let report = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("real repo proceeds");
     assert!(
         output.is_file(),
         "a gated real repo must produce its artifact"
@@ -1300,7 +1353,7 @@ fn gated_entry_requires_git_repo() {
     // downstream write -- the artifact must not exist afterwards.
     let bare = tempfile::tempdir().expect("bare fixture");
     let bare_output = bare.path().join(".omp-orchestrator/inception.json");
-    let error = initialize_gated(bare.path(), &bare_output).expect_err("non-repo must halt");
+    let error = initialize_gated(bare.path(), &bare_output, &TrustedInitConsent::Absent).expect_err("non-repo must halt");
     let text = error.to_string();
     assert!(
         text.starts_with("INCEPTION_IDENTITY_UNAVAILABLE"),
@@ -1437,7 +1490,7 @@ fn claude_stamp_gates_trust_entry() {
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated.json");
-    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
     assert!(
         output.exists(),
         "a trusted entry writes its artifact"
@@ -1476,14 +1529,14 @@ fn claude_stamp_gates_trust_entry() {
             .path()
             .join(format!(".omp-orchestrator/init-gated-{name}.json"));
         let error =
-            initialize_gated(repository.path(), &output).expect_err("unstamped must refuse");
+            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unstamped must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains("CLAUDE.md"),
             "{name} refusal must be typed and name the file, got: {text}"
         );
         assert!(
-            text.contains("remedy:") || text.contains("stamp it"),
+            text.contains("remedy=") || text.contains("stamp it"),
             "{name} refusal must carry remediation, got: {text}"
         );
         assert!(
@@ -1508,8 +1561,9 @@ fn claude_stamp_gates_trust_entry() {
 }
 
 /// L2-TEST-AGENTS-STAMP (bead 43x7): the reachable L2 trust-flow entry
-/// admits a stamped AGENTS.md and refuses every other AGENTS stamp state
-/// before trust-dependent continuation. Reuses the shared stamp core and
+/// admits a stamped AGENTS.md and refuses non-consentable AGENTS states
+/// before trust-dependent continuation. Foreign nonempty policy is owned by
+/// the trusted-init consent tests below. Reuses the shared stamp core and
 /// the `initialize_gated` seam beside the CLAUDE report -- no duplicate
 /// core, no second stamp vocabulary.
 ///
@@ -1530,20 +1584,17 @@ fn agents_stamp_gates_trust_entry() {
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated-agents.json");
-    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
     assert!(
         output.exists(),
         "a trusted entry writes its artifact"
     );
-    // Restrictive matrix: every non-Stamped AGENTS.md state refuses typed
-    // before initialize runs, with the file and the remedy named. CLAUDE.md
+    // Restrictive matrix: empty, corrupt, unreadable, and missing policy
+    // cannot be consented to and still refuse before initialize runs. CLAUDE.md
     // stays stamped throughout, so each refusal is the AGENTS gate firing.
     let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
         ("empty", Box::new(|root| {
             std::fs::write(root.join("AGENTS.md"), b"").expect("empty file");
-        })),
-        ("foreign", Box::new(|root| {
-            std::fs::write(root.join("AGENTS.md"), b"foreign stuff\n").expect("foreign file");
         })),
         ("corrupt", Box::new(|root| {
             std::fs::write(root.join("AGENTS.md"), b"\xff\xfe invalid \x00 bytes\n")
@@ -1574,14 +1625,14 @@ fn agents_stamp_gates_trust_entry() {
             .path()
             .join(format!(".omp-orchestrator/init-gated-agents-{name}.json"));
         let error =
-            initialize_gated(repository.path(), &output).expect_err("unstamped must refuse");
+            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unstamped must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains("AGENTS.md"),
             "{name} refusal must be typed and name the file, got: {text}"
         );
         assert!(
-            text.contains("remedy:") || text.contains("stamp it"),
+            text.contains("remedy=") || text.contains("stamp it"),
             "{name} refusal must carry remediation, got: {text}"
         );
         assert!(
@@ -1641,7 +1692,7 @@ fn beads_init_gates_trust_entry() {
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated-beads.json");
-    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
     assert!(
         output.exists(),
         "a trusted entry writes its artifact"
@@ -1715,7 +1766,7 @@ fn beads_init_gates_trust_entry() {
             .path()
             .join(format!(".omp-orchestrator/init-gated-beads-{name}.json"));
         let error =
-            initialize_gated(repository.path(), &output).expect_err("unready must refuse");
+            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unready must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains(".beads"),
@@ -1775,7 +1826,7 @@ fn toolchain_pin_gates_trust_entry() {
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated-toolchain.json");
-    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
     assert!(
         output.exists(),
         "a trusted entry writes its artifact"
@@ -1840,7 +1891,7 @@ fn toolchain_pin_gates_trust_entry() {
             .path()
             .join(format!(".omp-orchestrator/init-gated-toolchain-{name}.json"));
         let error =
-            initialize_gated(repository.path(), &output).expect_err("unsatisfied must refuse");
+            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unsatisfied must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains("rust-toolchain.toml"),
@@ -2035,7 +2086,7 @@ fn cargo_workspace_member_verdict_gates_l2_entry() {
     )
     .expect("foreign Cargo package");
     let output = repository.path().join(".omp-orchestrator/cargo-member-refused.json");
-    let error = initialize_gated(repository.path(), &output)
+    let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
         .expect_err("foreign current package must halt at the L2 entry");
     assert!(
         matches!(
@@ -2169,7 +2220,7 @@ fn agent_mail_registration_verdict_gates_l2_entry() {
     let output = repository
         .path()
         .join(".omp-orchestrator/agent-mail-refused.json");
-    match initialize_gated(repository.path(), &output) {
+    match initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent) {
         Err(InceptionError::AgentMailRegistration(
             AgentMailRegistrationError::ProjectMismatch { expected, actual },
         )) => assert_ne!(expected, actual, "mismatch cause collapsed"),
@@ -2423,7 +2474,7 @@ fn rch_lane_restrictive_causes_and_entry_wiring() {
     std::fs::write(entry_repo.path().join(".rch-project-excluded"), b"fixture\n")
         .expect("project exclusion marker");
     let artifact = entry_repo.path().join(".omp-orchestrator/rch-refused.json");
-    let entry_result = ompo_start::inception::initialize_gated(entry_repo.path(), &artifact);
+    let entry_result = ompo_start::inception::initialize_gated(entry_repo.path(), &artifact, &TrustedInitConsent::Absent);
     assert!(
         matches!(
             entry_result,
@@ -2466,7 +2517,7 @@ fn rch_lane_unknown_is_carried_by_gated_entry() {
     std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
         .expect("stamped CLAUDE.md");
     let output = repository.path().join(".omp-orchestrator/rch-unknown.json");
-    let outcome = initialize_gated(repository.path(), &output);
+    let outcome = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent);
     let carried_unknown = outcome.as_ref().is_ok_and(|report| {
         report
             .rch_lane
@@ -2478,4 +2529,123 @@ fn rch_lane_unknown_is_carried_by_gated_entry() {
         ompo_start::inception::read_inception(&output).is_ok(),
         "UNKNOWN continuation did not produce readable trust state"
     );
+}
+
+/// L2-TEST-TRUSTED-INIT: the reachable production entry treats foreign policy
+/// without an explicit consent record as a typed halt before any output,
+/// backup, or lifecycle write.
+#[test]
+fn foreign_policy_without_opt_in_is_read_only() {
+    let repository = foreign_policy_fixture();
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/jlna-missing-consent.json");
+    let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+        .expect_err("foreign policy without consent must halt");
+    assert!(
+        matches!(error, InceptionError::TrustedInitConsentMissing { .. }),
+        "wrong refusal: {error:?}"
+    );
+    let message = error.to_string();
+    assert!(
+        message.starts_with("HUMAN_HALT TRUSTED_INIT_CONSENT_MISSING")
+            && message.contains("remedy="),
+        "missing consent needs typed remediation: {message}"
+    );
+    assert_no_init_residue(repository.path(), &output);
+}
+
+#[test]
+fn trusted_init_consent_causes_are_distinct() {
+    let legacy = foreign_policy_fixture();
+    let legacy_output = legacy.path().join(".omp-orchestrator/jlna-foreign.json");
+    let foreign = initialize(legacy.path(), &legacy_output)
+        .expect_err("legacy entry must expose foreign policy");
+    assert!(matches!(foreign, InceptionError::UntrustedAgentsMd { .. }));
+    assert!(
+        foreign.to_string().contains("TRUSTED_INIT_FOREIGN_POLICY"),
+        "foreign policy cause collapsed: {foreign}"
+    );
+    assert_no_init_residue(legacy.path(), &legacy_output);
+
+    let malformed_repo = foreign_policy_fixture();
+    let malformed_output = malformed_repo
+        .path()
+        .join(".omp-orchestrator/jlna-malformed.json");
+    let mut malformed =
+        explicit_trusted_init_consent(malformed_repo.path(), "valid-before-mutation");
+    let TrustedInitConsent::Explicit { decision_id, .. } = &mut malformed else {
+        unreachable!("helper returns explicit consent")
+    };
+    decision_id.clear();
+    let malformed_error = initialize_gated(malformed_repo.path(), &malformed_output, &malformed)
+        .expect_err("malformed consent must halt");
+    assert!(matches!(
+        malformed_error,
+        InceptionError::TrustedInitConsentMalformed {
+            field: "decision_id",
+            ..
+        }
+    ));
+    assert!(malformed_error
+        .to_string()
+        .contains("TRUSTED_INIT_CONSENT_MALFORMED"));
+    assert_no_init_residue(malformed_repo.path(), &malformed_output);
+
+    let scope_repo = foreign_policy_fixture();
+    let scope_output = scope_repo.path().join(".omp-orchestrator/jlna-scope.json");
+    let mut wrong_scope = explicit_trusted_init_consent(scope_repo.path(), "scope-decision");
+    let TrustedInitConsent::Explicit {
+        repository_scope, ..
+    } = &mut wrong_scope
+    else {
+        unreachable!("helper returns explicit consent")
+    };
+    *repository_scope = Path::new("/different/repository").to_owned();
+    let scope_error = initialize_gated(scope_repo.path(), &scope_output, &wrong_scope)
+        .expect_err("wrong consent scope must halt");
+    assert!(matches!(
+        scope_error,
+        InceptionError::TrustedInitConsentScopeMismatch { .. }
+    ));
+    assert!(scope_error
+        .to_string()
+        .contains("TRUSTED_INIT_CONSENT_SCOPE_MISMATCH"));
+    assert_no_init_residue(scope_repo.path(), &scope_output);
+
+    let stale_repo = foreign_policy_fixture();
+    let stale_output = stale_repo.path().join(".omp-orchestrator/jlna-stale.json");
+    let stale = explicit_trusted_init_consent(stale_repo.path(), "stale-decision");
+    std::fs::write(
+        stale_repo.path().join("AGENTS.md"),
+        b"changed foreign policy\n",
+    )
+    .expect("policy changes after consent");
+    let stale_error = initialize_gated(stale_repo.path(), &stale_output, &stale)
+        .expect_err("replayed consent must halt");
+    assert!(matches!(
+        stale_error,
+        InceptionError::TrustedInitConsentStaleOrReplayed { .. }
+    ));
+    assert!(stale_error
+        .to_string()
+        .contains("TRUSTED_INIT_CONSENT_STALE_OR_REPLAYED"));
+    assert_no_init_residue(stale_repo.path(), &stale_output);
+}
+
+#[test]
+fn valid_scoped_trusted_init_consent_proceeds() {
+    let repository = foreign_policy_fixture();
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/jlna-valid-consent.json");
+    let consent = explicit_trusted_init_consent(repository.path(), "jlna-valid");
+    let report = initialize_gated(repository.path(), &output, &consent)
+        .expect("current scoped consent must proceed");
+    assert!(output.is_file(), "valid consent did not produce output");
+    assert!(matches!(
+        report.trusted_init,
+        TrustedInitDecision::ExplicitConsent { ref decision_id, .. }
+            if decision_id == "jlna-valid"
+    ));
 }

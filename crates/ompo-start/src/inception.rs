@@ -385,6 +385,28 @@ impl fmt::Display for RchLaneError {
 }
 impl std::error::Error for RchLaneError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrustedInitConsent {
+    Absent,
+    Explicit {
+        decision_id: String,
+        repository_scope: PathBuf,
+        source_revision: String,
+        policy_sha256: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrustedInitDecision {
+    OwnedPolicy,
+    ExplicitConsent {
+        decision_id: String,
+        repository_scope: PathBuf,
+        source_revision: String,
+        policy_sha256: String,
+    },
+}
+
 #[derive(Debug)]
 pub enum InceptionError {
     RepositoryUnreadable { path: PathBuf, detail: String },
@@ -398,6 +420,28 @@ pub enum InceptionError {
     AgentMailRegistration(AgentMailRegistrationError),
     /// Repository-to-RCH lane mapping could not be read consistently.
     RchLane(RchLaneError),
+    /// A foreign AGENTS.md reached an explicit consent-taking entry with no consent.
+    TrustedInitConsentMissing {
+        path: PathBuf,
+        policy_sha256: String,
+    },
+    /// A supplied consent record cannot represent a valid decision.
+    TrustedInitConsentMalformed {
+        field: &'static str,
+        detail: String,
+    },
+    /// Consent was issued for a different canonical repository.
+    TrustedInitConsentScopeMismatch {
+        expected: PathBuf,
+        provided: PathBuf,
+    },
+    /// Consent names an older repository revision or policy digest.
+    TrustedInitConsentStaleOrReplayed {
+        expected_source_revision: String,
+        provided_source_revision: String,
+        expected_policy_sha256: String,
+        provided_policy_sha256: String,
+    },
     /// The installed pre-commit hook cannot prove it was built from the
     /// repository's current source authority.
     HookIdentityRefused {
@@ -425,12 +469,9 @@ pub enum InceptionError {
         path: PathBuf,
         status: BeadsInitStatus,
     },
-    /// Init refused over an AGENTS.md whose stamp report is not Stamped
-    /// at the gated entry: same trust rule as [`UntrustedClaudeMd`],
-    /// with the AGENTS.md path. Deliberately distinct from
-    /// [`UntrustedAgentsMd`], which remains the shared-`initialize`
-    /// refusal with its `trusted_init` override (no such flag exists on
-    /// the gated entry by design -- stamp the file).
+    /// Init refused over an AGENTS.md state that cannot be consented to.
+    /// Nonempty foreign policy reaches the typed consent decision instead;
+    /// missing, empty, or unreadable policy remains restrictive here.
     AgentsStampRefused {
         path: PathBuf,
         status: AgentsStampStatus,
@@ -443,8 +484,8 @@ pub enum InceptionError {
         path: PathBuf,
         status: AgentsStampStatus,
     },
-    /// Init refused over an AGENTS.md that carries no repo ownership stamp.
-    /// Explicit opt-in (`trusted_init`) is the only override.
+    /// A legacy no-consent entry observed foreign AGENTS.md policy.
+    /// Explicit consent-taking entries use the distinct consent refusals above.
     UntrustedAgentsMd { path: PathBuf },
     /// AGENTS.md exists but is empty: a broken fixture, not a foreign repo.
     EmptyAgentsMd { path: PathBuf },
@@ -518,6 +559,37 @@ impl fmt::Display for InceptionError {
             Self::CargoWorkspace(error) => write!(formatter, "{error}"),
             Self::AgentMailRegistration(error) => write!(formatter, "{error}"),
             Self::RchLane(error) => write!(formatter, "{error}"),
+            Self::TrustedInitConsentMissing { path, policy_sha256 } => write_human_halt(
+                formatter,
+                "TRUSTED_INIT_CONSENT_MISSING",
+                format_args!("foreign_policy={} policy_sha256={policy_sha256}", path.display()),
+                "pass TrustedInitConsent::Explicit scoped to this repository, revision, and policy digest",
+            ),
+            Self::TrustedInitConsentMalformed { field, detail } => write_human_halt(
+                formatter,
+                "TRUSTED_INIT_CONSENT_MALFORMED",
+                format_args!("field={field} detail={detail}"),
+                "construct a nonempty typed consent record with canonical scope and lowercase digests",
+            ),
+            Self::TrustedInitConsentScopeMismatch { expected, provided } => write_human_halt(
+                formatter,
+                "TRUSTED_INIT_CONSENT_SCOPE_MISMATCH",
+                format_args!("expected={} provided={}", expected.display(), provided.display()),
+                "issue new consent for the exact canonical repository root",
+            ),
+            Self::TrustedInitConsentStaleOrReplayed {
+                expected_source_revision,
+                provided_source_revision,
+                expected_policy_sha256,
+                provided_policy_sha256,
+            } => write_human_halt(
+                formatter,
+                "TRUSTED_INIT_CONSENT_STALE_OR_REPLAYED",
+                format_args!(
+                    "expected_revision={expected_source_revision} provided_revision={provided_source_revision} expected_policy_sha256={expected_policy_sha256} provided_policy_sha256={provided_policy_sha256}"
+                ),
+                "reconfirm the current repository revision and foreign-policy digest, then issue a new decision id",
+            ),
             Self::HookIdentityRefused { path, status, detail } => write!(
                 formatter,
                 "HUMAN_HALT {} hook={} detail={} remedy={}",
@@ -536,10 +608,11 @@ impl fmt::Display for InceptionError {
                 "HUMAN_HALT refusing init over {status:?} CLAUDE.md path={} (stamp it with the project token to opt in; no flag bypasses this)",
                 path.display()
             ),
-            Self::UntrustedAgentsMd { path } => write!(
+            Self::UntrustedAgentsMd { path } => write_human_halt(
                 formatter,
-                "HUMAN_HALT refusing init over unstamped foreign AGENTS.md path={} (pass trusted_init=true to opt in)",
-                path.display()
+                "TRUSTED_INIT_FOREIGN_POLICY",
+                format_args!("path={}", path.display()),
+                "use an explicit consent-taking entry and pass TrustedInitConsent::Explicit",
             ),
             Self::EmptyAgentsMd { path } => write!(
                 formatter,
@@ -631,6 +704,8 @@ pub struct InitReport {
     /// Repo-scoped RCH topology report carried by the gated entry.
     /// Shared repair initialization does not query RCH.
     pub rch_lane: Option<RchLaneReport>,
+    /// The policy decision consumed before this run's first mutation.
+    pub trusted_init: TrustedInitDecision,
     pub actions: usize,
     pub backup: Option<PathBuf>,
     pub journal_rows: usize,
@@ -3151,28 +3226,112 @@ fn emit_init_event(repo_root: &Path) -> Result<usize, InceptionError> {
 
 /// Ownership anchor: an AGENTS.md that does not name this repository is foreign.
 /// Heuristic, stated plainly: content cannot prove ownership, so a foreign read
-/// refuses loudly and explicit opt-in (`trusted_init`) is the only override.
+/// refuses loudly unless the caller supplies an explicit typed consent record.
 pub const PROJECT_AGENTS_OWNERSHIP_STAMP: &str = "omp-orchestrator";
 
-/// Trust gate (cbl7): refuse init over an unstamped foreign AGENTS.md unless the
-/// caller explicitly opts in. Missing files never reach here (`build_manifest`
-/// refuses them first); unreadable files surface as `RepositoryUnreadable`.
-fn verify_agents_ownership(repo_root: &Path, trusted_init: bool) -> Result<(), InceptionError> {
-    if trusted_init {
-        return Ok(());
-    }
-    let path = repo_root.join("AGENTS.md");
-    let text = fs::read_to_string(&path).map_err(|error| InceptionError::RepositoryUnreadable {
+/// Trust gate (cbl7/jlna): resolve owned policy or validate a caller-supplied
+/// consent record. Missing control files are refused by build_manifest first;
+/// no environment variable, global flag, or mutable side file is consulted.
+fn trusted_init_decision(
+    repo_root: &Path,
+    consent: Option<&TrustedInitConsent>,
+) -> Result<TrustedInitDecision, InceptionError> {
+    let canonical =
+        repo_root
+            .canonicalize()
+            .map_err(|error| InceptionError::RepositoryUnreadable {
+                path: repo_root.to_owned(),
+                detail: format!("canonicalize for trusted-init consent failed: {error}"),
+            })?;
+    let path = canonical.join("AGENTS.md");
+    let bytes = fs::read(&path).map_err(|error| InceptionError::RepositoryUnreadable {
         path: path.clone(),
         detail: format!("AGENTS.md unreadable: {error}"),
     })?;
+    let text =
+        std::str::from_utf8(&bytes).map_err(|error| InceptionError::RepositoryUnreadable {
+            path: path.clone(),
+            detail: format!("AGENTS.md is not UTF-8: {error}"),
+        })?;
     if text.trim().is_empty() {
         return Err(InceptionError::EmptyAgentsMd { path });
     }
-    if !text.contains(PROJECT_AGENTS_OWNERSHIP_STAMP) {
-        return Err(InceptionError::UntrustedAgentsMd { path });
+    if text.contains(PROJECT_AGENTS_OWNERSHIP_STAMP) {
+        return Ok(TrustedInitDecision::OwnedPolicy);
     }
-    Ok(())
+
+    let policy_sha256 = sha256_hex(&bytes);
+    let Some(consent) = consent else {
+        return Err(InceptionError::UntrustedAgentsMd { path });
+    };
+    let TrustedInitConsent::Explicit {
+        decision_id,
+        repository_scope,
+        source_revision: provided_source_revision,
+        policy_sha256: provided_policy_sha256,
+    } = consent
+    else {
+        return Err(InceptionError::TrustedInitConsentMissing {
+            path,
+            policy_sha256,
+        });
+    };
+
+    let decision_id_valid = !decision_id.is_empty()
+        && decision_id.len() <= 128
+        && decision_id.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        });
+    if !decision_id_valid {
+        return Err(InceptionError::TrustedInitConsentMalformed {
+            field: "decision_id",
+            detail: "expected 1..=128 ASCII identifier characters".to_owned(),
+        });
+    }
+    let revision_valid = (7..=64).contains(&provided_source_revision.len())
+        && provided_source_revision
+            .chars()
+            .all(|character| character.is_ascii_hexdigit());
+    if !revision_valid {
+        return Err(InceptionError::TrustedInitConsentMalformed {
+            field: "source_revision",
+            detail: "expected a 7..=64 character hexadecimal revision".to_owned(),
+        });
+    }
+    let digest_valid = provided_policy_sha256.len() == 64
+        && provided_policy_sha256
+            .chars()
+            .all(|character| character.is_ascii_digit() || matches!(character, 'a'..='f'));
+    if !digest_valid {
+        return Err(InceptionError::TrustedInitConsentMalformed {
+            field: "policy_sha256",
+            detail: "expected a 64 character lowercase hexadecimal SHA-256".to_owned(),
+        });
+    }
+    if repository_scope != &canonical {
+        return Err(InceptionError::TrustedInitConsentScopeMismatch {
+            expected: canonical,
+            provided: repository_scope.clone(),
+        });
+    }
+
+    let expected_source_revision = source_revision(&canonical)?;
+    if provided_source_revision != &expected_source_revision
+        || provided_policy_sha256 != &policy_sha256
+    {
+        return Err(InceptionError::TrustedInitConsentStaleOrReplayed {
+            expected_source_revision,
+            provided_source_revision: provided_source_revision.clone(),
+            expected_policy_sha256: policy_sha256,
+            provided_policy_sha256: provided_policy_sha256.clone(),
+        });
+    }
+    Ok(TrustedInitDecision::ExplicitConsent {
+        decision_id: decision_id.clone(),
+        repository_scope: canonical,
+        source_revision: provided_source_revision.clone(),
+        policy_sha256,
+    })
 }
 
 /// L2-BUILD-AGENTS-STAMP (bead 43x7): AGENTS.md stamp identity with live
@@ -3507,13 +3666,17 @@ pub fn toolchain_pin_report(repo: &Path) -> ToolchainPinReport {
     }
 }
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
-    initialize_inner(repo_root, output, false)
+    initialize_inner(repo_root, output, None)
 }
 
-/// Explicit opt-in init over an unstamped foreign AGENTS.md. Identical flow to
-/// [`initialize`], minus the ownership refusal.
-pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
-    initialize_inner(repo_root, output, true)
+/// Explicit consent-taking init over a foreign AGENTS.md. The caller supplies
+/// repository scope, revision, policy digest, and decision id as one typed value.
+pub fn initialize_trusted(
+    repo_root: &Path,
+    output: &Path,
+    consent: &TrustedInitConsent,
+) -> Result<InitReport, InceptionError> {
+    initialize_inner(repo_root, output, Some(consent))
 }
 
 /// L2 entry for operator-driven init: the repository check gates before
@@ -3534,7 +3697,11 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 /// by design (git identity degrades to "missing"), and gating them would
 /// trade measured-green repair legs for zero new capability. The output
 /// path stays caller-chosen; only the root canonicalizes.
-pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
+pub fn initialize_gated(
+    repo_root: &Path,
+    output: &Path,
+    consent: &TrustedInitConsent,
+) -> Result<InitReport, InceptionError> {
     let top = git_repo_toplevel(repo_root)?;
     let _cargo_member = cargo_workspace_member_report(&top, &InputManifest::full())?;
     match claude_stamp_report(&top).status {
@@ -3548,6 +3715,9 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
     }
     match agents_stamp_report(&top).status {
         AgentsStampStatus::Stamped => {}
+        AgentsStampStatus::Unstamped
+            if fs::read_to_string(top.join("AGENTS.md"))
+                .is_ok_and(|text| !text.trim().is_empty()) => {}
         status => {
             return Err(InceptionError::AgentsStampRefused {
                 path: top.join("AGENTS.md"),
@@ -3587,10 +3757,9 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
             detail: hook_identity.detail,
         });
     }
-    let agent_mail_registration =
-        agent_mail_registration_report(&top, &InputManifest::full())?;
+    let agent_mail_registration = agent_mail_registration_report(&top, &InputManifest::full())?;
     let rch_lane = rch_lane_report(&top, &InputManifest::full())?;
-    let mut report = initialize(&top, output)?;
+    let mut report = initialize_inner(&top, output, Some(consent))?;
     report.persona_remote = Some(persona_remote);
     report.agent_mail_registration = Some(agent_mail_registration);
     report.rch_lane = Some(rch_lane);
@@ -3600,11 +3769,11 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
 fn initialize_inner(
     repo_root: &Path,
     output: &Path,
-    trusted_init: bool,
+    consent: Option<&TrustedInitConsent>,
 ) -> Result<InitReport, InceptionError> {
     let manifest = build_manifest(repo_root)?;
     let bytes = render_manifest(&manifest).into_bytes();
-    verify_agents_ownership(repo_root, trusted_init)?;
+    let trusted_init = trusted_init_decision(repo_root, consent)?;
     // ONE pre-state read answers both questions: did the artifact exist, and
     // does its content differ. Reading twice would let the two answers come
     // from two different moments.
@@ -3636,10 +3805,11 @@ fn initialize_inner(
     }
     let journal_path = default_repo_journal(repo_root);
     let journal_rows = emit_init_event(repo_root)?;
-    let monitor_rows = verify_artifact(&journal_path).map_err(|error| InceptionError::Readback {
-        path: journal_path,
-        detail: format!("monitor reread failed: {error}"),
-    })?;
+    let monitor_rows =
+        verify_artifact(&journal_path).map_err(|error| InceptionError::Readback {
+            path: journal_path,
+            detail: format!("monitor reread failed: {error}"),
+        })?;
     // THE 1:1 LAW, stated where it can be enforced rather than left to a
     // reader of two counts. Superseding pre-existing content without a
     // snapshot is unrecoverable, so it is a typed refusal, not a low ratio.
@@ -3667,6 +3837,7 @@ fn initialize_inner(
         persona_remote: None,
         agent_mail_registration: None,
         rch_lane: None,
+        trusted_init,
         actions,
         backup,
         journal_rows,
@@ -3678,27 +3849,31 @@ fn initialize_inner(
     })
 }
 
-pub fn write_inception(repo_root: &Path, output: &Path) -> Result<InceptionManifest, InceptionError> {
-    write_inception_inner(repo_root, output, false)
-}
-
-/// Explicit opt-in write over an unstamped foreign AGENTS.md. Identical flow to
-/// [`write_inception`], minus the ownership refusal.
-pub fn write_inception_trusted(
+pub fn write_inception(
     repo_root: &Path,
     output: &Path,
 ) -> Result<InceptionManifest, InceptionError> {
-    write_inception_inner(repo_root, output, true)
+    write_inception_inner(repo_root, output, None)
+}
+
+/// Explicit consent-taking write over a foreign AGENTS.md.
+pub fn write_inception_trusted(
+    repo_root: &Path,
+    output: &Path,
+    consent: &TrustedInitConsent,
+) -> Result<InceptionManifest, InceptionError> {
+    write_inception_inner(repo_root, output, Some(consent))
 }
 
 fn write_inception_inner(
     repo_root: &Path,
     output: &Path,
-    trusted_init: bool,
+    consent: Option<&TrustedInitConsent>,
 ) -> Result<InceptionManifest, InceptionError> {
     let manifest = build_manifest(repo_root)?;
-    verify_agents_ownership(repo_root, trusted_init)?;
+    let trusted_init = trusted_init_decision(repo_root, consent)?;
     let bytes = render_manifest(&manifest).into_bytes();
+    let _trusted_init = trusted_init;
     let should_write = match fs::read(output) {
         Ok(existing) if existing == bytes => false,
         Ok(_) => {
@@ -3733,7 +3908,14 @@ fn write_inception_inner(
         // L5 writer (5iwj): the write+fsync+readback success chokepoint records one
         // S1.L4 -> S1.L5 row. The source stage matches the supervisor-tick L5 row so
         // journal readers see one consistent S1.L4 -> S1.L5 transition.
-        emit_stage_event(repo_root, Layer::L5, "S1.L4", "S1.L5", "ompo-init", "INIT_WRITE_OK")?;
+        emit_stage_event(
+            repo_root,
+            Layer::L5,
+            "S1.L4",
+            "S1.L5",
+            "ompo-init",
+            "INIT_WRITE_OK",
+        )?;
     }
     Ok(manifest)
 }
@@ -3790,6 +3972,20 @@ fn fixture() -> (TempDir, PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn explicit_consent(root: &Path, decision_id: &str) -> TrustedInitConsent {
+        let repository_scope = root.canonicalize().expect("canonical consent scope");
+        let source_revision = source_revision(&repository_scope).expect("consent revision");
+        let policy_sha256 = sha256_hex(
+            &fs::read(repository_scope.join("AGENTS.md")).expect("consent policy bytes"),
+        );
+        TrustedInitConsent::Explicit {
+            decision_id: decision_id.to_owned(),
+            repository_scope,
+            source_revision,
+            policy_sha256,
+        }
+    }
     #[test]
     fn writes_and_reads_all_required_fields() {
         let (directory, output) = fixture();
@@ -4042,7 +4238,8 @@ mod tests {
         let (directory, output) = fixture();
         fs::write(directory.path().join("AGENTS.md"), "foreign template\n")
             .expect("foreign agents file");
-        write_inception_trusted(directory.path(), &output).expect("opt-in writes");
+        let consent = explicit_consent(directory.path(), "unit-write");
+        write_inception_trusted(directory.path(), &output, &consent).expect("opt-in writes");
         assert!(output.exists(), "opt-in must produce the artifact");
     }
 
@@ -4053,7 +4250,14 @@ mod tests {
         let (directory, output) = fixture();
         fs::write(directory.path().join("AGENTS.md"), "foreign template\n")
             .expect("foreign agents file");
-        initialize_trusted(directory.path(), &output).expect("opt-in initializes");
+        let consent = explicit_consent(directory.path(), "unit-initialize");
+        let report = initialize_trusted(directory.path(), &output, &consent)
+            .expect("opt-in initializes");
+        assert!(matches!(
+            report.trusted_init,
+            TrustedInitDecision::ExplicitConsent { ref decision_id, .. }
+                if decision_id == "unit-initialize"
+        ));
         assert!(output.exists(), "opt-in must produce the artifact");
     }
 

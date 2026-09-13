@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
 //! L5 inception durability laws, observed through the PRODUCTION public seam
-//! (`ompo_start::inception::write_inception_trusted`) rather than asserted
+//! (`ompo_start::inception::write_inception`) rather than asserted
 //! against source text.
 //!
 //! WHY NOT A SOURCE-TEXT ASSERTION: a leg that greps for `sync_all` passes on a
@@ -29,7 +29,9 @@
 //!         the parent, which root ignores; on this lane it is inexpressible.
 //! Both need an injectable sync seam or an in-module unit test.
 
-use ompo_start::inception::{required_control_files, write_inception_trusted, InceptionError};
+use ompo_start::inception::{
+    required_control_files, write_inception, InceptionError, PROJECT_AGENTS_OWNERSHIP_STAMP,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -69,6 +71,11 @@ fn fixture() -> (tempfile::TempDir, PathBuf) {
         }
         fs::write(&path, "fixture\n").expect("fixture control file");
     }
+    fs::write(
+        root.join("AGENTS.md"),
+        format!("fixture {PROJECT_AGENTS_OWNERSHIP_STAMP}\n"),
+    )
+    .expect("stamped AGENTS.md");
     run_git(&root, &["init", "-q"]);
     run_git(&root, &["add", "."]);
     run_git(
@@ -147,7 +154,7 @@ fn long_destination(out_dir: &Path) -> (PathBuf, String) {
 fn inception_publishes_and_leaves_no_staging_residue() {
     let (directory, out_dir) = fixture();
     let output = out_dir.join("inception.json");
-    write_inception_trusted(directory.path(), &output).expect("known-good write");
+    write_inception(directory.path(), &output).expect("known-good write");
     let published = fs::read_to_string(&output).expect("published artifact");
     assert!(
         published.trim_start().starts_with('{') && published.contains("\"schema_version\""),
@@ -171,7 +178,7 @@ fn inception_rename_same_dir() {
     let (directory, out_dir) = fixture();
     let (destination, dest_name) = long_destination(&out_dir);
 
-    let result = write_inception_trusted(directory.path(), &destination);
+    let result = write_inception(directory.path(), &destination);
     let InceptionError::Write { path, detail } = result.expect_err("staging must refuse") else {
         panic!("expected a typed Write refusal naming the staging path");
     };
@@ -211,7 +218,7 @@ fn crash_between_write_and_rename() {
     let (directory, out_dir) = fixture();
     let (destination, dest_name) = long_destination(&out_dir);
 
-    let result = write_inception_trusted(directory.path(), &destination);
+    let result = write_inception(directory.path(), &destination);
     assert!(
         result.is_err(),
         "an unusable staging name must not report a successful publication"
