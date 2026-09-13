@@ -36,7 +36,8 @@
 
 use crate::umbrella;
 use omp_rpc_session::{
-    run_session, OmpCommand, RpcError, RpcRequest, RpcSessionConfig, TimeoutPhase, NO_CLAIM_BOUNDARY,
+    run_session, OmpCommand, RpcError, RpcRequest, RpcSessionConfig, SelectedResponses, TimeoutPhase,
+    NO_CLAIM_BOUNDARY,
 };
 use serde_json::{json, Value};
 
@@ -57,31 +58,65 @@ pub const EXIT_INSTRUMENT: u8 = 3;
 pub const EXIT_UNMEASURED: u8 = 4;
 
 /// What one `ompo state` run established.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StateOutcome {
-    /// OMP answered and the state payload is present.
-    Answered(Box<OmpState>),
-    /// OMP answered and refused. **"OMP said no" and "OMP did not answer" have opposite
-    /// remedies**, so they are never one arm.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OmpReadOutcome<T> {
+    Answered(Box<T>),
     Refused { detail: String },
-    /// OMP answered successfully and carried no state object. A protocol surprise, not a
-    /// success: a verb that reports nothing must not report identically to one that reported.
     NoPayload,
-    /// The binary is absent. UNMEASURED — this says nothing about OMP.
     Absent { detail: String },
-    /// A deadline expired. `subprocess_contract::BoundedOutcome::TimedOut -> "UNMEASURED"` is
-    /// the precedent at `crate::run_doctor`'s probe loop and it is reused rather than
-    /// reinvented: **a timeout is a restrictive terminal, never a pass.**
     TimedOut { phase: String },
-    /// Spawn, io or protocol failure. Distinct from a refusal by construction.
     TransportFailed { detail: String },
 }
 
+impl<T: Eq> Eq for OmpReadOutcome<T> {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+enum OutcomeKind {
+    Answered,
+    Refused,
+    NoPayload,
+    Absent,
+    TimedOut,
+    TransportFailed,
+}
+
+impl OutcomeKind {
+    const fn exit_code(self) -> u8 {
+        [EXIT_OK, EXIT_REFUSED, EXIT_REFUSED, EXIT_UNMEASURED, EXIT_UNMEASURED, EXIT_UNMEASURED][self as usize]
+    }
+
+    const fn envelope_status(self) -> &'static str {
+        ["OK", "DEGRADED", "DEGRADED", "UNKNOWN", "UNKNOWN", "UNKNOWN"][self as usize]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutcomeCodes([&'static str; 6]);
+
+impl OutcomeCodes {
+    pub const fn new(values: [&'static str; 6]) -> Self {
+        Self(values)
+    }
+
+    const fn get(self, kind: OutcomeKind) -> &'static str {
+        self.0[kind as usize]
+    }
+}
+
+pub trait OmpReadPayload {
+    const CODES: OutcomeCodes;
+    const NO_PAYLOAD_DETAIL: &'static str;
+
+    fn success_detail(&self) -> String;
+}
+
+pub type StateOutcome = OmpReadOutcome<OmpState>;
+
 /// The typed projection of OMP's `get_state` payload.
 ///
-/// Every field is `Option` because the payload is OMP's, not ours: a field OMP stops sending
-/// must read as absent rather than as a default. `raw` is retained whole because OMP may
-/// extend the object without changing this contract.
+/// Every field is optional because the payload belongs to OMP. `raw` retains additions.
+/// A missing field remains absent rather than acquiring a fabricated default.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OmpState {
     pub session_id: Option<String>,
@@ -96,68 +131,84 @@ pub struct OmpState {
     pub raw: Value,
 }
 
-impl StateOutcome {
+impl<T: OmpReadPayload> OmpReadOutcome<T> {
+    fn kind(&self) -> OutcomeKind {
+        match self {
+            Self::Answered(_) => OutcomeKind::Answered,
+            Self::Refused { .. } => OutcomeKind::Refused,
+            Self::NoPayload => OutcomeKind::NoPayload,
+            Self::Absent { .. } => OutcomeKind::Absent,
+            Self::TimedOut { .. } => OutcomeKind::TimedOut,
+            Self::TransportFailed { .. } => OutcomeKind::TransportFailed,
+        }
+    }
+
     #[must_use]
     pub fn reason_code(&self) -> &'static str {
-        match self {
-            Self::Answered(_) => "OMP_STATE_OK",
-            Self::Refused { .. } => "OMP_STATE_REFUSED",
-            Self::NoPayload => "OMP_STATE_NO_PAYLOAD",
-            Self::Absent { .. } => "OMP_STATE_ABSENT",
-            Self::TimedOut { .. } => "OMP_STATE_TIMEOUT_UNMEASURED",
-            Self::TransportFailed { .. } => "OMP_STATE_TRANSPORT_FAILED",
-        }
+        T::CODES.get(self.kind())
     }
 
     #[must_use]
     pub fn exit_code(&self) -> u8 {
-        match self {
-            Self::Answered(_) => EXIT_OK,
-            Self::Refused { .. } | Self::NoPayload => EXIT_REFUSED,
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. } => {
-                EXIT_UNMEASURED
-            }
-        }
+        self.kind().exit_code()
     }
 
-    /// The envelope status. An unreachable OMP is `UNKNOWN`, never `DOWN`: we did not measure
-    /// OMP, we failed to reach it.
     #[must_use]
     pub fn envelope_status(&self) -> &'static str {
-        match self {
-            Self::Answered(_) => "OK",
-            Self::Refused { .. } | Self::NoPayload => "DEGRADED",
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. } => "UNKNOWN",
-        }
+        self.kind().envelope_status()
     }
 
-    /// True when nothing about OMP was established.
     #[must_use]
     pub fn is_unmeasured(&self) -> bool {
-        matches!(
-            self,
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. }
-        )
+        self.exit_code() == EXIT_UNMEASURED
     }
 
     #[must_use]
     pub fn detail(&self) -> String {
         match self {
-            Self::Answered(state) => format!(
-                "session_id={} model={}",
-                state.session_id.as_deref().unwrap_or("absent"),
-                state.model.as_deref().unwrap_or("absent")
-            ),
-            Self::Refused { detail } | Self::TransportFailed { detail } => detail.clone(),
-            Self::Absent { detail } => detail.clone(),
-            Self::NoPayload => {
-                "OMP answered successfully and carried no state object".to_owned()
-            }
+            Self::Answered(payload) => payload.success_detail(),
+            Self::Refused { detail }
+            | Self::Absent { detail }
+            | Self::TransportFailed { detail } => detail.clone(),
+            Self::NoPayload => T::NO_PAYLOAD_DETAIL.to_owned(),
             Self::TimedOut { phase } => format!("deadline expired in phase={phase}"),
         }
     }
 }
+/// Render sorted `(name, count)` pairs for compact human output.
+#[must_use]
+pub fn render_counts(counts: &[(String, usize)]) -> String {
+    if counts.is_empty() {
+        return "absent".to_owned();
+    }
+    counts
+        .iter()
+        .map(|(name, count)| format!("{name}:{count}"))
+        .collect::<Vec<_>>()
+        .join(",")
+}
 
+
+impl OmpReadPayload for OmpState {
+    const CODES: OutcomeCodes = OutcomeCodes::new([
+        "OMP_STATE_OK",
+        "OMP_STATE_REFUSED",
+        "OMP_STATE_NO_PAYLOAD",
+        "OMP_STATE_ABSENT",
+        "OMP_STATE_TIMEOUT_UNMEASURED",
+        "OMP_STATE_TRANSPORT_FAILED",
+    ]);
+    const NO_PAYLOAD_DETAIL: &'static str =
+        "OMP answered successfully and carried no state object";
+
+    fn success_detail(&self) -> String {
+        format!(
+            "session_id={} model={}",
+            self.session_id.as_deref().unwrap_or("absent"),
+            self.model.as_deref().unwrap_or("absent")
+        )
+    }
+}
 /// OMP's `model` is an OBJECT, not a string — measured against `omp/18.1.14`: eighteen keys
 /// including `id`, `name` and `provider`. A first pass read it with `as_str()` and reported
 /// `model=absent` for a field that WAS present, which is the honest failure direction but
@@ -198,45 +249,106 @@ pub fn project(data: &Value, lifecycle: &str, negotiated: u32) -> OmpState {
 /// outcome**, and the mapping is the whole point: a spawn failure and a refusal must not share
 /// a code.
 #[must_use]
-pub fn classify_error(error: &RpcError) -> StateOutcome {
+pub fn classify_error_for<T>(error: &RpcError) -> OmpReadOutcome<T> {
     match error {
         RpcError::Process { operation, detail } => {
-            // A missing binary surfaces here as a spawn failure. It is ABSENT, not a
-            // transport defect, because nothing was ever reached.
             if operation == "spawn" {
-                StateOutcome::Absent {
+                OmpReadOutcome::Absent {
                     detail: detail.clone(),
                 }
             } else {
-                StateOutcome::TransportFailed {
+                OmpReadOutcome::TransportFailed {
                     detail: format!("{operation}: {detail}"),
                 }
             }
         }
-        RpcError::InvalidSessionSelector { detail } => StateOutcome::TransportFailed {
+        RpcError::InvalidSessionSelector { detail } => OmpReadOutcome::TransportFailed {
             detail: format!("invalid existing-session selector: {detail}"),
         },
-        RpcError::ProcessExited { code } => StateOutcome::TransportFailed {
+        RpcError::ProcessExited { code } => OmpReadOutcome::TransportFailed {
             detail: format!(
                 "omp exited before answering, code={}",
-                code.map_or_else(|| "none".to_owned(), |c| c.to_string())
+                code.map_or_else(|| "none".to_owned(), |value| value.to_string())
             ),
         },
-        RpcError::Cancelled { detail } => StateOutcome::TimedOut {
+        RpcError::Cancelled { detail } => OmpReadOutcome::TimedOut {
             phase: format!("cancelled: {detail}"),
         },
-        RpcError::Timeout { phase } => StateOutcome::TimedOut {
+        RpcError::Timeout { phase } => OmpReadOutcome::TimedOut {
             phase: timeout_phase(*phase).to_owned(),
         },
-        RpcError::Protocol(protocol) => StateOutcome::TransportFailed {
+        RpcError::Protocol(protocol) => OmpReadOutcome::TransportFailed {
             detail: format!("protocol: {protocol}"),
         },
-        RpcError::Io { stream, detail } => StateOutcome::TransportFailed {
+        RpcError::Io { stream, detail } => OmpReadOutcome::TransportFailed {
             detail: format!("io on {stream}: {detail}"),
         },
-        RpcError::Cleanup { primary, detail } => StateOutcome::TransportFailed {
+        RpcError::Cleanup { primary, detail } => OmpReadOutcome::TransportFailed {
             detail: format!("cleanup after {}: {detail}", primary_label(primary)),
         },
+    }
+}
+
+#[must_use]
+pub fn classify_error(error: &RpcError) -> StateOutcome {
+    classify_error_for(error)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+pub enum ProjectionMethod {
+    SessionStats,
+    Messages,
+    AvailableModels,
+}
+
+impl ProjectionMethod {
+    const fn request(self) -> RpcRequest { [RpcRequest::GetSessionStats, RpcRequest::GetMessages, RpcRequest::GetAvailableModels][self as usize] }
+
+    fn selected(self, responses: &SelectedResponses) -> Option<&Value> {
+        match self {
+            Self::SessionStats => responses.session_stats.as_ref(),
+            Self::Messages => responses.messages.as_ref(),
+            Self::AvailableModels => responses.available_models.as_ref(),
+        }
+    }
+}
+
+pub async fn read_projection<T, F>(
+    cx: &asupersync::Cx,
+    binary: &str,
+    method: ProjectionMethod,
+    project: F,
+) -> OmpReadOutcome<T>
+where
+    T: OmpReadPayload,
+    F: FnOnce(&Value, &str, u32) -> Option<T>,
+{
+    let request = method.request();
+    let config = RpcSessionConfig::with_command(OmpCommand::new(binary))
+        .with_requests([RpcRequest::NegotiateProtocol, request]);
+    match run_session(cx, &config).await {
+        Ok(report) => {
+            let command = request.command();
+            if let Some(refusal) = report
+                .responses
+                .iter()
+                .find(|response| !response.success && response.command.as_str() == command)
+            {
+                return OmpReadOutcome::Refused {
+                    detail: refusal.error.clone().unwrap_or_else(|| {
+                        format!("omp refused {command} without an error string")
+                    }),
+                };
+            }
+            method
+                .selected(&report.selected)
+                .and_then(|data| project(data, report.lifecycle.as_str(), report.negotiated.0))
+                .map_or(OmpReadOutcome::NoPayload, |payload| {
+                    OmpReadOutcome::Answered(Box::new(payload))
+                })
+        }
+        Err(error) => classify_error_for(&error),
     }
 }
 

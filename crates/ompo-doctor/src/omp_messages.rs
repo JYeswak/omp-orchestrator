@@ -36,9 +36,12 @@
 //! answered and this session has no messages" and "OMP answered and did not send the messages
 //! field at all" have different remedies, so they are never one arm.
 
-use crate::omp_state::{self, StateOutcome, EXIT_OK, EXIT_REFUSED, EXIT_UNMEASURED};
+use crate::omp_state::{
+    self, classify_error_for, read_projection, render_counts, OmpReadOutcome, OmpReadPayload,
+    OutcomeCodes, ProjectionMethod, EXIT_OK, EXIT_REFUSED, EXIT_UNMEASURED,
+};
 use crate::umbrella;
-use omp_rpc_session::{RpcRequest, run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY};
+use omp_rpc_session::{RpcError, RpcRequest, NO_CLAIM_BOUNDARY};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -49,27 +52,7 @@ pub const ADOPTED_METHOD: &str = "get_messages";
 /// What one `ompo messages` run established. The same six arms as
 /// [`crate::omp_state::StateOutcome`] — one per cause — with reason codes of its own so a
 /// reader can tell WHICH surface reported.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MessagesOutcome {
-    /// OMP answered and the messages array is present. An EMPTY array lands here, with
-    /// `count == 0`: it is an answer about the session, not a failure to answer.
-    Answered(Box<OmpMessages>),
-    /// OMP answered and refused. **"OMP said no" and "OMP did not answer" have opposite
-    /// remedies**, so they are never one arm.
-    Refused { detail: String },
-    /// OMP answered successfully and carried no `messages` array — the key is missing, or is
-    /// present with a non-array type. A protocol surprise, NOT an empty session.
-    NoPayload,
-    /// The binary is absent. UNMEASURED — this says nothing about OMP.
-    Absent { detail: String },
-    /// A deadline expired. A timeout is a restrictive terminal, never a pass.
-    TimedOut { phase: String },
-    /// Spawn, io or protocol failure. Distinct from a refusal by construction.
-    TransportFailed { detail: String },
-}
-
-/// The typed projection of OMP's `get_messages` payload.
-///
+pub type MessagesOutcome = OmpReadOutcome<OmpMessages>;
 /// `count` and the histogram are counts OF AN ARRAY THAT WAS PRESENT; the absence of the
 /// array is [`MessagesOutcome::NoPayload`] and never a zero here.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,73 +83,24 @@ pub struct MessageSummary {
     pub content_bytes: Option<usize>,
 }
 
-impl MessagesOutcome {
-    #[must_use]
-    pub fn reason_code(&self) -> &'static str {
-        match self {
-            Self::Answered(_) => "OMP_MESSAGES_OK",
-            Self::Refused { .. } => "OMP_MESSAGES_REFUSED",
-            Self::NoPayload => "OMP_MESSAGES_NO_PAYLOAD",
-            Self::Absent { .. } => "OMP_MESSAGES_ABSENT",
-            Self::TimedOut { .. } => "OMP_MESSAGES_TIMEOUT_UNMEASURED",
-            Self::TransportFailed { .. } => "OMP_MESSAGES_TRANSPORT_FAILED",
-        }
-    }
+impl OmpReadPayload for OmpMessages {
+    const CODES: OutcomeCodes = OutcomeCodes::new([
+        "OMP_MESSAGES_OK",
+        "OMP_MESSAGES_REFUSED",
+        "OMP_MESSAGES_NO_PAYLOAD",
+        "OMP_MESSAGES_ABSENT",
+        "OMP_MESSAGES_TIMEOUT_UNMEASURED",
+        "OMP_MESSAGES_TRANSPORT_FAILED",
+    ]);
+    const NO_PAYLOAD_DETAIL: &'static str = "OMP answered successfully and carried no messages array; an EMPTY array is a success and is NOT reported here";
 
-    /// The exit code, from [`crate::omp_state`]'s dictionary rather than a second one.
-    ///
-    /// `Answered` is `EXIT_OK` **including when `count == 0`**. Spending a non-zero code on
-    /// "ran fine, no results" would make the code unreadable: a caller cannot then tell an
-    /// empty session from a refusal without parsing prose.
-    #[must_use]
-    pub fn exit_code(&self) -> u8 {
-        match self {
-            Self::Answered(_) => EXIT_OK,
-            Self::Refused { .. } | Self::NoPayload => EXIT_REFUSED,
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. } => {
-                EXIT_UNMEASURED
-            }
-        }
-    }
-
-    /// The envelope status. An unreachable OMP is `UNKNOWN`, never `DOWN`: we did not measure
-    /// OMP, we failed to reach it.
-    #[must_use]
-    pub fn envelope_status(&self) -> &'static str {
-        match self {
-            Self::Answered(_) => "OK",
-            Self::Refused { .. } | Self::NoPayload => "DEGRADED",
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. } => "UNKNOWN",
-        }
-    }
-
-    /// True when nothing about OMP was established.
-    #[must_use]
-    pub fn is_unmeasured(&self) -> bool {
-        matches!(
-            self,
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. }
+    fn success_detail(&self) -> String {
+        format!(
+            "count={} first_role={} last_role={}",
+            self.count,
+            self.first_role.as_deref().unwrap_or("absent"),
+            self.last_role.as_deref().unwrap_or("absent")
         )
-    }
-
-    #[must_use]
-    pub fn detail(&self) -> String {
-        match self {
-            Self::Answered(messages) => format!(
-                "count={} first_role={} last_role={}",
-                messages.count,
-                messages.first_role.as_deref().unwrap_or("absent"),
-                messages.last_role.as_deref().unwrap_or("absent")
-            ),
-            Self::Refused { detail } | Self::TransportFailed { detail } => detail.clone(),
-            Self::Absent { detail } => detail.clone(),
-            Self::NoPayload => {
-                "OMP answered successfully and carried no messages array; an EMPTY array is a \
-                 success and is NOT reported here"
-                    .to_owned()
-            }
-            Self::TimedOut { phase } => format!("deadline expired in phase={phase}"),
-        }
     }
 }
 
@@ -226,38 +160,10 @@ pub fn project(data: &Value, lifecycle: &str, negotiated: u32) -> Option<OmpMess
         raw: data.clone(),
     })
 }
-
-/// Convert the shared classifier's verdict onto this verb's arms.
-///
-/// [`crate::omp_state::classify_error`] owns the `RpcError` mapping; duplicating it would let
-/// the two verbs disagree about what a spawn failure is. This function is the ONLY translation
-/// layer, and it is total: the classifier's payload-bearing arms cannot arise from an error, so
-/// they land on `TransportFailed` with a detail that says so rather than on a silent default.
-#[must_use]
-pub fn from_state_outcome(outcome: &StateOutcome) -> MessagesOutcome {
-    match outcome {
-        StateOutcome::Refused { detail } => MessagesOutcome::Refused {
-            detail: detail.clone(),
-        },
-        StateOutcome::Absent { detail } => MessagesOutcome::Absent {
-            detail: detail.clone(),
-        },
-        StateOutcome::TimedOut { phase } => MessagesOutcome::TimedOut {
-            phase: phase.clone(),
-        },
-        StateOutcome::TransportFailed { detail } => MessagesOutcome::TransportFailed {
-            detail: detail.clone(),
-        },
-        StateOutcome::NoPayload | StateOutcome::Answered(_) => MessagesOutcome::TransportFailed {
-            detail: "classifier returned a payload arm for a transport error".to_owned(),
-        },
-    }
-}
-
-/// Map a transport error onto this verb's taxonomy, via the shared classifier.
+/// Map a transport error through the shared generic classifier.
 #[must_use]
 pub fn classify_error(error: &RpcError) -> MessagesOutcome {
-    from_state_outcome(&omp_state::classify_error(error))
+    classify_error_for(error)
 }
 /// The exact request set this verb issues: the handshake plus its own method.
 ///
@@ -275,64 +181,17 @@ pub fn request_set() -> [RpcRequest; 2] {
 ///
 /// `&Cx` first, per the asupersync contract; cancellation belongs to the caller.
 pub async fn read_messages(cx: &asupersync::Cx, binary: &str) -> MessagesOutcome {
-    // NARROWED per pane 1's selector ruling. Requesting only what this verb reports
-    // does two things: it makes `ADOPTED_METHOD` honest BY CONSTRUCTION -- a report can no
-    // longer name a method the session did not issue -- and it removes the `get_messages`
-    // verb from paying a deadline for methods it never asked about. %8 measured that the
-    // four-request sequence TIMES OUT at `get_messages` on a resumed session, so a wide
-    // default is a known-bad wait for every narrow caller.
-    let config = RpcSessionConfig::with_command(OmpCommand::new(binary))
-        .with_requests(request_set());
-    match run_session(cx, &config).await {
-        Ok(report) => {
-            let negotiated = report.negotiated.0;
-            let lifecycle = report.lifecycle.as_str();
-            if let Some(refusal) = report
-                .responses
-                .iter()
-                .find(|response| !response.success && response.command.as_str() == ADOPTED_METHOD)
-            {
-                return MessagesOutcome::Refused {
-                    detail: refusal.error.clone().unwrap_or_else(|| {
-                        "omp refused get_messages without an error string".to_owned()
-                    }),
-                };
-            }
-            report
-                .selected
-                .messages
-                .as_ref()
-                .and_then(|data| project(data, lifecycle, negotiated))
-                .map_or(MessagesOutcome::NoPayload, |messages| {
-                    MessagesOutcome::Answered(Box::new(messages))
-                })
-        }
-        Err(error) => classify_error(&error),
-    }
+    read_projection(cx, binary, ProjectionMethod::Messages, project).await
 }
 
-/// Render the role histogram deterministically: `role:count` pairs, ascending by role.
-fn render_roles(roles: &[(String, usize)]) -> String {
-    if roles.is_empty() {
-        // Not a hidden zero: `count=` on the same line says whether the session was empty or
-        // whether every member omitted its `role` key.
-        return "absent".to_owned();
-    }
-    roles
-        .iter()
-        .map(|(role, count)| format!("{role}:{count}"))
-        .collect::<Vec<_>>()
-        .join(",")
-}
-
-/// The human line. Success only; a refusal prints its reason code on stderr instead.
+/// Render the successful message summary for a human operator.
 #[must_use]
 pub fn render(messages: &OmpMessages) -> String {
     format!(
         "OMPO_OMP_MESSAGES count={} roles={} first_role={} last_role={} lifecycle={} \
          protocol={} adopted_method={ADOPTED_METHOD}",
         messages.count,
-        render_roles(&messages.roles),
+        render_counts(&messages.roles),
         messages.first_role.as_deref().unwrap_or("absent"),
         messages.last_role.as_deref().unwrap_or("absent"),
         messages.lifecycle,

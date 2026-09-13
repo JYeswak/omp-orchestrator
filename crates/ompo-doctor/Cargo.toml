@@ -41,14 +41,14 @@ sha2 = "0.11"
 # an array of objects each carrying non-empty `kind`, `name` and `call_site` strings; a missing
 # or empty field is an emitted defect, not a silent skip.
 #
-# These three replace the hand-typed 21-name candidate list in `omp-inventory-map`'s
-# `classification_for`, which could only ever name this crate as an owner. Every method below
-# was measured to ANSWER a live omp/18.1.14 before its verb was written, and each is reachable
-# as `ompo <verb>`.
+# These typed declarations replace the old hand-maintained candidate list. Every method
+# below was measured to answer a live OMP process before its verb was written; each is
+# reachable as `ompo <verb>`. The model catalog shape was re-measured on omp/18.1.19.
 [package.metadata.omp_surface]
 consumes = [
     { kind = "rpc_handler", name = "get_state", call_site = "src/omp_state.rs" },
     { kind = "rpc_handler", name = "get_session_stats", call_site = "src/omp_stats.rs" },
     { kind = "rpc_handler", name = "get_messages", call_site = "src/omp_messages.rs" },
+    { kind = "rpc_handler", name = "get_available_models", call_site = "src/omp_models.rs" },
     { kind = "daemon_process", name = "omp ps", call_site = "src/omp_process.rs" },
 ]

@@ -26,6 +26,7 @@ pub mod health_repair;
 pub(crate) mod revision_env;
 pub mod liveness;
 pub mod omp_messages;
+pub mod omp_models;
 pub mod omp_process;
 pub mod omp_state;
 pub mod omp_stats;

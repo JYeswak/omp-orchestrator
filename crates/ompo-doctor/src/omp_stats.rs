@@ -41,9 +41,14 @@
 //! the integer OMP sends today and the float a busier session sends; `as_u64` alone would
 //! report `cost=absent` the moment a session spent a fraction of a cent.
 
-use crate::omp_state::{classify_error, StateOutcome, EXIT_OK, EXIT_REFUSED, EXIT_UNMEASURED};
+use crate::omp_state::{
+    classify_error_for, read_projection, OmpReadOutcome, OmpReadPayload, OutcomeCodes,
+    ProjectionMethod, EXIT_OK, EXIT_REFUSED, EXIT_UNMEASURED,
+};
+#[cfg(test)]
+use crate::omp_state::StateOutcome;
 use crate::umbrella;
-use omp_rpc_session::{RpcRequest, run_session, OmpCommand, RpcSessionConfig, NO_CLAIM_BOUNDARY};
+use omp_rpc_session::{RpcRequest, NO_CLAIM_BOUNDARY};
 use serde_json::{json, Value};
 
 /// OMP's own native command this verb adopts. One method, named, so the report cannot claim
@@ -52,32 +57,15 @@ pub const ADOPTED_METHOD: &str = "get_session_stats";
 
 /// What one `ompo stats` run established.
 ///
-/// The same six arms as [`StateOutcome`], because the causes a caller must discriminate are
+/// The same six arms as [`crate::omp_state::StateOutcome`], because callers discriminate
 /// the same six causes — but with its OWN reason codes, so a log line naming
 /// `OMP_STATS_REFUSED` cannot be mistaken for the state verb's refusal.
-#[derive(Debug, Clone, PartialEq)]
-pub enum StatsOutcome {
-    /// OMP answered and the session-stats payload is present.
-    Answered(Box<OmpStats>),
-    /// OMP answered and refused. **"OMP said no" and "OMP did not answer" have opposite
-    /// remedies**, so they are never one arm.
-    Refused { detail: String },
-    /// OMP answered successfully and carried no stats object. A protocol surprise, not a
-    /// success: a verb that reports nothing must not report identically to one that reported.
-    NoPayload,
-    /// The binary is absent. UNMEASURED — this says nothing about OMP.
-    Absent { detail: String },
-    /// A deadline expired. A timeout is a restrictive terminal, never a pass.
-    TimedOut { phase: String },
-    /// Spawn, io or protocol failure. Distinct from a refusal by construction.
-    TransportFailed { detail: String },
-}
+pub type StatsOutcome = OmpReadOutcome<OmpStats>;
 
-/// OMP's `tokens` object, measured: six counters, all optional.
+/// OMP's `tokens` object, measured as optional counters.
 ///
-/// A nested object gets its own typed struct rather than a bare `Value`, so a caller reading
-/// `tokens.total` is reading a NAMED field this module promised, not indexing into whatever
-/// OMP happened to send.
+/// A nested object gets a typed struct so callers never index an accidental shape.
+/// `tokens.total` remains a named field rather than an untyped lookup.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TokenCounts {
     pub cache_read: Option<u64>,
@@ -125,85 +113,25 @@ pub struct OmpStats {
     pub raw: Value,
 }
 
-impl StatsOutcome {
-    #[must_use]
-    pub fn reason_code(&self) -> &'static str {
-        match self {
-            Self::Answered(_) => "OMP_STATS_OK",
-            Self::Refused { .. } => "OMP_STATS_REFUSED",
-            Self::NoPayload => "OMP_STATS_NO_PAYLOAD",
-            Self::Absent { .. } => "OMP_STATS_ABSENT",
-            Self::TimedOut { .. } => "OMP_STATS_TIMEOUT_UNMEASURED",
-            Self::TransportFailed { .. } => "OMP_STATS_TRANSPORT_FAILED",
-        }
-    }
+impl OmpReadPayload for OmpStats {
+    const CODES: OutcomeCodes = OutcomeCodes::new([
+        "OMP_STATS_OK",
+        "OMP_STATS_REFUSED",
+        "OMP_STATS_NO_PAYLOAD",
+        "OMP_STATS_ABSENT",
+        "OMP_STATS_TIMEOUT_UNMEASURED",
+        "OMP_STATS_TRANSPORT_FAILED",
+    ]);
+    const NO_PAYLOAD_DETAIL: &'static str =
+        "OMP answered successfully and carried no session-stats object";
 
-    #[must_use]
-    pub fn exit_code(&self) -> u8 {
-        match self {
-            Self::Answered(_) => EXIT_OK,
-            Self::Refused { .. } | Self::NoPayload => EXIT_REFUSED,
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. } => {
-                EXIT_UNMEASURED
-            }
-        }
-    }
-
-    /// The envelope status. An unreachable OMP is `UNKNOWN`, never `DOWN`: we did not measure
-    /// OMP, we failed to reach it.
-    #[must_use]
-    pub fn envelope_status(&self) -> &'static str {
-        match self {
-            Self::Answered(_) => "OK",
-            Self::Refused { .. } | Self::NoPayload => "DEGRADED",
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. } => "UNKNOWN",
-        }
-    }
-
-    /// True when nothing about OMP was established.
-    #[must_use]
-    pub fn is_unmeasured(&self) -> bool {
-        matches!(
-            self,
-            Self::Absent { .. } | Self::TimedOut { .. } | Self::TransportFailed { .. }
+    fn success_detail(&self) -> String {
+        format!(
+            "session_id={} messages={} tokens_total={}",
+            self.session_id.as_deref().unwrap_or("absent"),
+            absent_or(self.total_messages),
+            absent_or(self.tokens.as_ref().and_then(|tokens| tokens.total)),
         )
-    }
-
-    #[must_use]
-    pub fn detail(&self) -> String {
-        match self {
-            Self::Answered(stats) => format!(
-                "session_id={} messages={} tokens_total={}",
-                stats.session_id.as_deref().unwrap_or("absent"),
-                absent_or(stats.total_messages),
-                absent_or(stats.tokens.as_ref().and_then(|t| t.total)),
-            ),
-            Self::Refused { detail } | Self::TransportFailed { detail } => detail.clone(),
-            Self::Absent { detail } => detail.clone(),
-            Self::NoPayload => {
-                "OMP answered successfully and carried no session-stats object".to_owned()
-            }
-            Self::TimedOut { phase } => format!("deadline expired in phase={phase}"),
-        }
-    }
-}
-
-/// Translate the SHARED transport classification into this verb's vocabulary.
-///
-/// The mapping is arm-for-arm and total, so a cause cannot be silently collapsed into a
-/// neighbour. [`StateOutcome::Answered`] is unreachable from [`classify_error`] — it only
-/// ever returns failure arms — but it is handled rather than panicked on, because a
-/// classifier that grew a new return path must not take the process down.
-fn adopt(outcome: StateOutcome) -> StatsOutcome {
-    match outcome {
-        StateOutcome::Refused { detail } => StatsOutcome::Refused { detail },
-        StateOutcome::NoPayload => StatsOutcome::NoPayload,
-        StateOutcome::Absent { detail } => StatsOutcome::Absent { detail },
-        StateOutcome::TimedOut { phase } => StatsOutcome::TimedOut { phase },
-        StateOutcome::TransportFailed { detail } => StatsOutcome::TransportFailed { detail },
-        StateOutcome::Answered(_) => StatsOutcome::TransportFailed {
-            detail: "the transport classifier returned a state payload for an error".to_owned(),
-        },
     }
 }
 
@@ -276,43 +204,19 @@ pub fn request_set() -> [RpcRequest; 2] {
     [RpcRequest::NegotiateProtocol, RpcRequest::GetSessionStats]
 }
 
+fn classify_stats_error(error: &omp_rpc_session::RpcError) -> StatsOutcome {
+    classify_error_for(error)
+}
+
 
 /// Drive one bounded OMP `--mode=rpc` session and read its session stats.
 ///
 /// `&Cx` first, per the asupersync contract; cancellation belongs to the caller.
 pub async fn read_stats(cx: &asupersync::Cx, binary: &str) -> StatsOutcome {
-    // NARROWED per pane 1's selector ruling. Requesting only what this verb reports
-    // does two things: it makes `ADOPTED_METHOD` honest BY CONSTRUCTION -- a report can no
-    // longer name a method the session did not issue -- and it removes the `get_session_stats`
-    // verb from paying a deadline for methods it never asked about. %8 measured that the
-    // four-request sequence TIMES OUT at `get_messages` on a resumed session, so a wide
-    // default is a known-bad wait for every narrow caller.
-    let config = RpcSessionConfig::with_command(OmpCommand::new(binary))
-        .with_requests(request_set());
-    match run_session(cx, &config).await {
-        Ok(report) => {
-            let negotiated = report.negotiated.0;
-            let lifecycle = report.lifecycle.as_str();
-            if let Some(refusal) = report
-                .responses
-                .iter()
-                .find(|response| !response.success && response.command.as_str() == ADOPTED_METHOD)
-            {
-                return StatsOutcome::Refused {
-                    detail: refusal.error.clone().unwrap_or_else(|| {
-                        "omp refused get_session_stats without an error string".to_owned()
-                    }),
-                };
-            }
-            match report.selected.session_stats.as_ref() {
-                Some(data) => {
-                    StatsOutcome::Answered(Box::new(project(data, lifecycle, negotiated)))
-                }
-                None => StatsOutcome::NoPayload,
-            }
-        }
-        Err(error) => adopt(classify_error(&error)),
-    }
+    read_projection(cx, binary, ProjectionMethod::SessionStats, |data, lifecycle, negotiated| {
+        Some(project(data, lifecycle, negotiated))
+    })
+    .await
 }
 
 fn absent_or<T: std::fmt::Display>(value: Option<T>) -> String {
@@ -698,17 +602,17 @@ mod tests {
     fn the_shared_transport_classifier_is_delegated_to_arm_for_arm() {
         // The mapping lives ONCE, in `omp_state::classify_error`. A second copy is a second
         // place for a spawn failure to stop meaning ABSENT.
-        let spawn = adopt(classify_error(&RpcError::Process {
+        let spawn = classify_stats_error(&RpcError::Process {
             operation: "spawn".to_owned(),
             detail: "No such file or directory".to_owned(),
-        }));
+        });
         assert_eq!(spawn.reason_code(), "OMP_STATS_ABSENT");
         assert!(spawn.is_unmeasured());
 
-        let other = adopt(classify_error(&RpcError::Process {
+        let other = classify_stats_error(&RpcError::Process {
             operation: "kill".to_owned(),
             detail: "boom".to_owned(),
-        }));
+        });
         assert_eq!(other.reason_code(), "OMP_STATS_TRANSPORT_FAILED");
 
         for phase in [
@@ -716,7 +620,7 @@ mod tests {
             TimeoutPhase::Request,
             TimeoutPhase::Shutdown,
         ] {
-            let outcome = adopt(classify_error(&RpcError::Timeout { phase }));
+            let outcome = classify_stats_error(&RpcError::Timeout { phase });
             let StatsOutcome::TimedOut { phase: name } = &outcome else {
                 panic!("a timeout must classify as TimedOut, got {outcome:?}");
             };
@@ -727,7 +631,7 @@ mod tests {
             );
         }
 
-        let exited = adopt(classify_error(&RpcError::ProcessExited { code: Some(1) }));
+        let exited = classify_stats_error(&RpcError::ProcessExited { code: Some(1) });
         assert_eq!(exited.reason_code(), "OMP_STATS_TRANSPORT_FAILED");
     }
 

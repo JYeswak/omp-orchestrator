@@ -26,6 +26,7 @@
 use ompo_doctor::adapter_exec;
 use ompo_doctor::liveness::{self, Observation};
 use ompo_doctor::omp_messages;
+use ompo_doctor::omp_models;
 use ompo_doctor::omp_process;
 use ompo_doctor::omp_state;
 use ompo_doctor::omp_stats;
@@ -86,6 +87,7 @@ fn main() -> ExitCode {
         "state" => run_state(rest),
         "stats" => run_stats(rest),
         "messages" => run_messages(rest),
+        "models" => run_models(rest),
         "ps" => run_ps(rest),
         "doctor" => run_doctor_verb(rest),
         // f3maq's remaining half: the module was declared and compiled, and the
@@ -1461,7 +1463,7 @@ fn run_ps(rest: &[String]) -> ExitCode {
 
     if json_output {
         match serde_json::to_string(&omp_process::envelope(&outcome)) {
-            Ok(text) if outcome.exit_code() == omp_process::EXIT_OK => println!("{text}"),
+            Ok(text) if omp_process::ProcessProbeOutcome::exit_code(&outcome) == omp_process::EXIT_OK => println!("{text}"),
             Ok(text) => eprintln!("{text}"),
             Err(error) => {
                 eprintln!("ompo ps: OMP_PS_UNMEASURED detail=cannot encode report: {error}");
@@ -1477,115 +1479,135 @@ fn run_ps(rest: &[String]) -> ExitCode {
             outcome.detail()
         );
     }
+    ExitCode::from(omp_process::ProcessProbeOutcome::exit_code(&outcome))
+}
+#[derive(Debug, Clone, Copy)]
+#[repr(usize)]
+enum RpcProjectionVerb {
+    Stats,
+    Messages,
+    Models,
+}
+
+impl RpcProjectionVerb {
+    const fn name(self) -> &'static str {
+        ["stats", "messages", "models"][self as usize]
+    }
+}
+
+enum RpcProjectionOutcome {
+    Stats(omp_stats::StatsOutcome),
+    Messages(omp_messages::MessagesOutcome),
+    Models(omp_models::ModelsOutcome),
+}
+
+impl RpcProjectionOutcome {
+    fn exit_code(&self) -> u8 {
+        match self {
+            Self::Stats(outcome) => outcome.exit_code(),
+            Self::Messages(outcome) => outcome.exit_code(),
+            Self::Models(outcome) => outcome.exit_code(),
+        }
+    }
+
+    fn envelope(&self) -> Value {
+        match self {
+            Self::Stats(outcome) => omp_stats::envelope(outcome),
+            Self::Messages(outcome) => omp_messages::envelope(outcome),
+            Self::Models(outcome) => omp_models::envelope(outcome),
+        }
+    }
+
+    fn rendered(&self) -> Option<String> {
+        match self {
+            Self::Stats(omp_stats::StatsOutcome::Answered(stats)) => Some(omp_stats::render(stats)),
+            Self::Messages(omp_messages::MessagesOutcome::Answered(messages)) => {
+                Some(omp_messages::render(messages))
+            }
+            Self::Models(omp_models::ModelsOutcome::Answered(models)) => {
+                Some(omp_models::render(models))
+            }
+            _ => None,
+        }
+    }
+
+    fn reason_and_detail(&self) -> (&'static str, String) {
+        match self {
+            Self::Stats(outcome) => (outcome.reason_code(), outcome.detail()),
+            Self::Messages(outcome) => (outcome.reason_code(), outcome.detail()),
+            Self::Models(outcome) => (outcome.reason_code(), outcome.detail()),
+        }
+    }
+}
+
+fn run_rpc_projection(rest: &[String], verb: RpcProjectionVerb) -> ExitCode {
+    let name = verb.name();
+    for arg in rest {
+        if arg != "--json" {
+            eprintln!(
+                "ompo {name}: unknown argument {arg:?} hint=`ompo {name} [--json]` drives one bounded OMP --mode=rpc session"
+            );
+            return ExitCode::from(EXIT_BAD_INVOCATION);
+        }
+    }
+
+    let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            eprintln!("ompo {name}: OMP_RUNTIME_UNAVAILABLE detail={error}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+    let outcome = runtime.block_on(async {
+        let Some(cx) = asupersync::Cx::current() else {
+            return Err("no runtime context");
+        };
+        Ok(match verb {
+            RpcProjectionVerb::Stats => {
+                RpcProjectionOutcome::Stats(omp_stats::read_stats(&cx, "omp").await)
+            }
+            RpcProjectionVerb::Messages => {
+                RpcProjectionOutcome::Messages(omp_messages::read_messages(&cx, "omp").await)
+            }
+            RpcProjectionVerb::Models => {
+                RpcProjectionOutcome::Models(omp_models::read_models(&cx, "omp").await)
+            }
+        })
+    });
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(detail) => {
+            eprintln!("ompo {name}: OMP_RUNTIME_UNAVAILABLE detail={detail}");
+            return ExitCode::from(EXIT_INSTRUMENT);
+        }
+    };
+
+    if wants_json(rest) {
+        match serde_json::to_string(&outcome.envelope()) {
+            Ok(text) if outcome.exit_code() == omp_state::EXIT_OK => println!("{text}"),
+            Ok(text) => eprintln!("{text}"),
+            Err(error) => {
+                eprintln!("ompo {name}: cannot encode report: {error}");
+                return ExitCode::from(EXIT_INSTRUMENT);
+            }
+        }
+    } else if let Some(line) = outcome.rendered() {
+        println!("{line}");
+    } else {
+        let (reason, detail) = outcome.reason_and_detail();
+        eprintln!("ompo {name}: {reason} detail={detail}");
+    }
     ExitCode::from(outcome.exit_code())
 }
 
-/// `tokens`, `toolCalls` or `premiumRequests` from OMP at all.
 fn run_stats(rest: &[String]) -> ExitCode {
-    for arg in rest {
-        if arg != "--json" {
-            eprintln!(
-                "ompo stats: unknown argument {arg:?} \
-                 hint=`ompo stats [--json]` drives one bounded OMP --mode=rpc session"
-            );
-            return ExitCode::from(EXIT_BAD_INVOCATION);
-        }
-    }
-    let json = wants_json(rest);
-    let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            eprintln!("ompo stats: OMP_STATS_RUNTIME_UNAVAILABLE detail={error}");
-            return ExitCode::from(EXIT_INSTRUMENT);
-        }
-    };
-    let outcome = runtime.block_on(async {
-        match asupersync::Cx::current() {
-            Some(cx) => Ok(omp_stats::read_stats(&cx, "omp").await),
-            None => Err("no runtime context"),
-        }
-    });
-    let outcome = match outcome {
-        Ok(outcome) => outcome,
-        Err(detail) => {
-            eprintln!("ompo stats: OMP_STATS_RUNTIME_UNAVAILABLE detail={detail}");
-            return ExitCode::from(EXIT_INSTRUMENT);
-        }
-    };
-    if json {
-        match serde_json::to_string(&omp_stats::envelope(&outcome)) {
-            Ok(text) if outcome.exit_code() == omp_state::EXIT_OK => println!("{text}"),
-            Ok(text) => eprintln!("{text}"),
-            Err(error) => {
-                eprintln!("ompo stats: cannot encode report: {error}");
-                return ExitCode::from(EXIT_INSTRUMENT);
-            }
-        }
-    } else if let omp_stats::StatsOutcome::Answered(stats) = &outcome {
-        println!("{}", omp_stats::render(stats));
-    } else {
-        eprintln!(
-            "ompo stats: {} detail={}",
-            outcome.reason_code(),
-            outcome.detail()
-        );
-    }
-    ExitCode::from(outcome.exit_code())
+    run_rpc_projection(rest, RpcProjectionVerb::Stats)
 }
 
-/// `ompo messages [--json]` — OMP's message roles and counts over `--mode=rpc`.
-///
-/// The empty case is the one that matters: an EMPTY messages array is a SUCCESS with
-/// `count=0` at exit 0, and a MISSING or non-array key is `NO_PAYLOAD` at exit 1. A verb that
-/// used a non-zero exit to mean "ran fine, no results" is the failure being prevented.
 fn run_messages(rest: &[String]) -> ExitCode {
-    for arg in rest {
-        if arg != "--json" {
-            eprintln!(
-                "ompo messages: unknown argument {arg:?} \
-                 hint=`ompo messages [--json]` drives one bounded OMP --mode=rpc session"
-            );
-            return ExitCode::from(EXIT_BAD_INVOCATION);
-        }
-    }
-    let json = wants_json(rest);
-    let runtime = match asupersync::runtime::RuntimeBuilder::current_thread().build() {
-        Ok(runtime) => runtime,
-        Err(error) => {
-            eprintln!("ompo messages: OMP_MESSAGES_RUNTIME_UNAVAILABLE detail={error}");
-            return ExitCode::from(EXIT_INSTRUMENT);
-        }
-    };
-    let outcome = runtime.block_on(async {
-        match asupersync::Cx::current() {
-            Some(cx) => Ok(omp_messages::read_messages(&cx, "omp").await),
-            None => Err("no runtime context"),
-        }
-    });
-    let outcome = match outcome {
-        Ok(outcome) => outcome,
-        Err(detail) => {
-            eprintln!("ompo messages: OMP_MESSAGES_RUNTIME_UNAVAILABLE detail={detail}");
-            return ExitCode::from(EXIT_INSTRUMENT);
-        }
-    };
-    if json {
-        match serde_json::to_string(&omp_messages::envelope(&outcome)) {
-            Ok(text) if outcome.exit_code() == omp_state::EXIT_OK => println!("{text}"),
-            Ok(text) => eprintln!("{text}"),
-            Err(error) => {
-                eprintln!("ompo messages: cannot encode report: {error}");
-                return ExitCode::from(EXIT_INSTRUMENT);
-            }
-        }
-    } else if let omp_messages::MessagesOutcome::Answered(messages) = &outcome {
-        println!("{}", omp_messages::render(messages));
-    } else {
-        eprintln!(
-            "ompo messages: {} detail={}",
-            outcome.reason_code(),
-            outcome.detail()
-        );
-    }
-    ExitCode::from(outcome.exit_code())
+    run_rpc_projection(rest, RpcProjectionVerb::Messages)
+}
+
+fn run_models(rest: &[String]) -> ExitCode {
+    run_rpc_projection(rest, RpcProjectionVerb::Models)
 }

@@ -11,8 +11,8 @@
 //!
 //! # OMP surface
 //!
-//! This crate covers the OMP mode=rpc single-session transport and its four
-//! request methods. An exact resume selector can attach the child to an existing
+//! This crate covers the OMP mode=rpc single-session transport and five typed
+//! request methods; the default sequence remains four. An exact resume selector can attach the child to an existing
 //! session; the returned session id is observed evidence, not a cross-process
 //! continuity guarantee.
 //!
@@ -280,6 +280,7 @@ pub enum RpcRequest {
     GetState,
     GetSessionStats,
     GetMessages,
+    GetAvailableModels,
 }
 
 impl RpcRequest {
@@ -289,6 +290,7 @@ impl RpcRequest {
             Self::GetState => "state",
             Self::GetSessionStats => "stats",
             Self::GetMessages => "messages",
+            Self::GetAvailableModels => "models",
         }
     }
 
@@ -298,10 +300,12 @@ impl RpcRequest {
             Self::GetState => "get_state",
             Self::GetSessionStats => "get_session_stats",
             Self::GetMessages => "get_messages",
+            Self::GetAvailableModels => "get_available_models",
         }
     }
 
-    /// The one-shot request order sent after a valid `ready` frame.
+    /// The default one-shot request order sent after a valid `ready` frame.
+    /// Optional projections use an explicit narrow sequence instead of widening this default.
     pub const fn sequence() -> [Self; 4] {
         [
             Self::NegotiateProtocol,
@@ -323,7 +327,10 @@ impl RpcRequest {
                 "type": self.command(),
                 "protocolVersion": 2
             }),
-            Self::GetState | Self::GetSessionStats | Self::GetMessages => json!({
+            Self::GetState
+            | Self::GetSessionStats
+            | Self::GetMessages
+            | Self::GetAvailableModels => json!({
                 "id": self.id(),
                 "type": self.command()
             }),
@@ -339,6 +346,7 @@ pub enum RpcCommand {
     GetState,
     GetSessionStats,
     GetMessages,
+    GetAvailableModels,
     Unknown(String),
 }
 
@@ -349,18 +357,27 @@ impl RpcCommand {
             "get_state" => Self::GetState,
             "get_session_stats" => Self::GetSessionStats,
             "get_messages" => Self::GetMessages,
+            "get_available_models" => Self::GetAvailableModels,
             other => Self::Unknown(other.to_owned()),
         }
     }
 
     pub fn as_str(&self) -> &str {
-        match self {
-            Self::NegotiateProtocol => "negotiate_protocol",
-            Self::GetState => "get_state",
-            Self::GetSessionStats => "get_session_stats",
-            Self::GetMessages => "get_messages",
-            Self::Unknown(value) => value,
-        }
+        let index = match self {
+            Self::NegotiateProtocol => 0,
+            Self::GetState => 1,
+            Self::GetSessionStats => 2,
+            Self::GetMessages => 3,
+            Self::GetAvailableModels => 4,
+            Self::Unknown(value) => return value,
+        };
+        [
+            "negotiate_protocol",
+            "get_state",
+            "get_session_stats",
+            "get_messages",
+            "get_available_models",
+        ][index]
     }
 }
 
@@ -639,6 +656,7 @@ pub struct SelectedResponses {
     pub state: Option<Value>,
     pub session_stats: Option<Value>,
     pub messages: Option<Value>,
+    pub available_models: Option<Value>,
 }
 
 impl SelectedResponses {
@@ -648,6 +666,7 @@ impl SelectedResponses {
             RpcCommand::GetState => self.state = response.data.clone(),
             RpcCommand::GetSessionStats => self.session_stats = response.data.clone(),
             RpcCommand::GetMessages => self.messages = response.data.clone(),
+            RpcCommand::GetAvailableModels => self.available_models = response.data.clone(),
             RpcCommand::Unknown(_) => {}
         }
     }

@@ -10,6 +10,7 @@ mod fixture {
     pub const STATE: &str = r#"{"id":"state","type":"response","command":"get_state","success":true,"data":{"model":{"id":"m"},"thinkingLevel":"medium"}}"#;
     pub const STATS: &str = r#"{"id":"stats","type":"response","command":"get_session_stats","success":true,"data":{"turns":0}}"#;
     pub const MESSAGES: &str = r#"{"id":"messages","type":"response","command":"get_messages","success":true,"data":{"messages":[]}}"#;
+    pub const MODELS: &str = r#"{"id":"models","type":"response","command":"get_available_models","success":true,"data":{"models":[]}}"#;
     pub const UNKNOWN: &str = r#"{"type":"future_frame","payload":42}"#;
     pub const REJECTED: &str = r#"{"id":"state","type":"response","command":"get_state","success":false,"error":"unavailable"}"#;
 }
@@ -33,6 +34,12 @@ fn fixture_frames_parse_into_selected_types() {
         parse_frame(5, fixture::MESSAGES),
         RpcFrame::Response(_)
     ));
+    assert!(matches!(
+        parse_frame(6, fixture::MODELS),
+        RpcFrame::Response(response)
+            if response.command.as_str() == "get_available_models"
+                && response.data.as_ref().and_then(|data| data.get("models")).is_some()
+    ));
 }
 
 #[test]
@@ -55,6 +62,15 @@ fn request_wire_contract_is_exact_and_bounded() {
             .all(|request| request.to_frame().len() < 256)
     );
 }
+#[test]
+fn available_models_request_is_typed_without_widening_the_default_sequence() {
+    let request = RpcRequest::GetAvailableModels;
+    assert_eq!(request.id(), "models");
+    assert_eq!(request.command(), "get_available_models");
+    assert_eq!(request.to_frame(), "{\"id\":\"models\",\"type\":\"get_available_models\"}\n");
+    assert!(!RpcRequest::sequence().contains(&request));
+}
+
 #[test]
 fn report_names_only_the_native_omp_methods_it_adopts() {
     assert_eq!(
