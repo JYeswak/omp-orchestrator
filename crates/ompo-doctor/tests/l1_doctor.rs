@@ -828,17 +828,27 @@ fn frankenmermaid_probe_emits_two_signals() {
 #[test]
 fn git_probe_rejects_non_repo() {
     fn identity_of(dir: &std::path::Path) -> (Option<i32>, String, String) {
-        // GIT_CEILING_DIRECTORIES pins the upward search at the fixture root:
-        // worker TMPDIRs live inside checkouts, so a bare tempdir without a
-        // ceiling answers for its PARENT repo instead of itself (measured
-        // 2026-09-13: exit 0 where 128 was expected -- an 8y environment
-        // coupling, fixed at the fixture, not the probe). The ceiling changes
-        // nothing when .git sits directly inside dir.
+        // GIT_CEILING_DIRECTORIES pins the upward search at the fixture's
+        // PARENT, never the fixture itself: git will not exclude its own
+        // cwd, so a self-ceiling is silently ignored (measured 2026-09-13:
+        // self and trailing-slash ceilings read 0, parent reads 128).
+        // Needed at all because worker TMPDIRs live inside checkouts, so a
+        // bare tempdir without a ceiling answers for its PARENT repo instead
+        // of itself (exit 0 where 128 was expected -- an 8y environment
+        // coupling, fixed at the fixture, not the probe). Both -C and the
+        // ceiling use canonical paths: an unresolved symlink component would
+        // silently void the comparison.
+        let dir = dir
+            .canonicalize()
+            .expect("fixture dir must resolve");
         let output = std::process::Command::new("git")
             .arg("-C")
-            .arg(dir)
+            .arg(&dir)
             .args(["rev-parse", "--show-toplevel"])
-            .env("GIT_CEILING_DIRECTORIES", dir)
+            .env(
+                "GIT_CEILING_DIRECTORIES",
+                dir.parent().expect("fixture has a parent"),
+            )
             .output()
             .expect("git binary must be spawnable on every lane; a missing git is an environment ERROR, never absence");
         (
