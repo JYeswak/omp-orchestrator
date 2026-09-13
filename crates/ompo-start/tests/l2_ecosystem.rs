@@ -49,6 +49,14 @@ fn repository_fixture() -> TempDir {
         "{\"id\":\"fixture-0001\",\"title\":\"fixture\"}\n",
     )
     .expect("beads issues");
+    // yhia companion: the gated trust entry requires a satisfied
+    // toolchain pin (bead yhia). Declare the repository pin here so
+    // gated legs measure their own gate, not the pin gate.
+    std::fs::write(
+        directory.path().join("rust-toolchain.toml"),
+        "[toolchain]\nchannel = \"stable\"\n",
+    )
+    .expect("toolchain pin");
     std::fs::write(directory.path().join("docs/decisions.jsonl"), b"{}\n")
         .expect("decision ledger");
     run_git(directory.path(), &["init", "-q"]);
@@ -1248,6 +1256,131 @@ fn beads_init_gates_trust_entry() {
         );
         assert!(
             text.contains("br init") || text.contains("readable and writable"),
+            "{name} refusal must carry remediation, got: {text}"
+        );
+        assert!(
+            !output.exists(),
+            "a refused entry must write nothing, found {}",
+            output.display()
+        );
+    }
+}
+
+/// L2-TEST-RUST-TOOLCHAIN (bead yhia): the reachable L2 trust-flow entry
+/// admits a satisfied toolchain pin and refuses every other pin state
+/// before initialization can continue. Consumes the read-only
+/// [`toolchain_pin_report`] probe at `initialize_gated`: the declared
+/// `channel` checked against the live `rustc --version` with the same
+/// match vocabulary as the doctor's pin diagnostic (which this crate
+/// cannot depend on -- the doctor depends on it). Fixtures are isolated
+/// tempdirs, never the live repo; the pin file is never copied, only
+/// declared per arm.
+///
+/// KNOWN-BAD: bypass the pin report at the entry (proceed regardless)
+/// and the restrictive arms below pass silently: mismatched trust would
+/// advance with no evidence anything was required. Message AND exit
+/// are pinned on the mutation run.
+#[test]
+fn toolchain_pin_gates_trust_entry() {
+    use ompo_start::inception::{initialize_gated, toolchain_pin_report, ToolchainPinStatus};
+    // Healthy: the repository pin (`stable`) against the lane's default
+    // toolchain reaches the trust branch -- initialize runs and the
+    // artifact lands. (The fixture declares the repository pin; stamps
+    // and tracker are ready so the earlier gates pass and this leg
+    // measures the pin gate alone. The active line rides along in every
+    // message below, so a lane defaulting elsewhere fails LOUDLY with
+    // its cause named instead of mysteriously.)
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    let report = toolchain_pin_report(repository.path());
+    let active = report.active.clone().unwrap_or_else(|| "<unreadable>".to_owned());
+    assert_eq!(
+        report.status,
+        ToolchainPinStatus::Ready,
+        "repository pin is satisfied on this lane (active={active})"
+    );
+    assert_eq!(
+        report.declared.as_deref(),
+        Some("stable"),
+        "report names the declared pin"
+    );
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/init-gated-toolchain.json");
+    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    assert!(
+        output.exists(),
+        "a trusted entry writes its artifact"
+    );
+    // Restrictive matrix: every non-Ready pin state refuses typed
+    // before initialize runs, with the pin file and the remedy named.
+    // Earlier gates stay satisfied throughout, so each refusal is the
+    // pin gate firing.
+    let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
+        ("missing", Box::new(|root| {
+            let file = root.join("rust-toolchain.toml");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            } else {
+                std::fs::remove_file(&file).expect("remove pin");
+            }
+        })),
+        ("unreadable", Box::new(|root| {
+            // A directory at the file path fails the read for every uid
+            // (no chmod hazard): the pin can never be established.
+            let file = root.join("rust-toolchain.toml");
+            if !file.is_dir() {
+                let _ = std::fs::remove_file(&file);
+                std::fs::create_dir(&file).expect("directory mask");
+            }
+        })),
+        ("unparseable", Box::new(|root| {
+            // Present but unquoted channel: malformed, not a pin.
+            let file = root.join("rust-toolchain.toml");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, "[toolchain]\nchannel = stable\n").expect("bare pin");
+        })),
+        ("unpinned-absent", Box::new(|root| {
+            let file = root.join("rust-toolchain.toml");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, "[toolchain]\nprofile = \"minimal\"\n").expect("pinless file");
+        })),
+        ("unpinned-empty", Box::new(|root| {
+            let file = root.join("rust-toolchain.toml");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, "[toolchain]\nchannel = \"\"\n").expect("empty pin");
+        })),
+        ("mismatched", Box::new(|root| {
+            // A declared channel the lane's default toolchain cannot
+            // satisfy: stable rustc is never beta.
+            let file = root.join("rust-toolchain.toml");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, "[toolchain]\nchannel = \"beta\"\n").expect("beta pin");
+        })),
+    ];
+    for (name, arrange) in cases {
+        arrange(repository.path());
+        let output = repository
+            .path()
+            .join(format!(".omp-orchestrator/init-gated-toolchain-{name}.json"));
+        let error =
+            initialize_gated(repository.path(), &output).expect_err("unsatisfied must refuse");
+        let text = error.to_string();
+        assert!(
+            text.contains("HUMAN_HALT") && text.contains("rust-toolchain.toml"),
+            "{name} refusal must be typed and name the pin file, got: {text}"
+        );
+        assert!(
+            text.contains("rustup") || text.contains("declare the channel"),
             "{name} refusal must carry remediation, got: {text}"
         );
         assert!(

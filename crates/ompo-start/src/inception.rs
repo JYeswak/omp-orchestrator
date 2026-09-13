@@ -74,6 +74,16 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// Init refused over a rust-toolchain.toml whose pin report is not
+    /// Ready at the gated entry: the L2 trust flow requires the declared
+    /// toolchain identity to match the active toolchain before
+    /// initialization can continue. No opt-in override exists on the
+    /// gated entry by design -- declare the pin and install it.
+    ToolchainPinRefused {
+        path: PathBuf,
+        status: ToolchainPinStatus,
+        declared: Option<String>,
+    },
     /// Init refused over a `.beads` tracker whose init report is not
     /// Ready at the gated entry: the L2 trust flow requires an
     /// initialized, readable, writable tracker before initialization or
@@ -149,6 +159,16 @@ impl fmt::Display for InceptionError {
                 formatter,
                 "INCEPTION_WRITE_FAILED path={} detail={detail}",
                 path.display()
+            ),
+            Self::ToolchainPinRefused {
+                path,
+                status,
+                declared,
+            } => write!(
+                formatter,
+                "HUMAN_HALT refusing init over {status:?} toolchain pin path={} declared={} (declare the channel in rust-toolchain.toml and install it with rustup)",
+                path.display(),
+                declared.as_deref().unwrap_or("none"),
             ),
             Self::BeadsInitRefused { path, status } => write!(
                 formatter,
@@ -1571,6 +1591,195 @@ pub fn beads_init_report(repo: &Path) -> BeadsInitReport {
         },
     }
 }
+
+/// L2-BUILD-RUST-TOOLCHAIN (bead yhia): declared toolchain identity with
+/// an active-toolchain match. Reports the `channel` declared in the
+/// repo's rust-toolchain.toml plus the live `rustc --version`, joined
+/// into a status. Missing file reads as Missing; an unreadable file as
+/// Unreadable; a present file with no usable `channel` line as
+/// Unparseable (unquoted channel) or Unpinned (absent or empty channel);
+/// a declared pin the active toolchain does not satisfy as Mismatched.
+/// The channel scan follows the same line rules as the doctor's
+/// `read_toolchain_channel` -- trimmed lines, `#` comments skipped,
+/// `[toolchain]` section tracked, quoted value -- so the two can never
+/// disagree on what a pin IS. The matcher below is the same vocabulary
+/// under the same name for the same reason; its canonical home is
+/// `crates/ompo-doctor/src/lib.rs`, unreachable from here by dependency
+/// direction (the doctor depends on this crate), so the entry carries
+/// the gate-side copy rather than a second parser with its own semantics.
+///
+/// `ompo_doctor_ref`: `read_toolchain_channel` at
+/// `crates/ompo-doctor/src/lib.rs:812`, `toolchain_matches_pin` at
+/// `:849`. If those move, this comment -- not the semantics -- is stale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolchainPinStatus {
+    Ready,
+    Missing,
+    Unreadable,
+    Unparseable,
+    Unpinned,
+    Mismatched,
+}
+
+/// The toolchain pin report: declared and active identities plus status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolchainPinReport {
+    pub declared: Option<String>,
+    pub active: Option<String>,
+    pub status: ToolchainPinStatus,
+}
+
+/// Whether an active `rustc --version` line satisfies a pinned channel.
+/// Same vocabulary and semantics as the doctor's `toolchain_matches_pin`:
+/// stable has no marker word; dated nightlies match on the date; semver
+/// pins match on the core prefix at a `.` boundary. Fail-closed on
+/// garbage: a core that does not start with a digit satisfies nothing.
+#[must_use]
+pub fn toolchain_matches_pin(channel: &str, active_version: &str) -> bool {
+    let core = active_version
+        .strip_prefix("rustc ")
+        .and_then(|rest| rest.split_whitespace().next())
+        .unwrap_or("");
+    if !core.starts_with(|b: char| b.is_ascii_digit()) {
+        return false;
+    }
+    match channel {
+        "stable" => !core.contains('-'),
+        "beta" => core.contains("-beta"),
+        "nightly" => core.contains("-nightly"),
+        dated if dated.starts_with("nightly-") => {
+            core.contains("-nightly") && active_version.contains(&dated["nightly-".len()..])
+        }
+        version => core == version || core.starts_with(&format!("{version}.")),
+    }
+}
+
+/// Declared `channel` from a rust-toolchain.toml body: `Some(channel)`
+/// when a usable quoted value is present, `Some("")` when the key is
+/// present but empty, `None` when no channel line exists. A present but
+/// unquoted channel is malformed -- reported via the boolean arm, never
+/// mistaken for a pin.
+fn declared_toolchain_channel(text: &str) -> (Option<String>, bool) {
+    let mut in_toolchain = false;
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') {
+            in_toolchain = line == "[toolchain]";
+            continue;
+        }
+        if !in_toolchain {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "channel" {
+            continue;
+        }
+        let value = value.trim();
+        let Some(quote) = value.chars().next() else {
+            return (None, true);
+        };
+        if quote != '"' && quote != '\'' {
+            return (None, true);
+        }
+        let Some(end) = value[1..].find(quote) else {
+            return (None, true);
+        };
+        return (Some(value[1..1 + end].to_owned()), false);
+    }
+    (None, false)
+}
+
+/// Active toolchain line: `rustc --version` run from the system temp dir
+/// (never the repo, whose own pin file would select the toolchain under
+/// test through the rustup shim) with any `RUSTUP_TOOLCHAIN` override
+/// removed, so the answer is the default toolchain. `None` when rustc
+/// cannot be run or its output is empty.
+fn active_toolchain_version() -> Option<String> {
+    let mut command = Command::new("rustc");
+    command
+        .current_dir(std::env::temp_dir())
+        .env_remove("RUSTUP_TOOLCHAIN")
+        .arg("--version");
+    match subprocess_contract::bounded_output(&mut command, IDENTITY_COMMAND_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output)
+            if output.status.success() =>
+        {
+            let line = String::from_utf8_lossy(&output.stdout).into_owned();
+            (!line.trim().is_empty()).then(|| line.trim_end().to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// Probe the repo's declared toolchain pin and its live match: the
+/// `channel` in rust-toolchain.toml checked against the active
+/// `rustc --version`. The repository pin (`stable`) proceeds on any lane
+/// whose default toolchain is stable -- which the pin file itself
+/// enforces wherever rustup resolves it. A lane defaulting elsewhere
+/// refuses here; that refusal is the gate working, and the report's
+/// `active` field names the cause.
+pub fn toolchain_pin_report(repo: &Path) -> ToolchainPinReport {
+    let text = match fs::read_to_string(repo.join("rust-toolchain.toml")) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return ToolchainPinReport {
+                declared: None,
+                active: None,
+                status: ToolchainPinStatus::Missing,
+            }
+        }
+        Err(_) => {
+            return ToolchainPinReport {
+                declared: None,
+                active: None,
+                status: ToolchainPinStatus::Unreadable,
+            }
+        }
+    };
+    let (declared, malformed) = declared_toolchain_channel(&text);
+    if malformed {
+        return ToolchainPinReport {
+            declared: None,
+            active: None,
+            status: ToolchainPinStatus::Unparseable,
+        };
+    }
+    let Some(channel) = declared else {
+        return ToolchainPinReport {
+            declared: None,
+            active: None,
+            status: ToolchainPinStatus::Unpinned,
+        };
+    };
+    if channel.is_empty() {
+        return ToolchainPinReport {
+            declared: Some(channel),
+            active: None,
+            status: ToolchainPinStatus::Unpinned,
+        };
+    }
+    let Some(active) = active_toolchain_version() else {
+        return ToolchainPinReport {
+            declared: Some(channel),
+            active: None,
+            status: ToolchainPinStatus::Unreadable,
+        };
+    };
+    ToolchainPinReport {
+        declared: Some(channel.clone()),
+        active: Some(active.clone()),
+        status: if toolchain_matches_pin(&channel, &active) {
+            ToolchainPinStatus::Ready
+        } else {
+            ToolchainPinStatus::Mismatched
+        },
+    }
+}
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     initialize_inner(repo_root, output, false)
 }
@@ -1583,11 +1792,13 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 
 /// L2 entry for operator-driven init: the repository check gates before
 /// any downstream L2 state continues, the CLAUDE.md and AGENTS.md stamp
-/// checks gate before trust-dependent continuation, and the `.beads`
+/// checks gate before trust-dependent continuation, the `.beads`
 /// tracker init check gates before initialization or dispatch can
-/// continue. A real repository with stamped control files and a ready
-/// tracker proceeds with its canonical root; any other state refuses
-/// typed before `initialize` runs. This lives beside -- never inside --
+/// continue, and the rust-toolchain.toml pin check gates the compiler
+/// identity last. A real repository with stamped control files, a ready
+/// tracker, and a satisfied pin proceeds with its canonical root; any
+/// other state refuses typed before `initialize` runs. This lives
+/// beside -- never inside --
 /// shared [`initialize`]: doctor repair flows tolerate non-git checkouts
 /// by design (git identity degrades to "missing"), and gating them would
 /// trade measured-green repair legs for zero new capability. The output
@@ -1618,6 +1829,17 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
             return Err(InceptionError::BeadsInitRefused {
                 path: top.join(".beads"),
                 status,
+            })
+        }
+    }
+    let pin = toolchain_pin_report(&top);
+    match pin.status {
+        ToolchainPinStatus::Ready => {}
+        status => {
+            return Err(InceptionError::ToolchainPinRefused {
+                path: top.join("rust-toolchain.toml"),
+                status,
+                declared: pin.declared.clone(),
             })
         }
     }
