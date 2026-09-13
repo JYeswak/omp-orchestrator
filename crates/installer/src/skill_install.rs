@@ -93,6 +93,7 @@ pub fn install_skills_phase(
     binary_name: &str,
     head_sha: &str,
     identity: super::IdentityCheck,
+    attempt_identity: super::AttemptIdentity,
 ) -> Result<SkillPhaseReport, InstallError> {
     use super::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
     let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
@@ -121,6 +122,7 @@ pub fn install_skills_phase(
         install.backups.clone(),
         Vec::new(),
         identity,
+        attempt_identity,
     )?;
     Ok(SkillPhaseReport {
         scan,

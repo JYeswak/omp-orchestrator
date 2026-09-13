@@ -867,6 +867,7 @@ fn install_report_contains_outcomes_backups_path_hits_digest_and_identity() {
         vec![PathBuf::from("/tmp/pre-commit.bak.1")],
         vec![PathBuf::from("/usr/sbin/installer")],
         sample_identity(),
+        xic2_identity(),
     )
     .expect("complete report is success");
     let text = report.to_string();
@@ -899,6 +900,7 @@ fn install_report_refuses_when_one_detected_agent_is_dropped() {
         vec![PathBuf::from("/tmp/pre-commit.bak.1")],
         vec![PathBuf::from("/usr/sbin/installer")],
         sample_identity(),
+        xic2_identity(),
     )
     .expect_err("dropping codex must fail completeness");
     match error {
@@ -1912,6 +1914,7 @@ fn skill_install_creates_seals_and_reopens_quiet() {
         Vec::new(),
         Vec::new(),
         sample_identity(),
+        xic2_identity(),
     )
     .expect("complete outcomes must seal");
     assert!(!sealed.digest.is_empty(), "sealed report carries a digest");
@@ -1931,6 +1934,7 @@ fn skill_install_creates_seals_and_reopens_quiet() {
         Vec::new(),
         Vec::new(),
         sample_identity(),
+        xic2_identity(),
     )
     .expect_err("a dropped family must refuse");
     assert!(
@@ -2017,7 +2021,7 @@ fn skill_install_phase_gates_install_success() {
     let identity = sample_identity();
     // Healthy phase: ten created outcomes sealed with a digest, files
     // carrying the deterministic install manifest.
-    let phase = install_skills_phase(base.path(), "installer", "abc123def", identity.clone())
+    let phase = install_skills_phase(base.path(), "installer", "abc123def", identity.clone(), xic2_identity())
         .expect("ten writable roots must phase green");
     assert_eq!(
         phase.outcomes.len(),
@@ -2044,7 +2048,7 @@ fn skill_install_phase_gates_install_success() {
         assert_eq!(landed, manifest, "staged bytes verified on disk");
     }
     // Quiet rerun through the same phase: identical bytes are already.
-    let rerun = install_skills_phase(base.path(), "installer", "abc123def", identity.clone())
+    let rerun = install_skills_phase(base.path(), "installer", "abc123def", identity.clone(), xic2_identity())
         .expect("identical rerun stays success");
     for row in &rerun.outcomes {
         assert_eq!(row.outcome, "already", "rerun is already, got {row:?}");
@@ -2063,7 +2067,7 @@ fn skill_install_phase_gates_install_success() {
         .join("amp");
     std::fs::create_dir_all(victim_root.parent().expect("skills dir")).expect("parents");
     std::fs::write(&victim_root, b"block\n").expect("blocker file");
-    let error = install_skills_phase(blocked.path(), "installer", "abc123def", identity.clone())
+    let error = install_skills_phase(blocked.path(), "installer", "abc123def", identity.clone(), xic2_identity())
         .expect_err("one failed family denies phase success");
     match &error {
         installer::InstallError::SkillInstallFailed { outcomes, .. } => {
@@ -2088,7 +2092,7 @@ fn skill_install_phase_gates_install_success() {
         binary_name: String::new(),
         ..sample_identity()
     };
-    let noseal = install_skills_phase(base.path(), "installer", "abc123def", anonymous)
+    let noseal = install_skills_phase(base.path(), "installer", "abc123def", anonymous, xic2_identity())
         .expect_err("seal without identity must refuse");
     assert!(
         noseal.to_string().contains("identity"),
@@ -2154,6 +2158,7 @@ fn install_report_seals_complete_production_inputs() {
         &install.backups,
         &[subject.clone()],
         &sample_identity(),
+        &xic2_identity(),
         &InputManifest::Full {
             digest: hex.clone(),
         },
@@ -2176,9 +2181,15 @@ fn install_report_seals_complete_production_inputs() {
         text.contains(&hex),
         "artifact must carry the verified digest"
     );
-    assert!(
-        text.contains("manifest=FULL"),
-        "artifact must carry its manifest, got: {text}"
+    let document: serde_json::Value =
+        serde_json::from_str(&text).expect("canonical report is JSON");
+    assert_eq!(document["schema_version"], "install-report.v1");
+    assert_eq!(document["input_manifest"]["state"], "FULL");
+    assert_eq!(document["attempt_identity"]["attempt"], "l0-attempt");
+    assert_eq!(
+        document["path_hits"].as_array().map(Vec::len),
+        Some(1),
+        "artifact carries the explicit path_hits array: {text}"
     );
 }
 
@@ -2218,6 +2229,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &[],
         &sample_identity(),
+        &xic2_identity(),
         &full,
     )
     .expect_err("empty scan must refuse");
@@ -2236,6 +2248,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &[],
         &sample_identity(),
+        &xic2_identity(),
         &full,
     )
     .expect_err("a dropped family must refuse");
@@ -2252,6 +2265,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &[],
         &sample_identity(),
+        &xic2_identity(),
         &InputManifest::Full {
             digest: String::new(),
         },
@@ -2269,6 +2283,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &[],
         &sample_identity(),
+        &xic2_identity(),
         &InputManifest::Partial {
             bound_kind: "families".to_owned(),
             bound_value: 9,
@@ -2288,6 +2303,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &[],
         &sample_identity(),
+        &xic2_identity(),
         &InputManifest::Refused {
             reason: "fixture-withheld".to_owned(),
         },
@@ -2309,6 +2325,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &[],
         &sample_identity(),
+        &xic2_identity(),
         &full,
     )
     .expect_err("an unwritable root must refuse persistence");
@@ -2477,6 +2494,37 @@ fn xic2_full_manifest() -> installer::InputManifest {
     }
 }
 
+
+fn write_inception_host_capabilities(repo: &Path) {
+    let path = repo.join(".omp-orchestrator/inception.json");
+    fs::create_dir_all(path.parent().expect("inception parent"))
+        .expect("inception parent exists");
+    let document = serde_json::json!({
+        "schema_version": "inception.v1",
+        "project_id": "r19i-fixture",
+        "repo_identity": {
+            "canonical_path": repo.display().to_string(),
+            "git_marker": ".git",
+            "source_revision": "abc123def",
+            "host_identity": "r19i-host",
+        },
+        "control_files": {},
+        "host_capabilities": {
+            "os": "linux",
+            "arch": "x86_64",
+            "filesystem": "local",
+        },
+        "required_tools": [],
+        "trust_status": {
+            "status": "ok",
+            "reason_code": "R19I_FIXTURE",
+            "control_files_complete": true,
+        },
+    });
+    let mut text = serde_json::to_string_pretty(&document).expect("fixture JSON");
+    text.push('\n');
+    fs::write(path, text).expect("inception fixture lands");
+}
 fn xic2_journal_rows(repo: &Path) -> Vec<String> {
     match fs::read_to_string(lifecycle_event::default_repo_journal(repo)) {
         Ok(text) => text
@@ -2642,22 +2690,26 @@ fn fx3d_production_gate(
     // (seal -> persist -> emit -> observe -> gate -> verdict), not that
     // this fixture binary is real. Identity truth stays with the
     // four-way proof legs above.
-    let assembled = installer::assemble_install_report(
+    let identity = xic2_identity();
+    let report_identity = sample_identity();
+    write_inception_host_capabilities(repo);
+    let (assembled, correlated) = installer::assemble_and_correlate_install_report(
         repo,
         &scan,
         &outcomes,
         &[],
         &[subject],
-        &sample_identity(),
+        &report_identity,
+        &identity,
         manifest,
     )
-    .expect("complete inputs must seal");
-    assert!(assembled.readback_bytes > 0, "seal must persist");
-    let identity = installer::AttemptIdentity {
-        pane: "fx3d".to_owned(),
-        incarnation: "1".to_owned(),
-        attempt: "fx3d-attempt-1".to_owned(),
-    };
+    .expect("complete inputs must seal and correlate");
+    assert!(assembled.write_bytes > 0, "writer must report nonzero bytes");
+    assert!(assembled.readback_bytes > 0, "seal must read back");
+    assert!(
+        correlated.readback_bytes > 0,
+        "correlation must preserve a nonzero readback"
+    );
     let readback = installer::emit_s1(
         repo,
         Layer::L0,
@@ -2669,7 +2721,7 @@ fn fx3d_production_gate(
     )
     .expect("production emit must answer with readback");
     assert_eq!(readback.lines, 1, "one emit appends exactly one row");
-    let gate = installer::gate_observability(repo, manifest);
+    let gate = installer::gate_correlated_observability(repo, manifest, correlated);
     let gate_rows = gate.as_ref().expect("fresh row must gate").rows;
     let exit = installer::guard_observability_success(
         repo,
@@ -2764,6 +2816,7 @@ fn fx3d_zero_families_refuse_empty_scan() {
         vec![],
         vec![],
         sample_identity(),
+        xic2_identity(),
     )
     .expect_err("zero families must refuse");
     assert_eq!(
@@ -2785,6 +2838,7 @@ fn fx3d_zero_families_refuse_empty_scan() {
         vec![],
         vec![],
         sample_identity(),
+        xic2_identity(),
     )
     .expect_err("a family with no outcome must refuse");
     assert!(
@@ -2966,4 +3020,407 @@ fn fx3d_non_full_manifests_refuse_gate_stage() {
             error.reason
         );
     }
+}
+/// r19i fixture: one B12 canonical report, one explicit attempt, and the
+/// existing inception host-capability shape. The report path is production's.
+fn r19i_report_fixture(
+    name: &str,
+    path_hits: Vec<PathBuf>,
+) -> (
+    TempDir,
+    installer::SealedInstallReport,
+    IdentityCheck,
+    installer::AttemptIdentity,
+    installer::InputManifest,
+) {
+    let repo = TempDir::new(&format!("r19i-{name}"));
+    write_inception_host_capabilities(repo.path());
+    let identity = sample_identity();
+    let attempt = installer::AttemptIdentity {
+        pane: "r19i-pane".to_owned(),
+        incarnation: "1".to_owned(),
+        attempt: "r19i-attempt-1".to_owned(),
+    };
+    let manifest = installer::InputManifest::Full {
+        digest: "r19i-manifest-digest".to_owned(),
+    };
+    let scan = installer::AgentScan {
+        families: vec!["r19i-probe".to_owned()],
+    };
+    let outcomes = vec![installer::AgentOutcome {
+        family: "r19i-probe".to_owned(),
+        outcome: "installed".to_owned(),
+    }];
+    let sealed = installer::assemble_install_report(
+        repo.path(),
+        &scan,
+        &outcomes,
+        &[],
+        &path_hits,
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect("r19i fixture report seals");
+    (repo, sealed, identity, attempt, manifest)
+}
+
+fn r19i_report_path(repo: &Path) -> PathBuf {
+    repo.join(installer::INSTALL_REPORT_ARTIFACT)
+}
+
+fn r19i_rewrite_report(path: &Path, edit: impl FnOnce(&mut serde_json::Value)) {
+    let text = fs::read_to_string(path).expect("report fixture readable");
+    let mut value: serde_json::Value = serde_json::from_str(&text).expect("report fixture JSON");
+    edit(&mut value);
+    let mut updated = serde_json::to_string_pretty(&value).expect("updated report JSON");
+    updated.push('\n');
+    fs::write(path, updated).expect("updated report lands");
+}
+
+#[test]
+fn r19i_good_report_correlates_and_supplies_b15() {
+    use lifecycle_event::{EmitOutcome, Layer};
+    let (repo, sealed, identity, attempt, manifest) = r19i_report_fixture(
+        "good",
+        vec![PathBuf::from("/usr/local/bin/installer-shadow")],
+    );
+    assert!(sealed.write_bytes > 0, "B12 writer reports nonzero bytes");
+    assert!(
+        sealed.readback_bytes > 0,
+        "B12 readback reports nonzero bytes"
+    );
+    let report = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect("canonical report correlates");
+    assert!(report.readback_bytes > 0, "correlated readback is nonzero");
+    assert_eq!(report.path_hits, 1, "the explicit path hit is consumed");
+    assert_eq!(
+        report.host_capabilities, 3,
+        "os, arch and filesystem are consumed from inception"
+    );
+    let readback = installer::emit_s1(
+        repo.path(),
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        "INSTALL_VERIFIED",
+        &attempt,
+        &manifest,
+    )
+    .expect("current lifecycle row lands");
+    let gate = installer::gate_correlated_observability(repo.path(), &manifest, report)
+        .expect("B15 consumes the correlated report");
+    assert!(gate.report_readback_bytes > 0, "gate carries report bytes");
+    assert_eq!(gate.path_hits, 1, "gate carries the path-hit count");
+    assert_eq!(gate.host_capabilities, 3, "gate carries host capabilities");
+    assert!(gate.rows > 0 && gate.fresh, "journal gate is nonvacuous");
+    assert_eq!(
+        installer::guard_observability_success(
+            repo.path(),
+            &attempt,
+            &manifest,
+            readback,
+            Ok(gate),
+        ),
+        std::process::ExitCode::SUCCESS,
+        "the fully correlated flow may expose success"
+    );
+}
+
+#[test]
+fn r19i_explicit_empty_path_hits_is_valid() {
+    let (repo, sealed, identity, attempt, manifest) = r19i_report_fixture("empty-hits", vec![]);
+    let report = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect("an explicitly present empty path_hits array is valid");
+    assert!(report.readback_bytes > 0, "report remains nonzero");
+    assert_eq!(report.path_hits, 0, "the explicit array is empty");
+}
+
+#[test]
+fn r19i_missing_path_hits_refuses() {
+    let (repo, sealed, identity, attempt, manifest) = r19i_report_fixture("missing-hits", vec![]);
+    r19i_rewrite_report(&sealed.artifact, |value| {
+        value
+            .as_object_mut()
+            .expect("report object")
+            .remove("path_hits");
+    });
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("a missing path_hits field must refuse");
+    assert!(
+        matches!(&error, installer::InstallReportCause::MissingField { field, .. } if field == "path_hits"),
+        "wrong typed cause: {error}"
+    );
+    assert!(error.to_string().starts_with("L0_REPORT_FIELD_MISSING"));
+}
+
+#[test]
+fn r19i_missing_report_identity_field_refuses() {
+    let (repo, sealed, identity, attempt, manifest) =
+        r19i_report_fixture("missing-identity", vec![]);
+    r19i_rewrite_report(&sealed.artifact, |value| {
+        value["identity"]
+            .as_object_mut()
+            .expect("identity object")
+            .remove("head_sha");
+    });
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("a missing identity field must refuse");
+    assert!(
+        matches!(&error, installer::InstallReportCause::MissingField { field, .. } if field == "identity.head_sha"),
+        "wrong typed cause: {error}"
+    );
+}
+
+#[test]
+fn r19i_missing_report_refuses_distinctly() {
+    let repo = TempDir::new("r19i-missing");
+    write_inception_host_capabilities(repo.path());
+    let error = installer::correlate_install_report(
+        repo.path(),
+        None,
+        &sample_identity(),
+        &xic2_identity(),
+        &installer::InputManifest::Full {
+            digest: "r19i-manifest-digest".to_owned(),
+        },
+    )
+    .expect_err("an absent canonical report must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::Missing { .. }
+    ));
+}
+
+#[test]
+fn r19i_zero_byte_report_refuses_distinctly() {
+    let repo = TempDir::new("r19i-zero");
+    write_inception_host_capabilities(repo.path());
+    let path = r19i_report_path(repo.path());
+    fs::create_dir_all(path.parent().expect("report parent")).expect("report parent exists");
+    fs::write(&path, b"").expect("zero-byte report lands");
+    let error = installer::correlate_install_report(
+        repo.path(),
+        None,
+        &sample_identity(),
+        &xic2_identity(),
+        &installer::InputManifest::Full {
+            digest: "r19i-manifest-digest".to_owned(),
+        },
+    )
+    .expect_err("zero-byte report must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::ZeroBytes { .. }
+    ));
+}
+
+#[test]
+fn r19i_truncated_report_refuses_distinctly() {
+    let repo = TempDir::new("r19i-truncated");
+    write_inception_host_capabilities(repo.path());
+    let path = r19i_report_path(repo.path());
+    fs::create_dir_all(path.parent().expect("report parent")).expect("report parent exists");
+    fs::write(&path, b"{\"schema_version\":").expect("truncated report lands");
+    let error = installer::correlate_install_report(
+        repo.path(),
+        None,
+        &sample_identity(),
+        &xic2_identity(),
+        &installer::InputManifest::Full {
+            digest: "r19i-manifest-digest".to_owned(),
+        },
+    )
+    .expect_err("truncated report must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::Truncated { .. }
+    ));
+}
+
+#[test]
+fn r19i_deleted_after_write_refuses_distinctly() {
+    let (repo, sealed, identity, attempt, manifest) = r19i_report_fixture("deleted", vec![]);
+    fs::remove_file(&sealed.artifact).expect("delete the previously written report");
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("deletion after B12 write must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::DeletedAfterWrite { .. }
+    ));
+}
+
+#[test]
+fn r19i_non_full_manifests_refuse_distinctly() {
+    let repo = TempDir::new("r19i-manifest");
+    for (manifest, expected) in [
+        (
+            installer::InputManifest::Partial {
+                bound_kind: "families".to_owned(),
+                bound_value: 9,
+                source: "r19i-fixture".to_owned(),
+            },
+            "L0_REPORT_MANIFEST_PARTIAL",
+        ),
+        (
+            installer::InputManifest::Refused {
+                reason: "r19i-fixture".to_owned(),
+            },
+            "L0_REPORT_MANIFEST_REFUSED",
+        ),
+    ] {
+        let error = installer::correlate_install_report(
+            repo.path(),
+            None,
+            &sample_identity(),
+            &xic2_identity(),
+            &manifest,
+        )
+        .expect_err("non-FULL manifest must refuse before reading the artifact");
+        assert!(
+            error.to_string().starts_with(expected),
+            "wrong cause: {error}"
+        );
+    }
+}
+
+#[test]
+fn r19i_attempt_identity_mismatch_refuses() {
+    let (repo, sealed, identity, mut attempt, manifest) =
+        r19i_report_fixture("identity-mismatch", vec![]);
+    attempt.attempt = "other-attempt".to_owned();
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("a foreign attempt must refuse");
+    assert!(
+        matches!(&error, installer::InstallReportCause::IdentityMismatch { field, .. } if field == "attempt_identity.attempt"),
+        "wrong typed cause: {error}"
+    );
+}
+
+#[test]
+fn r19i_suppressed_writer_receipt_refuses() {
+    let (repo, mut sealed, identity, attempt, manifest) =
+        r19i_report_fixture("writer-suppressed", vec![]);
+    sealed.write_bytes = 0;
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("zero writer receipt must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::WriterSuppressed { .. }
+    ));
+}
+
+#[test]
+fn r19i_failed_readback_receipt_refuses() {
+    let (repo, mut sealed, identity, attempt, manifest) =
+        r19i_report_fixture("readback-failed", vec![]);
+    sealed.readback_bytes = 0;
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("zero readback receipt must refuse");
+    assert!(
+        matches!(
+            &error,
+            installer::InstallReportCause::ReadbackFailed { .. }
+        ),
+        "zero readback receipt must remain L0_REPORT_READBACK_FAILED, got: {error}"
+    );
+    assert!(
+        error.to_string().contains("B12 readback receipt is zero"),
+        "the exact receipt cause must survive: {error}"
+    );
+}
+
+#[test]
+fn r19i_unreadable_report_refuses_readback() {
+    let repo = TempDir::new("r19i-read-failed");
+    write_inception_host_capabilities(repo.path());
+    let path = r19i_report_path(repo.path());
+    fs::create_dir_all(&path).expect("directory at report path");
+    let error = installer::correlate_install_report(
+        repo.path(),
+        None,
+        &sample_identity(),
+        &xic2_identity(),
+        &installer::InputManifest::Full {
+            digest: "r19i-manifest-digest".to_owned(),
+        },
+    )
+    .expect_err("directory readback must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::ReadbackFailed { .. }
+    ));
+}
+
+#[test]
+fn r19i_missing_host_capability_refuses() {
+    let (repo, sealed, identity, attempt, manifest) =
+        r19i_report_fixture("host-capability", vec![]);
+    let path = repo.path().join(".omp-orchestrator/inception.json");
+    r19i_rewrite_report(&path, |value| {
+        value["host_capabilities"]
+            .as_object_mut()
+            .expect("host capabilities object")
+            .remove("filesystem");
+    });
+    let error = installer::correlate_install_report(
+        repo.path(),
+        Some(&sealed),
+        &identity,
+        &attempt,
+        &manifest,
+    )
+    .expect_err("missing host capability must refuse correlation");
+    assert!(matches!(
+        error,
+        installer::InstallReportCause::HostCapabilitiesInvalid { .. }
+    ));
 }

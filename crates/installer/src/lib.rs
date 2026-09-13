@@ -15,6 +15,159 @@ use std::process::{Command, ExitCode};
 use sha2::{Digest, Sha256};
 use lifecycle_event::{default_repo_journal, Layer};
 use lifecycle_monitor::{gate_freshness_verdict, observe_layer, verify_artifact};
+/// Typed reasons the canonical install report cannot be accepted by the
+/// production observability flow. Each state has a distinct variant and
+/// stable reason code; callers never infer the cause from a generic I/O error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstallReportCause {
+    ManifestPartial {
+        bound_kind: String,
+        bound_value: usize,
+        source: String,
+    },
+    ManifestRefused {
+        reason: String,
+    },
+    WriterSuppressed {
+        path: PathBuf,
+    },
+    Missing {
+        path: PathBuf,
+    },
+    DeletedAfterWrite {
+        path: PathBuf,
+    },
+    ZeroBytes {
+        path: PathBuf,
+    },
+    Truncated {
+        path: PathBuf,
+        detail: String,
+    },
+    ReadbackFailed {
+        path: PathBuf,
+        detail: String,
+    },
+    ReadbackMismatch {
+        path: PathBuf,
+        detail: String,
+    },
+    MissingField {
+        path: PathBuf,
+        field: String,
+    },
+    WrongType {
+        path: PathBuf,
+        field: String,
+        expected: &'static str,
+        found: &'static str,
+    },
+    EmptyField {
+        path: PathBuf,
+        field: String,
+    },
+    IdentityMismatch {
+        field: String,
+        expected: String,
+        actual: String,
+    },
+    InceptionMissing {
+        path: PathBuf,
+    },
+    HostCapabilitiesInvalid {
+        path: PathBuf,
+        detail: String,
+    },
+}
+
+impl fmt::Display for InstallReportCause {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ManifestPartial {
+                bound_kind,
+                bound_value,
+                source,
+            } => write!(
+                formatter,
+                "L0_REPORT_MANIFEST_PARTIAL bound={bound_kind} value={bound_value} source={source}"
+            ),
+            Self::ManifestRefused { reason } => {
+                write!(formatter, "L0_REPORT_MANIFEST_REFUSED reason={reason}")
+            }
+            Self::WriterSuppressed { path } => write!(
+                formatter,
+                "L0_REPORT_WRITE_SUPPRESSED path={}",
+                path.display()
+            ),
+            Self::Missing { path } => {
+                write!(formatter, "L0_REPORT_MISSING path={}", path.display())
+            }
+            Self::DeletedAfterWrite { path } => write!(
+                formatter,
+                "L0_REPORT_DELETED_AFTER_WRITE path={}",
+                path.display()
+            ),
+            Self::ZeroBytes { path } => {
+                write!(formatter, "L0_REPORT_ZERO_BYTES path={}", path.display())
+            }
+            Self::Truncated { path, detail } => write!(
+                formatter,
+                "L0_REPORT_TRUNCATED path={} detail={detail}",
+                path.display()
+            ),
+            Self::ReadbackFailed { path, detail } => write!(
+                formatter,
+                "L0_REPORT_READBACK_FAILED path={} detail={detail}",
+                path.display()
+            ),
+            Self::ReadbackMismatch { path, detail } => write!(
+                formatter,
+                "L0_REPORT_READBACK_MISMATCH path={} detail={detail}",
+                path.display()
+            ),
+            Self::MissingField { path, field } => write!(
+                formatter,
+                "L0_REPORT_FIELD_MISSING path={} field={field}",
+                path.display()
+            ),
+            Self::WrongType {
+                path,
+                field,
+                expected,
+                found,
+            } => write!(
+                formatter,
+                "L0_REPORT_FIELD_TYPE path={} field={field} expected={expected} found={found}",
+                path.display()
+            ),
+            Self::EmptyField { path, field } => write!(
+                formatter,
+                "L0_REPORT_FIELD_EMPTY path={} field={field}",
+                path.display()
+            ),
+            Self::IdentityMismatch {
+                field,
+                expected,
+                actual,
+            } => write!(
+                formatter,
+                "L0_REPORT_IDENTITY_MISMATCH field={field} expected={expected:?} actual={actual:?}"
+            ),
+            Self::InceptionMissing { path } => write!(
+                formatter,
+                "L0_REPORT_INCEPTION_MISSING path={}",
+                path.display()
+            ),
+            Self::HostCapabilitiesInvalid { path, detail } => write!(
+                formatter,
+                "L0_REPORT_HOST_CAPABILITIES_INVALID path={} detail={detail}",
+                path.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for InstallReportCause {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sha256FailureClass {
@@ -102,6 +255,8 @@ pub enum InstallError {
     IncompleteInstallReport {
         missing: Vec<String>,
     },
+    /// Canonical report persistence or readback refused with a typed cause.
+    InstallReportRefused(InstallReportCause),
     /// L0-B11 skill installation reached no all-agent success. Per-family
     /// outcomes travel with the refusal so partial progress survives it;
     /// seal-level incompleteness stays IncompleteInstallReport.
@@ -229,6 +384,7 @@ impl fmt::Display for InstallError {
                 "L0-REPORT: incomplete; missing {}",
                 missing.join(",")
             ),
+            Self::InstallReportRefused(cause) => write!(formatter, "{cause}"),
             Self::SkillInstallFailed { reason, outcomes } => write!(
                 formatter,
                 "L0_SKILLS_FAILED {reason} outcomes={}",
@@ -938,6 +1094,7 @@ pub struct InstallReport {
     pub path_hits: Vec<PathBuf>,
     pub digest: String,
     pub identity: IdentityCheck,
+    pub attempt_identity: AttemptIdentity,
 }
 
 impl fmt::Display for InstallReport {
@@ -962,12 +1119,13 @@ impl fmt::Display for InstallReport {
             .join(" ");
         write!(
             formatter,
-            "L0-REPORT agents={agents} backups={backups} path_hits={hits} digest={} identity={} HEAD={} consistent={} legs={}",
+            "L0-REPORT agents={agents} backups={backups} path_hits={hits} digest={} identity={} HEAD={} consistent={} legs={} attempt={}",
             self.digest,
             self.identity.binary_name,
             self.identity.head_sha,
             self.identity.consistent,
-            self.identity.identity_legs()
+            self.identity.identity_legs(),
+            self.attempt_identity.attempt,
         )
     }
 }
@@ -981,14 +1139,15 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
     hash
 }
 
-/// Seal the L0-REPORT. Missing a detected agent, digest, or identity is ERROR,
-/// never a success. Empty detected scan is EmptyAgentScan, not a blank report.
+/// Seal the L0 report. Missing a detected agent, digest, report identity,
+/// or attempt identity is ERROR; an empty path-hit set remains valid data.
 pub fn seal_install_report(
     detected: &AgentScan,
     outcomes: Vec<AgentOutcome>,
     backups: Vec<PathBuf>,
     path_hits: Vec<PathBuf>,
     identity: IdentityCheck,
+    attempt_identity: AttemptIdentity,
 ) -> Result<InstallReport, InstallError> {
     if detected.families.is_empty() {
         return Err(InstallError::EmptyAgentScan);
@@ -1002,11 +1161,14 @@ pub fn seal_install_report(
     if identity.binary_name.trim().is_empty() || identity.head_sha.trim().is_empty() {
         missing.push("identity".to_owned());
     }
+    if attempt_identity.attempt.trim().is_empty() {
+        missing.push("attempt_identity.attempt".to_owned());
+    }
     if !missing.is_empty() {
         return Err(InstallError::IncompleteInstallReport { missing });
     }
     let canonical = format!(
-        "agents={}|backups={}|hits={}|identity={}:{}",
+        "agents={}|backups={}|hits={}|identity={}:{}|attempt={}:{}:{}",
         outcomes
             .iter()
             .map(|row| format!("{}={}", row.family, row.outcome))
@@ -1023,7 +1185,10 @@ pub fn seal_install_report(
             .collect::<Vec<_>>()
             .join(","),
         identity.binary_name,
-        identity.head_sha
+        identity.head_sha,
+        attempt_identity.pane,
+        attempt_identity.incarnation,
+        attempt_identity.attempt,
     );
     let digest = format!("{:016x}", fnv1a64(canonical.as_bytes()));
     let report = InstallReport {
@@ -1032,6 +1197,7 @@ pub fn seal_install_report(
         path_hits,
         digest,
         identity,
+        attempt_identity,
     };
     if report.digest.is_empty() {
         return Err(InstallError::IncompleteInstallReport {
@@ -1042,23 +1208,25 @@ pub fn seal_install_report(
 }
 
 /// L0-B12 input manifest: what input set a sealed report closed over.
-/// FULL carries the verified artifact digest (B03's value gets a home
-/// here: the manifest attests the full input set including the digest the
-/// report was sealed over). PARTIAL names its bound; REFUSED names its
-/// reason. Non-FULL manifests never seal -- they refuse distinctly below.
+/// FULL carries the verified artifact digest. PARTIAL and REFUSED are
+/// first-class restrictive states and never reach report persistence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InputManifest {
-    Full { digest: String },
+    Full {
+        digest: String,
+    },
     Partial {
         bound_kind: String,
         bound_value: usize,
         source: String,
     },
-    Refused { reason: String },
+    Refused {
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for InputManifest {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Full { digest } => write!(formatter, "FULL digest={digest}"),
             Self::Partial {
@@ -1074,27 +1242,169 @@ impl std::fmt::Display for InputManifest {
     }
 }
 
-/// Canonical durable location of the sealed install report, under the
-/// install repo root (explicit, never HOME).
-pub const INSTALL_REPORT_ARTIFACT: &str = ".omp-orchestrator/install/report.txt";
+/// Canonical durable report path from the S1 L0 contract. This replaces the
+/// historical text artifact; there is one writer and one report.
+pub const INSTALL_REPORT_ARTIFACT: &str = ".omp-orchestrator/work/s1/l0/install-report.json";
 
-/// The durably sealed report: content, artifact path, and readback proof.
-/// `readback_bytes` is nonzero exactly when the artifact read back --
-/// mirroring the doctor readback discipline, not a second report type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealedInstallReport {
     pub report: InstallReport,
     pub artifact: PathBuf,
+    pub write_bytes: usize,
     pub readback_bytes: usize,
 }
 
-/// L0-B12 assembly choke point: validate every required input, seal
-/// through [`seal_install_report`] (no second report type), persist the
-/// artifact, and read it back. Each missing/failing input is a distinct
-/// typed refusal: manifest state, empty scan, missing family, missing
-/// field, write failure, readback mismatch. The caller keeps its own
-/// outcome copies for preservation; this takes borrows and clones small
-/// values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CorrelatedInstallReport {
+    pub readback_bytes: usize,
+    pub path_hits: usize,
+    pub host_capabilities: usize,
+}
+
+fn repo_ownership_json(ownership: &RepoOwnership) -> serde_json::Value {
+    match ownership {
+        RepoOwnership::ThisRepo => serde_json::json!({"state": "this_repo"}),
+        RepoOwnership::Foreign { repo } => {
+            serde_json::json!({"state": "foreign", "repo": repo})
+        }
+        RepoOwnership::Unknown => serde_json::json!({"state": "unknown"}),
+    }
+}
+
+fn input_manifest_json(manifest: &InputManifest) -> serde_json::Value {
+    match manifest {
+        InputManifest::Full { digest } => {
+            serde_json::json!({"state": "FULL", "digest": digest})
+        }
+        InputManifest::Partial {
+            bound_kind,
+            bound_value,
+            source,
+        } => serde_json::json!({
+            "state": "PARTIAL",
+            "bound_kind": bound_kind,
+            "bound_value": bound_value,
+            "source": source,
+        }),
+        InputManifest::Refused { reason } => {
+            serde_json::json!({"state": "REFUSED", "reason": reason})
+        }
+    }
+}
+
+fn install_report_document(report: &InstallReport, manifest: &InputManifest) -> String {
+    let outcomes: Vec<serde_json::Value> = report
+        .agent_outcomes
+        .iter()
+        .map(|row| serde_json::json!({"family": row.family, "outcome": row.outcome}))
+        .collect();
+    let backups: Vec<String> = report
+        .backups
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let path_hits: Vec<String> = report
+        .path_hits
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let value = serde_json::json!({
+        "schema_version": "install-report.v1",
+        "attempt_identity": {
+            "pane": report.attempt_identity.pane,
+            "incarnation": report.attempt_identity.incarnation,
+            "attempt": report.attempt_identity.attempt,
+        },
+        "agent_outcomes": outcomes,
+        "backups": backups,
+        "path_hits": path_hits,
+        "digest": report.digest,
+        "identity": {
+            "binary_name": report.identity.binary_name,
+            "repo_ownership": repo_ownership_json(&report.identity.repo_ownership),
+            "head_sha": report.identity.head_sha,
+            "build_id_in_binary": report.identity.build_id_in_binary,
+            "version_output": report.identity.version_output,
+            "consistent": report.identity.consistent,
+            "identity_legs": report.identity.identity_legs(),
+        },
+        "input_manifest": input_manifest_json(manifest),
+    });
+    let mut document =
+        serde_json::to_string_pretty(&value).expect("serializing a JSON Value cannot fail");
+    document.push('\n');
+    document
+}
+
+fn persist_install_report(artifact: &Path, document: &str) -> Result<usize, InstallError> {
+    let parent = artifact.parent().ok_or_else(|| InstallError::IoError {
+        path: artifact.display().to_string(),
+        detail: "report path has no parent".to_owned(),
+    })?;
+    std::fs::create_dir_all(parent).map_err(|error| InstallError::IoError {
+        path: parent.display().to_string(),
+        detail: format!("report dir failed: {error}"),
+    })?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(artifact)
+        .map_err(|error| InstallError::IoError {
+            path: artifact.display().to_string(),
+            detail: format!("report open failed: {error}"),
+        })?;
+    file.write_all(document.as_bytes())
+        .and_then(|()| file.sync_all())
+        .map_err(|error| InstallError::IoError {
+            path: artifact.display().to_string(),
+            detail: format!("report write failed: {error}"),
+        })?;
+    std::fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| InstallError::IoError {
+            path: parent.display().to_string(),
+            detail: format!("report parent sync failed: {error}"),
+        })?;
+    Ok(document.len())
+}
+
+fn persist_and_read_install_report(
+    artifact: &Path,
+    document: &str,
+) -> Result<(usize, usize), InstallError> {
+    let write_bytes = persist_install_report(artifact, document)?;
+    if write_bytes == 0 {
+        return Err(InstallError::InstallReportRefused(
+            InstallReportCause::WriterSuppressed {
+                path: artifact.to_owned(),
+            },
+        ));
+    }
+    let readback = std::fs::read_to_string(artifact).map_err(|error| {
+        InstallError::InstallReportRefused(InstallReportCause::ReadbackFailed {
+            path: artifact.to_owned(),
+            detail: error.to_string(),
+        })
+    })?;
+    if readback.is_empty() {
+        return Err(InstallError::InstallReportRefused(
+            InstallReportCause::ZeroBytes {
+                path: artifact.to_owned(),
+            },
+        ));
+    }
+    if readback != document {
+        return Err(InstallError::InstallReportRefused(
+            InstallReportCause::ReadbackMismatch {
+                path: artifact.to_owned(),
+                detail: "artifact bytes differ from sealed bytes".to_owned(),
+            },
+        ));
+    }
+    Ok((write_bytes, readback.len()))
+}
+
 pub fn assemble_install_report(
     repo_root: &Path,
     scan: &AgentScan,
@@ -1102,6 +1412,7 @@ pub fn assemble_install_report(
     backups: &[PathBuf],
     path_hits: &[PathBuf],
     identity: &IdentityCheck,
+    attempt_identity: &AttemptIdentity,
     manifest: &InputManifest,
 ) -> Result<SealedInstallReport, InstallError> {
     match manifest {
@@ -1134,36 +1445,500 @@ pub fn assemble_install_report(
         backups.to_vec(),
         path_hits.to_vec(),
         identity.clone(),
+        attempt_identity.clone(),
     )?;
     let artifact = repo_root.join(INSTALL_REPORT_ARTIFACT);
-    if let Some(parent) = artifact.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| InstallError::IoError {
-            path: parent.display().to_string(),
-            detail: format!("report dir failed: {error}"),
-        })?;
-    }
-    let document = format!("{report}\nmanifest={manifest}\n");
-    std::fs::write(&artifact, document.as_bytes()).map_err(|error| InstallError::IoError {
-        path: artifact.display().to_string(),
-        detail: format!("report write failed: {error}"),
-    })?;
-    let readback = std::fs::read_to_string(&artifact).map_err(|error| InstallError::IoError {
-        path: artifact.display().to_string(),
-        detail: format!("report readback failed: {error}"),
-    })?;
-    if readback != document {
-        return Err(InstallError::IoError {
-            path: artifact.display().to_string(),
-            detail: "report readback mismatch: artifact bytes differ from sealed bytes".to_owned(),
-        });
-    }
+    let document = install_report_document(&report, manifest);
+    let (write_bytes, readback_bytes) =
+        persist_and_read_install_report(&artifact, &document)?;
     Ok(SealedInstallReport {
         report,
         artifact,
-        readback_bytes: readback.len(),
+        write_bytes,
+        readback_bytes,
     })
 }
 
+/// One B12 writer followed immediately by r19i correlation over the same
+/// identity, attempt, manifest, and canonical artifact.
+pub fn assemble_and_correlate_install_report(
+    repo_root: &Path,
+    scan: &AgentScan,
+    outcomes: &[AgentOutcome],
+    backups: &[PathBuf],
+    path_hits: &[PathBuf],
+    identity: &IdentityCheck,
+    attempt_identity: &AttemptIdentity,
+    manifest: &InputManifest,
+) -> Result<(SealedInstallReport, CorrelatedInstallReport), InstallError> {
+    let sealed = assemble_install_report(
+        repo_root,
+        scan,
+        outcomes,
+        backups,
+        path_hits,
+        identity,
+        attempt_identity,
+        manifest,
+    )?;
+    let correlated = correlate_install_report(
+        repo_root,
+        Some(&sealed),
+        identity,
+        attempt_identity,
+        manifest,
+    )
+    .map_err(InstallError::InstallReportRefused)?;
+    Ok((sealed, correlated))
+}
+
+fn report_value_type(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "boolean",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
+}
+
+fn required_report_value<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    path: &Path,
+    key: &str,
+) -> Result<&'a serde_json::Value, InstallReportCause> {
+    object
+        .get(field)
+        .ok_or_else(|| InstallReportCause::MissingField {
+            path: path.to_owned(),
+            field: key.to_owned(),
+        })
+}
+
+fn required_report_object<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    path: &Path,
+    key: &str,
+) -> Result<&'a serde_json::Map<String, serde_json::Value>, InstallReportCause> {
+    let value = required_report_value(object, field, path, key)?;
+    value
+        .as_object()
+        .ok_or_else(|| InstallReportCause::WrongType {
+            path: path.to_owned(),
+            field: key.to_owned(),
+            expected: "object",
+            found: report_value_type(value),
+        })
+}
+
+fn required_report_string<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    path: &Path,
+    key: &str,
+    allow_empty: bool,
+) -> Result<&'a str, InstallReportCause> {
+    let value = required_report_value(object, field, path, key)?;
+    match value {
+        serde_json::Value::String(text) if allow_empty || !text.trim().is_empty() => Ok(text),
+        serde_json::Value::String(_) => Err(InstallReportCause::EmptyField {
+            path: path.to_owned(),
+            field: key.to_owned(),
+        }),
+        other => Err(InstallReportCause::WrongType {
+            path: path.to_owned(),
+            field: key.to_owned(),
+            expected: "string",
+            found: report_value_type(other),
+        }),
+    }
+}
+
+fn required_report_array<'a>(
+    object: &'a serde_json::Map<String, serde_json::Value>,
+    field: &str,
+    path: &Path,
+    key: &str,
+) -> Result<&'a Vec<serde_json::Value>, InstallReportCause> {
+    let value = required_report_value(object, field, path, key)?;
+    value
+        .as_array()
+        .ok_or_else(|| InstallReportCause::WrongType {
+            path: path.to_owned(),
+            field: key.to_owned(),
+            expected: "array",
+            found: report_value_type(value),
+        })
+}
+
+fn identity_mismatch(
+    field: &str,
+    expected: impl ToString,
+    actual: impl ToString,
+) -> InstallReportCause {
+    InstallReportCause::IdentityMismatch {
+        field: field.to_owned(),
+        expected: expected.to_string(),
+        actual: actual.to_string(),
+    }
+}
+
+fn full_report_manifest_digest<'a>(
+    manifest: &'a InputManifest,
+    canonical: &Path,
+) -> Result<&'a str, InstallReportCause> {
+    match manifest {
+        InputManifest::Full { digest } if !digest.trim().is_empty() => Ok(digest),
+        InputManifest::Full { .. } => Err(InstallReportCause::EmptyField {
+            path: canonical.to_owned(),
+            field: "input_manifest.digest".to_owned(),
+        }),
+        InputManifest::Partial {
+            bound_kind,
+            bound_value,
+            source,
+        } => Err(InstallReportCause::ManifestPartial {
+            bound_kind: bound_kind.clone(),
+            bound_value: *bound_value,
+            source: source.clone(),
+        }),
+        InputManifest::Refused { reason } => Err(InstallReportCause::ManifestRefused {
+            reason: reason.clone(),
+        }),
+    }
+}
+
+fn validate_sealed_report_receipts(
+    canonical: &Path,
+    sealed: Option<&SealedInstallReport>,
+) -> Result<(), InstallReportCause> {
+    let Some(sealed) = sealed else {
+        return Ok(());
+    };
+    if sealed.artifact != canonical {
+        return Err(identity_mismatch(
+            "artifact_path",
+            canonical.display(),
+            sealed.artifact.display(),
+        ));
+    }
+    if sealed.write_bytes == 0 {
+        return Err(InstallReportCause::WriterSuppressed {
+            path: canonical.to_owned(),
+        });
+    }
+    if sealed.readback_bytes == 0 {
+        return Err(InstallReportCause::ReadbackFailed {
+            path: canonical.to_owned(),
+            detail: "B12 readback receipt is zero".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn read_canonical_report(
+    canonical: &Path,
+    was_sealed: bool,
+) -> Result<String, InstallReportCause> {
+    let contents = match std::fs::read_to_string(canonical) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(if was_sealed {
+                InstallReportCause::DeletedAfterWrite {
+                    path: canonical.to_owned(),
+                }
+            } else {
+                InstallReportCause::Missing {
+                    path: canonical.to_owned(),
+                }
+            });
+        }
+        Err(error) => {
+            return Err(InstallReportCause::ReadbackFailed {
+                path: canonical.to_owned(),
+                detail: error.to_string(),
+            });
+        }
+    };
+    if contents.is_empty() {
+        return Err(InstallReportCause::ZeroBytes {
+            path: canonical.to_owned(),
+        });
+    }
+    Ok(contents)
+}
+
+fn validate_report_path_hits(
+    object: &serde_json::Map<String, serde_json::Value>,
+    canonical: &Path,
+    sealed: Option<&SealedInstallReport>,
+) -> Result<Vec<String>, InstallReportCause> {
+    let path_hits = required_report_array(object, "path_hits", canonical, "path_hits")?;
+    let mut actual = Vec::with_capacity(path_hits.len());
+    for (index, value) in path_hits.iter().enumerate() {
+        let Some(path) = value.as_str() else {
+            return Err(InstallReportCause::WrongType {
+                path: canonical.to_owned(),
+                field: format!("path_hits[{index}]"),
+                expected: "string",
+                found: report_value_type(value),
+            });
+        };
+        actual.push(path.to_owned());
+    }
+    if let Some(sealed) = sealed {
+        let expected: Vec<String> = sealed
+            .report
+            .path_hits
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect();
+        if actual != expected {
+            return Err(InstallReportCause::ReadbackMismatch {
+                path: canonical.to_owned(),
+                detail: format!("path_hits expected={expected:?} actual={actual:?}"),
+            });
+        }
+    }
+    Ok(actual)
+}
+
+fn validate_report_attempt(
+    object: &serde_json::Map<String, serde_json::Value>,
+    canonical: &Path,
+    expected: &AttemptIdentity,
+) -> Result<(), InstallReportCause> {
+    let attempt =
+        required_report_object(object, "attempt_identity", canonical, "attempt_identity")?;
+    for (field, wanted, allow_empty) in [
+        ("pane", expected.pane.as_str(), true),
+        ("incarnation", expected.incarnation.as_str(), true),
+        ("attempt", expected.attempt.as_str(), false),
+    ] {
+        let key = format!("attempt_identity.{field}");
+        let actual = required_report_string(attempt, field, canonical, &key, allow_empty)?;
+        if actual != wanted {
+            return Err(identity_mismatch(&key, wanted, actual));
+        }
+    }
+    Ok(())
+}
+
+fn validate_report_identity(
+    object: &serde_json::Map<String, serde_json::Value>,
+    canonical: &Path,
+    expected: &IdentityCheck,
+) -> Result<(), InstallReportCause> {
+    let identity = required_report_object(object, "identity", canonical, "identity")?;
+    for (field, wanted) in [
+        ("binary_name", expected.binary_name.as_str()),
+        ("head_sha", expected.head_sha.as_str()),
+        ("identity_legs", expected.identity_legs()),
+    ] {
+        let key = format!("identity.{field}");
+        let actual = required_report_string(identity, field, canonical, &key, false)?;
+        if actual != wanted {
+            return Err(identity_mismatch(&key, wanted, actual));
+        }
+    }
+    let consistent = required_report_value(identity, "consistent", canonical, "identity.consistent")?;
+    let Some(consistent) = consistent.as_bool() else {
+        return Err(InstallReportCause::WrongType {
+            path: canonical.to_owned(),
+            field: "identity.consistent".to_owned(),
+            expected: "boolean",
+            found: report_value_type(consistent),
+        });
+    };
+    if consistent != expected.consistent {
+        return Err(identity_mismatch(
+            "identity.consistent",
+            expected.consistent,
+            consistent,
+        ));
+    }
+    for (field, wanted) in [
+        ("repo_ownership", repo_ownership_json(&expected.repo_ownership)),
+        (
+            "build_id_in_binary",
+            serde_json::json!(&expected.build_id_in_binary),
+        ),
+        ("version_output", serde_json::json!(&expected.version_output)),
+    ] {
+        let key = format!("identity.{field}");
+        let actual = required_report_value(identity, field, canonical, &key)?;
+        if actual != &wanted {
+            return Err(identity_mismatch(&key, wanted, actual));
+        }
+    }
+    Ok(())
+}
+
+fn validate_report_manifest(
+    object: &serde_json::Map<String, serde_json::Value>,
+    canonical: &Path,
+    expected_digest: &str,
+) -> Result<(), InstallReportCause> {
+    let manifest =
+        required_report_object(object, "input_manifest", canonical, "input_manifest")?;
+    let state = required_report_string(
+        manifest,
+        "state",
+        canonical,
+        "input_manifest.state",
+        false,
+    )?;
+    if state != "FULL" {
+        return Err(identity_mismatch("input_manifest.state", "FULL", state));
+    }
+    let digest = required_report_string(
+        manifest,
+        "digest",
+        canonical,
+        "input_manifest.digest",
+        false,
+    )?;
+    if digest != expected_digest {
+        return Err(identity_mismatch(
+            "input_manifest.digest",
+            expected_digest,
+            digest,
+        ));
+    }
+    Ok(())
+}
+
+fn validate_inception_host_capabilities(repo_root: &Path) -> Result<(), InstallReportCause> {
+    let path = repo_root.join(".omp-orchestrator/inception.json");
+    let contents = match std::fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(InstallReportCause::InceptionMissing { path });
+        }
+        Err(error) => {
+            return Err(InstallReportCause::HostCapabilitiesInvalid {
+                path,
+                detail: error.to_string(),
+            });
+        }
+    };
+    let value: serde_json::Value = serde_json::from_str(&contents).map_err(|error| {
+        InstallReportCause::HostCapabilitiesInvalid {
+            path: path.clone(),
+            detail: error.to_string(),
+        }
+    })?;
+    let host = value
+        .as_object()
+        .and_then(|object| object.get("host_capabilities"))
+        .and_then(serde_json::Value::as_object)
+        .ok_or_else(|| InstallReportCause::HostCapabilitiesInvalid {
+            path: path.clone(),
+            detail: "host_capabilities missing or not an object".to_owned(),
+        })?;
+    for field in ["os", "arch", "filesystem"] {
+        if !host
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            return Err(InstallReportCause::HostCapabilitiesInvalid {
+                path: path.clone(),
+                detail: format!("host_capabilities.{field} missing, empty, or not a string"),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_sealed_report_document(
+    contents: &str,
+    canonical: &Path,
+    sealed: Option<&SealedInstallReport>,
+    manifest: &InputManifest,
+) -> Result<(), InstallReportCause> {
+    let Some(sealed) = sealed else {
+        return Ok(());
+    };
+    if contents.len() != sealed.readback_bytes {
+        return Err(InstallReportCause::ReadbackMismatch {
+            path: canonical.to_owned(),
+            detail: format!(
+                "readback bytes expected={} actual={}",
+                sealed.readback_bytes,
+                contents.len()
+            ),
+        });
+    }
+    if contents != install_report_document(&sealed.report, manifest) {
+        return Err(InstallReportCause::ReadbackMismatch {
+            path: canonical.to_owned(),
+            detail: "canonical document differs from B12 sealed report".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+pub fn correlate_install_report(
+    repo_root: &Path,
+    sealed: Option<&SealedInstallReport>,
+    expected_identity: &IdentityCheck,
+    expected_attempt: &AttemptIdentity,
+    manifest: &InputManifest,
+) -> Result<CorrelatedInstallReport, InstallReportCause> {
+    let canonical = repo_root.join(INSTALL_REPORT_ARTIFACT);
+    let manifest_digest = full_report_manifest_digest(manifest, &canonical)?;
+    validate_sealed_report_receipts(&canonical, sealed)?;
+    let contents = read_canonical_report(&canonical, sealed.is_some())?;
+    let value: serde_json::Value = serde_json::from_str(&contents).map_err(|error| {
+        InstallReportCause::Truncated {
+            path: canonical.clone(),
+            detail: error.to_string(),
+        }
+    })?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| InstallReportCause::WrongType {
+            path: canonical.clone(),
+            field: "$".to_owned(),
+            expected: "object",
+            found: report_value_type(&value),
+        })?;
+    let schema = required_report_string(
+        object,
+        "schema_version",
+        &canonical,
+        "schema_version",
+        false,
+    )?;
+    if schema != "install-report.v1" {
+        return Err(identity_mismatch(
+            "schema_version",
+            "install-report.v1",
+            schema,
+        ));
+    }
+    let digest = required_report_string(object, "digest", &canonical, "digest", false)?;
+    if let Some(sealed) = sealed {
+        if digest != sealed.report.digest {
+            return Err(identity_mismatch("digest", &sealed.report.digest, digest));
+        }
+    }
+    let path_hits = validate_report_path_hits(object, &canonical, sealed)?;
+    validate_report_attempt(object, &canonical, expected_attempt)?;
+    validate_report_identity(object, &canonical, expected_identity)?;
+    validate_report_manifest(object, &canonical, manifest_digest)?;
+    validate_inception_host_capabilities(repo_root)?;
+    validate_sealed_report_document(&contents, &canonical, sealed, manifest)?;
+    Ok(CorrelatedInstallReport {
+        readback_bytes: contents.len(),
+        path_hits: path_hits.len(),
+        host_capabilities: 3,
+    })
+}
 /// L0-B12-obs-writer (bead xic2): attempt identity carried explicitly on
 /// every emit. `pane`/`incarnation` name the operating agent when known
 /// (empty means unknown, never fabricated); `attempt` is minted once per
@@ -1408,6 +2183,16 @@ pub struct ObserveGate {
     pub fresh: bool,
 }
 
+/// B15 gate result after consuming r19i's canonical report correlation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InstallObserveGate {
+    pub report_readback_bytes: usize,
+    pub path_hits: usize,
+    pub host_capabilities: usize,
+    pub rows: usize,
+    pub fresh: bool,
+}
+
 /// A refused observability gate: which stage refused and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObserveGateError {
@@ -1491,6 +2276,23 @@ pub fn gate_observability(
     })
 }
 
+
+/// The production B15 consumer: a previously correlated canonical report
+/// becomes part of the same event/monitor/freshness verdict, not a second gate.
+pub fn gate_correlated_observability(
+    repo_root: &Path,
+    manifest: &InputManifest,
+    report: CorrelatedInstallReport,
+) -> Result<InstallObserveGate, ObserveGateError> {
+    let gate = gate_observability(repo_root, manifest)?;
+    Ok(InstallObserveGate {
+        report_readback_bytes: report.readback_bytes,
+        path_hits: report.path_hits,
+        host_capabilities: report.host_capabilities,
+        rows: gate.rows,
+        fresh: gate.fresh,
+    })
+}
 /// Final L0 observability decision used by the production installer and its
 /// integration tests. A failed gate emits the refusal event and returns 1
 /// before the sole success-printing guard can run.
@@ -1499,12 +2301,16 @@ pub fn guard_observability_success(
     identity: &AttemptIdentity,
     manifest: &InputManifest,
     readback: lifecycle_event::Readback,
-    gate: Result<ObserveGate, ObserveGateError>,
+    gate: Result<InstallObserveGate, ObserveGateError>,
 ) -> ExitCode {
     match gate {
         Ok(gate) => println!(
-            "  OBSERVE rows={} fresh={} manifest={manifest}",
-            gate.rows, gate.fresh
+            "  OBSERVE report_bytes={} path_hits={} host_capabilities={} rows={} fresh={} manifest={manifest}",
+            gate.report_readback_bytes,
+            gate.path_hits,
+            gate.host_capabilities,
+            gate.rows,
+            gate.fresh,
         ),
         Err(error) => {
             eprintln!("INSTALLER OBSERVE REFUSED: {error}");

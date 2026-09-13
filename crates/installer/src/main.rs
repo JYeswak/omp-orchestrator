@@ -394,6 +394,7 @@ fn run_install(
         binary_name,
         &head,
         check.clone(),
+        identity.clone(),
     ) {
         Ok(phase) => {
             println!(
@@ -437,37 +438,40 @@ fn run_install(
         &std::env::var("PATH").unwrap_or_default(),
     );
     let manifest = installer::InputManifest::Full { digest: digest_hex };
-    match installer::assemble_install_report(
+    let (assembled, correlated) = match installer::assemble_and_correlate_install_report(
         repo_root,
         &phase.scan,
         &phase.outcomes,
         &phase.backups,
         &path_hits,
         &check,
+        identity,
         &manifest,
     ) {
-        Ok(assembled) => println!(
-            "  REPORT digest={} artifact={}",
-            assembled.report.digest,
-            assembled.artifact.display()
-        ),
+        Ok(report) => report,
         Err(error) => {
             eprintln!("INSTALLER REPORT REFUSED: {error}");
             for row in &phase.outcomes {
                 eprintln!("  REPORT {}={}", row.family, row.outcome);
             }
-            let _ = installer::emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_REPORT_REFUSED", identity, &manifest);
-            // Vacuous input leaves by its own door: an empty scan measured
-            // nothing, so it exits 4 (UNMEASURED), never the measured-refusal
-            // 1. The refusal event above still journals the typed reason.
+            let _ = installer::emit_refusal(
+                repo_root,
+                Layer::L0,
+                "S1.L0",
+                "INSTALL_REPORT_REFUSED",
+                identity,
+                &manifest,
+            );
             return installer::report_assembly_exit(&error);
         }
-    }
-    // L0-B15: the sealed report's event row must be observable, the
-    // artifact must re-verify, and the freshness gate must pass before
-    // any success verdict. Any stage refusing denies install success
-    // with its typed reason; per-family outcomes already printed above
-    // survive on this path too.
+    };
+    println!(
+        "  REPORT digest={} artifact={}",
+        assembled.report.digest,
+        assembled.artifact.display()
+    );
+    // L0-B15 consumes the correlated report before the event/monitor/gate
+    // chain can expose success.
     let readback = match installer::emit_s1(
         repo_root,
         Layer::L0,
@@ -482,7 +486,7 @@ fn run_install(
             return installer::guard_success(Err(error), installer::GATE_OK_VERDICT)
         }
     };
-    let gate = installer::gate_observability(repo_root, &manifest);
+    let gate = installer::gate_correlated_observability(repo_root, &manifest, correlated);
     installer::guard_observability_success(repo_root, identity, &manifest, readback, gate)
 }
 
