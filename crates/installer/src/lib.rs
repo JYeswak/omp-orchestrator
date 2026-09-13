@@ -1357,6 +1357,23 @@ pub fn guard_success(
     }
 }
 
+/// L0-B15-obs-gate (bead fx3d): exit for a refused install report. The
+/// process exit vocabulary is 0 success, 1 operational refusal, 2 CLI
+/// usage, 3 environment/identity -- and 4 vacuous input. An empty agent
+/// scan measured nothing, so it must never share the measured-refusal
+/// code: exit 4 keeps UNMEASURED distinguishable from REFUSED. Every
+/// other assembly failure (manifest, digest, write, readback) is a
+/// measured refusal and stays 1. `run_install` owns the call site; legs
+/// pin both arms here.
+#[must_use]
+pub fn report_assembly_exit(error: &InstallError) -> std::process::ExitCode {
+    if matches!(error, InstallError::EmptyAgentScan) {
+        std::process::ExitCode::from(4)
+    } else {
+        std::process::ExitCode::from(1)
+    }
+}
+
 /// L0 observe stall bound: follows the 60s operator default used by the
 /// tick fleet and the resident supervisor. An emit that just landed reads
 /// back in milliseconds, so a row older than this at gate time is stale
@@ -1411,6 +1428,12 @@ impl std::fmt::Display for ObserveGateError {
 
 impl std::error::Error for ObserveGateError {}
 
+/// L0-B15-obs-gate (bead fx3d): the exact success verdict line. Production
+/// prints this bare word and nothing else on the composed-gate success
+/// path; legs pin the literal so a reworded verdict reddens instead of
+/// drifting. A refusing gate never yields this line: every refusal
+/// returns before the success guard that prints it.
+pub const GATE_OK_VERDICT: &str = "GATE_OK";
 /// L0-B15 observability gate: event -> monitor -> gate verdict.
 ///
 /// After the report seals, this re-reads the L0 journal through the
@@ -1431,12 +1454,24 @@ pub fn gate_observability(
 ) -> Result<ObserveGate, ObserveGateError> {
     let journal = default_repo_journal(repo_root);
     let manifest_text = manifest.to_string();
+    // INPUT: the gate verdicts only over a complete input set. A PARTIAL
+    // or REFUSED manifest refuses here with its own typed reason before
+    // any channel is consulted -- verdicting over undeclared input would
+    // launder it into a clean gate.
+    match manifest {
+        InputManifest::Full { .. } => {}
+        InputManifest::Partial { .. } | InputManifest::Refused { .. } => {
+            return Err(ObserveGateError {
+                stage: ObserveStage::Gate,
+                reason: format!("non-FULL manifest cannot gate: manifest={manifest}"),
+            })
+        }
+    }
     // EVENT: the sealed report's event row is durable and readable back.
     let event_rows = verify_artifact(&journal).map_err(|error| ObserveGateError {
         stage: ObserveStage::Event,
         reason: format!("{error} manifest={manifest_text}"),
     })?;
-    // MONITOR: the L0 layer observes with a fresh progressing verdict.
     let verdict = observe_layer(&journal, Layer::L0, L0_OBSERVE_STALL_MS).map_err(|error| {
         ObserveGateError {
             stage: ObserveStage::Monitor,
@@ -1454,6 +1489,37 @@ pub fn gate_observability(
         rows: event_rows,
         fresh: verdict.fresh,
     })
+}
+
+/// Final L0 observability decision used by the production installer and its
+/// integration tests. A failed gate emits the refusal event and returns 1
+/// before the sole success-printing guard can run.
+pub fn guard_observability_success(
+    repo_root: &Path,
+    identity: &AttemptIdentity,
+    manifest: &InputManifest,
+    readback: lifecycle_event::Readback,
+    gate: Result<ObserveGate, ObserveGateError>,
+) -> ExitCode {
+    match gate {
+        Ok(gate) => println!(
+            "  OBSERVE rows={} fresh={} manifest={manifest}",
+            gate.rows, gate.fresh
+        ),
+        Err(error) => {
+            eprintln!("INSTALLER OBSERVE REFUSED: {error}");
+            let _ = emit_refusal(
+                repo_root,
+                Layer::L0,
+                "S1.L0",
+                "INSTALL_OBSERVE_REFUSED",
+                identity,
+                manifest,
+            );
+            return ExitCode::from(1);
+        }
+    }
+    guard_success(Ok(readback), GATE_OK_VERDICT)
 }
 
 /// Local git reads are network-free but a foreign host can still hang them

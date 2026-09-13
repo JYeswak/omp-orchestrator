@@ -457,7 +457,10 @@ fn run_install(
                 eprintln!("  REPORT {}={}", row.family, row.outcome);
             }
             let _ = installer::emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_REPORT_REFUSED", identity, &manifest);
-            return ExitCode::from(1);
+            // Vacuous input leaves by its own door: an empty scan measured
+            // nothing, so it exits 4 (UNMEASURED), never the measured-refusal
+            // 1. The refusal event above still journals the typed reason.
+            return installer::report_assembly_exit(&error);
         }
     }
     // L0-B15: the sealed report's event row must be observable, the
@@ -465,18 +468,22 @@ fn run_install(
     // any success verdict. Any stage refusing denies install success
     // with its typed reason; per-family outcomes already printed above
     // survive on this path too.
-    match installer::gate_observability(repo_root, &manifest) {
-        Ok(gate) => println!(
-            "  OBSERVE rows={} fresh={} manifest={manifest}",
-            gate.rows, gate.fresh
-        ),
+    let readback = match installer::emit_s1(
+        repo_root,
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        "INSTALL_VERIFIED",
+        identity,
+        &manifest,
+    ) {
+        Ok(readback) => readback,
         Err(error) => {
-            eprintln!("INSTALLER OBSERVE REFUSED: {error}");
-            let _ = installer::emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_OBSERVE_REFUSED", identity, &manifest);
-            return ExitCode::from(1);
+            return installer::guard_success(Err(error), installer::GATE_OK_VERDICT)
         }
-    }
-    installer::guard_success(installer::emit_s1(repo_root, Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", identity, &manifest), &format!("INSTALLER: target {binary_name} installed and verified"))
+    };
+    let gate = installer::gate_observability(repo_root, &manifest);
+    installer::guard_observability_success(repo_root, identity, &manifest, readback, gate)
 }
 
 fn shellexpand_path(path: &str) -> String {

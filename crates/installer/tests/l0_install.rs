@@ -2604,3 +2604,366 @@ fn xic2_identity_stamps_emitted_row() {
         rows[0]
     );
 }
+
+/// L0-B15-obs-gate (bead fx3d): the dedicated nonzero production-path
+/// selector. Drives the REAL composed chain on a hermetic repo with a
+/// FULL manifest -- seal + persist + emit + observe + gate + guard, the
+/// same functions in the same order `run_install` calls, never a copy
+/// of their checks. One family, one outcome, one attempt: every
+/// denominator below is nonzero by construction, so a vacuous pass is
+/// unrepresentable. Returns the guard exit, the gate rows, and the
+/// journal rows for the legs to pin.
+fn fx3d_production_gate(
+    repo: &Path,
+    manifest: &installer::InputManifest,
+    reason: &str,
+) -> (
+    std::process::ExitCode,
+    usize,
+    Vec<String>,
+) {
+    use lifecycle_event::{EmitOutcome, Layer};
+    // Verified digest over fixed fixture bytes (B03 known-answer): the
+    // FULL manifest carries a real digest, never a placeholder.
+    const FIXTURE_HEX: &str =
+        "59bd16dfc39e768f82bb8ec74467e571e80ed284683b586f077dbf1aa2483ecd";
+    let subject = repo.join("artifact.bin");
+    std::fs::write(&subject, b"artifact bytes\n").expect("fixture artifact");
+    let hex = installer::verify_sha256(&subject, Some(FIXTURE_HEX)).expect("digest verifies");
+    assert_eq!(hex, FIXTURE_HEX, "selector works over a verified digest");
+    let scan = installer::AgentScan {
+        families: vec!["fx3d-probe".to_owned()],
+    };
+    let outcomes = vec![installer::AgentOutcome {
+        family: "fx3d-probe".to_owned(),
+        outcome: "ok".to_owned(),
+    }];
+    // Hermetic stand-in identity: the selector proves COMPOSITION
+    // (seal -> persist -> emit -> observe -> gate -> verdict), not that
+    // this fixture binary is real. Identity truth stays with the
+    // four-way proof legs above.
+    let assembled = installer::assemble_install_report(
+        repo,
+        &scan,
+        &outcomes,
+        &[],
+        &[subject],
+        &sample_identity(),
+        manifest,
+    )
+    .expect("complete inputs must seal");
+    assert!(assembled.readback_bytes > 0, "seal must persist");
+    let identity = installer::AttemptIdentity {
+        pane: "fx3d".to_owned(),
+        incarnation: "1".to_owned(),
+        attempt: "fx3d-attempt-1".to_owned(),
+    };
+    let readback = installer::emit_s1(
+        repo,
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        reason,
+        &identity,
+        manifest,
+    )
+    .expect("production emit must answer with readback");
+    assert_eq!(readback.lines, 1, "one emit appends exactly one row");
+    let gate = installer::gate_observability(repo, manifest);
+    let gate_rows = gate.as_ref().expect("fresh row must gate").rows;
+    let exit = installer::guard_observability_success(
+        repo,
+        &identity,
+        manifest,
+        readback,
+        gate,
+    );
+    let rows = xic2_journal_rows(repo);
+    (exit, gate_rows, rows)
+}
+
+/// GOOD: a complete one-attempt report/event/monitor/gate yields exactly
+/// GATE_OK with exit 0 over nonzero denominators.
+#[test]
+fn fx3d_good_gate_yields_gate_ok() {
+    assert_eq!(
+        installer::GATE_OK_VERDICT,
+        "GATE_OK",
+        "the production verdict constant is exactly the bare word"
+    );
+    let repo = TempDir::new("fx3d-good-gate");
+    let manifest = installer::InputManifest::Full {
+        digest: "59bd16dfc39e768f82bb8ec74467e571e80ed284683b586f077dbf1aa2483ecd"
+            .to_owned(),
+    };
+    let (exit, gate_rows, rows) =
+        fx3d_production_gate(repo.path(), &manifest, "INSTALL_VERIFIED");
+    assert_eq!(exit, std::process::ExitCode::SUCCESS, "GOOD gates exit 0");
+    assert!(gate_rows >= 1, "gate observed a nonzero row set");
+    assert_eq!(rows.len(), 1, "exactly the one emitted row is journaled");
+    assert!(
+        rows[0].contains("INSTALL_VERIFIED") && rows[0].contains("\"emitted\""),
+        "the row is the verified emit: {}",
+        rows[0]
+    );
+    assert!(
+        !rows.iter().any(|row| row.contains("GATE_OK")),
+        "the verdict line lives on stdout, never in the journal"
+    );
+}
+
+/// BAD tampered artifact: a digest mismatch refuses with the exact
+/// L0_SHA256_REFUSED line and the publishing action never runs.
+#[test]
+fn fx3d_tampered_artifact_refuses_sha256() {
+    use installer::verify_sha256_before_install;
+    let dir = TempDir::new("fx3d-tampered");
+    let subject = dir.path().join("artifact.bin");
+    std::fs::write(&subject, b"artifact bytes\n").expect("fixture artifact");
+    let actual =
+        installer::verify_sha256(&subject, None).expect_err("no expected digest refuses");
+    assert_eq!(
+        actual.to_string(),
+        "L0_SHA256_REFUSED: missing expected digest",
+        "missing expected digest is the exact line"
+    );
+    const REAL: &str =
+        "59bd16dfc39e768f82bb8ec74467e571e80ed284683b586f077dbf1aa2483ecd";
+    const WRONG: &str =
+        "0000000000000000000000000000000000000000000000000000000000000000";
+    let error =
+        installer::verify_sha256(&subject, Some(WRONG)).expect_err("tamper must refuse");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "L0_SHA256_REFUSED: digest mismatch path={} expected={} actual={}",
+            subject.display(),
+            WRONG,
+            REAL
+        ),
+        "mismatch refusal is the exact line"
+    );
+    let mut ran = false;
+    let refused = verify_sha256_before_install(&subject, Some(WRONG), || {
+        ran = true;
+        Ok::<_, installer::InstallError>(())
+    });
+    assert!(refused.is_err(), "tamper refuses before the action");
+    assert!(!ran, "the publishing action never runs on tamper");
+}
+
+/// BAD zero families: an empty scan refuses with the exact L0_EMPTY_SCAN
+/// line and leaves by the DISTINCT empty-input exit 4 -- never the
+/// measured-refusal 1, which a companion arm pins on the same mapper.
+#[test]
+fn fx3d_zero_families_refuse_empty_scan() {
+    use installer::{report_assembly_exit, InstallError};
+    let error = installer::seal_install_report(
+        &installer::AgentScan { families: vec![] },
+        vec![],
+        vec![],
+        vec![],
+        sample_identity(),
+    )
+    .expect_err("zero families must refuse");
+    assert_eq!(
+        error.to_string(),
+        "L0_EMPTY_SCAN: zero agents is ERROR, never a success report",
+        "empty-scan refusal is the exact line"
+    );
+    assert_eq!(
+        report_assembly_exit(&error),
+        std::process::ExitCode::from(4),
+        "vacuous input exits 4"
+    );
+    // Companion: a MEASURED assembly failure shares no exit with it.
+    let measured = installer::seal_install_report(
+        &installer::AgentScan {
+            families: vec!["fx3d-probe".to_owned()],
+        },
+        vec![],
+        vec![],
+        vec![],
+        sample_identity(),
+    )
+    .expect_err("a family with no outcome must refuse");
+    assert!(
+        !matches!(measured, InstallError::EmptyAgentScan),
+        "the companion is a different refusal: {measured}"
+    );
+    assert_eq!(
+        report_assembly_exit(&measured),
+        std::process::ExitCode::from(1),
+        "measured refusal stays 1"
+    );
+}
+
+/// A refusing LayerState never yields GATE_OK: the gate stops at the
+/// GATE stage with the stale layer named, the journal carries no verdict
+/// line, and the success guard withholds on any failure handed to it.
+#[test]
+fn fx3d_refusing_layer_state_never_gate_ok() {
+    use installer::{gate_observability, ObserveStage};
+    use lifecycle_event::{EmitOutcome, Layer};
+    let repo = TempDir::new("fx3d-refusing-state");
+    let manifest = installer::InputManifest::Full {
+        digest: "fx3d".to_owned(),
+    };
+    let identity = installer::AttemptIdentity {
+        pane: "fx3d".to_owned(),
+        incarnation: "1".to_owned(),
+        attempt: "fx3d-attempt-1".to_owned(),
+    };
+    let readback = installer::emit_s1(
+        repo.path(),
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        "INSTALL_VERIFIED",
+        &identity,
+        &manifest,
+    )
+    .expect("first emit lands");
+    installer::emit_refusal(
+        repo.path(),
+        Layer::L0,
+        "S1.L0",
+        "INSTALL_OBSERVE_REFUSED",
+        &identity,
+        &manifest,
+    )
+    .expect("refusal emit lands");
+    let error =
+        gate_observability(repo.path(), &manifest).expect_err("refusing state must not gate");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Gate,
+        "a refusing last row fails the freshness gate, got: {error}"
+    );
+    assert!(
+        error.reason.contains("L0:refusing"),
+        "the stale layer is named: {}",
+        error.reason
+    );
+    let rows = xic2_journal_rows(repo.path());
+    assert_eq!(rows.len(), 2, "both rows are durable");
+    assert!(
+        !rows.iter().any(|row| row.contains("GATE_OK")),
+        "no verdict line ever reaches the journal"
+    );
+    let exit = installer::guard_observability_success(
+        repo.path(),
+        &identity,
+        &manifest,
+        readback,
+        Err(error),
+    );
+    assert_eq!(
+        exit,
+        std::process::ExitCode::from(1),
+        "the production guard must withhold GATE_OK on a refusing layer"
+    );
+    let rows = xic2_journal_rows(repo.path());
+    assert_eq!(rows.len(), 3, "the final refusal is journaled");
+    assert!(
+        !rows.iter().any(|row| row.contains("GATE_OK")),
+        "a refusing production guard never journals GATE_OK"
+    );
+}
+
+/// Missing or empty journal refuses at the EVENT stage: nothing was
+/// observed because nothing durable exists to observe.
+#[test]
+fn fx3d_missing_journal_refuses_event_stage() {
+    use installer::{gate_observability, ObserveStage};
+    let manifest = installer::InputManifest::Full {
+        digest: "fx3d".to_owned(),
+    };
+    let missing = TempDir::new("fx3d-missing-journal");
+    let error = gate_observability(missing.path(), &manifest)
+        .expect_err("a missing journal must refuse");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Event,
+        "missing journal blames EVENT, got: {error}"
+    );
+    let empty = TempDir::new("fx3d-empty-journal");
+    let journal = lifecycle_event::default_repo_journal(empty.path());
+    if let Some(parent) = journal.parent() {
+        std::fs::create_dir_all(parent).expect("journal parent");
+    }
+    std::fs::write(&journal, b"").expect("empty journal lands");
+    let error = gate_observability(empty.path(), &manifest)
+        .expect_err("an empty journal must refuse");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Event,
+        "empty journal blames EVENT, got: {error}"
+    );
+}
+
+/// Present rows but no L0 verdict refuses at the MONITOR stage: the
+/// journal is fine, the layer under gate simply has no verdict.
+#[test]
+fn fx3d_absent_verdict_refuses_monitor_stage() {
+    use installer::{gate_observability, ObserveStage};
+    use lifecycle_event::{EmitOutcome, Layer};
+    let repo = TempDir::new("fx3d-absent-verdict");
+    let manifest = installer::InputManifest::Full {
+        digest: "fx3d".to_owned(),
+    };
+    let identity = installer::AttemptIdentity {
+        pane: "fx3d".to_owned(),
+        incarnation: "1".to_owned(),
+        attempt: "fx3d-attempt-1".to_owned(),
+    };
+    installer::emit_s1(
+        repo.path(),
+        Layer::L1,
+        "S1.L1",
+        EmitOutcome::Emitted,
+        "IDENTITY_OK",
+        &identity,
+        &manifest,
+    )
+    .expect("L1 row lands");
+    let error = gate_observability(repo.path(), &manifest)
+        .expect_err("no L0 verdict must refuse");
+    assert_eq!(
+        error.stage,
+        ObserveStage::Monitor,
+        "absent L0 verdict blames MONITOR, got: {error}"
+    );
+}
+
+/// PARTIAL and REFUSED manifests refuse at the GATE stage before any
+/// channel is consulted: verdicting over undeclared input would launder
+/// it into a clean gate.
+#[test]
+fn fx3d_non_full_manifests_refuse_gate_stage() {
+    use installer::{gate_observability, ObserveStage};
+    let repo = TempDir::new("fx3d-gate-manifest");
+    for manifest in [
+        installer::InputManifest::Partial {
+            bound_kind: "depth".to_owned(),
+            bound_value: 3,
+            source: "fx3d-fixture".to_owned(),
+        },
+        installer::InputManifest::Refused {
+            reason: "fx3d-fixture".to_owned(),
+        },
+    ] {
+        let error = gate_observability(repo.path(), &manifest)
+            .expect_err("a non-FULL manifest must refuse the gate");
+        assert_eq!(
+            error.stage,
+            ObserveStage::Gate,
+            "manifest refusal is a GATE verdict, got: {error}"
+        );
+        assert!(
+            error.reason.contains("non-FULL manifest cannot gate"),
+            "the refusal names its cause: {}",
+            error.reason
+        );
+    }
+}
