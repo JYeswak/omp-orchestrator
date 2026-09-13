@@ -58,6 +58,12 @@ fn main() -> ExitCode {
             usage();
             ExitCode::from(2)
         }
+        Some("--delta") if args.len() == 1 => run_delta(&repo_root),
+        Some("--delta") => {
+            eprintln!("INSTALLER ERROR: --delta takes no positional arguments");
+            usage();
+            ExitCode::from(2)
+        }
         Some("--version") => {
             println!("installer 0.1.0 build_id={}", env!("OMP_BUILD_ID"));
             ExitCode::SUCCESS
@@ -146,13 +152,30 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
 }
 
 fn usage() {
-    eprintln!("installer [--check | --install TARGET | --version] [--bin-dir PATH] [--sha256 DIGEST] [--pane ID] [--incarnation ID]");
+    eprintln!("installer [--check | --install TARGET | --delta | --version] [--bin-dir PATH] [--sha256 DIGEST] [--pane ID] [--incarnation ID]");
 }
 fn dirs_home() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
 }
+fn run_delta(repo_root: &PathBuf) -> ExitCode {
+    let Some(now_ms) = installer::current_time_ms() else {
+        eprintln!("INSTALLER DELTA UNMEASURABLE: INSTALL_METRIC_UNMEASURABLE reason=TIMESTAMP_MISSING field=observer_now_ms");
+        return ExitCode::from(4);
+    };
+    match installer::read_install_metric_deltas(repo_root, now_ms) {
+        Ok(report) => {
+            println!("{}", report.to_json_line());
+            ExitCode::from(report.exit_code())
+        }
+        Err(error) => {
+            eprintln!("INSTALLER DELTA UNMEASURABLE: {error}");
+            ExitCode::from(4)
+        }
+    }
+}
+
 fn run_check(
     repo_root: &PathBuf,
     bin_dir: &PathBuf,
@@ -257,10 +280,24 @@ fn run_check(
         );
         return ExitCode::SUCCESS;
     }
-    installer::guard_success(installer::emit_s1(repo_root, Layer::L1, "S1.L1", EmitOutcome::Emitted, "IDENTITY_OK", identity, &manifest), &format!(
+    installer::guard_success(installer::emit_s1(repo_root, Layer::L1, "S1.L1", EmitOutcome::Emitted, "IDENTITY_OK", identity, &manifest, &[]), &format!(
         "INSTALLER IDENTITY OK: {}/{} binaries consistent with HEAD {head_short}",
         report.probed, report.probed
     ))
+}
+
+fn production_metric_inputs(
+    started_at_ms: Option<u64>,
+    phase: &installer::skill_install::SkillPhaseReport,
+    path_hits: &[PathBuf],
+) -> installer::InstallMetricInputs {
+    installer::InstallMetricInputs::production(
+        started_at_ms,
+        installer::current_time_ms(),
+        path_hits.len(),
+        phase.backups.len(),
+        &phase.outcomes,
+    )
 }
 
 fn run_install(
@@ -276,6 +313,7 @@ fn run_install(
     let manifest = installer::InputManifest::Full {
         digest: String::new(),
     };
+    let install_started_at_ms = installer::current_time_ms();
     if let Err(error) = installer::check_build_fence(repo_root) {
         eprintln!("INSTALLER BLOCKED: {error}");
         let _ = installer::emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_FENCE_BLOCKED", identity, &manifest);
@@ -438,6 +476,7 @@ fn run_install(
         &std::env::var("PATH").unwrap_or_default(),
     );
     let manifest = installer::InputManifest::Full { digest: digest_hex };
+    let metric_inputs = production_metric_inputs(install_started_at_ms, &phase, &path_hits);
     let (assembled, correlated) = match installer::assemble_and_correlate_install_report(
         repo_root,
         &phase.scan,
@@ -446,6 +485,7 @@ fn run_install(
         &path_hits,
         &check,
         identity,
+        metric_inputs,
         &manifest,
     ) {
         Ok(report) => report,
@@ -471,16 +511,7 @@ fn run_install(
         assembled.artifact.display()
     );
     // L0-B15 consumes the correlated report before the event/monitor/gate
-    // chain can expose success.
-    let readback = match installer::emit_s1(
-        repo_root,
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        identity,
-        &manifest,
-    ) {
+    let readback = match assembled.emit_verified_event(repo_root, identity, &manifest) {
         Ok(readback) => readback,
         Err(error) => {
             return installer::guard_success(Err(error), installer::GATE_OK_VERDICT)

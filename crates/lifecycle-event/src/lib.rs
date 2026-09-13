@@ -89,7 +89,88 @@ impl ReasonCode {
 
 pub use omp_types::EmitOutcome;
 
-/// One S1 lifecycle row. Extra L3 fields are optional, never a second type.
+/// Threshold direction from the xkr6 expectation contract.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricDirection {
+    AtMost,
+    AtLeast,
+}
+
+impl MetricDirection {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::AtMost => "AT_MOST",
+            Self::AtLeast => "AT_LEAST",
+        }
+    }
+}
+
+/// Declared side of one xkr6 metric comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetricExpectation {
+    pub metric: &'static str,
+    pub unit: &'static str,
+    pub expected: u64,
+}
+
+/// Configured tolerance and polarity. Materialized rows never omit it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetricThreshold {
+    pub tolerance: u64,
+    pub direction: MetricDirection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetricDeltaVerdict {
+    Pass,
+    Red,
+}
+
+impl MetricDeltaVerdict {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pass => "PASS",
+            Self::Red => "RED",
+        }
+    }
+}
+
+/// Materialized xkr6 expectation/threshold/delta row. Ratio rows additionally
+/// carry their numerator and denominator so a zero denominator cannot hide
+/// behind a plausible scalar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MetricDelta {
+    pub expectation: MetricExpectation,
+    pub threshold: MetricThreshold,
+    pub observed: u64,
+    pub delta: i64,
+    pub verdict: MetricDeltaVerdict,
+    pub numerator: Option<u64>,
+    pub denominator: Option<u64>,
+}
+
+impl MetricDelta {
+    #[must_use]
+    pub fn to_json_value(self) -> Value {
+        json!({
+            "metric": self.expectation.metric,
+            "unit": self.expectation.unit,
+            "expected": self.expectation.expected,
+            "threshold": self.threshold.tolerance,
+            "direction": self.threshold.direction.as_str(),
+            "observed": self.observed,
+            "delta": self.delta,
+            "verdict": self.verdict.as_str(),
+            "numerator": self.numerator,
+            "denominator": self.denominator,
+        })
+    }
+}
+
+/// One S1 lifecycle row. Extra L3 fields and metric deltas are optional,
+/// never second event types or channels.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LifecycleEvent {
     layer: Layer,
@@ -98,12 +179,14 @@ pub struct LifecycleEvent {
     actor: String,
     pane: String,
     incarnation: String,
+    attempt: String,
     outcome: EmitOutcome,
     reason_code: ReasonCode,
     blocker: String,
     step: String,
     status: String,
     next_command: String,
+    metric_deltas: Vec<MetricDelta>,
 }
 
 impl LifecycleEvent {
@@ -122,12 +205,14 @@ impl LifecycleEvent {
             actor: actor.into(),
             pane: String::new(),
             incarnation: String::new(),
+            attempt: String::new(),
             outcome,
             reason_code,
             blocker: String::new(),
             step: String::new(),
             status: String::new(),
             next_command: String::new(),
+            metric_deltas: Vec::new(),
         }
     }
 
@@ -138,6 +223,11 @@ impl LifecycleEvent {
 
     pub fn with_incarnation(mut self, incarnation: impl Into<String>) -> Self {
         self.incarnation = incarnation.into();
+        self
+    }
+
+    pub fn with_attempt(mut self, attempt: impl Into<String>) -> Self {
+        self.attempt = attempt.into();
         self
     }
 
@@ -156,6 +246,15 @@ impl LifecycleEvent {
         self.status = status.into();
         self.next_command = next_command.into();
         self
+    }
+
+    pub fn with_metric_deltas(mut self, metric_deltas: Vec<MetricDelta>) -> Self {
+        self.metric_deltas = metric_deltas;
+        self
+    }
+
+    pub fn metric_deltas(&self) -> &[MetricDelta] {
+        &self.metric_deltas
     }
 
     pub fn layer(&self) -> Layer {
@@ -186,6 +285,9 @@ impl LifecycleEvent {
         if !self.incarnation.is_empty() {
             map.insert("incarnation".into(), json!(self.incarnation));
         }
+        if !self.attempt.is_empty() {
+            map.insert("attempt".into(), json!(self.attempt));
+        }
         if !self.blocker.is_empty() {
             map.insert("blocker".into(), json!(self.blocker));
         }
@@ -193,6 +295,18 @@ impl LifecycleEvent {
             map.insert("step".into(), json!(self.step));
             map.insert("status".into(), json!(self.status));
             map.insert("next_command".into(), json!(self.next_command));
+        }
+        if !self.metric_deltas.is_empty() {
+            map.insert(
+                "metrics".into(),
+                Value::Array(
+                    self.metric_deltas
+                        .iter()
+                        .copied()
+                        .map(MetricDelta::to_json_value)
+                        .collect(),
+                ),
+            );
         }
         Value::Object(map).to_string()
     }
@@ -515,5 +629,45 @@ mod tests {
                 let cx = asupersync::Cx::current().expect("cx");
                 emit_one(&cx, &journal, event).await.expect("cx emit");
             });
+    }
+}
+
+#[cfg(test)]
+mod metric_tests {
+    use super::*;
+
+    #[test]
+    fn metric_deltas_share_the_lifecycle_event_row() {
+        let delta = MetricDelta {
+            expectation: MetricExpectation {
+                metric: "install_to_verified_path_ms",
+                unit: "ms",
+                expected: 30_000,
+            },
+            threshold: MetricThreshold {
+                tolerance: 5_000,
+                direction: MetricDirection::AtMost,
+            },
+            observed: 28_100,
+            delta: -6_900,
+            verdict: MetricDeltaVerdict::Pass,
+            numerator: None,
+            denominator: None,
+        };
+        let event = LifecycleEvent::new(
+            Layer::L0,
+            "HUMAN",
+            "S1.L0",
+            "test",
+            EmitOutcome::Emitted,
+            ReasonCode::new("INSTALL_VERIFIED").unwrap(),
+        )
+        .with_attempt("attempt-1")
+        .with_metric_deltas(vec![delta]);
+        let value: Value = serde_json::from_str(&event.to_json_line()).unwrap();
+        assert_eq!(event.metric_deltas(), &[delta]);
+        assert_eq!(value["attempt"], "attempt-1");
+        assert_eq!(value["metrics"][0], delta.to_json_value());
+        assert_eq!(value["reason_code"], "INSTALL_VERIFIED");
     }
 }

@@ -18,6 +18,9 @@ use lifecycle_event::{
     default_host_journal, default_repo_journal, readback_after_claimed_write, DurableJournal,
     EmitError, Layer, LifecycleEvent,
 };
+pub use lifecycle_event::{
+    MetricDelta, MetricDeltaVerdict, MetricDirection, MetricExpectation, MetricThreshold,
+};
 use serde_json::Value;
 pub mod ntm_sources;
 
@@ -161,6 +164,96 @@ pub const EMPTY_JOURNAL_EXIT: u8 = 2;
 pub const LAYER_ABSENT_EXIT: u8 = 3;
 
 impl std::error::Error for MonitorError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MetricMeasureError {
+    MissingThreshold { metric: &'static str },
+    ZeroDenominator { metric: &'static str },
+    Overflow { metric: &'static str, operation: &'static str },
+}
+
+impl std::fmt::Display for MetricMeasureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingThreshold { metric } => write!(
+                f,
+                "METRIC_UNMEASURABLE reason=MISSING_THRESHOLD metric={metric}"
+            ),
+            Self::ZeroDenominator { metric } => write!(
+                f,
+                "METRIC_UNMEASURABLE reason=ZERO_DENOMINATOR metric={metric}"
+            ),
+            Self::Overflow { metric, operation } => write!(
+                f,
+                "METRIC_UNMEASURABLE reason=OVERFLOW metric={metric} operation={operation}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MetricMeasureError {}
+
+/// Materialize one xkr6 expectation/threshold/delta row without floating
+/// point or narrowing conversions. A positive delta is outside the allowed
+/// band; zero is the configured boundary and remains PASS.
+pub fn measure_metric(
+    expectation: MetricExpectation,
+    threshold: Option<MetricThreshold>,
+    observed: u64,
+) -> Result<MetricDelta, MetricMeasureError> {
+    let threshold = threshold.ok_or(MetricMeasureError::MissingThreshold {
+        metric: expectation.metric,
+    })?;
+    let observed_i128 = i128::from(observed);
+    let expected = i128::from(expectation.expected);
+    let tolerance = i128::from(threshold.tolerance);
+    let delta_i128 = match threshold.direction {
+        MetricDirection::AtMost => observed_i128 - expected - tolerance,
+        MetricDirection::AtLeast => expected - observed_i128 - tolerance,
+    };
+    let delta = i64::try_from(delta_i128).map_err(|_| MetricMeasureError::Overflow {
+        metric: expectation.metric,
+        operation: "delta_to_i64",
+    })?;
+    Ok(MetricDelta {
+        expectation,
+        threshold,
+        observed,
+        delta,
+        verdict: if delta <= 0 {
+            MetricDeltaVerdict::Pass
+        } else {
+            MetricDeltaVerdict::Red
+        },
+        numerator: None,
+        denominator: None,
+    })
+}
+
+/// Ratio evaluator using a caller-declared integer scale. The numerator is
+/// multiplied before division; overflow and zero denominator are typed
+/// UNMEASURABLE states rather than saturated green values.
+pub fn measure_ratio_metric(
+    expectation: MetricExpectation,
+    threshold: Option<MetricThreshold>,
+    numerator: u64,
+    denominator: u64,
+    scale: u64,
+) -> Result<MetricDelta, MetricMeasureError> {
+    if denominator == 0 {
+        return Err(MetricMeasureError::ZeroDenominator {
+            metric: expectation.metric,
+        });
+    }
+    let scaled = numerator.checked_mul(scale).ok_or(MetricMeasureError::Overflow {
+        metric: expectation.metric,
+        operation: "numerator*scale",
+    })? / denominator;
+    let mut delta = measure_metric(expectation, threshold, scaled)?;
+    delta.numerator = Some(numerator);
+    delta.denominator = Some(denominator);
+    Ok(delta)
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MetricSpec {
@@ -590,4 +683,71 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod metric_tests {
+    use super::*;
+    fn duration_expectation() -> MetricExpectation {
+        MetricExpectation {
+            metric: "install_to_verified_path_ms",
+            unit: "ms",
+            expected: 30_000,
+        }
+    }
 
+    fn duration_threshold() -> Option<MetricThreshold> {
+        Some(MetricThreshold {
+            tolerance: 5_000,
+            direction: MetricDirection::AtMost,
+        })
+    }
+
+    #[test]
+    fn metric_below_threshold_is_pass_with_negative_delta() {
+        let row = measure_metric(duration_expectation(), duration_threshold(), 34_999).unwrap();
+        assert_eq!(row.delta, -1);
+        assert_eq!(row.verdict, MetricDeltaVerdict::Pass);
+    }
+
+    #[test]
+    fn metric_at_threshold_is_pass_with_zero_delta() {
+        let row = measure_metric(duration_expectation(), duration_threshold(), 35_000).unwrap();
+        assert_eq!(row.delta, 0);
+        assert_eq!(row.verdict, MetricDeltaVerdict::Pass);
+    }
+
+    #[test]
+    fn metric_above_threshold_is_red_with_positive_delta() {
+        let row = measure_metric(duration_expectation(), duration_threshold(), 35_001).unwrap();
+        assert_eq!(row.delta, 1);
+        assert_eq!(row.verdict, MetricDeltaVerdict::Red);
+    }
+
+    #[test]
+    fn metric_missing_threshold_is_typed_unmeasurable() {
+        let error = measure_metric(duration_expectation(), None, 30_000).unwrap_err();
+        assert!(matches!(error, MetricMeasureError::MissingThreshold { .. }));
+        assert!(error.to_string().contains("reason=MISSING_THRESHOLD"));
+    }
+
+    #[test]
+    fn ratio_zero_denominator_is_typed_unmeasurable() {
+        let error = measure_ratio_metric(duration_expectation(), duration_threshold(), 1, 0, 1_000_000)
+            .unwrap_err();
+        assert!(matches!(error, MetricMeasureError::ZeroDenominator { .. }));
+        assert!(error.to_string().contains("reason=ZERO_DENOMINATOR"));
+    }
+
+    #[test]
+    fn ratio_overflow_is_typed_unmeasurable() {
+        let error = measure_ratio_metric(
+            duration_expectation(),
+            duration_threshold(),
+            u64::MAX,
+            1,
+            1_000_000,
+        )
+        .unwrap_err();
+        assert!(matches!(error, MetricMeasureError::Overflow { .. }));
+        assert!(error.to_string().contains("reason=OVERFLOW"));
+    }
+}

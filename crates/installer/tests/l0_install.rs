@@ -2151,18 +2151,9 @@ fn install_report_seals_complete_production_inputs() {
     let hex = installer::verify_sha256(&subject, Some(FIXTURE_HEX)).expect("verifier reads the digest");
     assert_eq!(hex, FIXTURE_HEX, "verifier must return the known hex");
     let repo = TempDir::new("rmr2-repo");
-    let assembled = assemble_install_report(
-        repo.path(),
-        &scan,
-        &install.outcomes,
-        &install.backups,
-        &[subject.clone()],
-        &sample_identity(),
-        &xic2_identity(),
-        &InputManifest::Full {
-            digest: hex.clone(),
-        },
-    )
+    let assembled = assemble_install_report(repo.path(), &scan, &install.outcomes, &install.backups, &[subject.clone()], &sample_identity(), &xic2_identity(), metric_inputs(&install.outcomes, &install.backups, &[subject.clone()]), &InputManifest::Full {
+        digest: hex.clone(),
+    })
     .expect("complete inputs must seal and persist");
     assert!(
         !assembled.report.digest.is_empty(),
@@ -2222,16 +2213,7 @@ fn install_report_refuses_restrictive_classes() {
     let empty = AgentScan {
         families: Vec::new(),
     };
-    let error = assemble_install_report(
-        repo.path(),
-        &empty,
-        &[],
-        &[],
-        &[],
-        &sample_identity(),
-        &xic2_identity(),
-        &full,
-    )
+    let error = assemble_install_report(repo.path(), &empty, &[], &[], &[], &sample_identity(), &xic2_identity(), metric_inputs(&[], &[], &[]), &full)
     .expect_err("empty scan must refuse");
     assert_eq!(
         error.to_string(),
@@ -2241,16 +2223,7 @@ fn install_report_refuses_restrictive_classes() {
     // Dropped family names the missing family.
     let mut dropped = good_outcomes.clone();
     let missing = dropped.pop().expect("ten outcomes to drop one from");
-    let error = assemble_install_report(
-        repo.path(),
-        &scan,
-        &dropped,
-        &[],
-        &[],
-        &sample_identity(),
-        &xic2_identity(),
-        &full,
-    )
+    let error = assemble_install_report(repo.path(), &scan, &dropped, &[], &[], &sample_identity(), &xic2_identity(), metric_inputs(&dropped, &[], &[]), &full)
     .expect_err("a dropped family must refuse");
     assert!(
         error.to_string().contains(&missing.family),
@@ -2258,56 +2231,29 @@ fn install_report_refuses_restrictive_classes() {
         missing.family
     );
     // Missing digest is a missing field, not a seal pass.
-    let error = assemble_install_report(
-        repo.path(),
-        &scan,
-        &good_outcomes,
-        &[],
-        &[],
-        &sample_identity(),
-        &xic2_identity(),
-        &InputManifest::Full {
-            digest: String::new(),
-        },
-    )
+    let error = assemble_install_report(repo.path(), &scan, &good_outcomes, &[], &[], &sample_identity(), &xic2_identity(), metric_inputs(&good_outcomes, &[], &[]), &InputManifest::Full {
+        digest: String::new(),
+    })
     .expect_err("an empty digest must refuse");
     assert!(
         error.to_string().contains("digest"),
         "missing field must name digest, got: {error}"
     );
     // Non-FULL manifests refuse distinctly.
-    let error = assemble_install_report(
-        repo.path(),
-        &scan,
-        &good_outcomes,
-        &[],
-        &[],
-        &sample_identity(),
-        &xic2_identity(),
-        &InputManifest::Partial {
-            bound_kind: "families".to_owned(),
-            bound_value: 9,
-            source: "fixture".to_owned(),
-        },
-    )
+    let error = assemble_install_report(repo.path(), &scan, &good_outcomes, &[], &[], &sample_identity(), &xic2_identity(), metric_inputs(&good_outcomes, &[], &[]), &InputManifest::Partial {
+        bound_kind: "families".to_owned(),
+        bound_value: 9,
+        source: "fixture".to_owned(),
+    })
     .expect_err("a partial manifest must refuse");
     assert_eq!(
         error.to_string(),
         "L0_INPUT_MANIFEST_PARTIAL bound=families value=9 source=fixture: partial input cannot seal",
         "got: {error}"
     );
-    let error = assemble_install_report(
-        repo.path(),
-        &scan,
-        &good_outcomes,
-        &[],
-        &[],
-        &sample_identity(),
-        &xic2_identity(),
-        &InputManifest::Refused {
-            reason: "fixture-withheld".to_owned(),
-        },
-    )
+    let error = assemble_install_report(repo.path(), &scan, &good_outcomes, &[], &[], &sample_identity(), &xic2_identity(), metric_inputs(&good_outcomes, &[], &[]), &InputManifest::Refused {
+        reason: "fixture-withheld".to_owned(),
+    })
     .expect_err("a refused manifest must refuse");
     assert_eq!(
         error.to_string(),
@@ -2318,6 +2264,9 @@ fn install_report_refuses_restrictive_classes() {
     // refuses the persistence step with its path named.
     let blocker = repo.path().join("not-a-directory");
     std::fs::write(&blocker, b"block\n").expect("blocker file");
+    let mut persistence_metrics = metric_inputs(&good_outcomes, &[], &[]);
+    persistence_metrics.backups_written = 1;
+    persistence_metrics.files_mutated = 1;
     let error = assemble_install_report(
         &blocker,
         &scan,
@@ -2326,6 +2275,7 @@ fn install_report_refuses_restrictive_classes() {
         &[],
         &sample_identity(),
         &xic2_identity(),
+        persistence_metrics,
         &full,
     )
     .expect_err("an unwritable root must refuse persistence");
@@ -2494,6 +2444,25 @@ fn xic2_full_manifest() -> installer::InputManifest {
     }
 }
 
+fn metric_inputs(
+    outcomes: &[installer::AgentOutcome],
+    backups: &[PathBuf],
+    path_hits: &[PathBuf],
+) -> installer::InstallMetricInputs {
+    let verified_path_at_ms = installer::current_time_ms().expect("fixture clock");
+    installer::InstallMetricInputs {
+        started_at_ms: verified_path_at_ms.checked_sub(1_000),
+        verified_path_at_ms: Some(verified_path_at_ms),
+        path_hits: path_hits.len(),
+        backups_written: backups.len(),
+        files_mutated: outcomes
+            .iter()
+            .filter(|row| row.outcome == "merged")
+            .count(),
+        thresholds: installer::InstallMetricThresholds::production(),
+    }
+}
+
 
 fn write_inception_host_capabilities(repo: &Path) {
     let path = repo.join(".omp-orchestrator/inception.json");
@@ -2540,15 +2509,7 @@ fn xic2_journal_rows(repo: &Path) -> Vec<String> {
 fn xic2_unlisted_l0_reason_is_typed_refusal() {
     use lifecycle_event::{EmitOutcome, Layer};
     let repo = TempDir::new("xic2-unlisted-reason");
-    let error = installer::emit_s1(
-        repo.path(),
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "NOT_A_REAL_REASON",
-        &xic2_identity(),
-        &xic2_full_manifest(),
-    )
+    let error = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "NOT_A_REAL_REASON", &xic2_identity(), &xic2_full_manifest(), &[])
     .expect_err("an unlisted L0 reason must refuse");
     assert!(
         matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "l0_reason_allowlist"),
@@ -2574,15 +2535,7 @@ fn xic2_non_full_manifests_cannot_emit() {
         },
     ] {
         let repo = TempDir::new("xic2-manifest-refusal");
-        let error = installer::emit_s1(
-            repo.path(),
-            Layer::L0,
-            "S1.L0",
-            EmitOutcome::Emitted,
-            "INSTALL_VERIFIED",
-            &xic2_identity(),
-            &manifest,
-        )
+        let error = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &xic2_identity(), &manifest, &[])
         .expect_err("a non-FULL manifest must refuse");
         assert!(
             matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "input_manifest"),
@@ -2605,15 +2558,7 @@ fn xic2_empty_attempt_cannot_emit() {
             incarnation: "l0-incarnation".to_owned(),
             attempt: attempt.to_owned(),
         };
-        let error = installer::emit_s1(
-            repo.path(),
-            Layer::L0,
-            "S1.L0",
-            EmitOutcome::Emitted,
-            "INSTALL_VERIFIED",
-            &identity,
-            &xic2_full_manifest(),
-        )
+        let error = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &identity, &xic2_full_manifest(), &[])
         .expect_err("an empty attempt must refuse");
         assert!(
             matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "attempt_identity"),
@@ -2630,15 +2575,7 @@ fn xic2_empty_attempt_cannot_emit() {
 fn xic2_identity_stamps_emitted_row() {
     use lifecycle_event::{EmitOutcome, Layer};
     let repo = TempDir::new("xic2-identity-stamp");
-    let readback = installer::emit_s1(
-        repo.path(),
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        &xic2_identity(),
-        &xic2_full_manifest(),
-    )
+    let readback = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &xic2_identity(), &xic2_full_manifest(), &[])
     .expect("a fully-attributed emit answers with readback");
     assert_eq!(readback.lines, 1, "one emit appends exactly one row");
     let rows = xic2_journal_rows(repo.path());
@@ -2691,8 +2628,10 @@ fn fx3d_production_gate(
     };
     let outcomes = vec![installer::AgentOutcome {
         family: "fx3d-probe".to_owned(),
-        outcome: "ok".to_owned(),
+        outcome: "merged".to_owned(),
     }];
+    let backups = vec![repo.join("fx3d-probe.backup")];
+    let path_hits = vec![subject];
     // Hermetic stand-in identity: the selector proves COMPOSITION
     // (seal -> persist -> emit -> observe -> gate -> verdict), not that
     // this fixture binary is real. Identity truth stays with the
@@ -2704,10 +2643,11 @@ fn fx3d_production_gate(
         repo,
         &scan,
         &outcomes,
-        &[],
-        &[subject],
+        &backups,
+        &path_hits,
         &report_identity,
         &identity,
+        metric_inputs(&outcomes, &backups, &path_hits),
         manifest,
     )
     .expect("complete inputs must seal and correlate");
@@ -2717,15 +2657,12 @@ fn fx3d_production_gate(
         correlated.readback_bytes > 0,
         "correlation must preserve a nonzero readback"
     );
-    let readback = installer::emit_s1(
-        repo,
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        reason,
-        &identity,
-        manifest,
-    )
+    let readback = installer::emit_s1(repo, Layer::L0, "S1.L0", EmitOutcome::Emitted, reason, &identity, manifest, &assembled
+        .report
+        .install_metrics
+        .as_ref()
+        .expect("metric home")
+        .deltas)
     .expect("production emit must answer with readback");
     assert_eq!(readback.lines, 1, "one emit appends exactly one row");
     let gate = installer::gate_correlated_observability(
@@ -2880,15 +2817,7 @@ fn fx3d_refusing_layer_state_never_gate_ok() {
         incarnation: "1".to_owned(),
         attempt: "fx3d-attempt-1".to_owned(),
     };
-    let readback = installer::emit_s1(
-        repo.path(),
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        &identity,
-        &manifest,
-    )
+    let readback = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &identity, &manifest, &[])
     .expect("first emit lands");
     installer::emit_refusal(
         repo.path(),
@@ -2983,15 +2912,7 @@ fn fx3d_absent_verdict_refuses_monitor_stage() {
         incarnation: "1".to_owned(),
         attempt: "fx3d-attempt-1".to_owned(),
     };
-    installer::emit_s1(
-        repo.path(),
-        Layer::L1,
-        "S1.L1",
-        EmitOutcome::Emitted,
-        "IDENTITY_OK",
-        &identity,
-        &manifest,
-    )
+    installer::emit_s1(repo.path(), Layer::L1, "S1.L1", EmitOutcome::Emitted, "IDENTITY_OK", &identity, &manifest, &[])
     .expect("L1 row lands");
     let error = gate_observability(repo.path(), &manifest)
         .expect_err("no L0 verdict must refuse");
@@ -3061,16 +2982,18 @@ fn r19i_report_fixture(
     };
     let outcomes = vec![installer::AgentOutcome {
         family: "r19i-probe".to_owned(),
-        outcome: "installed".to_owned(),
+        outcome: "merged".to_owned(),
     }];
+    let backups = vec![repo.path().join("r19i-probe.backup")];
     let sealed = installer::assemble_install_report(
         repo.path(),
         &scan,
         &outcomes,
-        &[],
+        &backups,
         &path_hits,
         &identity,
         &attempt,
+        metric_inputs(&outcomes, &backups, &path_hits),
         &manifest,
     )
     .expect("r19i fixture report seals");
@@ -3116,15 +3039,12 @@ fn r19i_good_report_correlates_and_supplies_b15() {
         report.host_capabilities, 3,
         "os, arch and filesystem are consumed from inception"
     );
-    let readback = installer::emit_s1(
-        repo.path(),
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        &attempt,
-        &manifest,
-    )
+    let readback = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &attempt, &manifest, &sealed
+        .report
+        .install_metrics
+        .as_ref()
+        .expect("metric home")
+        .deltas)
     .expect("current lifecycle row lands");
     let gate = installer::gate_correlated_observability(
         repo.path(),
@@ -3276,6 +3196,12 @@ fn r19i_truncated_report_refuses_distinctly() {
     assert!(matches!(
         error,
         installer::InstallReportCause::Truncated { .. }
+    ));
+    let metric_error = installer::read_install_metric_deltas(repo.path(), 1)
+        .expect_err("the delta reader must also refuse truncated bytes");
+    assert!(matches!(
+        metric_error,
+        installer::InstallMetricUnmeasurable::ReadbackFailed { .. }
     ));
 }
 
@@ -3504,28 +3430,28 @@ fn monitor_fixture(name: &str, stale: bool) -> MonitorFixture {
     };
     let outcomes = vec![installer::AgentOutcome {
         family: "83pe-probe".to_owned(),
-        outcome: "installed".to_owned(),
+        outcome: "merged".to_owned(),
     }];
+    let backups = vec![repo.path().join("83pe-probe.backup")];
+    let path_hits = vec![installed_path.clone()];
     let (sealed, correlated) = installer::assemble_and_correlate_install_report(
         repo.path(),
         &scan,
         &outcomes,
-        &[],
-        &[],
+        &backups,
+        &path_hits,
         &identity,
         &attempt,
+        metric_inputs(&outcomes, &backups, &path_hits),
         &manifest,
     )
     .expect("monitor report seals and correlates");
-    let readback = installer::emit_s1(
-        repo.path(),
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        &attempt,
-        &manifest,
-    )
+    let readback = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &attempt, &manifest, &sealed
+        .report
+        .install_metrics
+        .as_ref()
+        .expect("metric home")
+        .deltas)
     .expect("monitor lifecycle row");
     if stale {
         let journal = lifecycle_event::default_repo_journal(repo.path());
@@ -3727,4 +3653,220 @@ fn monitor_writer_or_fsync_suppression_is_typed() {
         error.reason.contains("L0_REPORT_FSYNC_INCOMPLETE"),
         "{error}"
     );
+}
+
+fn qod0_metric_inputs() -> installer::InstallMetricInputs {
+    installer::InstallMetricInputs {
+        started_at_ms: Some(1_000),
+        verified_path_at_ms: Some(2_000),
+        path_hits: 1,
+        backups_written: 1,
+        files_mutated: 1,
+        thresholds: installer::InstallMetricThresholds::production(),
+    }
+}
+
+fn qod0_manifest() -> installer::InputManifest {
+    installer::InputManifest::Full {
+        digest: "qod0-full-input".to_owned(),
+    }
+}
+
+#[test]
+fn qod0_three_metrics_are_distinct_and_delta_reads_production_report() {
+    let fixture = monitor_fixture("qod0-good", false);
+    let report = installer::read_install_metric_deltas(
+        fixture.repo.path(),
+        installer::current_time_ms().expect("observer clock"),
+    )
+    .expect("the production report is the delta home");
+    let names: Vec<&str> = report
+        .metrics
+        .deltas
+        .iter()
+        .map(|row| row.expectation.metric)
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "install_to_verified_path_ms",
+            "path_hits",
+            "backups_written_per_file_mutated",
+        ]
+    );
+    assert_eq!(report.metrics.deltas[1].observed, 1);
+    assert_eq!(report.metrics.deltas[2].numerator, Some(1));
+    assert_eq!(report.metrics.deltas[2].denominator, Some(1));
+    assert!(report.fresh && report.readback_bytes > 0);
+}
+
+#[test]
+fn qod0_metric_event_carries_report_deltas_and_attempt_identity() {
+    let fixture = monitor_fixture("qod0-event", false);
+    let text = fs::read_to_string(lifecycle_event::default_repo_journal(fixture.repo.path()))
+        .expect("event journal");
+    let event: serde_json::Value = serde_json::from_str(text.trim()).expect("event JSON");
+    let expected = fixture
+        .sealed
+        .report
+        .install_metrics
+        .as_ref()
+        .expect("metric home");
+    assert_eq!(event["attempt"], expected.attempt_identity.attempt);
+    assert_eq!(event["metrics"].as_array().map(Vec::len), Some(3));
+    assert_eq!(
+        event["metrics"][0],
+        expected.deltas[0].to_json_value(),
+        "the lifecycle event carries the report's materialized delta"
+    );
+}
+
+#[test]
+fn qod0_absent_writer_is_typed_unmeasurable() {
+    let repo = TempDir::new("qod0-no-writer");
+    let error = installer::read_install_metric_deltas(repo.path(), 1)
+        .expect_err("missing production report must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallMetricUnmeasurable::WriterAbsent { .. }
+    ));
+}
+
+#[test]
+fn qod0_missing_metric_home_is_typed_unmeasurable() {
+    let fixture = monitor_fixture("qod0-no-home", false);
+    r19i_rewrite_report(&fixture.sealed.artifact, |value| {
+        value.as_object_mut().expect("report object").remove("install_metrics");
+    });
+    let error = installer::read_install_metric_deltas(fixture.repo.path(), 1)
+        .expect_err("missing metric home must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallMetricUnmeasurable::MissingHome
+    ));
+}
+
+#[test]
+fn qod0_partial_and_refused_inputs_are_typed_unmeasurable() {
+    for state in ["PARTIAL", "REFUSED"] {
+        let fixture = monitor_fixture(&format!("qod0-{state}"), false);
+        r19i_rewrite_report(&fixture.sealed.artifact, |value| {
+            value["input_manifest"]["state"] = serde_json::json!(state);
+        });
+        let error = installer::read_install_metric_deltas(fixture.repo.path(), 1)
+            .expect_err("non-FULL input must refuse");
+        assert!(matches!(
+            error,
+            installer::InstallMetricUnmeasurable::InputNotFull { .. }
+        ));
+    }
+}
+
+#[test]
+fn qod0_missing_timestamp_is_typed_unmeasurable() {
+    let fixture = monitor_fixture("qod0-no-timestamp", false);
+    r19i_rewrite_report(&fixture.sealed.artifact, |value| {
+        value["install_metrics"]
+            .as_object_mut()
+            .expect("metric object")
+            .remove("started_at_ms");
+    });
+    let error = installer::read_install_metric_deltas(fixture.repo.path(), 1)
+        .expect_err("missing timestamp must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallMetricUnmeasurable::TimestampMissing { .. }
+    ));
+}
+
+#[test]
+fn qod0_missing_attempt_identity_is_typed_unmeasurable() {
+    let fixture = monitor_fixture("qod0-no-attempt", false);
+    r19i_rewrite_report(&fixture.sealed.artifact, |value| {
+        value["install_metrics"]["attempt_identity"]["attempt"] = serde_json::json!("");
+        value["attempt_identity"]["attempt"] = serde_json::json!("");
+    });
+    let error = installer::read_install_metric_deltas(fixture.repo.path(), 1)
+        .expect_err("missing attempt identity must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallMetricUnmeasurable::AttemptIdentityMissing
+    ));
+}
+
+#[test]
+fn qod0_reversed_timestamps_are_typed_unmeasurable() {
+    let error = installer::materialize_install_metrics(
+        installer::InstallMetricInputs {
+            started_at_ms: Some(2_000),
+            verified_path_at_ms: Some(1_000),
+            ..qod0_metric_inputs()
+        },
+        &xic2_identity(),
+        &qod0_manifest(),
+    )
+    .expect_err("reversed clock must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallMetricUnmeasurable::TimestampReversed { .. }
+    ));
+}
+
+#[test]
+fn qod0_stale_report_is_typed_unmeasurable() {
+    let fixture = monitor_fixture("qod0-stale-report", false);
+    let metrics = fixture
+        .sealed
+        .report
+        .install_metrics
+        .as_ref()
+        .expect("metric home");
+    let now = metrics.observed_at_ms + metrics.freshness_threshold_ms + 1;
+    let error = installer::read_install_metric_deltas(fixture.repo.path(), now)
+        .expect_err("stale report must refuse");
+    assert!(matches!(
+        error,
+        installer::InstallMetricUnmeasurable::StaleReport { .. }
+    ));
+}
+
+#[test]
+fn qod0_zero_denominator_is_typed_unmeasurable() {
+    let error = installer::materialize_install_metrics(
+        installer::InstallMetricInputs {
+            files_mutated: 0,
+            ..qod0_metric_inputs()
+        },
+        &xic2_identity(),
+        &qod0_manifest(),
+    )
+    .expect_err("zero denominator must refuse");
+    assert!(error.to_string().contains("ZERO_DENOMINATOR"), "{error}");
+}
+
+#[test]
+fn qod0_ratio_overflow_is_typed_unmeasurable() {
+    let error = installer::materialize_install_metrics(
+        installer::InstallMetricInputs {
+            backups_written: usize::MAX,
+            ..qod0_metric_inputs()
+        },
+        &xic2_identity(),
+        &qod0_manifest(),
+    )
+    .expect_err("ratio multiplication overflow must refuse");
+    assert!(error.to_string().contains("OVERFLOW"), "{error}");
+}
+
+#[test]
+fn qod0_missing_threshold_is_typed_unmeasurable() {
+    let mut inputs = qod0_metric_inputs();
+    inputs.thresholds.duration = None;
+    let error = installer::materialize_install_metrics(
+        inputs,
+        &xic2_identity(),
+        &qod0_manifest(),
+    )
+    .expect_err("missing threshold must refuse");
+    assert!(error.to_string().contains("MISSING_THRESHOLD"), "{error}");
 }

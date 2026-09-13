@@ -173,15 +173,7 @@ fn emit_s1_known_good_roundtrips_with_readback() {
     let repo = gj669_repo("known-good");
     // Fixture reason is a real allowlisted S1.L0 reason (the allowlist
     // governs membership; this leg owns plumbing, not vocabulary).
-    let readback = installer::emit_s1(
-        &repo,
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        &fixture_identity(),
-        &full_manifest(),
-    )
+    let readback = installer::emit_s1(&repo, Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &fixture_identity(), &full_manifest(), &[])
     .expect("healthy emit answers with readback");
     assert_eq!(
         readback.lines, 1,
@@ -206,15 +198,7 @@ fn emit_s1_write_failure_is_typed() {
     let repo = gj669_blocked_repo("write-fail");
     // Real allowlisted reason: the failure under test comes from the
     // blocked journal path, never from the reason string.
-    let error = installer::emit_s1(
-        &repo,
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-        &fixture_identity(),
-        &full_manifest(),
-    )
+    let error = installer::emit_s1(&repo, Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &fixture_identity(), &full_manifest(), &[])
     .expect_err("a file-blocked journal parent must refuse");
     assert!(
         matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "create_dir_all"),
@@ -388,6 +372,23 @@ fn empty_journal_certifies_nothing() {
     assert!(
         !rows.iter().any(|line| line.contains("\"emitted\"")),
         "an empty journal must never read as an emitted event"
+    );
+    gj669_cleanup(&repo);
+}
+
+#[test]
+fn delta_flag_routes_as_a_single_operator_action() {
+    let parsed = parse_cli_args(vec!["--delta".to_owned()]).expect("delta parses");
+    assert_eq!(parsed.positional, vec!["--delta"]);
+}
+
+#[test]
+fn delta_command_refuses_without_the_production_writer() {
+    let repo = gj669_repo("qod0-delta-missing-writer");
+    assert_eq!(
+        run_delta(&repo),
+        ExitCode::from(4),
+        "the reachable --delta consumer must read the canonical report"
     );
     gj669_cleanup(&repo);
 }
