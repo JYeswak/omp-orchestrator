@@ -812,3 +812,186 @@ fn frankenmermaid_probe_emits_two_signals() {
         );
     }
 }
+
+/// L1-TEST-PROBE-GIT (contract s1_l1_doctor.md `L1-BUILD-PROBE-GIT`): run
+/// `git rev-parse --show-toplevel`; expect repository identity or
+/// ABSENT_FAMILY. The mapping below is the whole subject: exit 0 plus a
+/// directory that exists is identity; git's not-a-repository refusal is
+/// ABSENT_FAMILY; anything else (killed, missing binary, unreadable output)
+/// is an ERROR, never a quiet third verdict -- ABSENT_FAMILY and UNRUN
+/// share nothing, by construction rather than by comment.
+///
+/// KNOWN-BAD: invert the mapping (a refusal reads as identity) and the
+/// absence arm fails: a tempdir would certify as a repository. Message AND
+/// exit are pinned on both arms: git's 128 is as load-bearing as its fatal
+/// text, and either alone passes a nearby wrong state.
+#[test]
+fn git_probe_rejects_non_repo() {
+    fn identity_of(dir: &std::path::Path) -> (Option<i32>, String, String) {
+        // GIT_CEILING_DIRECTORIES pins the upward search at the fixture root:
+        // worker TMPDIRs live inside checkouts, so a bare tempdir without a
+        // ceiling answers for its PARENT repo instead of itself (measured
+        // 2026-09-13: exit 0 where 128 was expected -- an 8y environment
+        // coupling, fixed at the fixture, not the probe). The ceiling changes
+        // nothing when .git sits directly inside dir.
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(["rev-parse", "--show-toplevel"])
+            .env("GIT_CEILING_DIRECTORIES", dir)
+            .output()
+            .expect("git binary must be spawnable on every lane; a missing git is an environment ERROR, never absence");
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        )
+    }
+    fn classify(code: Option<i32>, stdout: &str, stderr: &str) -> &'static str {
+        match code {
+            Some(0) if !stdout.is_empty() && std::path::Path::new(stdout).is_dir() => {
+                "REPOSITORY_IDENTITY"
+            }
+            Some(128) if stderr.contains("not a git repository") => "ABSENT_FAMILY",
+            _ => panic!(
+                "unexpected git shape: refusing to map it silently (code={code:?}, out={stdout:?}, err={stderr:?})"
+            ),
+        }
+    }
+    // Identity arm: a real repo answers with its own toplevel.
+    let repo = tempfile::tempdir().expect("git fixture repo");
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo.path())
+        .args(["init", "-q"])
+        .status()
+        .expect("git init must run");
+    assert!(status.success(), "fixture repo must init");
+    let (code, stdout, stderr) = identity_of(repo.path());
+    assert_eq!(code, Some(0), "rev-parse in a repo must exit 0: {stderr}");
+    assert_eq!(
+        stdout,
+        repo.path().canonicalize().expect("canonical fixture").display().to_string(),
+        "identity must be the fixture toplevel itself"
+    );
+    assert_eq!(
+        classify(code, &stdout, &stderr),
+        "REPOSITORY_IDENTITY",
+        "a repo must classify as identity"
+    );
+    // Absence arm: a bare tempdir is ABSENT_FAMILY with git's message and exit.
+    let bare = tempfile::tempdir().expect("bare fixture dir");
+    let (code, stdout, stderr) = identity_of(bare.path());
+    assert_eq!(code, Some(128), "rev-parse outside a repo must exit 128");
+    assert!(
+        stderr.contains("not a git repository"),
+        "absence must carry git's fatal text: {stderr}"
+    );
+    assert_eq!(
+        classify(code, &stdout, &stderr),
+        "ABSENT_FAMILY",
+        "a non-repo must classify as absent family, never UNRUN and never identity"
+    );
+}
+
+#[test]
+fn ntm_probe_emits_two_signals() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    let spec = PROBES
+        .iter()
+        .find(|spec| spec.name == "ntm")
+        .expect("ntm is a declared probe");
+    assert_eq!(spec.command, "ntm", "ntm probe runs ntm");
+    assert_eq!(
+        spec.args,
+        &["--version"],
+        "ntm probe reads the version surface"
+    );
+    fn decision(status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: "ntm".to_owned(),
+            status: status.to_owned(),
+            reason_code: "L1_PROBE_NTM_SCOPED_FIXTURE".to_owned(),
+            detail: "ntm scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Healthy: endpoint identity plus version answers.
+    let healthy = decision("OK", Some("ntm 0.2.0"), Some("ntm 0.2.0"));
+    // NOTE: fixture version strings are shaped data, not minimums; no probe
+    // declares a version floor, so STALE is unmeasured by construction here.
+    assert!(answered(&healthy), "identity plus version must answer");
+    // KNOWN-BAD shape, asserted directly: presence without version is not OK.
+    let present_no_version = decision("OK", Some("ntm 0.2.0"), None);
+    assert!(
+        !answered(&present_no_version),
+        "a present ntm with no version response must not be OK"
+    );
+    // Unsupported answers are not OK either: only the two signals certify.
+    let unsupported = decision("SUPPORTED", Some("ntm 0.2.0"), Some("ntm 0.2.0"));
+    assert!(
+        !answered(&unsupported),
+        "an unsupported status must not read as OK"
+    );
+    // UNPROBEABLE is observed and named: the row is listed, the metric drops
+    // below floor, and the verdict is never a guessed OK.
+    let full: Vec<ProbeDecision> = PROBES
+        .iter()
+        .map(|spec| {
+            let (presence, version) = if spec.name == "ntm" {
+                (None, None)
+            } else {
+                (Some("/fixture/bin"), Some("fixture 1.0"))
+            };
+            let mut row = decision("OK", presence, version);
+            row.name = spec.name.to_owned();
+            if spec.name == "ntm" {
+                row.status = "UNPROBEABLE".to_owned();
+            }
+            row
+        })
+        .collect();
+    let metric = probe_answer_metric(PROBES, &full);
+    assert_eq!(
+        metric.verdict, "MEASURED_BELOW_FLOOR",
+        "one unanswered probe of {} must hold the metric below floor: {}",
+        PROBES.len(),
+        metric.reason_code
+    );
+    assert!(
+        metric.unprobeable.contains(&"ntm".to_owned()),
+        "the unanswering probe must be named: {:?}",
+        metric.unprobeable
+    );
+    // The live row, both lanes: OK implies both signals; anything else
+    // is a typed absence with a namespaced reason -- never bare ABSENT and
+    // never an UNRUN reading as refusal or health.
+    let repo = tempfile::tempdir().expect("ntm fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    let row = summary
+        .probes
+        .iter()
+        .find(|probe| probe.name == "ntm")
+        .expect("run_doctor must report an ntm row");
+    if row.status == "OK" {
+        assert!(
+            row.presence.as_ref().is_some_and(|value| !value.is_empty())
+                && row.version.as_ref().is_some_and(|value| !value.is_empty()),
+            "an OK ntm row must carry both signals: {row:?}"
+        );
+    } else {
+        assert!(
+            [
+                "ABSENT_FAMILY",
+                "ABSENT_SPECIFIC",
+                "UNPROBEABLE",
+                "UNMEASURED",
+                "STALE",
+                "PAUSED"
+            ]
+            .contains(&row.status.as_str()),
+            "a non-OK ntm row must be typed absence, got: {row:?}"
+        );
+    }
+}
