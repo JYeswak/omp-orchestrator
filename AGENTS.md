@@ -4322,29 +4322,47 @@ said **BUILD FREEZE** in bold at `:59` while the amendment lifting it for S1 sat
 reader who stops at the word FREEZE never reaches the word AUTHORIZED. **That cost a session:** 131
 authorized beads sat claimable while three panes were routed to audits.
 
-**A bead is closed by an agent who did NOT implement it.** Verification runs
+**A bead that needs a grade is closed by an agent who did NOT implement it.** Verification runs
 `/beads-compliance-and-completion-verification` against the bead's own acceptance
 criteria, and the close reason cites what the GRADER re-executed — not what the
 implementer reported.
+
+**EASY-CLOSE vs GRADE (Joshua 2026-09-13, lands here).** Measured this S1 probe wave:
+12/12 non-author grades were `MUTATION-VERIFIED` and `CHANGES_REQUESTED=0`. The extra
+round was correlated confirmation, not defect catch. **The conductor classifies at the
+DONE callback. The implementer does not self-declare easy.**
+
+EASY-CLOSE — **all** of these, or it is GRADE:
+
+1. `git show --stat <sha>` is tests-only (`crates/*/tests/**` or `**/tests/*.rs`). No
+   `crates/*/src/` production hunk. `ALREADY-FIXED` with a named sha also qualifies.
+2. Callback carries **both** remote proof lines **and** a mutation that reddened the
+   **named** leg with message AND exit, restored byte-identical.
+3. Acceptance was **not** amended after the impl packet (an amended row is GRADE).
+4. No `NEEDS-RULING` leftover, no sweep into a peer commit, no split landing.
+
+Any miss → GRADE (different pane re-runs). All four → conductor closes
+`DONE EASY-CLOSE sha=…` and dispatches the next current-stage bead to that pane
+**in the same turn**. Status still read back.
 
 Measured 2026-08-31: of the first three closes, one was independently graded (`-4ak`,
 pane 1, "re-run, not read") and two were self-certified by their implementer (`-7ai`
 GoldLark, `-a3p` BlueLantern). Both self-closes carried real evidence and a NO-CLAIM
 line, which is why this is a process gap and not a fabrication — but a report is a
-CLAIM, and the whole point of the grade is that a second agent ran the command.
+CLAIM, and the whole point of GRADE is that a second agent ran the command. EASY-CLOSE
+is the conductor applying a **two-valued** filter to that claim, not the implementer
+skipping it.
 
-**Stage order, and grading outruns new work.** When a bead is implementation-complete,
-grading it takes priority over claiming anything new. A verification backlog is worse
-than an empty queue: unclosed finished work makes `br ready` keep serving it, which is
-how a pane ends up correctly reporting NO_ELIGIBLE_TARGET and going idle.
-
-Every bead carries a stage, and dispatches name it:
+**Stage order.** GRADE-class beads still outrun new work. EASY-CLOSE beads do not
+enter `grading` and do not occupy a second pane.
 
 ```
 IMPL     implementation-complete, commit landed
-  ->  GRADING   a DIFFERENT agent re-executes the acceptance criteria
-  ->  CLOSED    the grader closes; reason starts MUTATION-VERIFIED / DONE / APPROVED / WONTFIX
+  ->  EASY-CLOSE  conductor classifies; DONE EASY-CLOSE; same pane takes next
+  ->  GRADING     a DIFFERENT pane re-executes (any of the four filters missed)
+  ->  CLOSED      MUTATION-VERIFIED / DONE / APPROVED / WONTFIX / DONE EASY-CLOSE
 ```
+
 
 The IMPL→GRADING edge is owned by `crates/dispatch-saga` (`dispatch-saga grading-transition`).
 Decide-only by default; `--apply` may `br update --status grading`. A pane MUST NOT move its

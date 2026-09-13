@@ -83,12 +83,17 @@ br list --status closed --json   <- `br list` EXCLUDES closed rows by default.
 
 Order of value, highest first — **and every row must be the CURRENT STAGE (S1 today):**
 
-1. **Grade-ready CURRENT-STAGE beads** (`status=grading`) — route to a **NON-AUTHOR**, different
-   **PANE**. Off-stage grading waits. Grading outruns new work inside the stage.
-2. **Author-held CURRENT-STAGE beads** — release them: `br update <id> --status grading --assignee ''`.
-3. **The current stage's critical path.** Name the stage in the packet. Today: S1-L* BUILD/TEST,
-   then remaining S1 P0s. Not `br ready` P0s from other stages.
+0. **DONE callback → EASY-CLOSE or GRADE** (conductor classifies; see AGENTS.md grading
+   gate). All four filters → `br close … DONE EASY-CLOSE sha=` and dispatch the **next**
+   S1 bead to that pane same turn. Any miss → `grading`, unheld, different pane.
+1. **Grade-ready CURRENT-STAGE beads** (`status=grading`) — route to a **NON-AUTHOR**,
+   different **PANE**. Off-stage grading waits.
+2. **Author-held CURRENT-STAGE beads** that are GRADE-class — release:
+   `br update <id> --status grading --assignee ''`.
+3. **The current stage's critical path.** Name the stage in the packet. Today: S1-L*
+   BUILD/TEST, then remaining S1 P0s.
 4. **P0s in `br ready` that are S1.** Everything else waits.
+
 
 
 **Re-derive every COUNT a bead's acceptance asserts BEFORE dispatching it.** 170 of 755 non-terminal
