@@ -1005,3 +1005,73 @@ fn ntm_probe_emits_two_signals() {
         );
     }
 }
+
+/// LAW-L1-WRONG-VERSION (contract s1_l1_doctor.md `L1-BUILD-TWO-SIGNALS`):
+/// a present tool with a wrong version is STALE, never OK or ABSENT.
+/// No version floor is declared, so STALE is OBSERVED (constructed here),
+/// never derived -- and an observed STALE row must be COUNTED in the stale
+/// band and keep its status, not be absorbed into OK, ABSENT, or UNPROBEABLE.
+#[test]
+fn wrong_version_is_stale() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    fn decision(name: &str, status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: name.to_owned(),
+            status: status.to_owned(),
+            reason_code: "L1_PROBE_STALE_SCOPED_FIXTURE".to_owned(),
+            detail: "stale scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Wrong version, both signals present: present but not OK, and the row
+    // keeps its STALE status -- it is not remapped to absence.
+    let stale = decision("tmux", "STALE", Some("tmux 1.0"), Some("tmux 0.1"));
+    assert!(
+        !answered(&stale),
+        "a stale row must not answer, even with both signals present"
+    );
+    assert_eq!(stale.status, "STALE", "stale status must survive classification");
+    // Counted, not absorbed: the metric's stale band measures it.
+    let mut full: Vec<ProbeDecision> = PROBES
+        .iter()
+        .map(|spec| {
+            decision(
+                spec.name,
+                "OK",
+                Some("/fixture/bin"),
+                Some("fixture 1.0"),
+            )
+        })
+        .collect();
+    if let Some(row) = full.iter_mut().find(|row| row.name == "tmux") {
+        row.status = "STALE".to_owned();
+        row.version = Some("tmux 0.1".to_owned());
+    }
+    let metric = probe_answer_metric(PROBES, &full);
+    assert_eq!(
+        metric.stale_count,
+        Some(1),
+        "an observed STALE row must be counted, not absorbed"
+    );
+    assert_eq!(
+        metric.stale_status, "MEASURED",
+        "an observed STALE row makes the band measured"
+    );
+    assert!(
+        !metric.unprobeable.contains(&"tmux".to_owned()),
+        "stale is not unprobeable: {:?}",
+        metric.unprobeable
+    );
+    // Contrast, same set all-OK: the band is unmeasured when nothing is
+    // observed -- unreachability stated, not a zero smuggled in.
+    let clean: Vec<ProbeDecision> = PROBES
+        .iter()
+        .map(|spec| decision(spec.name, "OK", Some("/fixture/bin"), Some("fixture 1.0")))
+        .collect();
+    let clean_metric = probe_answer_metric(PROBES, &clean);
+    assert_eq!(
+        clean_metric.stale_count, None,
+        "no observed STALE row means unmeasured, never zero"
+    );
+}
