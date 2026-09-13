@@ -860,6 +860,10 @@ pub fn merge_hooks(
 // own tests) to stay clear of the active b07 lane in this file.
 pub mod agent_families;
 
+// b11-uegf: per-family skill installation lives in skill_install.rs (own
+// file, own tests), beside the roster it consumes.
+pub mod skill_install;
+
 /// Detected agent families. Empty is unrepresentable as success.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentScan {

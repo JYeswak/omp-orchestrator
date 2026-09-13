@@ -9,6 +9,7 @@ use installer::{
     IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
     SigstoreTrust, COSIGN_CVE_FLOOR, COSIGN_CVE_ID,
 };
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1863,5 +1864,134 @@ fn agent_detection() {
     assert!(
         error.to_string().contains("L0_EMPTY_SCAN"),
         "empty scan must carry its exact reason, got: {error}"
+    );
+}
+
+/// L0-B11 (bead uegf): skill installation over the B09 detector output.
+/// Every detected family gets exactly one created outcome on first install
+/// (bytes verified on disk), `already` on a quiet rerun, and the outcomes
+/// seal with the detector scan. Dropping one outcome refuses completeness
+/// with the missing family named.
+#[test]
+fn skill_install_creates_seals_and_reopens_quiet() {
+    use installer::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
+    use installer::skill_install::install_agent_skills;
+    let base = TempDir::new("uegf-roots");
+    let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .collect();
+    let scan = detect_agent_families(&observed).expect("ten named families must scan");
+    let roots: BTreeMap<String, PathBuf> = scan
+        .families
+        .iter()
+        .map(|family| {
+            let dir = base.path().join(family);
+            std::fs::create_dir_all(&dir).expect("fixture root");
+            (family.clone(), dir)
+        })
+        .collect();
+    // First install: every family created, bytes verified on disk.
+    let first = install_agent_skills(&scan, &roots, "SKILL.md", b"# skill\n")
+        .expect("install over ten roots");
+    assert!(first.success, "ten writable roots must succeed");
+    assert_eq!(
+        first.outcomes.len(),
+        scan.families.len(),
+        "exactly one outcome per family"
+    );
+    for row in &first.outcomes {
+        assert_eq!(row.outcome, "created", "first install creates, got {row:?}");
+        let landed = std::fs::read(roots[&row.family].join("SKILL.md")).expect("landed bytes");
+        assert_eq!(landed, b"# skill\n", "staged bytes verified on disk");
+    }
+    // Seal with the detector scan: the B09 -> B11 -> seal edge.
+    let sealed = installer::seal_install_report(
+        &scan,
+        first.outcomes.clone(),
+        Vec::new(),
+        Vec::new(),
+        sample_identity(),
+    )
+    .expect("complete outcomes must seal");
+    assert!(!sealed.digest.is_empty(), "sealed report carries a digest");
+    // Quiet rerun: identical bytes present are already, untouched.
+    let second = install_agent_skills(&scan, &roots, "SKILL.md", b"# skill\n")
+        .expect("rerun over identical bytes");
+    assert!(second.success, "a quiet rerun stays success");
+    for row in &second.outcomes {
+        assert_eq!(row.outcome, "already", "rerun is already, got {row:?}");
+    }
+    // Dropped family: seal refuses completeness with the family named.
+    let mut dropped = first.outcomes.clone();
+    let missing = dropped.pop().expect("ten outcomes to drop one from");
+    let error = installer::seal_install_report(
+        &scan,
+        dropped,
+        Vec::new(),
+        Vec::new(),
+        sample_identity(),
+    )
+    .expect_err("a dropped family must refuse");
+    assert!(
+        error.to_string().contains(&missing.family),
+        "refusal must name {}, got: {error}",
+        missing.family
+    );
+}
+
+/// L0-B11 unwritable half: one unwriteable destination yields a typed
+/// `failed` family and no all-agent success, while siblings still land.
+/// The unwritable root is a regular FILE (ENOTDIR on every uid, including
+/// the root-running worker lane), never a chmod the lane ignores. An empty
+/// scan is EmptyAgentScan before any root is consulted.
+#[test]
+fn skill_install_marks_unwritable_failed_without_success() {
+    use installer::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
+    use installer::skill_install::install_agent_skills;
+    use installer::AgentScan;
+    let base = TempDir::new("uegf-unwritable");
+    let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .collect();
+    let scan = detect_agent_families(&observed).expect("ten named families must scan");
+    let blocker = base.path().join("not-a-directory");
+    std::fs::write(&blocker, b"block\n").expect("blocker file");
+    let mut roots: BTreeMap<String, PathBuf> = scan
+        .families
+        .iter()
+        .map(|family| {
+            let dir = base.path().join(family);
+            std::fs::create_dir_all(&dir).expect("fixture root");
+            (family.clone(), dir)
+        })
+        .collect();
+    let victim = scan.families[0].clone();
+    roots.insert(victim.clone(), blocker);
+    let report = install_agent_skills(&scan, &roots, "SKILL.md", b"# skill\n")
+        .expect("partial outcomes still report");
+    assert!(!report.success, "one failed family denies overall success");
+    assert_eq!(
+        report.outcomes.len(),
+        scan.families.len(),
+        "exactly one outcome per family even on failure"
+    );
+    for row in &report.outcomes {
+        if row.family == victim {
+            assert_eq!(row.outcome, "failed", "unwritable root fails, got {row:?}");
+        } else {
+            assert_eq!(row.outcome, "created", "siblings still land, got {row:?}");
+        }
+    }
+    // Empty scan never reaches the roots.
+    let empty = AgentScan {
+        families: Vec::new(),
+    };
+    let error = install_agent_skills(&empty, &roots, "SKILL.md", b"# skill\n")
+        .expect_err("empty scan must refuse");
+    assert!(
+        matches!(error, InstallError::EmptyAgentScan),
+        "empty scan is EmptyAgentScan, got {error:?}"
     );
 }
