@@ -19,6 +19,172 @@ use lifecycle_event::{
     default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
 };
 use lifecycle_monitor::{gate_claimed_write_readback, observe_layer, verify_artifact, LayerState};
+fn marker_exists(project: &str, marker: &str) -> bool {
+    Path::new(project).join(marker).exists()
+}
+
+fn read_http_json(stream: &mut std::net::TcpStream) -> Value {
+    use std::io::Read as _;
+    let mut bytes = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    let (body_start, content_length) = loop {
+        let read = stream.read(&mut chunk).expect("read mock request");
+        assert!(read > 0, "mock request ended before headers");
+        bytes.extend_from_slice(&chunk[..read]);
+        let Some(header_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
+            continue;
+        };
+        let headers = String::from_utf8_lossy(&bytes[..header_end]);
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().expect("content length"))
+            })
+            .expect("mock request content-length");
+        break (header_end + 4, content_length);
+    };
+    while bytes.len() < body_start + content_length {
+        let read = stream.read(&mut chunk).expect("read mock body");
+        assert!(read > 0, "mock request ended before body");
+        bytes.extend_from_slice(&chunk[..read]);
+    }
+    serde_json::from_slice(&bytes[body_start..body_start + content_length])
+        .expect("mock request JSON")
+}
+
+fn handle_agent_mail_request(mut stream: std::net::TcpStream) {
+    use std::io::Write as _;
+    let request = read_http_json(&mut stream);
+    let id = request.get("id").cloned().unwrap_or(Value::Null);
+    let method = request.get("method").and_then(Value::as_str).unwrap_or("");
+    let (project, pane) = if method == "resources/read" {
+        let uri = request["params"]["uri"].as_str().expect("resource uri");
+        (
+            uri.strip_prefix("resource://agents/")
+                .expect("agent registry resource")
+                .to_owned(),
+            "%59".to_owned(),
+        )
+    } else {
+        (
+            request["params"]["arguments"]["project_key"]
+                .as_str()
+                .expect("project key")
+                .to_owned(),
+            request["params"]["arguments"]["pane_id"]
+                .as_str()
+                .expect("pane id")
+                .to_owned(),
+        )
+    };
+
+    if marker_exists(&project, ".agent-mail-unavailable") {
+        let body = br#"{"error":"fixture unavailable"}"#;
+        let response = format!(
+            "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(response.as_bytes()).expect("write status");
+        stream.write_all(body).expect("write unavailable body");
+        return;
+    }
+
+    let envelope = if method == "resources/read" {
+        if marker_exists(&project, ".agent-mail-project-missing") {
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {"code": -32602, "message": "Project not found"}
+            })
+        } else {
+            let actual_project = if marker_exists(&project, ".agent-mail-project-mismatch") {
+                "/different/project"
+            } else {
+                project.as_str()
+            };
+            let agents = if marker_exists(&project, ".agent-mail-agent-missing") {
+                Vec::<Value>::new()
+            } else {
+                vec![serde_json::json!({"name": "BlackMeadow"})]
+            };
+            let payload = if marker_exists(&project, ".agent-mail-malformed") {
+                "not-json".to_owned()
+            } else {
+                serde_json::json!({
+                    "project": {"slug": "fixture", "human_key": actual_project},
+                    "agents": agents,
+                })
+                .to_string()
+            };
+            serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {"contents": [{"uri": format!("resource://agents/{project}"), "text": payload}]}
+            })
+        }
+    } else if method == "tools/call"
+        && request["params"]["name"].as_str() == Some("resolve_pane_identity")
+    {
+        let binding = if marker_exists(&project, ".agent-mail-unknown") {
+            "future-binding"
+        } else {
+            "verified-live"
+        };
+        let resolved_agent = if marker_exists(&project, ".agent-mail-pane-mismatch") {
+            "OtherAgent"
+        } else {
+            "BlackMeadow"
+        };
+        let payload = serde_json::json!({
+            "pane_id": pane,
+            "binding": binding,
+            "agent_name": resolved_agent,
+            "session": "omp-orchestrator",
+            "pane_index": 2,
+        });
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {"content": [{"type": "text", "text": payload.to_string()}]}
+        })
+    } else {
+        serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": {"code": -32601, "message": "fixture method not found"}
+        })
+    };
+    let body = serde_json::to_vec(&envelope).expect("mock response JSON");
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream
+        .write_all(response.as_bytes())
+        .expect("write headers");
+    stream.write_all(&body).expect("write response");
+}
+
+fn ensure_agent_mail_fixture_server() {
+    static URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    let url = URL.get_or_init(|| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind Agent Mail mock");
+        let address = listener.local_addr().expect("mock address");
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let stream = stream.expect("accept Agent Mail mock request");
+                std::thread::spawn(move || handle_agent_mail_request(stream));
+            }
+        });
+        format!("http://{address}/mcp/")
+    });
+    std::env::set_var("AM_MCP_URL", url);
+    std::env::set_var("AGENT_MAIL_BEARER_TOKEN", "fixture-token");
+    std::env::set_var("AGENT_MAIL_AGENT", "BlackMeadow");
+    std::env::set_var("TMUX_PANE", "%59");
+}
 fn run_git(repo: &Path, args: &[&str]) {
     let mut command = Command::new("git");
     command.current_dir(repo).args(args);
@@ -70,6 +236,7 @@ fn commit_hook_source_change(root: &Path, bytes: &[u8]) {
 }
 
 fn repository_fixture() -> TempDir {
+    ensure_agent_mail_fixture_server();
     let directory = tempfile::tempdir().expect("fixture directory");
     std::fs::create_dir(directory.path().join("docs")).expect("docs directory");
     for name in ["CLAUDE.md", "README.md", "SCHEMAS.toml"] {
@@ -1830,4 +1997,133 @@ fn cargo_workspace_member_verdict_gates_l2_entry() {
         "wrong gated-entry cause: {error}"
     );
     assert!(!output.exists(), "Cargo refusal must precede trust writes");
+}
+
+fn agent_mail_case(marker: Option<&str>) -> TempDir {
+    ensure_agent_mail_fixture_server();
+    let directory = tempfile::tempdir().expect("Agent Mail case directory");
+    if let Some(marker) = marker {
+        std::fs::write(directory.path().join(marker), b"fixture\n")
+            .expect("Agent Mail case marker");
+    }
+    directory
+}
+
+/// Exact registered identity is the known-good control. Every restrictive
+/// response remains a separate typed cause with remediation; the input arms
+/// halt before any service call.
+#[test]
+fn agent_mail_registration_exact_control_and_restrictive_matrix() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::{
+        agent_mail_registration_report, AgentMailRegistrationError,
+    };
+
+    let exact = agent_mail_case(None);
+    let report = agent_mail_registration_report(exact.path(), &InputManifest::full())
+        .expect("canonical project, roster, and pane binding agree");
+    assert_eq!(
+        (report.project.as_str(), report.pane_id.as_str(), report.agent.as_str()),
+        (exact.path().to_string_lossy().as_ref(), "%59", "BlackMeadow")
+    );
+
+    type KindCheck = fn(&AgentMailRegistrationError) -> bool;
+    let cases: [(&str, KindCheck, &str); 7] = [
+        (
+            ".agent-mail-project-missing",
+            |error| matches!(error, AgentMailRegistrationError::ProjectMissing { .. }),
+            "AGENT_MAIL_PROJECT_MISSING",
+        ),
+        (
+            ".agent-mail-agent-missing",
+            |error| matches!(error, AgentMailRegistrationError::AgentMissing { .. }),
+            "AGENT_MAIL_AGENT_MISSING",
+        ),
+        (
+            ".agent-mail-project-mismatch",
+            |error| matches!(error, AgentMailRegistrationError::ProjectMismatch { .. }),
+            "AGENT_MAIL_PROJECT_MISMATCH",
+        ),
+        (
+            ".agent-mail-pane-mismatch",
+            |error| matches!(error, AgentMailRegistrationError::PaneAgentMismatch { .. }),
+            "AGENT_MAIL_PANE_AGENT_MISMATCH",
+        ),
+        (
+            ".agent-mail-unavailable",
+            |error| matches!(error, AgentMailRegistrationError::ServiceUnavailable { .. }),
+            "AGENT_MAIL_SERVICE_UNAVAILABLE",
+        ),
+        (
+            ".agent-mail-malformed",
+            |error| matches!(error, AgentMailRegistrationError::MalformedResponse { .. }),
+            "AGENT_MAIL_RESPONSE_MALFORMED",
+        ),
+        (
+            ".agent-mail-unknown",
+            |error| matches!(error, AgentMailRegistrationError::Unknown { .. }),
+            "AGENT_MAIL_REGISTRATION_UNKNOWN",
+        ),
+    ];
+    for (marker, is_expected_kind, code) in cases {
+        let subject = agent_mail_case(Some(marker));
+        let error = agent_mail_registration_report(subject.path(), &InputManifest::full())
+            .expect_err("restrictive registration state must halt");
+        assert!(is_expected_kind(&error), "wrong typed cause: {error}");
+        let text = error.to_string();
+        assert!(text.contains(code) && text.contains("remedy="), "{text}");
+    }
+
+    let bounded = agent_mail_case(None);
+    let partial = InputManifest::partial("registry_rows", 1, "4xwl-fixture")
+        .expect("valid partial input");
+    let refused = InputManifest::refused("fixture withheld registration")
+        .expect("valid refused input");
+    let partial_error = agent_mail_registration_report(bounded.path(), &partial)
+        .expect_err("PARTIAL registration input must halt before I/O");
+    let refused_error = agent_mail_registration_report(bounded.path(), &refused)
+        .expect_err("REFUSED registration input must halt before I/O");
+    assert!(matches!(
+        partial_error,
+        AgentMailRegistrationError::PartialInput { .. }
+    ));
+    assert!(matches!(
+        refused_error,
+        AgentMailRegistrationError::RefusedInput { .. }
+    ));
+    assert!(partial_error.to_string().contains("AGENT_MAIL_INPUT_PARTIAL"));
+    assert!(refused_error.to_string().contains("AGENT_MAIL_INPUT_REFUSED"));
+}
+
+/// 4xwl wiring leg: preserve all previous L2 gates, then consume the read-only
+/// registration verdict after hook identity and before `initialize` writes.
+/// Ignoring this Result lets the mismatch reach a trust artifact and reddens
+/// only this entry leg; the exact-registration matrix above remains green.
+#[test]
+fn agent_mail_registration_verdict_gates_l2_entry() {
+    use ompo_start::inception::{
+        initialize_gated, AgentMailRegistrationError, InceptionError,
+    };
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped CLAUDE.md");
+    std::fs::write(
+        repository.path().join(".agent-mail-project-mismatch"),
+        b"fixture\n",
+    )
+    .expect("project mismatch marker");
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/agent-mail-refused.json");
+    match initialize_gated(repository.path(), &output) {
+        Err(InceptionError::AgentMailRegistration(
+            AgentMailRegistrationError::ProjectMismatch { expected, actual },
+        )) => assert_ne!(expected, actual, "mismatch cause collapsed"),
+        Ok(report) => panic!("registration bypass wrote trust: {report:?}"),
+        Err(other) => panic!("wrong L2 refusal: {other}"),
+    }
+    assert_eq!(
+        std::fs::metadata(&output).expect_err("refusal wrote no artifact").kind(),
+        std::io::ErrorKind::NotFound
+    );
 }

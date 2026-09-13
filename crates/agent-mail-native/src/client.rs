@@ -183,6 +183,21 @@ impl MailClient {
         decode_tool_payload(tool, &result)
     }
 
+    /// Read one MCP resource through the same authenticated transport.
+    ///
+    /// Resource reads are the non-mutating authority for registry checks. In
+    /// particular, callers that need to distinguish an absent project must not
+    /// use `list_agents`: the server's absolute-path tool lookup may ensure the
+    /// project as a side effect. `resource://agents/{project}` only reads an
+    /// existing project and returns its canonical project identity alongside
+    /// the registered agents.
+    pub async fn read_resource(&self, cx: &Cx, uri: &str) -> Result<Value, MailError> {
+        let result = self
+            .rpc(cx, "resources/read", json!({ "uri": uri }), uri)
+            .await?;
+        decode_resource_payload(uri, &result)
+    }
+
     /// One JSON-RPC round trip, returning the `result` object.
     async fn rpc(
         &self,
@@ -307,6 +322,28 @@ pub(crate) fn decode_tool_payload(tool: &str, result: &Value) -> Result<Value, M
         }),
         None => Ok(payload),
     }
+}
+
+/// Decode a JSON-valued MCP resource response.
+///
+/// MCP resources carry their payload in `result.contents[0].text`, distinct
+/// from the `result.content[0].text` tool envelope. Keeping this decoder beside
+/// the tool decoder preserves one protocol client while refusing a malformed
+/// response instead of treating it as an empty registry.
+fn decode_resource_payload(uri: &str, result: &Value) -> Result<Value, MailError> {
+    let text = result
+        .get("contents")
+        .and_then(Value::as_array)
+        .and_then(|contents| contents.first())
+        .and_then(|entry| entry.get("text"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| MailError::Protocol {
+            detail: format!("{uri}: result.contents[0].text missing or not a string"),
+        })?;
+
+    serde_json::from_str(text).map_err(|error| MailError::Protocol {
+        detail: format!("{uri}: resource payload was not JSON: {error}"),
+    })
 }
 
 /// Promote the server's error object into the narrowest variant available.

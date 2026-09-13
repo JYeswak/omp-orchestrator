@@ -21,7 +21,10 @@ lifecycle-monitor = { path = "../lifecycle-monitor" }
 # second authority on the row shape, and the request-vs-answer distinction is
 # exactly what a hand-rolled presence check gets wrong.
 decision-ledger = { path = "../decision-ledger" }
+agent-mail-native = { path = "../agent-mail-native" }
+asupersync = { workspace = true }
 input-manifest = { path = "../input-manifest" }
+sender-identity = { path = "../sender-identity" }
 subprocess-contract = { path = "../subprocess-contract" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -36,7 +39,6 @@ name = "ompo-start-mail-freshness"
 path = "src/bin/mail_freshness.rs"
 
 [dev-dependencies]
-asupersync = { workspace = true }
 tempfile = "3"
 
 [build-dependencies]

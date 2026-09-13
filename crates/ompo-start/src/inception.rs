@@ -21,6 +21,13 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use agent_mail_native::{
+    resolve_pane_identity, BindingStatus, IdentityError, MailClient, MailError, PaneIdentity,
+    ProjectKey,
+};
+use asupersync::{runtime::RuntimeBuilder, Cx};
+use sender_identity::first_candidate;
+use std::env;
 
 // Reuse the hook's existing source-set, digest, manifest, and diff authority
 // without adding a cycle from ompo-start -> no-shell-gate -> ompo-start.
@@ -62,6 +69,7 @@ pub fn control_file_presence(repo: &Path) -> BTreeMap<String, bool> {
 
 const REQUIRED_TOOLS: &[&str] = &["git", "cargo", "br", "bv", "ntm", "am", "jq"];
 const IDENTITY_COMMAND_DEADLINE: Duration = Duration::from_secs(10);
+const AGENT_MAIL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const REQUIRED_KEYS: &[&str] = &[
     "schema_version",
     "project_id",
@@ -143,6 +151,148 @@ impl fmt::Display for CargoWorkspaceError {
 
 impl std::error::Error for CargoWorkspaceError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentMailRegistrationError {
+    ProjectMissing {
+        project: String,
+        detail: String,
+    },
+    AgentMissing {
+        project: String,
+        agent: Option<String>,
+        detail: String,
+    },
+    ProjectMismatch {
+        expected: String,
+        actual: String,
+    },
+    PaneAgentMismatch {
+        expected_pane: String,
+        actual_pane: String,
+        intended_agent: String,
+        resolved_agent: Option<String>,
+    },
+    ServiceUnavailable {
+        detail: String,
+    },
+    MalformedResponse {
+        detail: String,
+    },
+    Unknown {
+        detail: String,
+    },
+    PartialInput {
+        bound_kind: String,
+        bound_value: u64,
+        source: String,
+    },
+    RefusedInput {
+        reason: String,
+    },
+}
+
+fn write_human_halt(
+    formatter: &mut fmt::Formatter<'_>,
+    code: &str,
+    detail: fmt::Arguments<'_>,
+    remedy: &str,
+) -> fmt::Result {
+    write!(formatter, "HUMAN_HALT {code} {detail} remedy={remedy}")
+}
+
+impl fmt::Display for AgentMailRegistrationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ProjectMissing { project, detail } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_PROJECT_MISSING",
+                format_args!("project={project} detail={detail}"),
+                "register the canonical repository project, then retry the read-only resource",
+            ),
+            Self::AgentMissing { project, agent, detail } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_AGENT_MISSING",
+                format_args!(
+                    "project={project} agent={} detail={detail}",
+                    agent.as_deref().unwrap_or("<unset>")
+                ),
+                "register the intended agent in the canonical project and bind it to this pane",
+            ),
+            Self::ProjectMismatch { expected, actual } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_PROJECT_MISMATCH",
+                format_args!("expected_project={expected} actual_project={actual}"),
+                "use the exact canonical git root as the Agent Mail project key",
+            ),
+            Self::PaneAgentMismatch {
+                expected_pane,
+                actual_pane,
+                intended_agent,
+                resolved_agent,
+            } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_PANE_AGENT_MISMATCH",
+                format_args!(
+                    "expected_pane={expected_pane} actual_pane={actual_pane} intended_agent={intended_agent} resolved_agent={}",
+                    resolved_agent.as_deref().unwrap_or("<missing>")
+                ),
+                "repair the canonical pane identity so it names this pane and intended agent",
+            ),
+            Self::ServiceUnavailable { detail } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_SERVICE_UNAVAILABLE",
+                format_args!("detail={detail}"),
+                "restore the Agent Mail daemon and credential, then rerun registration readback",
+            ),
+            Self::MalformedResponse { detail } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_RESPONSE_MALFORMED",
+                format_args!("detail={detail}"),
+                "repair or upgrade the Agent Mail service; do not infer registration from malformed data",
+            ),
+            Self::Unknown { detail } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_REGISTRATION_UNKNOWN",
+                format_args!("detail={detail}"),
+                "resolve the unknown Agent Mail state before continuing",
+            ),
+            Self::PartialInput {
+                bound_kind,
+                bound_value,
+                source,
+            } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_INPUT_PARTIAL",
+                format_args!(
+                    "bound_kind={bound_kind} bound_value={bound_value} source={source}"
+                ),
+                "rerun registration over the full project, roster, and pane identity inputs",
+            ),
+            Self::RefusedInput { reason } => write_human_halt(
+                formatter,
+                "AGENT_MAIL_INPUT_REFUSED",
+                format_args!("reason={reason}"),
+                "resolve the input refusal before deriving registration trust",
+            ),
+        }
+    }
+}
+impl std::error::Error for AgentMailRegistrationError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMailRegistrationReport {
+    pub input: InputManifest,
+    pub project: String,
+    pub pane_id: String,
+    pub agent: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AgentMailProjectRegistry {
+    project: String,
+    agents: BTreeSet<String>,
+}
+
 #[derive(Debug)]
 pub enum InceptionError {
     RepositoryUnreadable { path: PathBuf, detail: String },
@@ -152,6 +302,8 @@ pub enum InceptionError {
     IdentityUnavailable { field: &'static str, detail: String },
     /// Cargo workspace membership refused before trust initialization.
     CargoWorkspace(CargoWorkspaceError),
+    /// Agent Mail project and pane-bound agent registration could not be proven.
+    AgentMailRegistration(AgentMailRegistrationError),
     /// The installed pre-commit hook cannot prove it was built from the
     /// repository's current source authority.
     HookIdentityRefused {
@@ -270,6 +422,7 @@ impl fmt::Display for InceptionError {
                 "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
             ),
             Self::CargoWorkspace(error) => write!(formatter, "{error}"),
+            Self::AgentMailRegistration(error) => write!(formatter, "{error}"),
             Self::HookIdentityRefused { path, status, detail } => write!(
                 formatter,
                 "HUMAN_HALT {} hook={} detail={} remedy={}",
@@ -377,6 +530,9 @@ pub struct InitReport {
     /// initialization does not evaluate persona policy and leaves this absent;
     /// [`initialize_gated`] always carries the explicit Persona A verdict.
     pub persona_remote: Option<PersonaRemote>,
+    /// Exact read-only Agent Mail registration carried by the gated entry.
+    /// Shared repair initialization does not query Agent Mail.
+    pub agent_mail_registration: Option<AgentMailRegistrationReport>,
     pub actions: usize,
     pub backup: Option<PathBuf>,
     pub journal_rows: usize,
@@ -602,6 +758,12 @@ impl From<CargoWorkspaceError> for InceptionError {
     }
 }
 
+impl From<AgentMailRegistrationError> for InceptionError {
+    fn from(error: AgentMailRegistrationError) -> Self {
+        Self::AgentMailRegistration(error)
+    }
+}
+
 fn require_full_cargo_input(input: &InputManifest) -> Result<(), CargoWorkspaceError> {
     match input {
         InputManifest::Full => Ok(()),
@@ -745,6 +907,303 @@ pub fn cargo_workspace_member_report(
 ) -> Result<CargoWorkspaceMemberReport, CargoWorkspaceError> {
     cargo_workspace_member_report_with_program(repo, input, Path::new("cargo"))
 }
+/// Parse the read-only project registry and require its exact canonical path.
+fn parse_agent_mail_project_registry(
+    value: &Value,
+    expected_project: &str,
+) -> Result<AgentMailProjectRegistry, AgentMailRegistrationError> {
+    let object =
+        value
+            .as_object()
+            .ok_or_else(|| AgentMailRegistrationError::MalformedResponse {
+                detail: "agent registry resource is not an object".to_owned(),
+            })?;
+    let project =
+        object
+            .get("project")
+            .ok_or_else(|| AgentMailRegistrationError::ProjectMissing {
+                project: expected_project.to_owned(),
+                detail: "agent registry omitted project readback".to_owned(),
+            })?;
+    let project =
+        project
+            .as_object()
+            .ok_or_else(|| AgentMailRegistrationError::MalformedResponse {
+                detail: "agent registry project is not an object".to_owned(),
+            })?;
+    let actual_project = project
+        .get("human_key")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AgentMailRegistrationError::ProjectMissing {
+            project: expected_project.to_owned(),
+            detail: "agent registry omitted project.human_key".to_owned(),
+        })?;
+    if actual_project != expected_project {
+        return Err(AgentMailRegistrationError::ProjectMismatch {
+            expected: expected_project.to_owned(),
+            actual: actual_project.to_owned(),
+        });
+    }
+
+    let rows = object
+        .get("agents")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AgentMailRegistrationError::MalformedResponse {
+            detail: "agent registry omitted the agents array".to_owned(),
+        })?;
+    let agents = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            row.as_object()
+                .and_then(|row| row.get("name"))
+                .and_then(Value::as_str)
+                .filter(|name| !name.trim().is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| AgentMailRegistrationError::MalformedResponse {
+                    detail: format!("agent registry agents[{index}].name is missing or empty"),
+                })
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    Ok(AgentMailProjectRegistry {
+        project: actual_project.to_owned(),
+        agents,
+    })
+}
+
+fn require_full_agent_mail_input(input: &InputManifest) -> Result<(), AgentMailRegistrationError> {
+    input.require_full().map_err(|_| match input {
+        InputManifest::Partial {
+            bound_kind,
+            bound_value,
+            source,
+        } => AgentMailRegistrationError::PartialInput {
+            bound_kind: bound_kind.clone(),
+            bound_value: *bound_value,
+            source: source.clone(),
+        },
+        InputManifest::Refused { reason } => AgentMailRegistrationError::RefusedInput {
+            reason: reason.clone(),
+        },
+        InputManifest::Full => unreachable!("require_full accepted FULL"),
+    })
+}
+
+fn agent_mail_registration_from_registry(
+    registry: AgentMailProjectRegistry,
+    expected_pane: &str,
+    intended_agent: &str,
+    pane_identity: &PaneIdentity,
+    input: &InputManifest,
+) -> Result<AgentMailRegistrationReport, AgentMailRegistrationError> {
+    require_full_agent_mail_input(input)?;
+    let intended_agent = intended_agent.trim();
+    if intended_agent.is_empty() {
+        return Err(AgentMailRegistrationError::AgentMissing {
+            project: registry.project,
+            agent: None,
+            detail: "the canonical intended-agent surface was empty".to_owned(),
+        });
+    }
+    if !registry.agents.contains(intended_agent) {
+        return Err(AgentMailRegistrationError::AgentMissing {
+            project: registry.project,
+            agent: Some(intended_agent.to_owned()),
+            detail: "the read-only project roster does not contain the intended agent".to_owned(),
+        });
+    }
+    if pane_identity.binding != BindingStatus::VerifiedLive {
+        return Err(AgentMailRegistrationError::Unknown {
+            detail: format!(
+                "pane {} has non-live binding {:?}",
+                pane_identity.pane_id, pane_identity.binding
+            ),
+        });
+    }
+    let resolved_agent = pane_identity
+        .agent_name
+        .as_ref()
+        .map(|agent| agent.as_str());
+    if pane_identity.pane_id != expected_pane || resolved_agent != Some(intended_agent) {
+        return Err(AgentMailRegistrationError::PaneAgentMismatch {
+            expected_pane: expected_pane.to_owned(),
+            actual_pane: pane_identity.pane_id.clone(),
+            intended_agent: intended_agent.to_owned(),
+            resolved_agent: resolved_agent.map(str::to_owned),
+        });
+    }
+    Ok(AgentMailRegistrationReport {
+        input: input.clone(),
+        project: registry.project,
+        pane_id: pane_identity.pane_id.clone(),
+        agent: intended_agent.to_owned(),
+    })
+}
+
+/// Validate read-only Agent Mail project and pane identity responses.
+///
+/// This pure boundary lets restrictive response shapes be tested without a
+/// daemon. Production obtains both values through [`MailClient`], never from a
+/// config file or a name-only assertion.
+pub fn agent_mail_registration_from_readbacks(
+    expected_project: &Path,
+    expected_pane: &str,
+    intended_agent: &str,
+    registry_value: &Value,
+    pane_identity: &PaneIdentity,
+    input: &InputManifest,
+) -> Result<AgentMailRegistrationReport, AgentMailRegistrationError> {
+    require_full_agent_mail_input(input)?;
+    let expected_project = expected_project.display().to_string();
+    let registry = parse_agent_mail_project_registry(registry_value, &expected_project)?;
+    agent_mail_registration_from_registry(
+        registry,
+        expected_pane,
+        intended_agent,
+        pane_identity,
+        input,
+    )
+}
+
+fn agent_mail_error(
+    error: MailError,
+    project: &str,
+    agent: Option<&str>,
+) -> AgentMailRegistrationError {
+    match error {
+        MailError::Rpc { code, message }
+            if message.to_ascii_lowercase().contains("project not found") =>
+        {
+            AgentMailRegistrationError::ProjectMissing {
+                project: project.to_owned(),
+                detail: format!("rpc_code={code} message={message}"),
+            }
+        }
+        MailError::ToolRefused { kind, message, .. }
+            if kind == "IDENTITY_NOT_FOUND" || kind == "AGENT_NOT_FOUND" =>
+        {
+            AgentMailRegistrationError::AgentMissing {
+                project: project.to_owned(),
+                agent: agent.map(str::to_owned),
+                detail: format!("kind={kind} message={message}"),
+            }
+        }
+        MailError::Unreachable { .. }
+        | MailError::Unauthorized { .. }
+        | MailError::MissingCredential { .. }
+        | MailError::TimedOut { .. }
+        | MailError::Cancelled(_)
+        | MailError::UnexpectedStatus { .. } => AgentMailRegistrationError::ServiceUnavailable {
+            detail: error.to_string(),
+        },
+        MailError::Protocol { .. } | MailError::Codec { .. } => {
+            AgentMailRegistrationError::MalformedResponse {
+                detail: error.to_string(),
+            }
+        }
+        other => AgentMailRegistrationError::Unknown {
+            detail: other.to_string(),
+        },
+    }
+}
+
+fn agent_mail_identity_error(
+    error: IdentityError,
+    project: &str,
+    agent: &str,
+) -> AgentMailRegistrationError {
+    match error {
+        IdentityError::Mail(error) => agent_mail_error(error, project, Some(agent)),
+        IdentityError::UnknownPaneBinding { binding } => AgentMailRegistrationError::Unknown {
+            detail: format!("unknown pane binding {binding}"),
+        },
+        IdentityError::UnverifiedPaneBinding { binding } => AgentMailRegistrationError::Unknown {
+            detail: format!("unverified pane binding {binding}"),
+        },
+        IdentityError::MissingTmuxPane => AgentMailRegistrationError::PaneAgentMismatch {
+            expected_pane: "<missing>".to_owned(),
+            actual_pane: "<missing>".to_owned(),
+            intended_agent: agent.to_owned(),
+            resolved_agent: None,
+        },
+        other => AgentMailRegistrationError::MalformedResponse {
+            detail: other.to_string(),
+        },
+    }
+}
+
+/// Read back the canonical project roster and this pane's exact agent binding.
+///
+/// The project resource is deliberately used instead of the `list_agents`
+/// tool: the resource only reads existing state, while an absolute-path tool
+/// lookup may ensure a missing project. The intended agent comes from the
+/// typed sender-identity surface; a machine-global `AGENT_NAME` remains an
+/// explicit Unknown and is never accepted as project registration.
+pub fn agent_mail_registration_report(
+    repo: &Path,
+    input: &InputManifest,
+) -> Result<AgentMailRegistrationReport, AgentMailRegistrationError> {
+    require_full_agent_mail_input(input)?;
+    let project = repo.display().to_string();
+    let pane_id = env::var("TMUX_PANE")
+        .ok()
+        .map(|pane| pane.trim().to_owned())
+        .filter(|pane| !pane.is_empty())
+        .ok_or_else(|| AgentMailRegistrationError::PaneAgentMismatch {
+            expected_pane: "<missing>".to_owned(),
+            actual_pane: "<missing>".to_owned(),
+            intended_agent: "<unknown>".to_owned(),
+            resolved_agent: None,
+        })?;
+    let candidate = first_candidate(&|name| env::var(name).ok()).ok_or_else(|| {
+        AgentMailRegistrationError::AgentMissing {
+            project: project.clone(),
+            agent: None,
+            detail: "none of the canonical sender identity variables is set".to_owned(),
+        }
+    })?;
+    if candidate.source.is_ambient() {
+        return Err(AgentMailRegistrationError::Unknown {
+            detail: format!(
+                "{}={} is machine-global and cannot establish the intended project agent",
+                candidate.source.var(),
+                candidate.value
+            ),
+        });
+    }
+    let intended_agent = candidate.value;
+    let project_key = ProjectKey::new(project.clone());
+    let uri = format!("resource://agents/{project}");
+    let client = MailClient::discover().with_request_timeout(AGENT_MAIL_REQUEST_TIMEOUT);
+    let runtime = RuntimeBuilder::current_thread().build().map_err(|error| {
+        AgentMailRegistrationError::ServiceUnavailable {
+            detail: format!("Agent Mail runtime build failed: {error}"),
+        }
+    })?;
+    let (registry_value, pane_identity) = runtime.block_on(async {
+        let cx = Cx::current().ok_or_else(|| AgentMailRegistrationError::Unknown {
+            detail: "Agent Mail runtime supplied no Cx".to_owned(),
+        })?;
+        let registry_value = client
+            .read_resource(&cx, &uri)
+            .await
+            .map_err(|error| agent_mail_error(error, &project, Some(&intended_agent)))?;
+        let pane_identity = resolve_pane_identity(&cx, &client, &project_key, &pane_id)
+            .await
+            .map_err(|error| agent_mail_identity_error(error, &project, &intended_agent))?;
+        Ok::<_, AgentMailRegistrationError>((registry_value, pane_identity))
+    })?;
+    let registry = parse_agent_mail_project_registry(&registry_value, &project)?;
+    agent_mail_registration_from_registry(
+        registry,
+        &pane_id,
+        &intended_agent,
+        &pane_identity,
+        input,
+    )
+}
+
 /// L2-BUILD-REMOTE-PERSONA-A (contract s1_l2_ecosystem.md): Persona A
 /// local-only remote rule.
 ///
@@ -2457,8 +2916,11 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
             detail: hook_identity.detail,
         });
     }
+    let agent_mail_registration =
+        agent_mail_registration_report(&top, &InputManifest::full())?;
     let mut report = initialize(&top, output)?;
     report.persona_remote = Some(persona_remote);
+    report.agent_mail_registration = Some(agent_mail_registration);
     Ok(report)
 }
 
@@ -2530,6 +2992,7 @@ fn initialize_inner(
     Ok(InitReport {
         manifest,
         persona_remote: None,
+        agent_mail_registration: None,
         actions,
         backup,
         journal_rows,

@@ -1612,12 +1612,14 @@ dependencies = [
 name = "ompo-start"
 version = "0.1.0"
 dependencies = [
+ "agent-mail-native",
  "asupersync",
  "build-stamp",
  "decision-ledger",
  "input-manifest",
  "lifecycle-event",
  "lifecycle-monitor",
+ "sender-identity",
  "serde",
  "serde_json",
  "sha2 0.11.0",
