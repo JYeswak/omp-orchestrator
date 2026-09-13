@@ -11,7 +11,7 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitCode};
 use sha2::{Digest, Sha256};
 use lifecycle_event::{default_repo_journal, Layer};
 use lifecycle_monitor::{gate_freshness_verdict, observe_layer, verify_artifact};
@@ -1162,6 +1162,199 @@ pub fn assemble_install_report(
         artifact,
         readback_bytes: readback.len(),
     })
+}
+
+/// L0-B12-obs-writer (bead xic2): attempt identity carried explicitly on
+/// every emit. `pane`/`incarnation` name the operating agent when known
+/// (empty means unknown, never fabricated); `attempt` is minted once per
+/// operator invocation and is REQUIRED non-empty -- an unattributed emit
+/// is refused rather than journaled anonymously.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttemptIdentity {
+    pub pane: String,
+    pub incarnation: String,
+    pub attempt: String,
+}
+
+/// Mint one attempt identity token for an operator invocation. Process id
+/// plus nanos: unique per attempt without ambient coordination. Callers
+/// that know their pane pass it explicitly; nothing here reads it from
+/// the environment.
+#[must_use]
+pub fn mint_attempt_id() -> String {
+    format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0)
+    )
+}
+
+/// Centralized allowed S1.L0 reason set. Every stage_to=S1.L0 reason the
+/// production installer emits is listed here; the emitter refuses anything
+/// else with a typed reason so a misspelled or invented reason can never
+/// journal as a legitimate outcome. Other stages pass through: their
+/// authority lives with their own lanes, not here.
+pub const ALLOWED_L0_REASONS: &[&str] = &[
+    "INSTALL_FENCE_BLOCKED",
+    "INSTALL_UNKNOWN_TARGET",
+    "INSTALL_FOREIGN_TARGET",
+    "INSTALL_GIT_HEAD_REFUSED",
+    "INSTALL_PLATFORM_REFUSED",
+    "INSTALL_RESTART_READ_REFUSED",
+    "INSTALL_BUILD_REFUSED",
+    "INSTALL_CATALOG_REFUSED",
+    "INSTALL_SELECT_REFUSED",
+    "INSTALL_VERIFY_REFUSED",
+    "INSTALL_RESTART_REFUSED",
+    "INSTALL_SKILLS_REFUSED",
+    "INSTALL_REPORT_REFUSED",
+    "INSTALL_OBSERVE_REFUSED",
+    "INSTALL_VERIFIED",
+];
+
+/// Typed lifecycle-event emit with durable append, fsync, and readback proof.
+/// Moved from the binary root (bead xic2) so integration legs drive the
+/// same boundary production calls -- one writer, reachable from both.
+///
+/// Success carries the journal [`Readback`]. Any failure -- missing reason,
+/// disallowed L0 reason, unattributed attempt, non-FULL manifest, unopenable
+/// journal, unwritable file, failed fsync, or failed readback -- is `Err`
+/// and MUST refuse the caller's success: the success line prints only
+/// behind the `Ok` arm (see [`guard_success`]), so log-and-continue cannot
+/// report success for an event that is not durable.
+///
+/// Manifest split, stated once: the emit path requires FULL *state* (the
+/// input set was complete); the digest *value* is checked at report
+/// assembly, because no digest exists yet when early refusals emit. A
+/// PARTIAL or REFUSED manifest refuses here with its own typed reason.
+/// The event schema carries pane/incarnation when present; it has no
+/// attempt key, so the attempt travels in the call (required, validated)
+/// rather than smuggled into an unrelated field.
+pub fn emit_s1(
+    repo_root: &Path,
+    layer: Layer,
+    stage_to: &str,
+    outcome: lifecycle_event::EmitOutcome,
+    reason: &str,
+    identity: &AttemptIdentity,
+    manifest: &InputManifest,
+) -> Result<lifecycle_event::Readback, lifecycle_event::EmitError> {
+    emit_event_to_journal(
+        &lifecycle_event::default_repo_journal(repo_root),
+        layer,
+        stage_to,
+        outcome,
+        reason,
+        identity,
+        manifest,
+    )
+}
+
+/// Journal-path-injectable core of [`emit_s1`]. Production passes
+/// [`default_repo_journal`]; tests inject failure shapes (`/dev/null` reads
+/// back empty, a file-blocked parent refuses the append) without touching
+/// the production path.
+pub fn emit_event_to_journal(
+    journal_path: &Path,
+    layer: Layer,
+    stage_to: &str,
+    outcome: lifecycle_event::EmitOutcome,
+    reason: &str,
+    identity: &AttemptIdentity,
+    manifest: &InputManifest,
+) -> Result<lifecycle_event::Readback, lifecycle_event::EmitError> {
+    use lifecycle_event::{DurableJournal, LifecycleEvent, ReasonCode};
+    let refuse = |op: &'static str, detail: String| lifecycle_event::EmitError::Io {
+        op,
+        detail,
+    };
+    if identity.attempt.trim().is_empty() {
+        return Err(refuse(
+            "attempt_identity",
+            "unattributed emit refused: attempt must be non-empty".to_owned(),
+        ));
+    }
+    if stage_to == "S1.L0" && !ALLOWED_L0_REASONS.contains(&reason) {
+        return Err(refuse(
+            "l0_reason_allowlist",
+            format!("reason {reason:?} is not allowlisted for S1.L0"),
+        ));
+    }
+    match manifest {
+        InputManifest::Full { .. } => {}
+        InputManifest::Partial { .. } | InputManifest::Refused { .. } => {
+            return Err(refuse(
+                "input_manifest",
+                format!("non-FULL manifest cannot emit: {manifest}"),
+            ));
+        }
+    }
+    let code = ReasonCode::new(reason).map_err(|error| {
+        eprintln!(
+            "LIFECYCLE_EVENT_EMIT_FAILED layer={} detail={error}",
+            layer.as_str()
+        );
+        error
+    })?;
+    let event = LifecycleEvent::new(layer, "HUMAN", stage_to, "installer", outcome, code)
+        .with_pane(identity.pane.clone())
+        .with_incarnation(identity.incarnation.clone());
+    DurableJournal::open(journal_path.to_path_buf())
+        .and_then(|journal| lifecycle_event::emit_one_host(&journal, event))
+        .map_err(|error| {
+            eprintln!(
+                "LIFECYCLE_EVENT_EMIT_FAILED layer={} detail={error}",
+                layer.as_str()
+            );
+            error
+        })
+}
+
+/// Best-effort refusal event for restrictive paths. The `Result` exists for
+/// the wiring proof (`main -> run_check/run_install -> event result ->
+/// success guard`); callers discard it (`let _ =`) so a refused emit can
+/// neither convert the original failure into success nor mask it with a
+/// second failure.
+pub fn emit_refusal(
+    repo_root: &Path,
+    layer: Layer,
+    stage_to: &str,
+    reason: &str,
+    identity: &AttemptIdentity,
+    manifest: &InputManifest,
+) -> Result<lifecycle_event::Readback, lifecycle_event::EmitError> {
+    emit_s1(
+        repo_root,
+        layer,
+        stage_to,
+        lifecycle_event::EmitOutcome::Refused,
+        reason,
+        identity,
+        manifest,
+    )
+}
+
+/// The success guard: the only place a success verdict prints. A refused
+/// emit returns exit 1 and never the success line -- restoring log-and-continue
+/// (ignore the `Result`, print success, return `SUCCESS`) reddens the
+/// `success_guard_refuses_on_emit_failure` leg by construction.
+pub fn guard_success(
+    emit: Result<lifecycle_event::Readback, lifecycle_event::EmitError>,
+    ok_line: &str,
+) -> std::process::ExitCode {
+    match emit {
+        Ok(_) => {
+            println!("{ok_line}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("INSTALLER LIFECYCLE REFUSED: success withheld, event not durable: {error}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 /// L0 observe stall bound: follows the 60s operator default used by the

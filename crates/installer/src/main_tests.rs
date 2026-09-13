@@ -3,6 +3,25 @@ use super::*;
 const DIGEST: &str = "bdd2a7291457c6a5e371324772061f751ba7774d8d7057895f5d5ea8daa773f1";
 const PAYLOAD: &[u8] = b"B03 fixed buffer SHA-256 payload\n";
 
+/// Fixture attempt identity: explicit pane/incarnation/attempt threading
+/// through every migrated emit call. Deterministic values so journal-row
+/// asserts stay exact.
+fn fixture_identity() -> installer::AttemptIdentity {
+    installer::AttemptIdentity {
+        pane: "fixture-pane".to_owned(),
+        incarnation: "fixture-incarnation".to_owned(),
+        attempt: "fixture-attempt".to_owned(),
+    }
+}
+
+/// Emit-time manifest fixture: FULL state attested with no digest value
+/// yet (verification happens downstream), mirroring production callers.
+fn full_manifest() -> installer::InputManifest {
+    installer::InputManifest::Full {
+        digest: String::new(),
+    }
+}
+
 fn install_args(digest: &str, bin_dir: &str, equals: bool) -> Vec<String> {
     let mut args = vec![
         "--install".to_owned(),
@@ -63,6 +82,42 @@ fn parsed_digest_reaches_production_verification_action() {
     assert!(action_called, "matching parsed digest did not reach action");
     std::fs::remove_file(source).expect("cleanup artifact");
 }
+
+#[test]
+fn pane_and_incarnation_flags_thread_explicitly() {
+    // Space form lands verbatim; nothing is derived from environment.
+    let parsed = parse_cli_args(vec![
+        "--check".to_owned(),
+        "--pane".to_owned(),
+        "pane-49".to_owned(),
+        "--incarnation".to_owned(),
+        "incarnation-3".to_owned(),
+    ])
+    .expect("pane flags parse");
+    assert_eq!(parsed.pane, "pane-49", "pane threads explicitly");
+    assert_eq!(
+        parsed.incarnation, "incarnation-3",
+        "incarnation threads explicitly"
+    );
+    // Equals form agrees, and the last occurrence wins like --bin-dir.
+    let parsed = parse_cli_args(vec![
+        "--check".to_owned(),
+        "--pane=first".to_owned(),
+        "--pane=second".to_owned(),
+        "--incarnation=first".to_owned(),
+    ])
+    .expect("equals-form pane flags parse");
+    assert_eq!(parsed.pane, "second", "last pane wins");
+    assert_eq!(parsed.incarnation, "first", "incarnation parses");
+    // Absent flags default to empty (unknown, never fabricated).
+    let bare =
+        parse_cli_args(vec!["--check".to_owned()]).expect("bare check parses");
+    assert!(
+        bare.pane.is_empty() && bare.incarnation.is_empty(),
+        "absent identity stays empty, never invented"
+    );
+}
+
 // ── gj669: lifecycle-event write failure propagates before success ──
 //
 // KNOWN-BAD for this file: restore log-and-continue — make `emit_s1` swallow
@@ -72,9 +127,10 @@ fn parsed_digest_reaches_production_verification_action() {
 // AND exit: `cargo` returns 101 for unrelated causes, so neither alone tells
 // which band moved.
 //
-// The journal file IS the manifest here: the installer owns no InputManifest
-// type, so "empty manifest" anti-vacuity is an empty journal (or an empty
-// emit set), which must refuse — never read as an emitted event.
+// The journal file is the ANTI-VACUITY half here: "empty manifest" is an
+// empty journal (or an empty emit set), which must refuse -- never read as
+// an emitted event. The TYPED half (Partial/Refused cannot emit) lives in
+// the lib boundary and its legs in tests/l0_install.rs.
 
 fn gj669_repo(name: &str) -> PathBuf {
     let repo =
@@ -115,12 +171,16 @@ fn gj669_cleanup(repo: &PathBuf) {
 #[test]
 fn emit_s1_known_good_roundtrips_with_readback() {
     let repo = gj669_repo("known-good");
-    let readback = emit_s1(
+    // Fixture reason is a real allowlisted S1.L0 reason (the allowlist
+    // governs membership; this leg owns plumbing, not vocabulary).
+    let readback = installer::emit_s1(
         &repo,
         Layer::L0,
         "S1.L0",
         EmitOutcome::Emitted,
-        "GJ669_KNOWN_GOOD",
+        "INSTALL_VERIFIED",
+        &fixture_identity(),
+        &full_manifest(),
     )
     .expect("healthy emit answers with readback");
     assert_eq!(
@@ -134,7 +194,7 @@ fn emit_s1_known_good_roundtrips_with_readback() {
         "the journal holds exactly the emitted row: {rows:?}"
     );
     assert!(
-        rows[0].contains("GJ669_KNOWN_GOOD") && rows[0].contains("\"emitted\""),
+        rows[0].contains("INSTALL_VERIFIED") && rows[0].contains("\"emitted\""),
         "the row carries reason and outcome: {}",
         rows[0]
     );
@@ -144,12 +204,16 @@ fn emit_s1_known_good_roundtrips_with_readback() {
 #[test]
 fn emit_s1_write_failure_is_typed() {
     let repo = gj669_blocked_repo("write-fail");
-    let error = emit_s1(
+    // Real allowlisted reason: the failure under test comes from the
+    // blocked journal path, never from the reason string.
+    let error = installer::emit_s1(
         &repo,
         Layer::L0,
         "S1.L0",
         EmitOutcome::Emitted,
-        "GJ669_WRITE_FAIL",
+        "INSTALL_VERIFIED",
+        &fixture_identity(),
+        &full_manifest(),
     )
     .expect_err("a file-blocked journal parent must refuse");
     assert!(
@@ -198,7 +262,7 @@ fn emit_readback_failure_is_typed() {
         "readback failure must carry its exact reason, got: {error}"
     );
     assert_eq!(
-        guard_success(Err(error), "GJ669 MUST NOT PRINT"),
+        installer::guard_success(Err(error), "GJ669 MUST NOT PRINT"),
         ExitCode::from(1),
         "this readback refusal must withhold success with exit 1"
     );
@@ -212,7 +276,7 @@ fn success_guard_refuses_on_emit_failure() {
         detail: "injected".to_owned(),
     };
     assert_eq!(
-        guard_success(Err(injected), "GJ669 MUST NOT PRINT"),
+        installer::guard_success(Err(injected), "GJ669 MUST NOT PRINT"),
         ExitCode::from(1),
         "a refused emit must refuse success with exit 1, never SUCCESS"
     );
@@ -221,7 +285,7 @@ fn success_guard_refuses_on_emit_failure() {
         lines: 1,
     };
     assert_eq!(
-        guard_success(Ok(durable), "GJ669 OK"),
+        installer::guard_success(Ok(durable), "GJ669 OK"),
         ExitCode::SUCCESS,
         "a durable event advances"
     );
@@ -235,7 +299,7 @@ fn check_git_refusal_emits_without_converting_failure() {
     let repo = gj669_repo("check-refusal");
     let bin = gj669_repo("check-refusal-bin");
     assert_eq!(
-        run_check(&repo, &bin),
+        run_check(&repo, &bin, &fixture_identity()),
         ExitCode::from(3),
         "the non-repo check keeps its original refusal"
     );
@@ -261,7 +325,7 @@ fn check_refusal_emit_failure_preserves_exit() {
     let repo = gj669_blocked_repo("check-refusal-blocked");
     let bin = gj669_repo("check-refusal-blocked-bin");
     assert_eq!(
-        run_check(&repo, &bin),
+        run_check(&repo, &bin, &fixture_identity()),
         ExitCode::from(3),
         "a refused emit must not convert the original refusal"
     );
@@ -280,7 +344,7 @@ fn install_unknown_target_emits_refusal_with_exit_2() {
     let repo = gj669_repo("install-refusal");
     let bin = gj669_repo("install-refusal-bin");
     assert_eq!(
-        run_install(&repo, &bin, "definitely-not-a-target", None),
+        run_install(&repo, &bin, "definitely-not-a-target", None, &fixture_identity()),
         ExitCode::from(2),
         "the unknown target keeps its original refusal"
     );

@@ -2453,3 +2453,154 @@ fn observability_writer_gates_install_success() {
     assert_eq!(gate.rows, 1, "exactly the one written row is observed");
     assert!(gate.fresh, "a just-written row is fresh");
 }
+
+/// L0-B12 emitter boundary (bead xic2, Option A): the production S1.L0
+/// emitter lives in the library with explicit attempt identity and a
+/// required InputManifest. Every arm below drives the real `emit_s1`
+/// over a hermetic TempDir journal -- never a copy of its checks.
+/// KNOWN-BAD per arm, announced with its prediction: deleting the
+/// allowlist check greens the unlisted arm; deleting the manifest
+/// check greens the partial/refused arms; deleting the attempt check
+/// greens the empty arm. Message (op string) AND journal-emptiness
+/// are pinned on every refusal arm.
+fn xic2_identity() -> installer::AttemptIdentity {
+    installer::AttemptIdentity {
+        pane: "l0-pane".to_owned(),
+        incarnation: "l0-incarnation".to_owned(),
+        attempt: "l0-attempt".to_owned(),
+    }
+}
+
+fn xic2_full_manifest() -> installer::InputManifest {
+    installer::InputManifest::Full {
+        digest: String::new(),
+    }
+}
+
+fn xic2_journal_rows(repo: &Path) -> Vec<String> {
+    match fs::read_to_string(lifecycle_event::default_repo_journal(repo)) {
+        Ok(text) => text
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(str::to_owned)
+            .collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+#[test]
+fn xic2_unlisted_l0_reason_is_typed_refusal() {
+    use lifecycle_event::{EmitOutcome, Layer};
+    let repo = TempDir::new("xic2-unlisted-reason");
+    let error = installer::emit_s1(
+        repo.path(),
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        "NOT_A_REAL_REASON",
+        &xic2_identity(),
+        &xic2_full_manifest(),
+    )
+    .expect_err("an unlisted L0 reason must refuse");
+    assert!(
+        matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "l0_reason_allowlist"),
+        "refusal must name the allowlist op, got: {error}"
+    );
+    assert!(
+        xic2_journal_rows(repo.path()).is_empty(),
+        "a refused emit persists nothing"
+    );
+}
+
+#[test]
+fn xic2_non_full_manifests_cannot_emit() {
+    use lifecycle_event::{EmitOutcome, Layer};
+    for manifest in [
+        installer::InputManifest::Partial {
+            bound_kind: "depth".to_owned(),
+            bound_value: 3,
+            source: "xic2-fixture".to_owned(),
+        },
+        installer::InputManifest::Refused {
+            reason: "xic2-fixture".to_owned(),
+        },
+    ] {
+        let repo = TempDir::new("xic2-manifest-refusal");
+        let error = installer::emit_s1(
+            repo.path(),
+            Layer::L0,
+            "S1.L0",
+            EmitOutcome::Emitted,
+            "INSTALL_VERIFIED",
+            &xic2_identity(),
+            &manifest,
+        )
+        .expect_err("a non-FULL manifest must refuse");
+        assert!(
+            matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "input_manifest"),
+            "refusal must name the manifest op, got: {error}"
+        );
+        assert!(
+            xic2_journal_rows(repo.path()).is_empty(),
+            "a refused emit persists nothing"
+        );
+    }
+}
+
+#[test]
+fn xic2_empty_attempt_cannot_emit() {
+    use lifecycle_event::{EmitOutcome, Layer};
+    for attempt in ["", "   "] {
+        let repo = TempDir::new("xic2-empty-attempt");
+        let identity = installer::AttemptIdentity {
+            pane: "l0-pane".to_owned(),
+            incarnation: "l0-incarnation".to_owned(),
+            attempt: attempt.to_owned(),
+        };
+        let error = installer::emit_s1(
+            repo.path(),
+            Layer::L0,
+            "S1.L0",
+            EmitOutcome::Emitted,
+            "INSTALL_VERIFIED",
+            &identity,
+            &xic2_full_manifest(),
+        )
+        .expect_err("an empty attempt must refuse");
+        assert!(
+            matches!(&error, lifecycle_event::EmitError::Io { op, .. } if *op == "attempt_identity"),
+            "refusal must name the attempt op, got: {error}"
+        );
+        assert!(
+            xic2_journal_rows(repo.path()).is_empty(),
+            "a refused emit persists nothing"
+        );
+    }
+}
+
+#[test]
+fn xic2_identity_stamps_emitted_row() {
+    use lifecycle_event::{EmitOutcome, Layer};
+    let repo = TempDir::new("xic2-identity-stamp");
+    let readback = installer::emit_s1(
+        repo.path(),
+        Layer::L0,
+        "S1.L0",
+        EmitOutcome::Emitted,
+        "INSTALL_VERIFIED",
+        &xic2_identity(),
+        &xic2_full_manifest(),
+    )
+    .expect("a fully-attributed emit answers with readback");
+    assert_eq!(readback.lines, 1, "one emit appends exactly one row");
+    let rows = xic2_journal_rows(repo.path());
+    assert_eq!(rows.len(), 1, "the journal holds exactly the emitted row");
+    assert!(
+        rows[0].contains("l0-pane")
+            && rows[0].contains("l0-incarnation")
+            && rows[0].contains("INSTALL_VERIFIED")
+            && rows[0].contains("\"emitted\""),
+        "the row stamps pane, incarnation, reason and outcome: {}",
+        rows[0]
+    );
+}
