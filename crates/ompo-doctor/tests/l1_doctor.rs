@@ -1414,3 +1414,66 @@ fn socraticode_probe_preserves_unknown() {
         metric.reason_code
     );
 }
+
+/// LAW-L1-UNRUN (contract s1_l1_doctor.md): a deadline-expired probe is
+/// UNMEASURED, never Pass and never a refusal. Models the row production
+/// `run_probe` emits on `BoundedOutcome::TimedOut` (status UNMEASURED,
+/// detail "probe timed out", no version) and pins it through the real
+/// `answered` authority and the real exit band.
+///
+/// VOCABULARY NOTE, not a dodge: the contract wire shape names
+/// `run_state=UNRUN` on the UNMEASURED arm, but no `run_state` carrier
+/// exists in code (`ProbeDecision` carries status plus reason_code; the
+/// `ompo state` verb is an unrelated OMP-session surface). This leg pins
+/// every producible element -- exact UNMEASURED status (which excludes all
+/// six other arms, refusal-flavored or otherwise), the reason, the
+/// unanswered reading, and exit 1 -- and does not synthesize the field.
+/// Carrying `run_state` needs a production BUILD bead, not a TEST row.
+///
+/// KNOWN-BAD: answering UNMEASURED rows (status-blind `answered`) greens
+/// the expired probe below and this leg fails: a measurement that never
+/// ran would count as answered, which is the false-Pass this row exists
+/// to prevent.
+#[test]
+fn timeout_is_unmeasured_unrun() {
+    use ompo_doctor::{answered, doctor_exit_code, ProbeDecision};
+    // The deadline-expired shape, as production emits it.
+    let expired = ProbeDecision {
+        name: "fixture-hung".to_owned(),
+        status: "UNMEASURED".to_owned(),
+        reason_code: "L1_PROBE_FIXTURE_HUNG_UNMEASURED".to_owned(),
+        detail: "probe timed out".to_owned(),
+        presence: Some("/fixture/hung".to_owned()),
+        version: None,
+    };
+    assert_eq!(
+        expired.status, "UNMEASURED",
+        "an expired probe must be UNMEASURED, got {}",
+        expired.status
+    );
+    assert!(
+        !answered(&expired),
+        "an expired probe must not answer, even when present"
+    );
+    // Never Pass: a set containing only the expired probe exits 1.
+    assert_eq!(
+        doctor_exit_code(&[expired]).expect("non-empty set"),
+        1,
+        "an unrun measurement must never exit 0"
+    );
+    // Positive control: the paired healthy input answers and exits 0.
+    let healthy = ProbeDecision {
+        name: "fixture-healthy".to_owned(),
+        status: "OK".to_owned(),
+        reason_code: "L1_PROBE_FIXTURE_HEALTHY_OK".to_owned(),
+        detail: "exit=0 fixture 1.0".to_owned(),
+        presence: Some("/fixture/healthy".to_owned()),
+        version: Some("fixture 1.0".to_owned()),
+    };
+    assert!(answered(&healthy), "identity plus version must answer");
+    assert_eq!(
+        doctor_exit_code(&[healthy]).expect("non-empty set"),
+        0,
+        "a healthy set exits 0"
+    );
+}
