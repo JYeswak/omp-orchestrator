@@ -750,6 +750,63 @@ fn persona_a_local_only_remote_rule() {
     );
 }
 
+/// nqac wiring rework: the reachable L2 production entry consumes the
+/// existing Persona A policy before initialization continues and carries the
+/// exact verdict it used. Both healthy remote states reach the artifact; the
+/// local-only state is never inferred from ambient environment state.
+///
+/// KNOWN-BAD: bypass `persona_remote_policy` at `initialize_gated` or
+/// replace its result with a fabricated local-only record. This leg then
+/// fails on the returned policy record while the standalone policy matrix
+/// above remains the known-good control. Message AND exit are pinned on the
+/// mutation run.
+#[test]
+fn persona_a_remote_policy_is_carried_by_gated_entry() {
+    use ompo_start::inception::{initialize_gated, PersonaRemote};
+
+    let remote = repository_fixture();
+    std::fs::write(remote.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    run_git(
+        remote.path(),
+        &["remote", "add", "origin", "https://example.invalid/x.git"],
+    );
+    let remote_output = remote
+        .path()
+        .join(".omp-orchestrator/init-gated-remote-present.json");
+    let remote_report = initialize_gated(remote.path(), &remote_output)
+        .expect("remote-present Persona A proceeds");
+    assert_eq!(
+        remote_report.persona_remote,
+        Some(PersonaRemote {
+            remote_optional: false,
+            remote_present: true,
+            reason_code: "REMOTE_REQUIRED",
+        }),
+        "the gated entry must carry the live remote-present policy verdict"
+    );
+    assert!(remote_output.is_file(), "remote-present init must continue");
+
+    let local = repository_fixture();
+    std::fs::write(local.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    let local_output = local
+        .path()
+        .join(".omp-orchestrator/init-gated-local-only.json");
+    let local_report = initialize_gated(local.path(), &local_output)
+        .expect("local-only Persona A proceeds");
+    assert_eq!(
+        local_report.persona_remote,
+        Some(PersonaRemote {
+            remote_optional: true,
+            remote_present: false,
+            reason_code: "PERSONA_A_LOCAL_ONLY",
+        }),
+        "local-only continuation must carry its explicit Persona A allowance"
+    );
+    assert!(local_output.is_file(), "local-only init must continue");
+}
+
 /// L2-TEST-REMOTE-PERSONA-BC (bead mxro): a non-optional policy without
 /// an observed remote halts shared dispatch with a named remediation;
 /// every other record passes through. Reuses the nqac `PersonaRemote`

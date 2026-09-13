@@ -279,6 +279,10 @@ pub struct InceptionReadback {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitReport {
     pub manifest: InceptionManifest,
+    /// Remote policy observed by the reachable L2 gate. Shared repair
+    /// initialization does not evaluate persona policy and leaves this absent;
+    /// [`initialize_gated`] always carries the explicit Persona A verdict.
+    pub persona_remote: Option<PersonaRemote>,
     pub actions: usize,
     pub backup: Option<PathBuf>,
     pub journal_rows: usize,
@@ -471,8 +475,10 @@ pub fn git_repo_toplevel(repo: &Path) -> Result<PathBuf, InceptionError> {
 /// missing, killed) is a typed error, never an absence claim: absence
 /// of evidence is not evidence of a remote.
 ///
-/// INERT BY DESIGN (rule 9): no caller yet -- same reasoning as
-/// [`git_repo_toplevel`]. The L2 entry owns adoption.
+/// WIRED (rule 9): [`initialize_gated`] consumes this verdict immediately
+/// before initialization continues and returns the same record in
+/// [`InitReport::persona_remote`]. Shared repair initialization remains
+/// deliberately outside this policy boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PersonaRemote {
     pub remote_optional: bool,
@@ -1795,7 +1801,10 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 /// checks gate before trust-dependent continuation, the `.beads`
 /// tracker init check gates before initialization or dispatch can
 /// continue, and the rust-toolchain.toml pin check gates the compiler
-/// identity last. A real repository with stamped control files, a ready
+/// identity. The explicit Persona A remote policy is then observed and
+/// carried before `initialize` runs: no remote is an explicit local-only
+/// allowance, a present remote needs no allowance, and an unobservable probe
+/// refuses typed. A real repository with stamped control files, a ready
 /// tracker, and a satisfied pin proceeds with its canonical root; any
 /// other state refuses typed before `initialize` runs. This lives
 /// beside -- never inside --
@@ -1843,7 +1852,13 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
             })
         }
     }
-    initialize(&top, output)
+    // This entry is the local operator bootstrap, so Persona A is explicit at
+    // the call site rather than inferred from ambient environment state. The
+    // fleet-required policy remains owned by require_remote_for_dispatch.
+    let persona_remote = persona_remote_policy(&top, true)?;
+    let mut report = initialize(&top, output)?;
+    report.persona_remote = Some(persona_remote);
+    Ok(report)
 }
 
 fn initialize_inner(
@@ -1913,6 +1928,7 @@ fn initialize_inner(
     };
     Ok(InitReport {
         manifest,
+        persona_remote: None,
         actions,
         backup,
         journal_rows,
