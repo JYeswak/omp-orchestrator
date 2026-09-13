@@ -1477,3 +1477,63 @@ fn timeout_is_unmeasured_unrun() {
         "a healthy set exits 0"
     );
 }
+
+/// L1-TEST-ABSENT-REMEDIATION (contract s1_l1_doctor.md
+/// `L1-BUILD-REMEDIATION`): every absent verdict carries a NAMED
+/// remediation, because a bare "rerun" on a missing tool is advice to
+/// repeat a measurement whose subject does not exist. Uses the real
+/// `run_doctor` summary rows and the real remediation vector -- never a
+/// copy of the table (`remediation_for` is private to the crate; the
+/// observable contract is rows-in/rows-out).
+///
+/// KNOWN-BAD: empty the remediation of an absent row and this leg fails:
+/// an ABSENT verdict with no remedy leaves the operator with a verdict
+/// and no next action. Message AND exit are pinned on the mutation run.
+#[test]
+fn every_absent_has_remediation() {
+    let repo = tempfile::tempdir().expect("remediation fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    // Shape holds on every lane, empty or not: each remediation line names
+    // its probe and its reason. An emptied remediation fails here on any
+    // lane that emits one.
+    for line in &summary.remediation {
+        assert!(
+            line.contains("probe=") && line.contains("reason="),
+            "every remediation line names probe and reason, got: {line}"
+        );
+    }
+    let absent: Vec<_> = summary
+        .probes
+        .iter()
+        .filter(|probe| probe.status == "ABSENT_FAMILY" || probe.status == "ABSENT_SPECIFIC")
+        .collect();
+    if absent.is_empty() {
+        // Positive control: the paired healthy input -- every row OK means
+        // OK contributes no remediation row at all.
+        assert!(
+            summary.remediation.is_empty(),
+            "an all-OK lane emits no remediation rows, got: {:?}",
+            summary.remediation
+        );
+    } else {
+        for row in absent {
+            let hit = summary
+                .remediation
+                .iter()
+                .find(|line| line.contains(&format!("probe={}", row.name)));
+            assert!(
+                hit.is_some(),
+                "absent probe {} must carry remediation, got: {:?}",
+                row.name,
+                summary.remediation
+            );
+            let line = hit.unwrap();
+            assert!(
+                line.contains(&row.reason_code),
+                "remediation for {} must carry its namespaced reason {}, got: {line}",
+                row.name,
+                row.reason_code
+            );
+        }
+    }
+}
