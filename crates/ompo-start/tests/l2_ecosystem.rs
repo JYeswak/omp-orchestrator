@@ -185,6 +185,59 @@ fn ensure_agent_mail_fixture_server() {
     std::env::set_var("AGENT_MAIL_AGENT", "BlackMeadow");
     std::env::set_var("TMUX_PANE", "%59");
 }
+fn ensure_rch_fixture_program() {
+    use std::os::unix::fs::PermissionsExt as _;
+    static BIN: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+    let binary = BIN.get_or_init(|| {
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .expect("test HOME");
+        let directory = home
+            .join(".local/state/zeststream/scratch/omp-orchestrator")
+            .join(format!("ompo-start-test-{}", std::process::id()))
+            .join("bx3q");
+        std::fs::create_dir_all(&directory).expect("RCH fixture directory");
+        std::fs::write(
+            directory.join(".owner.json"),
+            format!(
+                "{{\"session\":\"omp-orchestrator\",\"owner\":\"ompo-start-test-{}\",\"job\":\"bx3q\"}}\n",
+                std::process::id()
+            ),
+        )
+        .expect("RCH fixture owner metadata");
+        let binary = directory.join("rch");
+        let script = br#"#!/bin/sh
+case "$*" in
+  *"doctor --reliability"*)
+    printf '%s\n' '{"api_version":"1.0","command":"doctor.reliability","success":true,"data":{"scope":["topology","convergence"],"diagnostics":[{"category":"topology","check_name":"workers_config","severity":"pass","code":"RCH-R003","message":"fixture topology ready","details":"fixture"},{"category":"repo_presence","check_name":"repo_convergence","severity":"info","code":"RCH-R303","message":"No worker repo-convergence records were reported","details":"status=unknown, total=0, ready=0, converging=0, drifting=0, failed=0, stale=0"}]}}'
+    ;;
+  *"status --workers"*)
+    printf '%s\n' '{"api_version":"1.0","command":"status","success":true,"data":{"convergence":{"status":"unknown","workers":[],"summary":{"total_workers":0,"ready":0,"drifting":0,"converging":0,"failed":0,"stale":0}}}}'
+    ;;
+  *"diagnose --dry-run"*)
+    if [ -f .rch-project-excluded ]; then
+      printf '%s\n' '{"api_version":"1.0","command":"diagnose","success":true,"data":{"classification":{"is_compilation":true},"decision":{"would_intercept":false,"reason":"project_excluded"},"worker_selection":{"reason":"no_admissible_workers","diagnostics":{"active_project_exclusion_count":1,"workers":[{"worker_id":"fixture-worker","active_project_excluded":true}]}}}}'
+    else
+      printf '%s\n' '{"api_version":"1.0","command":"diagnose","success":true,"data":{"classification":{"is_compilation":true},"decision":{"would_intercept":true,"reason":"fixture offload eligible"},"worker_selection":{"reason":"selected"}}}'
+    fi
+    ;;
+  *) exit 64 ;;
+esac
+"#;
+        std::fs::write(&binary, script).expect("RCH fixture program");
+        let mut permissions = std::fs::metadata(&binary).expect("RCH fixture metadata").permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&binary, permissions).expect("RCH fixture executable");
+        binary
+    });
+    let directory = binary.parent().expect("RCH fixture parent");
+    let mut paths = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .collect::<Vec<_>>();
+    if !paths.iter().any(|path| path == directory) {
+        paths.insert(0, directory.to_owned());
+        std::env::set_var("PATH", std::env::join_paths(paths).expect("fixture PATH"));
+    }
+}
 fn run_git(repo: &Path, args: &[&str]) {
     let mut command = Command::new("git");
     command.current_dir(repo).args(args);
@@ -237,6 +290,7 @@ fn commit_hook_source_change(root: &Path, bytes: &[u8]) {
 
 fn repository_fixture() -> TempDir {
     ensure_agent_mail_fixture_server();
+    ensure_rch_fixture_program();
     let directory = tempfile::tempdir().expect("fixture directory");
     std::fs::create_dir(directory.path().join("docs")).expect("docs directory");
     for name in ["CLAUDE.md", "README.md", "SCHEMAS.toml"] {
@@ -2125,5 +2179,303 @@ fn agent_mail_registration_verdict_gates_l2_entry() {
     assert_eq!(
         std::fs::metadata(&output).expect_err("refusal wrote no artifact").kind(),
         std::io::ErrorKind::NotFound
+    );
+}
+fn bx3q_doctor(no_records: bool) -> Vec<u8> {
+    let (severity, code, message) = if no_records {
+        (
+            "info",
+            "RCH-R303",
+            "No worker repo-convergence records were reported",
+        )
+    } else {
+        ("pass", "RCH-R300", "fixture convergence rows available")
+    };
+    serde_json::to_vec(&serde_json::json!({
+        "api_version": "1.0",
+        "command": "doctor.reliability",
+        "success": true,
+        "data": {
+            "scope": ["topology", "convergence"],
+            "diagnostics": [
+                {
+                    "category": "topology",
+                    "check_name": "workers_config",
+                    "severity": "pass",
+                    "code": "RCH-R003",
+                    "message": "fixture topology ready",
+                    "details": "fixture",
+                },
+                {
+                    "category": "repo_presence",
+                    "check_name": "repo_convergence",
+                    "severity": severity,
+                    "code": code,
+                    "message": message,
+                    "details": if no_records { "status=unknown, total=0" } else { "status=ready" },
+                },
+            ],
+        },
+    }))
+    .expect("doctor fixture JSON")
+}
+
+fn bx3q_worker(
+    worker_id: &str,
+    drift_state: &str,
+    required_repos: &[&str],
+    synced_repos: &[&str],
+    missing_repos: &[&str],
+) -> Value {
+    serde_json::json!({
+        "worker_id": worker_id,
+        "drift_state": drift_state,
+        "required_repos": required_repos,
+        "synced_repos": synced_repos,
+        "missing_repos": missing_repos,
+    })
+}
+
+fn bx3q_status(status: &str, workers: Vec<Value>) -> Vec<u8> {
+    let count = |state: &str| {
+        workers
+            .iter()
+            .filter(|worker| worker["drift_state"].as_str() == Some(state))
+            .count()
+    };
+    serde_json::to_vec(&serde_json::json!({
+        "api_version": "1.0",
+        "command": "status",
+        "success": true,
+        "data": {
+            "convergence": {
+                "status": status,
+                "summary": {
+                    "total_workers": workers.len(),
+                    "ready": count("ready"),
+                    "drifting": count("drifting"),
+                    "converging": count("converging"),
+                    "failed": count("failed"),
+                    "stale": count("stale"),
+                },
+                "workers": workers,
+            },
+        },
+    }))
+    .expect("status fixture JSON")
+}
+
+fn bx3q_diagnose(excluded: bool) -> Vec<u8> {
+    let selection = if excluded {
+        serde_json::json!({
+            "reason": "no_admissible_workers",
+            "diagnostics": {
+                "active_project_exclusion_count": 1,
+                "workers": [{
+                    "worker_id": "worker-a",
+                    "active_project_excluded": true,
+                }],
+            },
+        })
+    } else {
+        serde_json::json!({"reason": "selected"})
+    };
+    serde_json::to_vec(&serde_json::json!({
+        "api_version": "1.0",
+        "command": "diagnose",
+        "success": true,
+        "data": {
+            "classification": {"is_compilation": true},
+            "decision": {
+                "would_intercept": !excluded,
+                "reason": if excluded { "project_excluded" } else { "offload eligible" },
+            },
+            "worker_selection": selection,
+        },
+    }))
+    .expect("diagnose fixture JSON")
+}
+
+#[test]
+fn rch_lane_mapped_and_unknown_are_distinct() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::{rch_lane_report_from_outputs, RchLaneState};
+    let repo = Path::new("/repo");
+    let mapped_status = bx3q_status(
+        "ready",
+        vec![
+            bx3q_worker("worker-a", "ready", &["repo"], &["repo"], &[]),
+            bx3q_worker("worker-b", "ready", &["other"], &["other"], &[]),
+        ],
+    );
+    let mapped = rch_lane_report_from_outputs(
+        repo,
+        &InputManifest::full(),
+        &bx3q_doctor(false),
+        &mapped_status,
+        &bx3q_diagnose(false),
+    )
+    .expect("one topology-wide convergence row maps the repo");
+    assert_eq!(
+        mapped.state,
+        RchLaneState::Mapped {
+            workers: std::collections::BTreeSet::from(["worker-a".to_owned()]),
+        }
+    );
+
+    let unknown = rch_lane_report_from_outputs(
+        repo,
+        &InputManifest::full(),
+        &bx3q_doctor(true),
+        &bx3q_status("unknown", Vec::new()),
+        &bx3q_diagnose(false),
+    )
+    .expect("zero convergence records are explicit UNKNOWN, not absence or mapped");
+    match unknown.state {
+        RchLaneState::Unknown { cause } => {
+            assert!(cause.contains("No worker repo-convergence records"), "{cause}");
+        }
+        other => panic!("UNKNOWN was coerced to {other:?}"),
+    }
+}
+
+#[test]
+fn rch_lane_restrictive_causes_and_entry_wiring() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::{rch_lane_report_from_outputs, RchLaneError};
+    let repo = Path::new("/repo");
+    let doctor = bx3q_doctor(false);
+    let diagnose = bx3q_diagnose(false);
+
+    let malformed = rch_lane_report_from_outputs(
+        repo,
+        &InputManifest::full(),
+        b"not-json",
+        &bx3q_status("unknown", Vec::new()),
+        &diagnose,
+    )
+    .expect_err("malformed doctor output must halt");
+    assert!(matches!(malformed, RchLaneError::MalformedOutput { surface: "doctor", .. }));
+
+    let absent = rch_lane_report_from_outputs(
+        repo,
+        &InputManifest::full(),
+        &doctor,
+        &bx3q_status(
+            "ready",
+            vec![bx3q_worker("worker-a", "ready", &["other"], &["other"], &[])],
+        ),
+        &diagnose,
+    )
+    .expect_err("a known topology with no project row must halt");
+    assert!(matches!(absent, RchLaneError::ProjectRowAbsent { .. }));
+
+    let contradictory = rch_lane_report_from_outputs(
+        repo,
+        &InputManifest::full(),
+        &doctor,
+        &bx3q_status(
+            "drifting",
+            vec![bx3q_worker(
+                "worker-a",
+                "drifting",
+                &["repo"],
+                &["repo"],
+                &["repo"],
+            )],
+        ),
+        &diagnose,
+    )
+    .expect_err("synced and missing is contradictory");
+    assert!(matches!(
+        contradictory,
+        RchLaneError::ContradictoryTopology { .. }
+    ));
+
+    let excluded = rch_lane_report_from_outputs(
+        repo,
+        &InputManifest::full(),
+        &doctor,
+        &bx3q_status(
+            "ready",
+            vec![bx3q_worker("worker-a", "ready", &["repo"], &["repo"], &[])],
+        ),
+        &bx3q_diagnose(true),
+    )
+    .expect_err("active project exclusion must halt");
+    assert!(matches!(excluded, RchLaneError::ProjectExcluded { .. }));
+
+    let partial = InputManifest::partial("convergence_rows", 1, "bx3q-fixture")
+        .expect("valid partial input");
+    let refused = InputManifest::refused("fixture withheld topology")
+        .expect("valid refused input");
+    assert!(matches!(
+        rch_lane_report_from_outputs(repo, &partial, b"", b"", b""),
+        Err(RchLaneError::PartialInput { .. })
+    ));
+    assert!(matches!(
+        rch_lane_report_from_outputs(repo, &refused, b"", b"", b""),
+        Err(RchLaneError::RefusedInput { .. })
+    ));
+    let entry_repo = repository_fixture();
+    std::fs::write(entry_repo.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped CLAUDE.md");
+    std::fs::write(entry_repo.path().join(".rch-project-excluded"), b"fixture\n")
+        .expect("project exclusion marker");
+    let artifact = entry_repo.path().join(".omp-orchestrator/rch-refused.json");
+    let entry_result = ompo_start::inception::initialize_gated(entry_repo.path(), &artifact);
+    assert!(
+        matches!(
+            entry_result,
+            Err(ompo_start::inception::InceptionError::RchLane(
+                RchLaneError::ProjectExcluded { .. }
+            ))
+        ),
+        "production entry discarded the RCH lane refusal: {entry_result:?}"
+    );
+    assert!(!artifact.try_exists().expect("artifact existence probe"));
+}
+
+#[test]
+fn rch_process_missing_and_timeout_are_distinct() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::{rch_lane_report_with_program, RchLaneError};
+    use std::os::unix::fs::PermissionsExt as _;
+    let repository = tempfile::tempdir().expect("RCH process fixture");
+    let missing = repository.path().join("missing-rch");
+    assert!(matches!(
+        rch_lane_report_with_program(repository.path(), &InputManifest::full(), &missing),
+        Err(RchLaneError::MissingRch { .. })
+    ));
+
+    let slow = repository.path().join("slow-rch");
+    std::fs::write(&slow, b"#!/bin/sh\nsleep 30\n").expect("slow RCH fixture");
+    let mut permissions = std::fs::metadata(&slow).expect("slow metadata").permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&slow, permissions).expect("slow executable");
+    assert!(matches!(
+        rch_lane_report_with_program(repository.path(), &InputManifest::full(), &slow),
+        Err(RchLaneError::Timeout { surface: "doctor" })
+    ));
+}
+
+#[test]
+fn rch_lane_unknown_is_carried_by_gated_entry() {
+    use ompo_start::inception::{initialize_gated, RchLaneState};
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped CLAUDE.md");
+    let output = repository.path().join(".omp-orchestrator/rch-unknown.json");
+    let outcome = initialize_gated(repository.path(), &output);
+    let carried_unknown = outcome.as_ref().is_ok_and(|report| {
+        report
+            .rch_lane
+            .as_ref()
+            .is_some_and(|lane| matches!(lane.state, RchLaneState::Unknown { .. }))
+    });
+    assert!(carried_unknown, "gated report lost exact UNKNOWN: {outcome:?}");
+    assert!(
+        ompo_start::inception::read_inception(&output).is_ok(),
+        "UNKNOWN continuation did not produce readable trust state"
     );
 }

@@ -293,6 +293,98 @@ struct AgentMailProjectRegistry {
     agents: BTreeSet<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RchLaneState {
+    Mapped { workers: BTreeSet<String> },
+    Unknown { cause: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RchLaneReport {
+    pub input: InputManifest,
+    pub project_id: String,
+    pub state: RchLaneState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RchLaneError {
+    MissingRch { program: String, detail: String },
+    Timeout { surface: &'static str },
+    CommandFailed { surface: &'static str, detail: String },
+    MalformedOutput { surface: &'static str, detail: String },
+    ProjectExcluded { project_id: String, workers: BTreeSet<String> },
+    ProjectRowAbsent { project_id: String },
+    ContradictoryTopology { detail: String },
+    PartialInput {
+        bound_kind: String,
+        bound_value: u64,
+        source: String,
+    },
+    RefusedInput { reason: String },
+}
+
+struct RchLaneErrorSpec {
+    code: &'static str,
+    remediation: &'static str,
+}
+
+impl RchLaneError {
+    const fn spec(&self) -> RchLaneErrorSpec {
+        let (code, remediation) = match self {
+            Self::MissingRch { .. } => (
+                "RCH_LANE_RCH_MISSING",
+                "install the approved rch client on PATH; do not build locally",
+            ),
+            Self::Timeout { .. } => (
+                "RCH_LANE_TIMEOUT",
+                "restore the local RCH daemon or retry the bounded read-only surface",
+            ),
+            Self::CommandFailed { .. } => (
+                "RCH_LANE_COMMAND_FAILED",
+                "repair the named RCH topology surface before continuing",
+            ),
+            Self::MalformedOutput { .. } => (
+                "RCH_LANE_OUTPUT_MALFORMED",
+                "upgrade or repair RCH; do not infer lane state from malformed output",
+            ),
+            Self::ProjectExcluded { .. } => (
+                "RCH_LANE_PROJECT_EXCLUDED",
+                "wait for project exclusion to clear or use the scheduler's unpinned retry path",
+            ),
+            Self::ProjectRowAbsent { .. } => (
+                "RCH_LANE_PROJECT_ROW_ABSENT",
+                "rerun convergence after RCH records this repository",
+            ),
+            Self::ContradictoryTopology { .. } => (
+                "RCH_LANE_TOPOLOGY_CONTRADICTORY",
+                "repair the topology source; conflicting rows cannot authorize dispatch",
+            ),
+            Self::PartialInput { .. } => (
+                "RCH_LANE_INPUT_PARTIAL",
+                "rerun the RCH lane report over all three read-only surfaces",
+            ),
+            Self::RefusedInput { .. } => (
+                "RCH_LANE_INPUT_REFUSED",
+                "resolve the input refusal before deriving RCH lane state",
+            ),
+        };
+        RchLaneErrorSpec { code, remediation }
+    }
+}
+
+impl fmt::Display for RchLaneError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let spec = self.spec();
+        write_human_halt(
+            formatter,
+            spec.code,
+            format_args!("{self:?}"),
+            spec.remediation,
+        )
+    }
+}
+impl std::error::Error for RchLaneError {}
+
 #[derive(Debug)]
 pub enum InceptionError {
     RepositoryUnreadable { path: PathBuf, detail: String },
@@ -304,6 +396,8 @@ pub enum InceptionError {
     CargoWorkspace(CargoWorkspaceError),
     /// Agent Mail project and pane-bound agent registration could not be proven.
     AgentMailRegistration(AgentMailRegistrationError),
+    /// Repository-to-RCH lane mapping could not be read consistently.
+    RchLane(RchLaneError),
     /// The installed pre-commit hook cannot prove it was built from the
     /// repository's current source authority.
     HookIdentityRefused {
@@ -423,6 +517,7 @@ impl fmt::Display for InceptionError {
             ),
             Self::CargoWorkspace(error) => write!(formatter, "{error}"),
             Self::AgentMailRegistration(error) => write!(formatter, "{error}"),
+            Self::RchLane(error) => write!(formatter, "{error}"),
             Self::HookIdentityRefused { path, status, detail } => write!(
                 formatter,
                 "HUMAN_HALT {} hook={} detail={} remedy={}",
@@ -533,6 +628,9 @@ pub struct InitReport {
     /// Exact read-only Agent Mail registration carried by the gated entry.
     /// Shared repair initialization does not query Agent Mail.
     pub agent_mail_registration: Option<AgentMailRegistrationReport>,
+    /// Repo-scoped RCH topology report carried by the gated entry.
+    /// Shared repair initialization does not query RCH.
+    pub rch_lane: Option<RchLaneReport>,
     pub actions: usize,
     pub backup: Option<PathBuf>,
     pub journal_rows: usize,
@@ -761,6 +859,12 @@ impl From<CargoWorkspaceError> for InceptionError {
 impl From<AgentMailRegistrationError> for InceptionError {
     fn from(error: AgentMailRegistrationError) -> Self {
         Self::AgentMailRegistration(error)
+    }
+}
+
+impl From<RchLaneError> for InceptionError {
+    fn from(error: RchLaneError) -> Self {
+        Self::RchLane(error)
     }
 }
 
@@ -1202,6 +1306,573 @@ pub fn agent_mail_registration_report(
         &pane_identity,
         input,
     )
+}
+
+fn require_full_rch_input(input: &InputManifest) -> Result<(), RchLaneError> {
+    if let InputManifest::Partial {
+        bound_kind,
+        bound_value,
+        source,
+    } = input
+    {
+        return Err(RchLaneError::PartialInput {
+            bound_kind: bound_kind.clone(),
+            bound_value: *bound_value,
+            source: source.clone(),
+        });
+    }
+    if let InputManifest::Refused { reason } = input {
+        return Err(RchLaneError::RefusedInput {
+            reason: reason.clone(),
+        });
+    }
+    Ok(())
+}
+
+fn rch_surface_data(
+    bytes: &[u8],
+    surface: &'static str,
+    expected_command: &str,
+) -> Result<Map<String, Value>, RchLaneError> {
+    let value: Value = serde_json::from_slice(bytes).map_err(|error| {
+        RchLaneError::MalformedOutput {
+            surface,
+            detail: format!("response is not JSON: {error}"),
+        }
+    })?;
+    let object = value.as_object().ok_or_else(|| RchLaneError::MalformedOutput {
+        surface,
+        detail: "response envelope is not an object".to_owned(),
+    })?;
+    let command = object
+        .get("command")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface,
+            detail: "response omitted command".to_owned(),
+        })?;
+    if command != expected_command {
+        return Err(RchLaneError::MalformedOutput {
+            surface,
+            detail: format!("expected command={expected_command}, found={command}"),
+        });
+    }
+    match object.get("success").and_then(Value::as_bool) {
+        Some(true) => {}
+        Some(false) => {
+            return Err(RchLaneError::CommandFailed {
+                surface,
+                detail: "RCH returned success=false".to_owned(),
+            });
+        }
+        None => {
+            return Err(RchLaneError::MalformedOutput {
+                surface,
+                detail: "response omitted boolean success".to_owned(),
+            });
+        }
+    }
+    object
+        .get("data")
+        .and_then(Value::as_object)
+        .cloned()
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface,
+            detail: "response omitted object data".to_owned(),
+        })
+}
+
+fn rch_string_set(
+    object: &Map<String, Value>,
+    field: &'static str,
+) -> Result<BTreeSet<String>, RchLaneError> {
+    let rows = object
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "status",
+            detail: format!("worker row omitted array {field}"),
+        })?;
+    rows.iter()
+        .enumerate()
+        .map(|(index, value)| {
+            value
+                .as_str()
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| RchLaneError::MalformedOutput {
+                    surface: "status",
+                    detail: format!("{field}[{index}] is not a nonempty string"),
+                })
+        })
+        .collect()
+}
+
+fn rch_project_id(repo: &Path) -> Result<String, RchLaneError> {
+    let name = repo
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .ok_or_else(|| RchLaneError::ContradictoryTopology {
+            detail: format!("repository root {} has no usable final component", repo.display()),
+        })?;
+    if name == "."
+        || name == ".."
+        || name.contains("..")
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains('\0')
+        || name.starts_with('-')
+    {
+        return Ok("unknown".to_owned());
+    }
+    let is_safe = name
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.'))
+        && !name.starts_with('.');
+    if is_safe {
+        return Ok(name.to_owned());
+    }
+    let sanitized: String = name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let sanitized = sanitized.trim_start_matches('.');
+    Ok(if sanitized.is_empty() {
+        "unknown".to_owned()
+    } else {
+        sanitized.to_owned()
+    })
+}
+
+/// Derive one repository's RCH lane state from the read-only doctor, status,
+/// and dry-run diagnosis envelopes. A selected worker is deliberately ignored:
+/// only convergence rows spanning the reported topology can establish MAPPED.
+pub fn rch_lane_report_from_outputs(
+    repo: &Path,
+    input: &InputManifest,
+    doctor_bytes: &[u8],
+    status_bytes: &[u8],
+    diagnose_bytes: &[u8],
+) -> Result<RchLaneReport, RchLaneError> {
+    require_full_rch_input(input)?;
+    let project_id = rch_project_id(repo)?;
+    let doctor = rch_surface_data(doctor_bytes, "doctor", "doctor.reliability")?;
+    let status = rch_surface_data(status_bytes, "status", "status")?;
+    let diagnose = rch_surface_data(diagnose_bytes, "diagnose", "diagnose")?;
+
+    let scope = doctor
+        .get("scope")
+        .and_then(Value::as_array)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "doctor",
+            detail: "doctor omitted scope".to_owned(),
+        })?;
+    for required in ["topology", "convergence"] {
+        if !scope.iter().any(|value| value.as_str() == Some(required)) {
+            return Err(RchLaneError::MalformedOutput {
+                surface: "doctor",
+                detail: format!("doctor scope omitted {required}"),
+            });
+        }
+    }
+    let diagnostics = doctor
+        .get("diagnostics")
+        .and_then(Value::as_array)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "doctor",
+            detail: "doctor omitted diagnostics".to_owned(),
+        })?;
+    if !diagnostics.iter().any(|row| row.get("category").and_then(Value::as_str) == Some("topology")) {
+        return Err(RchLaneError::MalformedOutput {
+            surface: "doctor",
+            detail: "doctor returned no topology diagnostic".to_owned(),
+        });
+    }
+    let convergence_diagnostic = diagnostics
+        .iter()
+        .find(|row| row.get("check_name").and_then(Value::as_str) == Some("repo_convergence"))
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "doctor",
+            detail: "doctor returned no repo_convergence diagnostic".to_owned(),
+        })?;
+    let doctor_code = convergence_diagnostic
+        .get("code")
+        .and_then(Value::as_str)
+        .unwrap_or("<missing-code>");
+    let doctor_message = convergence_diagnostic
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or("<missing-message>");
+    let doctor_details = convergence_diagnostic
+        .get("details")
+        .and_then(Value::as_str)
+        .unwrap_or("<missing-details>");
+    if doctor_code.starts_with("<missing") || doctor_message.starts_with("<missing") {
+        return Err(RchLaneError::MalformedOutput {
+            surface: "doctor",
+            detail: "repo_convergence diagnostic omitted code or message".to_owned(),
+        });
+    }
+    let topology_causes = diagnostics
+        .iter()
+        .filter(|row| row.get("category").and_then(Value::as_str) == Some("topology"))
+        .filter(|row| row.get("severity").and_then(Value::as_str) != Some("pass"))
+        .filter_map(|row| row.get("message").and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join("; ");
+
+    let classification = diagnose
+        .get("classification")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "diagnose",
+            detail: "diagnose omitted classification".to_owned(),
+        })?;
+    if classification.get("is_compilation").and_then(Value::as_bool) != Some(true) {
+        return Err(RchLaneError::ContradictoryTopology {
+            detail: "repo-scoped cargo check was not classified as compilation".to_owned(),
+        });
+    }
+    let decision = diagnose
+        .get("decision")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "diagnose",
+            detail: "diagnose omitted decision".to_owned(),
+        })?;
+    let would_intercept = decision
+        .get("would_intercept")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "diagnose",
+            detail: "diagnose decision omitted would_intercept".to_owned(),
+        })?;
+    let diagnose_reason = decision
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("no diagnose reason");
+
+    let mut excluded_workers = BTreeSet::new();
+    if let Some(selection) = diagnose.get("worker_selection") {
+        let selection = selection.as_object().ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "diagnose",
+            detail: "worker_selection is not an object".to_owned(),
+        })?;
+        if selection
+            .get("reason")
+            .and_then(Value::as_str)
+            .is_some_and(|reason| reason.contains("project_excluded"))
+        {
+            excluded_workers.insert("<selection>".to_owned());
+        }
+        if let Some(selection_diagnostics) = selection.get("diagnostics") {
+            let selection_diagnostics = selection_diagnostics.as_object().ok_or_else(|| {
+                RchLaneError::MalformedOutput {
+                    surface: "diagnose",
+                    detail: "worker_selection.diagnostics is not an object".to_owned(),
+                }
+            })?;
+            let declared = selection_diagnostics
+                .get("active_project_exclusion_count")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| RchLaneError::MalformedOutput {
+                    surface: "diagnose",
+                    detail: "selection diagnostics omitted exclusion count".to_owned(),
+                })?;
+            let rows = selection_diagnostics
+                .get("workers")
+                .and_then(Value::as_array)
+                .ok_or_else(|| RchLaneError::MalformedOutput {
+                    surface: "diagnose",
+                    detail: "selection diagnostics omitted workers".to_owned(),
+                })?;
+            for row in rows {
+                if row.get("active_project_excluded").and_then(Value::as_bool) == Some(true) {
+                    let worker = row
+                        .get("worker_id")
+                        .and_then(Value::as_str)
+                        .filter(|worker| !worker.is_empty())
+                        .ok_or_else(|| RchLaneError::MalformedOutput {
+                            surface: "diagnose",
+                            detail: "excluded worker omitted worker_id".to_owned(),
+                        })?;
+                    excluded_workers.insert(worker.to_owned());
+                }
+            }
+            if declared != u64::try_from(excluded_workers.len()).unwrap_or(u64::MAX) {
+                return Err(RchLaneError::ContradictoryTopology {
+                    detail: format!(
+                        "diagnose exclusion count={declared} but named workers={}",
+                        excluded_workers.len()
+                    ),
+                });
+            }
+        }
+    }
+    if !excluded_workers.is_empty() {
+        return Err(RchLaneError::ProjectExcluded {
+            project_id,
+            workers: excluded_workers,
+        });
+    }
+
+    let convergence = status
+        .get("convergence")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "status",
+            detail: "status omitted convergence".to_owned(),
+        })?;
+    let convergence_status = convergence
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "status",
+            detail: "convergence omitted status".to_owned(),
+        })?;
+    let workers = convergence
+        .get("workers")
+        .and_then(Value::as_array)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "status",
+            detail: "convergence omitted workers".to_owned(),
+        })?;
+    let summary = convergence
+        .get("summary")
+        .and_then(Value::as_object)
+        .ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "status",
+            detail: "convergence omitted summary".to_owned(),
+        })?;
+    let summary_value = |field: &'static str| {
+        summary.get(field).and_then(Value::as_u64).ok_or_else(|| {
+            RchLaneError::MalformedOutput {
+                surface: "status",
+                detail: format!("convergence summary omitted {field}"),
+            }
+        })
+    };
+    let total = summary_value("total_workers")?;
+    let partition = ["ready", "drifting", "converging", "failed", "stale"]
+        .into_iter()
+        .try_fold(0_u64, |sum, field| {
+            summary_value(field).and_then(|value| {
+                sum.checked_add(value).ok_or_else(|| RchLaneError::ContradictoryTopology {
+                    detail: "convergence summary overflowed".to_owned(),
+                })
+            })
+        })?;
+    if total != u64::try_from(workers.len()).unwrap_or(u64::MAX) || total != partition {
+        return Err(RchLaneError::ContradictoryTopology {
+            detail: format!(
+                "convergence summary total={total} partition={partition} rows={}",
+                workers.len()
+            ),
+        });
+    }
+    if convergence_status == "unknown" {
+        if !workers.is_empty() || total != 0 || doctor_code != "RCH-R303" {
+            return Err(RchLaneError::ContradictoryTopology {
+                detail: format!(
+                    "status=unknown rows={} total={total} doctor_code={doctor_code}",
+                    workers.len()
+                ),
+            });
+        }
+        return Ok(RchLaneReport {
+            input: input.clone(),
+            project_id,
+            state: RchLaneState::Unknown {
+                cause: format!("{doctor_message}; {doctor_details}"),
+            },
+        });
+    }
+    if doctor_code == "RCH-R303" {
+        return Err(RchLaneError::ContradictoryTopology {
+            detail: format!(
+                "doctor reports no convergence rows while status={convergence_status} rows={}",
+                workers.len()
+            ),
+        });
+    }
+    if !matches!(convergence_status, "ready" | "drifting" | "converging" | "failed" | "stale") {
+        return Ok(RchLaneReport {
+            input: input.clone(),
+            project_id,
+            state: RchLaneState::Unknown {
+                cause: format!("unrecognized convergence status={convergence_status}"),
+            },
+        });
+    }
+
+    let mut seen_workers = BTreeSet::new();
+    let mut mapped_workers = BTreeSet::new();
+    let mut relevant_rows = false;
+    let mut unresolved = Vec::new();
+    for row in workers {
+        let row = row.as_object().ok_or_else(|| RchLaneError::MalformedOutput {
+            surface: "status",
+            detail: "convergence worker row is not an object".to_owned(),
+        })?;
+        let worker_id = row
+            .get("worker_id")
+            .and_then(Value::as_str)
+            .filter(|worker| !worker.is_empty())
+            .ok_or_else(|| RchLaneError::MalformedOutput {
+                surface: "status",
+                detail: "convergence worker omitted worker_id".to_owned(),
+            })?;
+        if !seen_workers.insert(worker_id.to_owned()) {
+            return Err(RchLaneError::ContradictoryTopology {
+                detail: format!("duplicate convergence worker_id={worker_id}"),
+            });
+        }
+        let drift_state = row
+            .get("drift_state")
+            .and_then(Value::as_str)
+            .ok_or_else(|| RchLaneError::MalformedOutput {
+                surface: "status",
+                detail: format!("worker {worker_id} omitted drift_state"),
+            })?;
+        let required = rch_string_set(row, "required_repos")?;
+        let synced = rch_string_set(row, "synced_repos")?;
+        let missing = rch_string_set(row, "missing_repos")?;
+        let is_required = required.contains(&project_id);
+        let is_synced = synced.contains(&project_id);
+        let is_missing = missing.contains(&project_id);
+        if !(is_required || is_synced || is_missing) {
+            continue;
+        }
+        relevant_rows = true;
+        if is_synced && is_missing {
+            return Err(RchLaneError::ContradictoryTopology {
+                detail: format!("worker {worker_id} lists {project_id} as synced and missing"),
+            });
+        }
+        if is_synced && !is_required {
+            return Err(RchLaneError::ContradictoryTopology {
+                detail: format!("worker {worker_id} syncs unrequired project {project_id}"),
+            });
+        }
+        if is_required && is_synced && !is_missing && drift_state == "ready" {
+            mapped_workers.insert(worker_id.to_owned());
+        } else {
+            unresolved.push(format!(
+                "worker={worker_id} state={drift_state} required={is_required} synced={is_synced} missing={is_missing}"
+            ));
+        }
+    }
+    if !relevant_rows {
+        return Err(RchLaneError::ProjectRowAbsent { project_id });
+    }
+    if !topology_causes.is_empty() || !would_intercept || mapped_workers.is_empty() {
+        let mut causes = unresolved;
+        if !topology_causes.is_empty() {
+            causes.push(format!("topology={topology_causes}"));
+        }
+        if !would_intercept {
+            causes.push(format!("diagnose={diagnose_reason}"));
+        }
+        if causes.is_empty() {
+            causes.push(format!("convergence={convergence_status}"));
+        }
+        return Ok(RchLaneReport {
+            input: input.clone(),
+            project_id,
+            state: RchLaneState::Unknown {
+                cause: causes.join("; "),
+            },
+        });
+    }
+    Ok(RchLaneReport {
+        input: input.clone(),
+        project_id,
+        state: RchLaneState::Mapped {
+            workers: mapped_workers,
+        },
+    })
+}
+
+fn run_rch_surface(
+    program: &Path,
+    repo: &Path,
+    surface: &'static str,
+    args: &[&str],
+) -> Result<Vec<u8>, RchLaneError> {
+    let mut command = Command::new(program);
+    command.current_dir(repo).args(args);
+    match run_command_output_typed(&mut command) {
+        Ok(output) => Ok(output.stdout),
+        Err(BoundedCommandError::Unspawned { kind, detail })
+            if kind == std::io::ErrorKind::NotFound =>
+        {
+            Err(RchLaneError::MissingRch {
+                program: program.display().to_string(),
+                detail,
+            })
+        }
+        Err(BoundedCommandError::TimedOut) => Err(RchLaneError::Timeout { surface }),
+        Err(error) => Err(RchLaneError::CommandFailed {
+            surface,
+            detail: error.to_string(),
+        }),
+    }
+}
+pub fn rch_lane_report_with_program(
+    repo: &Path,
+    input: &InputManifest,
+    program: &Path,
+) -> Result<RchLaneReport, RchLaneError> {
+    require_full_rch_input(input)?;
+    let doctor = run_rch_surface(
+        program,
+        repo,
+        "doctor",
+        &[
+            "--no-self-healing",
+            "doctor",
+            "--reliability",
+            "--scope",
+            "topology,convergence",
+            "--json",
+        ],
+    )?;
+    let status = run_rch_surface(
+        program,
+        repo,
+        "status",
+        &["--no-self-healing", "status", "--workers", "--json"],
+    )?;
+    let diagnose = run_rch_surface(
+        program,
+        repo,
+        "diagnose",
+        &[
+            "--no-self-healing",
+            "diagnose",
+            "--dry-run",
+            "--json",
+            "cargo",
+            "check",
+            "-p",
+            CURRENT_WORKSPACE_PACKAGE,
+        ],
+    )?;
+    rch_lane_report_from_outputs(repo, input, &doctor, &status, &diagnose)
+}
+
+pub fn rch_lane_report(
+    repo: &Path,
+    input: &InputManifest,
+) -> Result<RchLaneReport, RchLaneError> {
+    rch_lane_report_with_program(repo, input, Path::new("rch"))
 }
 
 /// L2-BUILD-REMOTE-PERSONA-A (contract s1_l2_ecosystem.md): Persona A
@@ -2918,9 +3589,11 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
     }
     let agent_mail_registration =
         agent_mail_registration_report(&top, &InputManifest::full())?;
+    let rch_lane = rch_lane_report(&top, &InputManifest::full())?;
     let mut report = initialize(&top, output)?;
     report.persona_remote = Some(persona_remote);
     report.agent_mail_registration = Some(agent_mail_registration);
+    report.rch_lane = Some(rch_lane);
     Ok(report)
 }
 
@@ -2993,6 +3666,7 @@ fn initialize_inner(
         manifest,
         persona_remote: None,
         agent_mail_registration: None,
+        rch_lane: None,
         actions,
         backup,
         journal_rows,
