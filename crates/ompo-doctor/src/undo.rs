@@ -613,8 +613,11 @@ mod tests {
     /// asserts the artifact is byte-identical to the backup and hashes to
     /// the recorded sha. The fixture first proves the recorded sha describes
     /// the recorded bytes, or the oracle would be the thing under test.
-    /// Removing the integrity gate (the known-bad: restore proceeds over a
-    /// tampered backup) reds here with a hash mismatch instead of a refusal.
+    /// Removing the integrity gate alone does NOT red this leg: an untampered
+    /// backup restores identically either way, so the happy path stays green
+    /// and the SIBLING tamper-refusal leg (`a_backup_that_fails_its_own_hash_is_refused`)
+    /// is the one that bites (its refusal is gone). This leg reddens only when
+    /// restored bytes actually differ from the recorded ones (tamper with no gate).
     #[test]
     fn undo_restores_bytes_matching_the_recorded_before_hash() {
         use sha2::{Digest, Sha256};
