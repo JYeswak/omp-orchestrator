@@ -1813,3 +1813,55 @@ fn sigstore_identity_mismatch_refuses() {
     verify_sigstore_policy(Some("9.0.0"), &expected, &expected, true)
         .expect("the expected identity must pass");
 }
+
+/// L0-B09 (bead x282): ten-agent family detection through the production
+/// roster. All ten ratified families observed -> the scan carries all ten
+/// by name. Empty observed -> typed EmptyAgentScan (L0_EMPTY_SCAN), never
+/// clean. Uses production `detect_agent_families` throughout, so the
+/// integration property is the roster's, not a copy of it.
+///
+/// KNOWN-BAD: neutralizing the empty-scan refusal (empty observed returns a
+/// clean scan) keeps the ten-proof green and reds the typed-error arm
+/// below: an installer that installs for zero families while reporting
+/// success is the defect this row exists to prevent.
+#[test]
+fn agent_detection() {
+    use installer::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
+    use installer::InstallError;
+    // The ratified ten, referenced dynamically so the roster module owns
+    // the names and this leg owns the integration property.
+    let observed: Vec<&str> = SUPPORTED_AGENT_FAMILIES
+        .iter()
+        .map(|(family, _)| *family)
+        .collect();
+    assert_eq!(
+        observed.len(),
+        10,
+        "the ratified roster carries ten families, got {}",
+        observed.len()
+    );
+    let scan = detect_agent_families(&observed).expect("ten named families must scan");
+    assert_eq!(
+        scan.families.len(),
+        10,
+        "the scan must carry all ten, got {:?}",
+        scan.families
+    );
+    for (family, _) in SUPPORTED_AGENT_FAMILIES {
+        assert!(
+            scan.families.iter().any(|name| name == family),
+            "scan must name {family}, got {:?}",
+            scan.families
+        );
+    }
+    // Empty observed is a typed error, never clean.
+    let error = detect_agent_families(&[]).expect_err("zero families must refuse");
+    assert!(
+        matches!(error, InstallError::EmptyAgentScan),
+        "empty scan must be EmptyAgentScan, got {error:?}"
+    );
+    assert!(
+        error.to_string().contains("L0_EMPTY_SCAN"),
+        "empty scan must carry its exact reason, got: {error}"
+    );
+}
