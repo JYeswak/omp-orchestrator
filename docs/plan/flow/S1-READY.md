@@ -527,32 +527,85 @@ comment still arguing `certified = false` above eight rows now reading `UNATTEMP
 wrongly folded it in here. Retracted at `ec7d93d`; see the retraction note under the scorecard.
 
 ```bash
+# R5_JSONL lets the SAME runner be pointed at a fixture; it defaults to the live tracker.
 # Strip any SUBJECT: echo, then require the hit INSIDE A NUMBERED ITEM, case-insensitively.
-for g in l0-jtgw l1-fnv8 l2-j5m9 l3-z8hz l4-hs15 l5-w44h djn8; do
-  br --lock-timeout 60000 show "omp-orchestrator-gate-s1-$g" --json | python3 -c "
-import json,sys,re
-a=(json.load(sys.stdin)[0].get('acceptance_criteria') or '')
-body=chr(10).join(l for l in a.split(chr(10)) if not l.strip().upper().startswith('SUBJECT:'))
-n=len([l for l in body.split(chr(10)) if re.match(r'\s*\d+[.)]',l) and 'known-bad' in l.lower()])
-print('$g', 'PASS' if n else 'FAIL', 'numbered-items-naming-known-bad=%d' % n)"
-done
+# ANTI-VACUITY: an empty/unreadable acceptance is an ERROR, and an empty gate set is an
+# ERROR -- a criterion that passes on zero rows is the defect R2 already shipped once.
+# Gate ids derive from AGENTS.md's seven (pattern, never line numbers): a doc that gains
+# an eighth gate or loses one fails loudly here instead of silently changing the denominator.
+R5_JSONL=${R5_JSONL:-} python3 - <<'PY'
+import json, os, re, subprocess, sys
+PAT = r'omp-orchestrator-gate-s1-[a-z0-9-]+'
+fix = os.environ.get('R5_JSONL') or ''
+if fix:
+    rows = [json.loads(l) for l in open(fix) if l.strip().startswith('{')]
+    acc = {r['id']: (r.get('acceptance_criteria') or '') for r in rows if r.get('id')}
+    gate_ids = sorted(i for i in acc if re.fullmatch(PAT, i))
+    surface = fix
+else:
+    try:
+        text = open('AGENTS.md').read()
+    except OSError as e:
+        print('R5_GATES_UNREADABLE=ERROR detail=%s' % e); sys.exit(1)
+    gate_ids = sorted(set(re.findall(PAT, text)))
+    if len(gate_ids) != 7:
+        print('R5_GATE_COUNT=ERROR want=7 got=%d surface=AGENTS.md' % len(gate_ids)); sys.exit(1)
+    acc = {}
+    for gid in gate_ids:
+        try:
+            out = subprocess.run(['br', '--lock-timeout', '60000', 'show', gid, '--json'],
+                                 capture_output=True, text=True, timeout=90)
+        except Exception as e:
+            print('R5_BRIDGE_UNREADABLE=ERROR gate=%s detail=%s' % (gid, e)); sys.exit(1)
+        if out.returncode != 0:
+            print('R5_BRIDGE_UNREADABLE=ERROR gate=%s rc=%s' % (gid, out.returncode)); sys.exit(1)
+        acc[gid] = (json.loads(out.stdout)[0].get('acceptance_criteria') or '')
+    surface = 'tracker'
+if not gate_ids:
+    print('R5_GATES_UNREADABLE=ERROR empty_gate_list surface=%s' % surface); sys.exit(1)
+fails = 0
+for gid in gate_ids:
+    short = gid.split('gate-s1-')[1]
+    a = acc[gid]
+    if not a.strip():
+        print('%s ERROR empty_acceptance acclen=0 surface=%s' % (short, surface)); fails += 1; continue
+    body = chr(10).join(l for l in a.split(chr(10)) if not l.strip().upper().startswith('SUBJECT:'))
+    n = len([l for l in body.split(chr(10)) if re.match(r'\s*\d+[.)]', l) and 'known-bad' in l.lower()])
+    print('%s %s numbered-items-naming-known-bad=%d acclen=%d surface=%s'
+          % (short, 'PASS' if n else 'FAIL', n, len(a), surface))
+    fails += (n == 0)
+sys.exit(1 if fails else 0)
+PY
 ```
-**Expect PASS on all seven.** Measured 2026-09-07 23:0xZ:
+**Expect PASS on all seven, each with `acclen>0` (the positive control: the runner proves it
+read an acceptance rather than passing on absence).** Measured 2026-09-12 (`8hq3` unit):
 
 ```
-gate       lower   UPPER   numbered   SUBJECT:-echo
-l0-jtgw    1       1       1          1
-l1-fnv8    1       1       1          1
-l2-j5m9    1       1       1          1
-l3-z8hz    1       1       1          1
-l4-hs15    1       1       1          1
-l5-w44h    1       1       1          1
-djn8       0       1       1          0
+l0-jtgw PASS numbered-items-naming-known-bad=1 acclen=3663 surface=tracker
+l1-fnv8 PASS numbered-items-naming-known-bad=1 acclen=3663 surface=tracker
+l2-j5m9 PASS numbered-items-naming-known-bad=1 acclen=3663 surface=tracker
+l3-z8hz PASS numbered-items-naming-known-bad=1 acclen=3663 surface=tracker
+l4-hs15 PASS numbered-items-naming-known-bad=1 acclen=3663 surface=tracker
+l5-w44h PASS numbered-items-naming-known-bad=1 acclen=3663 surface=tracker
+djn8    PASS numbered-items-naming-known-bad=2 acclen=6245 surface=tracker
 ```
 
-✅ **PASS — 7 of 7.** Every gate carries a numbered KNOWN-BAD item, and `%20` reports a KNOWN-GOOD
-leg and an ANTI-VACUITY clause alongside it (`8hq3`, P0). Filed by `%20`; **I am ineligible to
-grade it.**
+✅ **PASS — 7 of 7.** Every gate carries a numbered KNOWN-BAD item. Gate ids derive from AGENTS.md's
+seven by pattern (not line numbers); a doc that gains or loses a gate fails loudly instead of
+silently moving the denominator. Filed by `%20`; **I am ineligible to grade it.**
+
+**FIRES-ON-KNOWN-BAD, four fixtures under `docs/fixtures/`, each executed (not predicted):**
+
+|fixture|corrected|old lowercase-grep|rc|
+|---|---|---|---|
+|`r5-numbered` (l0+l1, numbered items)|2/2 PASS|2/2 PASS (agrees)|0|
+|`r5-echo-only` (SUBJECT echo, no numbered item)|FAIL, `numbered=0`|PASS (1 echo hit) — **the difference IS the defect**|1|
+|`r5-empty-acceptance` (`""`)|`ERROR empty_acceptance`|would print `0 of 1`|1|
+|`r5-no-gates` (no gate rows)|`ERROR empty_gate_list`|would print `0 of 0`|1|
+
+MUTATION (item 4): deleting l1's numbered item from `r5-numbered` moves the count 2/2 → 1/2
+(l1 FAIL, `numbered=0`), all other rows unchanged, rc 0 → 1. A mutation that fails to bite is
+the most valuable result available; this one bites exactly one row.
 
 **MY FIRST RUNNER WAS WRONG THREE WAYS AND `%20` FOUND ALL THREE:**
 
@@ -580,6 +633,14 @@ trigger` **zero** times:
 > failure and an unrelated workspace-loading error produced an identical `101` in this repo, so a
 > leg keyed on `rc != 0` goes green on unrelated breakage. `8hq3` item 7 closes the trigger half;
 > the message half needs adding to it.
+
+> ⛔ **CORRECTED 2026-09-13 (`8hq3` item 7, %48): the message half has now been added to it.**
+> `djn8`'s acceptance carries items 9 (REACHABLE TRIGGER: CI gate job evaluates, verdict
+> consumed at the gate-s2-ehx8 blocked edge, the scorecard row, and conductor routing) and 10
+> (KNOWN-BAD LEGS ASSERT THE MESSAGE: specific named errors per items 3 and 5, never `rc != 0`
+> alone). Re-measured at edit time: `MESSAGE` 0→1, `asserting` 0→1, `REACHABLE` 0→1; item 1's
+> premise census remains untouched. The paragraph above stays as the dated record of what the
+> gap was, not what it is.
 
 ### R9 — has any S1 layer gate ever FIRED (new row; my R5 measurement, re-homed)
 

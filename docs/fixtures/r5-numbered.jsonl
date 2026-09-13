@@ -1,0 +1,2 @@
+{"id": "omp-orchestrator-gate-s1-l0-jtgw", "status": "open", "title": "GATE S1-L0 fixture stand-in", "acceptance_criteria": "SUBJECT: GATE S1-L0: layer L0 is finished -- gate fired on known-bad.\n1. KNOWN-BAD LEG asserting the MESSAGE, not the exit code.\n"}
+{"id": "omp-orchestrator-gate-s1-l1-fnv8", "status": "open", "title": "GATE S1-L1 fixture stand-in", "acceptance_criteria": "SUBJECT: GATE S1-L1: layer L1 is finished -- gate fired on known-bad.\n1. KNOWN-BAD LEG asserting the MESSAGE, not the exit code.\n"}
