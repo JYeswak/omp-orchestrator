@@ -1095,7 +1095,7 @@ fn run_init(rest: &[String]) -> ExitCode {
     let destination =
         output.unwrap_or_else(|| repo.join(".omp-orchestrator").join("inception.json"));
 
-    match ompo_start::inception::initialize(&repo, &destination) {
+    match ompo_start::inception::initialize_gated(&repo, &destination) {
         Ok(report) => {
             if json {
                 let value = umbrella::envelope(

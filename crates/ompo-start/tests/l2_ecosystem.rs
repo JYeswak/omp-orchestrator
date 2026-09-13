@@ -780,3 +780,50 @@ fn persona_bc_missing_remote_halts_dispatch() {
         "halt must carry remediation, got: {text}"
     );
 }
+
+/// L2-ENTRY-GIT-REPO (bead e0li rework): the L2 operator entry gates on
+/// the repository check before downstream state continues. A real
+/// repository proceeds through `initialize` (canonical root); a bare
+/// directory halts typed with remediation and writes nothing -- no
+/// artifact, no journal side effects from a flow that never started.
+/// Uses the real `initialize_gated` entry, never a copy of its arms.
+///
+/// KNOWN-BAD: bypassing the gate (delegating straight to `initialize`)
+/// greens the bare directory below and this leg fails: downstream state
+/// would continue without a repository, which is the unwired adoption
+/// this row exists to prevent. Message AND exit are pinned on the
+/// mutation run.
+#[test]
+fn gated_entry_requires_git_repo() {
+    use ompo_start::inception::initialize_gated;
+    // Healthy: a real repository proceeds with actions recorded.
+    let repository = repository_fixture();
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/inception.json");
+    let report = initialize_gated(repository.path(), &output).expect("real repo proceeds");
+    assert!(
+        output.is_file(),
+        "a gated real repo must produce its artifact"
+    );
+    let _ = report;
+    // Halt: a bare directory halts typed with remediation BEFORE any
+    // downstream write -- the artifact must not exist afterwards.
+    let bare = tempfile::tempdir().expect("bare fixture");
+    let bare_output = bare.path().join(".omp-orchestrator/inception.json");
+    let error = initialize_gated(bare.path(), &bare_output).expect_err("non-repo must halt");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("INCEPTION_IDENTITY_UNAVAILABLE"),
+        "halt must be typed, got: {text}"
+    );
+    assert!(
+        text.contains("remedy:"),
+        "halt must carry remediation, got: {text}"
+    );
+    assert!(
+        !bare_output.exists(),
+        "halted entry must write nothing, found {}",
+        bare_output.display()
+    );
+}

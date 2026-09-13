@@ -1396,6 +1396,20 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
     initialize_inner(repo_root, output, true)
 }
 
+/// L2 entry for operator-driven init: the repository check gates before
+/// any downstream L2 state continues. A real repository proceeds with its
+/// canonical root; a non-repo, unspawned, timed-out, killed, or unreadable
+/// git observation halts with the typed identity-unavailable
+/// reason/remediation. This lives beside -- never inside -- shared
+/// [`initialize`]: doctor repair flows tolerate non-git checkouts by
+/// design (git identity degrades to "missing"), and gating them would
+/// trade measured-green repair legs for zero new capability. The output
+/// path stays caller-chosen; only the root canonicalizes.
+pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
+    let top = git_repo_toplevel(repo_root)?;
+    initialize(&top, output)
+}
+
 fn initialize_inner(
     repo_root: &Path,
     output: &Path,
