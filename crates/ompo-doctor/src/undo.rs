@@ -606,4 +606,51 @@ mod tests {
             assert_eq!(dispatch(command, &[]), None, "captured {command}");
         }
     }
+
+    /// L1-BUILD-UNDO (row wctj): undo restores bytes matching the RECORDED
+    /// before-hash, not merely "something". Reads the backup bytes and the
+    /// recorded content_sha BEFORE diverging, runs production `undo`, then
+    /// asserts the artifact is byte-identical to the backup and hashes to
+    /// the recorded sha. The fixture first proves the recorded sha describes
+    /// the recorded bytes, or the oracle would be the thing under test.
+    /// Removing the integrity gate (the known-bad: restore proceeds over a
+    /// tampered backup) reds here with a hash mismatch instead of a refusal.
+    #[test]
+    fn undo_restores_bytes_matching_the_recorded_before_hash() {
+        use sha2::{Digest, Sha256};
+        fn sha_hex(bytes: &[u8]) -> String {
+            Sha256::digest(bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect()
+        }
+        let directory = fixture();
+        let artifact = planted(directory.path());
+        let backups = inception::list_backups(&artifact).expect("list");
+        let entry = backups.first().expect("one backup");
+        let recorded_sha = entry.content_sha.clone();
+        let recorded_bytes = fs::read(&entry.path).expect("backup bytes");
+        assert_eq!(
+            sha_hex(&recorded_bytes),
+            recorded_sha,
+            "fixture: backup bytes must hash to the recorded sha"
+        );
+        // Diverge so there is something to restore.
+        fs::write(&artifact, b"{\"diverged\":true}\n").expect("diverge");
+
+        let report = undo(directory.path(), "inception", RepairMode::Apply, None)
+            .expect("undo");
+        assert_eq!(report.reason_code, "UNDO_APPLIED");
+
+        let restored = fs::read(&artifact).expect("restored");
+        assert_eq!(
+            restored, recorded_bytes,
+            "restored bytes must equal the backup bytes"
+        );
+        assert_eq!(
+            sha_hex(&restored),
+            recorded_sha,
+            "restored bytes must hash to the recorded before-hash"
+        );
+    }
 }
