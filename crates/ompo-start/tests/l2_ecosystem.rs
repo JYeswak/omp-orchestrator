@@ -827,3 +827,102 @@ fn gated_entry_requires_git_repo() {
         bare_output.display()
     );
 }
+
+/// L2-TEST-AGENTS-STAMP (bead 43x7): the control-file probe reports
+/// AGENTS.md stamp identity, live source revision, and a typed status.
+/// Uses the real `agents_stamp_report` over real fixtures -- stamp
+/// token referenced, never copied; no line count pinned anywhere.
+///
+/// KNOWN-BAD: blind the detector (never see the token) and the stamped
+/// arms fail while the unstamped arms stay green: a missing stamp
+/// would certify. Message AND exit are pinned on the mutation run.
+#[test]
+fn agents_stamp_reports_identity_revision_and_status() {
+    use ompo_start::inception::{agents_stamp_report, AgentsStampStatus};
+    fn live_head(repo: &std::path::Path) -> String {
+        let output = Command::new("git")
+            .current_dir(repo)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("git rev-parse runs");
+        assert!(
+            output.status.success(),
+            "fixture must be a live repository"
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+    // Healthy: stamped file in a live repo reports identity, live
+    // revision, and Stamped status together.
+    let repository = repository_fixture();
+    let report = agents_stamp_report(repository.path());
+    assert!(report.stamp_present, "the fixture token must be seen");
+    assert_eq!(
+        report.source_revision.as_deref(),
+        Some(live_head(repository.path()).as_str()),
+        "revision must track live HEAD, not a constant"
+    );
+    assert_eq!(
+        report.status,
+        AgentsStampStatus::Stamped,
+        "stamped plus revision is Stamped"
+    );
+    // Revision disagreement: a new commit moves HEAD and the report
+    // must track it, never the recorded value.
+    run_git(
+        repository.path(),
+        &[
+            "-c",
+            "user.name=ompo-start-test",
+            "-c",
+            "user.email=ompo-start-test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "second",
+        ],
+    );
+    let moved = agents_stamp_report(repository.path());
+    assert_ne!(
+        moved.source_revision.as_deref(),
+        report.source_revision.as_deref(),
+        "the report must track HEAD across commits"
+    );
+    assert!(moved.stamp_present, "stamp survives unrelated commits");
+    // Corrupt the stamp (token gone, file otherwise intact): identity
+    // lost, revision still observed, status Unstamped.
+    std::fs::write(repository.path().join("AGENTS.md"), b"foreign stuff\n")
+        .expect("corruption lands");
+    let corrupt = agents_stamp_report(repository.path());
+    assert!(
+        !corrupt.stamp_present,
+        "a tokenless file must not certify"
+    );
+    assert!(
+        corrupt.source_revision.is_some(),
+        "revision observes independently of the stamp"
+    );
+    assert_eq!(
+        corrupt.status,
+        AgentsStampStatus::Unstamped,
+        "tokenless is Unstamped"
+    );
+    // Stamped file with no usable git: a `.git` FILE pointing nowhere is
+    // fatal locally, so no upward search can rescue it -- revision is
+    // deterministically unknown on every lane, unlike a bare tempdir
+    // (which resolves parent checkouts on some workers).
+    let nogit = tempfile::tempdir().expect("no-git fixture");
+    std::fs::write(nogit.path().join("AGENTS.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped non-repo file");
+    std::fs::write(nogit.path().join(".git"), b"gitdir: /nonexistent/e0li\n")
+        .expect("broken gitdir");
+    let report = agents_stamp_report(nogit.path());
+    assert!(
+        report.stamp_present && report.source_revision.is_none(),
+        "non-git stamp keeps identity without revision, got {report:?}"
+    );
+    assert_eq!(
+        report.status,
+        AgentsStampStatus::GitUnavailable,
+        "stamp without git is GitUnavailable"
+    );
+}

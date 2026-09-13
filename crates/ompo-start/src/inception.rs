@@ -1386,6 +1386,50 @@ fn verify_agents_ownership(repo_root: &Path, trusted_init: bool) -> Result<(), I
     Ok(())
 }
 
+/// L2-BUILD-AGENTS-STAMP (bead 43x7): AGENTS.md stamp identity with live
+/// source revision and a typed status. Reports three independent facts:
+/// whether the ownership token is present (a `contains` check against
+/// [`PROJECT_AGENTS_OWNERSHIP_STAMP`] -- the token is referenced, never
+/// copied, and no line count is pinned), the live HEAD revision when git
+/// answers, and the status joining the two. Missing, empty, foreign, and
+/// unreadable files all read as unstamped rather than erroring: absence
+/// of evidence is a report field, not a refusal (refusal lives in
+/// [`verify_agents_ownership`], which this never calls).
+///
+/// INERT BY DESIGN (rule 9): no caller yet. The L2 trust flow owns
+/// adoption; until then this stays available, not invoked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AgentsStampStatus {
+    Stamped,
+    Unstamped,
+    GitUnavailable,
+}
+
+/// The stamp report: token presence, live revision, joined status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentsStampReport {
+    pub stamp_present: bool,
+    pub source_revision: Option<String>,
+    pub status: AgentsStampStatus,
+}
+
+/// Probe the AGENTS.md stamp and the live source revision.
+pub fn agents_stamp_report(repo: &Path) -> AgentsStampReport {
+    let stamped = fs::read_to_string(repo.join("AGENTS.md"))
+        .is_ok_and(|text| text.contains(PROJECT_AGENTS_OWNERSHIP_STAMP));
+    let source_revision = source_revision(repo).ok();
+    let status = match (stamped, &source_revision) {
+        (true, Some(_)) => AgentsStampStatus::Stamped,
+        (true, None) => AgentsStampStatus::GitUnavailable,
+        (false, _) => AgentsStampStatus::Unstamped,
+    };
+    AgentsStampReport {
+        stamp_present: stamped,
+        source_revision,
+        status,
+    }
+}
+
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     initialize_inner(repo_root, output, false)
 }
