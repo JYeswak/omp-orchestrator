@@ -7,7 +7,7 @@
 
 use installer::RepoOwnership;
 use lifecycle_event::{
-    default_repo_journal, DurableJournal, Layer, LifecycleEvent, EmitOutcome, ReasonCode,
+    default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
 };
 use std::path::Path;
 use std::path::PathBuf;
@@ -130,6 +130,7 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         Ok(sha) => sha,
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
+            let _ = emit_refusal(repo_root, Layer::L1, "S1.L1", "CHECK_GIT_HEAD_REFUSED");
             return ExitCode::from(3);
         }
     };
@@ -194,6 +195,7 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         );
     }
     if report.drifted() {
+        let _ = emit_refusal(repo_root, Layer::L1, "S1.L1", "IDENTITY_DRIFT_REFUSED");
         return ExitCode::from(report.exit_code());
     }
     if report.probed == 0 {
@@ -210,18 +212,19 @@ fn run_check(repo_root: &PathBuf, bin_dir: &PathBuf) -> ExitCode {
         );
         return ExitCode::SUCCESS;
     }
-    println!(
-        "INSTALLER IDENTITY OK: {}/{} binaries consistent with HEAD {head_short}",
-        report.probed, report.probed
-    );
-    emit_s1(
-        repo_root,
-        Layer::L1,
-        "S1.L1",
-        EmitOutcome::Emitted,
-        "IDENTITY_OK",
-    );
-    ExitCode::SUCCESS
+    guard_success(
+        emit_s1(
+            repo_root,
+            Layer::L1,
+            "S1.L1",
+            EmitOutcome::Emitted,
+            "IDENTITY_OK",
+        ),
+        &format!(
+            "INSTALLER IDENTITY OK: {}/{} binaries consistent with HEAD {head_short}",
+            report.probed, report.probed
+        ),
+    )
 }
 
 fn run_install(
@@ -232,6 +235,7 @@ fn run_install(
 ) -> ExitCode {
     if let Err(error) = installer::check_build_fence(repo_root) {
         eprintln!("INSTALLER BLOCKED: {error}");
+        let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_FENCE_BLOCKED");
         return ExitCode::from(75);
     }
     let Some((crate_name, binary_name)) = installer::OWNED_BINARIES
@@ -240,17 +244,20 @@ fn run_install(
         .copied()
     else {
         eprintln!("INSTALLER ERROR: unknown target {target:?}; expected one of ompo, tick-monitor, pane-truth, installer, bead-availability");
+        let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_UNKNOWN_TARGET");
         return ExitCode::from(2);
     };
     let ownership = installer::resolve_repo_ownership(repo_root, crate_name);
     if let RepoOwnership::Foreign { repo } = &ownership {
         eprintln!("INSTALLER ERROR: target {binary_name} is FOREIGN (source in {repo}); install it from its owning repository");
+        let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_FOREIGN_TARGET");
         return ExitCode::from(3);
     }
     let head = match installer::git_head(repo_root) {
         Ok(sha) => sha,
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_GIT_HEAD_REFUSED");
             return ExitCode::from(3);
         }
     };
@@ -258,6 +265,7 @@ fn run_install(
         Ok(platform) => platform,
         Err(error) => {
             eprintln!("INSTALLER PLATFORM REFUSED: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_PLATFORM_REFUSED");
             return ExitCode::from(2);
         }
     };
@@ -270,6 +278,12 @@ fn run_install(
         Ok(start) => start,
         Err(error) => {
             eprintln!("INSTALLER RESTART READ FAILED: {error}");
+            let _ = emit_refusal(
+                repo_root,
+                Layer::L0,
+                "S1.L0",
+                "INSTALL_RESTART_READ_REFUSED",
+            );
             return ExitCode::from(2);
         }
     };
@@ -277,6 +291,7 @@ fn run_install(
     let cargo = shellexpand_path(&cargo);
     if let Err(error) = installer::build_target(repo_root, &cargo, crate_name, &head) {
         eprintln!("INSTALLER BUILD REFUSED: {error}");
+        let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_BUILD_REFUSED");
         return ExitCode::from(2);
     }
     // L0-PLATFORM-TRIPLE composition: the build output directory is read as
@@ -290,6 +305,7 @@ fn run_install(
         Ok(catalog) => catalog,
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_CATALOG_REFUSED");
             return ExitCode::from(1);
         }
     };
@@ -297,6 +313,7 @@ fn run_install(
         Ok(source) => source,
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_SELECT_REFUSED");
             return ExitCode::from(1);
         }
     };
@@ -306,6 +323,7 @@ fn run_install(
         Ok(check) => println!("  INSTALLED {binary_name}: {check}"),
         Err(error) => {
             eprintln!("INSTALLER ERROR: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_VERIFY_REFUSED");
             return ExitCode::from(1);
         }
     }
@@ -318,18 +336,20 @@ fn run_install(
         Ok(outcome) => println!("  RESTART {binary_name}: {outcome}"),
         Err(error) => {
             eprintln!("INSTALLER RESTART FAILED: {error}");
+            let _ = emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_RESTART_REFUSED");
             return ExitCode::from(1);
         }
     }
-    emit_s1(
-        repo_root,
-        Layer::L0,
-        "S1.L0",
-        EmitOutcome::Emitted,
-        "INSTALL_VERIFIED",
-    );
-    println!("INSTALLER: target {binary_name} installed and verified");
-    ExitCode::SUCCESS
+    guard_success(
+        emit_s1(
+            repo_root,
+            Layer::L0,
+            "S1.L0",
+            EmitOutcome::Emitted,
+            "INSTALL_VERIFIED",
+        ),
+        &format!("INSTALLER: target {binary_name} installed and verified"),
+    )
 }
 
 fn shellexpand_path(path: &str) -> String {
@@ -341,21 +361,90 @@ fn shellexpand_path(path: &str) -> String {
     path.to_owned()
 }
 
-fn emit_s1(repo_root: &Path, layer: Layer, stage_to: &str, outcome: EmitOutcome, reason: &str) {
-    let Ok(code) = ReasonCode::new(reason) else {
-        eprintln!("LIFECYCLE_EVENT_EMIT_FAILED layer={} detail=missing reason_code", layer.as_str());
-        return;
-    };
-    let event = LifecycleEvent::new(layer, "HUMAN", stage_to, "installer", outcome, code);
-    let path = default_repo_journal(repo_root);
-    match DurableJournal::open(path).and_then(|journal| {
-        lifecycle_event::emit_one_host(&journal, event)
-    }) {
-        Ok(_) => {}
-        Err(error) => eprintln!(
+/// Typed lifecycle-event emit with durable append, fsync, and readback proof.
+///
+/// Success carries the journal [`Readback`]. Any failure — missing reason,
+/// unopenable journal, unwritable file, failed fsync, or failed readback —
+/// is `Err` and MUST refuse the caller's success: the success line prints
+/// only behind the `Ok` arm (see [`guard_success`]), so log-and-continue
+/// cannot report success for an event that is not durable.
+fn emit_s1(
+    repo_root: &Path,
+    layer: Layer,
+    stage_to: &str,
+    outcome: EmitOutcome,
+    reason: &str,
+) -> Result<lifecycle_event::Readback, lifecycle_event::EmitError> {
+    emit_event_to_journal(
+        &default_repo_journal(repo_root),
+        layer,
+        stage_to,
+        outcome,
+        reason,
+    )
+}
+
+/// Journal-path-injectable core of [`emit_s1`]. Production passes
+/// [`default_repo_journal`]; tests inject failure shapes (`/dev/null` reads
+/// back empty, a file-blocked parent refuses the append) without touching
+/// the production path.
+fn emit_event_to_journal(
+    journal_path: &Path,
+    layer: Layer,
+    stage_to: &str,
+    outcome: EmitOutcome,
+    reason: &str,
+) -> Result<lifecycle_event::Readback, lifecycle_event::EmitError> {
+    let code = ReasonCode::new(reason).map_err(|error| {
+        eprintln!(
             "LIFECYCLE_EVENT_EMIT_FAILED layer={} detail={error}",
             layer.as_str()
-        ),
+        );
+        error
+    })?;
+    let event = LifecycleEvent::new(layer, "HUMAN", stage_to, "installer", outcome, code);
+    DurableJournal::open(journal_path.to_path_buf())
+        .and_then(|journal| lifecycle_event::emit_one_host(&journal, event))
+        .map_err(|error| {
+            eprintln!(
+                "LIFECYCLE_EVENT_EMIT_FAILED layer={} detail={error}",
+                layer.as_str()
+            );
+            error
+        })
+}
+
+/// Best-effort refusal event for restrictive paths. The `Result` exists for
+/// the wiring proof (`main -> run_check/run_install -> event result ->
+/// success guard`); callers discard it (`let _ =`) so a refused emit can
+/// neither convert the original failure into success nor mask it with a
+/// second failure.
+fn emit_refusal(
+    repo_root: &Path,
+    layer: Layer,
+    stage_to: &str,
+    reason: &str,
+) -> Result<lifecycle_event::Readback, lifecycle_event::EmitError> {
+    emit_s1(repo_root, layer, stage_to, EmitOutcome::Refused, reason)
+}
+
+/// The success guard: the only place a success verdict prints. A refused
+/// emit returns exit 1 and never the success line — restoring log-and-continue
+/// (ignore the `Result`, print success, return `SUCCESS`) reddens the
+/// `success_guard_refuses_on_emit_failure` leg by construction.
+fn guard_success(
+    emit: Result<lifecycle_event::Readback, lifecycle_event::EmitError>,
+    ok_line: &str,
+) -> ExitCode {
+    match emit {
+        Ok(_) => {
+            println!("{ok_line}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("INSTALLER LIFECYCLE REFUSED: success withheld, event not durable: {error}");
+            ExitCode::from(1)
+        }
     }
 }
 #[cfg(test)]
