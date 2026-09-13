@@ -162,3 +162,71 @@ fn doctor_command_reports_two_signals_and_exit_band() {
         }
     }
 }
+
+/// L1-TEST-EXIT-LATTICE (contract s1_l1_doctor.md `L1-BUILD-EXIT`): healthy,
+/// refusing, and unrun fixtures land in three distinct exit bands, and UNRUN
+/// never reads as refusal. Uses the real `exit_code` mapping, not a copy of
+/// its arms: a copy would agree with the subject by construction.
+///
+/// KNOWN-BAD: map the unmeasured arms to Refused (or delete them so unrun
+/// reads all-live) and this leg fails: an unprobed tool reading exit 0 or 1
+/// certifies what was never measured, which is the false-green this envelope
+/// exists to prevent. Both the message and the exit are pinned: `cargo`
+/// returns 101 for unrelated causes, so an exit code alone cannot tell which
+/// band moved.
+#[test]
+fn exit_bands_match_verdicts() {
+    use ompo_doctor::adapter_exec::{
+        exit_code, AdapterStatus, AdapterVerdict, EXIT_ALL_LIVE, EXIT_DEGRADED,
+        EXIT_UNMEASURABLE,
+    };
+    fn verdict(status: AdapterStatus) -> AdapterVerdict {
+        AdapterVerdict {
+            adapter: "lattice-fixture".to_owned(),
+            status,
+            resolved: None,
+            exit: None,
+            detail: "exit-lattice fixture".to_owned(),
+        }
+    }
+    // Healthy band: every adapter live.
+    assert_eq!(
+        exit_code(&[verdict(AdapterStatus::Live)]).expect("healthy set codes"),
+        EXIT_ALL_LIVE,
+        "healthy verdicts must exit {EXIT_ALL_LIVE}"
+    );
+    // Refusing band: a live adapter that answers without a help contract.
+    assert_eq!(
+        exit_code(&[verdict(AdapterStatus::Live), verdict(AdapterStatus::NoHelpContract)])
+            .expect("refusing set codes"),
+        EXIT_DEGRADED,
+        "a refusing verdict must exit {EXIT_DEGRADED}, never 0"
+    );
+    // Unrun band: foreign, absent, and killed adapters each read unmeasured,
+    // never healthy and never refused.
+    for status in [
+        AdapterStatus::Foreign,
+        AdapterStatus::NotInstalled,
+        AdapterStatus::TimedOut,
+    ] {
+        let code = exit_code(&[verdict(status)]).expect("unrun set codes");
+        assert_eq!(
+            code, EXIT_UNMEASURABLE,
+            "unrun verdict {status:?} must exit {EXIT_UNMEASURABLE}"
+        );
+        assert_ne!(
+            code, EXIT_ALL_LIVE,
+            "unrun verdict {status:?} must never read healthy"
+        );
+        assert_ne!(
+            code, EXIT_DEGRADED,
+            "unrun verdict {status:?} must never read as refusal"
+        );
+    }
+    // Empty band: a verb that executed nothing errors, never passes.
+    let error = exit_code(&[]).expect_err("empty set must refuse to code");
+    assert!(
+        error.contains("UAD_EXECUTE_EMPTY_SET"),
+        "empty-set refusal must name its code: {error}"
+    );
+}
