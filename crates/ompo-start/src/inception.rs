@@ -391,6 +391,71 @@ pub fn git_repo_toplevel(repo: &Path) -> Result<PathBuf, InceptionError> {
     }
 }
 
+/// L2-BUILD-REMOTE-PERSONA-A (contract s1_l2_ecosystem.md): Persona A
+/// local-only remote rule.
+///
+/// Persona A runs without remotes: a subject with no git remote is an
+/// explicitly recorded allowance (`remote_optional=true`) with
+/// continuation -- never a silent universal success, and never a halt.
+/// Every other combination is restrictive (`remote_optional=false`): a
+/// present remote needs no allowance, and a non-Persona-A subject must
+/// treat a missing remote as required. (No Persona B/C variants exist
+/// in this tree; non-Persona-A covers them, and this rule changes
+/// nothing for that population.)
+///
+/// `remote -v` reads the subject's own config, so unlike `show-toplevel`
+/// there is no upward search to ceiling. An unobservable subject (git
+/// missing, killed) is a typed error, never an absence claim: absence
+/// of evidence is not evidence of a remote.
+///
+/// INERT BY DESIGN (rule 9): no caller yet -- same reasoning as
+/// [`git_repo_toplevel`]. The L2 entry owns adoption.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PersonaRemote {
+    pub remote_optional: bool,
+    pub reason_code: &'static str,
+}
+
+/// Persona A remote allowance over a live `git remote -v` observation.
+pub fn persona_remote_policy(
+    repo: &Path,
+    persona_a: bool,
+) -> Result<PersonaRemote, InceptionError> {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(repo).args(["remote", "-v"]);
+    let present = match subprocess_contract::bounded_output(
+        &mut command,
+        IDENTITY_COMMAND_DEADLINE,
+    ) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output
+            .stdout
+            .split(|byte| *byte == b'\n')
+            .any(|line| !line.iter().all(u8::is_ascii_whitespace)),
+        subprocess_contract::BoundedOutcome::TimedOut => {
+            return Err(InceptionError::IdentityUnavailable {
+                field: "git_remote",
+                detail: "remote listing timed out; unobservable, never absent".to_owned(),
+            })
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            return Err(InceptionError::IdentityUnavailable {
+                field: "git_remote",
+                detail: format!("remote listing could not start: {error}"),
+            })
+        }
+    };
+    if persona_a && !present {
+        Ok(PersonaRemote {
+            remote_optional: true,
+            reason_code: "PERSONA_A_LOCAL_ONLY",
+        })
+    } else {
+        Ok(PersonaRemote {
+            remote_optional: false,
+            reason_code: "REMOTE_REQUIRED",
+        })
+    }
+}
 fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError> {
     let canonical =
         repo_root

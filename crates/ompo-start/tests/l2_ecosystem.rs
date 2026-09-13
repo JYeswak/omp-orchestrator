@@ -680,3 +680,54 @@ fn non_repo_halts() {
         "halt must carry remediation, got: {text}"
     );
 }
+
+/// L2-TEST-REMOTE-PERSONA-A (bead nqac): Persona A with no git remote
+/// records an explicit `remote_optional=true` allowance and continues;
+/// absence is never a silent universal success. Uses the real
+/// `persona_remote_policy` over live `git remote -v` observations --
+/// never a copy of its arms. (No Persona B/C variants exist in this
+/// tree; non-Persona-A cells cover that population by construction.)
+///
+/// KNOWN-BAD: drop the Persona A allowance (never optional) and the
+/// no-remote Persona A cell fails: a local-only subject would halt
+/// where the contract grants continuation. Message AND exit are pinned
+/// on the mutation run.
+#[test]
+fn persona_a_local_only_remote_rule() {
+    use ompo_start::inception::{persona_remote_policy, PersonaRemote};
+    // No remote anywhere here: repository_fixture never adds one, so the
+    // no-remote cells observe a real absence, not an injected boolean.
+    let repository = repository_fixture();
+    // Persona A, no remote: explicit allowance with continuation.
+    let allowed = persona_remote_policy(repository.path(), true).expect("policy answers");
+    assert_eq!(
+        allowed,
+        PersonaRemote {
+            remote_optional: true,
+            reason_code: "PERSONA_A_LOCAL_ONLY",
+        },
+        "Persona A with no remote must carry the explicit allowance"
+    );
+    // Non-Persona-A, no remote: restrictive, unchanged by this rule.
+    let required = persona_remote_policy(repository.path(), false).expect("policy answers");
+    assert_eq!(
+        required.remote_optional, false,
+        "a missing remote stays required off Persona A"
+    );
+    assert_eq!(
+        required.reason_code, "REMOTE_REQUIRED",
+        "the restrictive branch names its reason, got {}",
+        required.reason_code
+    );
+    // Persona A WITH a remote: nothing to allow, still restrictive-shaped
+    // (adding a remote needs no network: `remote -v` only reads config).
+    run_git(
+        repository.path(),
+        &["remote", "add", "origin", "https://example.invalid/x.git"],
+    );
+    let present = persona_remote_policy(repository.path(), true).expect("policy answers");
+    assert_eq!(
+        present.remote_optional, false,
+        "a present remote needs no allowance"
+    );
+}
