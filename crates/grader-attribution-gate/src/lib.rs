@@ -581,6 +581,149 @@ pub fn ledger_gate_exit(unattributed: &[String]) -> u8 {
     }
 }
 
+/// Correction obligations (bead `omp-orchestrator-6le78`): the route for a
+/// grader quoted into doctrine with no correction path.
+///
+/// A grader subagent has no write tool -- the anti-self-certification
+/// property that makes its verdict admissible, and it MUST NOT be relaxed.
+/// The consequence is structural: a grader can detect a misquote of its own
+/// finding and cannot repair it. The route is a bead convention plus a
+/// discoverable query, not a workflow engine and not write access:
+///
+/// - A correction is a bead titled `CORRECTION: <what is misquoted>`, whose
+///   body names the misquoting location, the correct reading, and the
+///   evidence, and whose ASSIGNEE is the discharging party (the file or
+///   lane owner who can edit the misquote). An unassigned obligation is an
+///   unrouted grade with extra steps.
+/// - THE QUERY is `br list --title-contains 'CORRECTION:'`: the default
+///   listing excludes closed beads, so every row it returns is outstanding
+///   by construction -- the same shape that makes `br list --status
+///   grading` the owed-grade query. No human or conductor needs to have
+///   read IRC for the obligation to be found.
+/// - The live `--title-contains` match is case-insensitive (measured
+///   2026-09-12: `reclaim` and `RECLAIM` return the same 7 rows), so live
+///   discovery is a SUPERSET of the canonical-prefix match below: it can
+///   surface more, never hide an outstanding obligation.
+///
+/// The `473e62a` misquote that motivated this is routed to its file owner
+/// separately and is NOT the subject here; this is the route, and its legs
+/// below run it against fixture ledgers, not that instance.
+pub const CORRECTION_TITLE_PREFIX: &str = "CORRECTION: ";
+
+/// One bead row reduced to the fields the correction query reads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorrectionRow {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub assignee: Option<String>,
+}
+
+/// One outstanding correction obligation: a non-closed `CORRECTION:` bead.
+/// The assignee, when present, is the discharging party.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorrectionObligation {
+    pub bead_id: String,
+    pub title: String,
+    pub assignee: Option<String>,
+}
+
+/// Why a correction query has no answer. An unreadable source is UNKNOWN,
+/// never "no outstanding corrections": zero obligations and an unreadable
+/// ledger must not share a verdict, and the compliant verdict is a positive
+/// arm (a parsed ledger with no open correction rows), never the fallthrough.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CorrectionQueryError {
+    EmptyScan,
+    MalformedLine { line: usize },
+    MissingField { line: usize, field: &'static str },
+}
+
+impl fmt::Display for CorrectionQueryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyScan => f.write_str(
+                "CORRECTION_SCAN_EMPTY code=CORRECTION_EMPTY -- ledger contained no rows",
+            ),
+            Self::MalformedLine { line } => write!(
+                f,
+                "CORRECTION_LEDGER_INVALID code=CORRECTION_MALFORMED line={line}"
+            ),
+            Self::MissingField { line, field } => write!(
+                f,
+                "CORRECTION_LEDGER_INVALID code=CORRECTION_MISSING_FIELD line={line} field={field}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CorrectionQueryError {}
+
+/// Parse every bead row the correction query needs, refusing malformed input.
+/// Mirrors `parse_actor_provenance`: an empty ledger is an error (a query
+/// over nothing read is not a clean bill), and a missing field names its
+/// line rather than defaulting.
+pub fn parse_correction_rows(
+    jsonl: &str,
+) -> Result<Vec<CorrectionRow>, CorrectionQueryError> {
+    let mut rows = Vec::new();
+    for (line_index, line) in jsonl.lines().enumerate() {
+        let line_number = line_index + 1;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value = serde_json::from_str::<serde_json::Value>(line)
+            .map_err(|_| CorrectionQueryError::MalformedLine { line: line_number })?;
+        let object = value
+            .as_object()
+            .ok_or(CorrectionQueryError::MalformedLine { line: line_number })?;
+        let required = |field: &'static str| {
+            object
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(str::to_owned)
+                .ok_or(CorrectionQueryError::MissingField {
+                    line: line_number,
+                    field,
+                })
+        };
+        rows.push(CorrectionRow {
+            id: required("id")?,
+            title: required("title")?,
+            status: required("status")?,
+            assignee: object
+                .get("assignee")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .map(str::to_owned),
+        });
+    }
+    if rows.is_empty() {
+        Err(CorrectionQueryError::EmptyScan)
+    } else {
+        Ok(rows)
+    }
+}
+
+/// The discovery predicate, stated as code so legs can run it: outstanding
+/// means titled `CORRECTION: ` AND not closed. A correction being worked
+/// (assigned, in progress) is still outstanding until its close lands.
+#[must_use]
+pub fn outstanding_corrections(rows: &[CorrectionRow]) -> Vec<CorrectionObligation> {
+    rows.iter()
+        .filter(|row| row.title.starts_with(CORRECTION_TITLE_PREFIX))
+        .filter(|row| row.status != "closed")
+        .map(|row| CorrectionObligation {
+            bead_id: row.id.clone(),
+            title: row.title.clone(),
+            assignee: row.assignee.clone(),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -795,5 +938,111 @@ mod tests {
         let mut ids = Vec::new();
         ids.resize(UNATTRIBUTED_CLOSE_CEILING + 1, "x".into());
         assert_eq!(ledger_gate_exit(&ids), 1);
+    }
+}
+
+#[cfg(test)]
+mod correction_tests {
+    use super::*;
+
+    const FIXTURE: &str = r#"{"id":"omp-orchestrator-open-1","title":"CORRECTION: exit_codes misquotes GradePairAdm","status":"open","assignee":"BackstopFix"}
+{"id":"omp-orchestrator-closed-1","title":"CORRECTION: stale label claim","status":"closed","assignee":"pane-1"}
+{"id":"omp-orchestrator-plain-1","title":"Some ordinary bead","status":"open","assignee":"pane-2"}
+"#;
+
+    const DISCHARGED: &str = r#"{"id":"omp-orchestrator-open-1","title":"CORRECTION: exit_codes misquotes GradePairAdm","status":"closed","assignee":"BackstopFix"}
+{"id":"omp-orchestrator-closed-1","title":"CORRECTION: stale label claim","status":"closed","assignee":"pane-1"}
+{"id":"omp-orchestrator-plain-1","title":"Some ordinary bead","status":"open","assignee":"pane-2"}
+"#;
+
+    /// KNOWN-BAD (item 5, first half): an outstanding correction obligation
+    /// is surfaced WITH its discharging party, and nothing else is.
+    #[test]
+    fn outstanding_correction_is_surfaced_with_its_discharger() {
+        let rows = parse_correction_rows(FIXTURE).expect("fixture parses");
+        let obligations = outstanding_corrections(&rows);
+        assert_eq!(obligations.len(), 1, "exactly one row is outstanding: {obligations:?}");
+        assert_eq!(obligations[0].bead_id, "omp-orchestrator-open-1");
+        assert_eq!(
+            obligations[0].assignee.as_deref(),
+            Some("BackstopFix"),
+            "the obligation must name its discharging party: {:?}",
+            obligations[0]
+        );
+    }
+
+    /// KNOWN-BAD companion for the title arm: an open bead WITHOUT the
+    /// prefix is never an obligation, however live. Dropping the title
+    /// check surfaces it (SUPERSET) and reddens exactly this leg.
+    #[test]
+    fn open_non_correction_is_not_an_obligation() {
+        let rows = parse_correction_rows(FIXTURE).expect("fixture parses");
+        let obligations = outstanding_corrections(&rows);
+        assert!(
+            obligations.iter().all(|obligation| obligation.bead_id != "omp-orchestrator-plain-1"),
+            "a live non-correction bead must not surface: {obligations:?}"
+        );
+    }
+
+    /// KNOWN-BAD companion for the status arm: a discharged correction is
+    /// gone. Dropping the status check resurfaces it (SUPERSET) and reddens
+    /// exactly this leg -- disjoint from the title arm's set.
+    #[test]
+    fn closed_correction_is_not_an_obligation() {
+        let rows = parse_correction_rows(DISCHARGED).expect("fixture parses");
+        let obligations = outstanding_corrections(&rows);
+        assert!(
+            obligations.is_empty(),
+            "discharge must clear the query -- same query, opposite result: {obligations:?}"
+        );
+    }
+
+    /// ANTI-VACUITY (item 6): an unreadable ledger is UNKNOWN, never clean.
+    /// Malformed input and an empty scan refuse; a compliant empty set is a
+    /// positive arm (parsed rows, zero obligations), never the fallthrough.
+    #[test]
+    fn unreadable_ledger_is_unknown_never_clean() {
+        assert!(matches!(
+            parse_correction_rows("not json\n"),
+            Err(CorrectionQueryError::MalformedLine { line: 1 })
+        ));
+        assert!(matches!(
+            parse_correction_rows(""),
+            Err(CorrectionQueryError::EmptyScan)
+        ));
+        assert!(matches!(
+            parse_correction_rows("{\"id\":\"x\"}\n"),
+            Err(CorrectionQueryError::MissingField { .. })
+        ));
+    }
+
+    #[test]
+    fn compliant_empty_is_a_parsed_ledger_with_no_open_corrections() {
+        let rows = parse_correction_rows(DISCHARGED).expect("discharge parses");
+        assert_eq!(rows.len(), 3, "the compliant verdict must rest on rows read, not on absence");
+        assert!(outstanding_corrections(&rows).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod correction_status_tests {
+    use super::*;
+
+    const TWO_ROW: &str = r#"{"id":"omp-orchestrator-open-1","title":"CORRECTION: exit_codes misquotes GradePairAdm","status":"open","assignee":"BackstopFix"}
+{"id":"omp-orchestrator-closed-1","title":"CORRECTION: stale label claim","status":"closed","assignee":"pane-1"}
+"#;
+
+    /// Status-arm discriminator (rule 7b): with no open plain bead in the
+    /// fixture, dropping the TITLE arm changes nothing here (the closed row
+    /// stays hidden by status alone), while dropping the STATUS arm
+    /// resurfaces it. Paired with `open_non_correction_is_not_an_obligation`
+    /// (reddens only when the title arm drops), the two mutations have
+    /// DISJOINT reddened sets -- each arm proved load-bearing alone.
+    #[test]
+    fn status_arm_alone_hides_closed_corrections() {
+        let rows = parse_correction_rows(TWO_ROW).expect("fixture parses");
+        let obligations = outstanding_corrections(&rows);
+        assert_eq!(obligations.len(), 1, "only the open row surfaces: {obligations:?}");
+        assert_eq!(obligations[0].bead_id, "omp-orchestrator-open-1");
     }
 }
