@@ -779,6 +779,32 @@ mod tests {
         );
     }
 
+    /// L1-BUILD-REPROBE-IDEMPOTENCE (row il2t): conditional idempotence. An
+    /// unchanged second repair is quiet, but drifted content REOPENS the
+    /// repair -- a changed hash invalidates the no-op premise (L1-DRIFT), so
+    /// existence of the artifact is never the quiet condition. Uses
+    /// production `repair` throughout; an existence-short-circuit (the
+    /// known-bad: quiet whenever the artifact file exists) keeps the first
+    /// two greens and reds the third.
+    #[test]
+    fn repair_reopens_after_content_drift() {
+        let directory = fixture();
+        let artifact = inception_artifact(directory.path());
+        let first = repair(directory.path(), "inception", RepairMode::Apply).expect("first");
+        assert!(!first.applied.is_empty(), "first repair must act");
+        let second = repair(directory.path(), "inception", RepairMode::Apply).expect("second");
+        assert!(second.applied.is_empty(), "unchanged repair must stay quiet");
+        // Drift: the artifact bytes change out from under the repair.
+        std::fs::write(&artifact, b"{\"drifted\":true}\n").expect("drift");
+        let third = repair(directory.path(), "inception", RepairMode::Apply).expect("third");
+        assert!(
+            !third.applied.is_empty(),
+            "drifted content must reopen the repair, got quiet {}",
+            third.reason_code
+        );
+        assert_eq!(third.reason_code, "REPAIR_APPLIED");
+    }
+
     /// ACCEPTANCE E. Known-GOOD: a clean repository is a zero-action success. An
     /// attack-only suite ships an over-strict repair, and an over-strict repair gets routed
     /// around.
