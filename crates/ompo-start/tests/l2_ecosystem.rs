@@ -640,3 +640,43 @@ fn l2_damaged_backup_refuses_restore_instead_of_recovering_garbage() {
         "missing and damaged must not collapse into one message: {missing}"
     );
 }
+
+/// L2-TEST-GIT-REPO (contract s1_l2_ecosystem.md `L2-BUILD-GIT-REPO`):
+/// `git_repo_toplevel` yields the canonical top-level path for a real
+/// repository and a typed halt with remediation outside one. Uses the
+/// real production check -- never a copy of its arms: a copy would agree
+/// with the subject by construction.
+///
+/// Upward-search note: git resolves parent checkouts, so the production
+/// check ceilings the search at the argument's parent (per-spawn env,
+/// thread-safe, no process-global games): a real repository carries its
+/// own `.git`, found before any ascent, while a bare directory inside a
+/// checkout then reads 128 deterministically on every lane.
+///
+/// KNOWN-BAD: invert the mapping (a refusal reads as identity) and the
+/// halt arm fails: a bare tempdir would certify as a repository.
+/// Message AND exit are pinned on the mutation run.
+#[test]
+fn non_repo_halts() {
+    use ompo_start::inception::git_repo_toplevel;
+    // Healthy: a real repository yields its canonical top level.
+    let repository = repository_fixture();
+    let top = git_repo_toplevel(repository.path()).expect("real repo resolves");
+    assert_eq!(
+        top,
+        repository.path().canonicalize().expect("canonical"),
+        "healthy branch yields the canonical top level"
+    );
+    // Halt: outside git, typed halt with remediation, never a guessed path.
+    let bare = tempfile::tempdir().expect("bare fixture");
+    let error = git_repo_toplevel(bare.path()).expect_err("non-repo must halt");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("INCEPTION_IDENTITY_UNAVAILABLE"),
+        "halt must be typed, got: {text}"
+    );
+    assert!(
+        text.contains("remedy:"),
+        "halt must carry remediation, got: {text}"
+    );
+}

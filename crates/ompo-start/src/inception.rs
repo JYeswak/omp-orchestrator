@@ -337,6 +337,60 @@ fn git_marker(repo_root: &Path) -> Result<String, InceptionError> {
     Ok("missing".to_owned())
 }
 
+/// L2-BUILD-GIT-REPO (contract s1_l2_ecosystem.md): canonical git
+/// repository check via `show-toplevel`.
+///
+/// Healthy: exit 0 plus an existing directory is the canonical top-level
+/// path. Halt: git's not-a-repository refusal, a missing binary, a kill,
+/// or unreadable output is `IdentityUnavailable` with a remedy, never a
+/// guessed path. The L1 git leg pins the same mapping test-locally; this
+/// is the production function the L2 flow adopts.
+///
+/// INERT BY DESIGN (rule 9): no caller yet. Wiring this into shared
+/// `initialize`/`build_manifest` would re-route doctor repair too, whose
+/// kyng-class legs run green on non-git fixtures on workers WITH a `.git`
+/// upward and would newly refuse on workers WITHOUT one --
+/// environment-divergent breakage for zero new capability. The L2 entry
+/// owns adoption; until then this stays available, not invoked.
+pub fn git_repo_toplevel(repo: &Path) -> Result<PathBuf, InceptionError> {
+    let mut command = Command::new("git");
+    // Ceiling the upward search at the argument's parent keeps this
+    // deterministic on every lane: without it a bare directory inside any
+    // checkout resolves upward and reads as a repository (measured on a
+    // worker whose scratch sits under a checkout). A real repository
+    // carries its own `.git`, found before any ascent, so the ceiling
+    // never consults -- it only stops the climb that manufactures repos.
+    if let Some(parent) = repo.parent() {
+        command.env("GIT_CEILING_DIRECTORIES", parent);
+    }
+    command
+        .arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "--show-toplevel"]);
+    let line = run_identity_command(&mut command, "git_toplevel").map_err(|error| match error {
+        InceptionError::IdentityUnavailable { field, detail } => {
+            InceptionError::IdentityUnavailable {
+                field,
+                detail: format!(
+                    "{detail}; remedy: run git init here or point --repo at a git checkout"
+                ),
+            }
+        }
+        other => other,
+    })?;
+    let path = PathBuf::from(&line);
+    if path.is_dir() {
+        Ok(path)
+    } else {
+        Err(InceptionError::IdentityUnavailable {
+            field: "git_toplevel",
+            detail: format!(
+                "show-toplevel printed {line:?}, which is not a directory; remedy: run git init here or point --repo at a git checkout"
+            ),
+        })
+    }
+}
+
 fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError> {
     let canonical =
         repo_root
