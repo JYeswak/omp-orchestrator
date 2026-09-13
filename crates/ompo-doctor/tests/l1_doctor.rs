@@ -113,13 +113,23 @@ fn doctor_run_reports_complete_envelope_with_typed_remediation() {
     );
     assert_eq!(summary.remediation.len(), non_ok.len());
     for probe in non_ok {
+        // o0nl table vocabulary: absent probes remediate with a named
+        // install row (never "rerun" -- rerunning a missing tool repeats a
+        // measurement whose subject does not exist); all other non-OK
+        // statuses keep the generic rerun row.
+        let want = match probe.status.as_str() {
+            "ABSENT_FAMILY" => "install tool family",
+            "ABSENT_SPECIFIC" => "install tool for",
+            _ => "rerun",
+        };
         assert!(
             summary
                 .remediation
                 .iter()
-                .any(|row| row.contains("rerun") && row.contains(&probe.name)),
-            "non-OK probe {} lacks an explicit rerun row: {:?}",
+                .any(|row| row.contains(want) && row.contains(&probe.name)),
+            "non-OK probe {} (status {}) lacks its {want:?} row: {:?}",
             probe.name,
+            probe.status,
             summary.remediation
         );
     }
