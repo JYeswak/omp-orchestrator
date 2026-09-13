@@ -787,6 +787,37 @@ fn frankenmermaid_probe_emits_two_signals() {
         "the unanswering probe must be named: {:?}",
         metric.unprobeable
     );
+    // Wrong version is STALE when observed: counted in the stale band with
+    // its exact reason, never OK, ABSENT_SPECIFIC, or UNPROBEABLE. No
+    // version floor is declared, so STALE is observed (constructed here),
+    // never derived -- the bv_probe_emits_two_signals shape and the
+    // LAW-L1-WRONG-VERSION leg, not a second surface.
+    let stale = decision(
+        "STALE",
+        Some("frankenmermaid 1.0"),
+        Some("frankenmermaid 0.0.0"),
+    );
+    assert!(!answered(&stale), "a stale row answers nothing itself");
+    let stale_metric = probe_answer_metric(
+        std::slice::from_ref(spec),
+        &[
+            decision(
+                "OK",
+                Some("/fixture/frankenmermaid"),
+                Some("frankenmermaid 1.0"),
+            ),
+            stale,
+        ],
+    );
+    assert_eq!(
+        stale_metric.stale_count,
+        Some(1),
+        "an observed STALE row must be counted, not absorbed"
+    );
+    assert_eq!(
+        stale_metric.stale_status, "MEASURED",
+        "an observed STALE row makes the band measured"
+    );
     // The live row, both lanes: OK implies both signals; anything else
     // is a typed absence with a namespaced reason -- never bare ABSENT and
     // never an UNRUN reading as refusal or health.
