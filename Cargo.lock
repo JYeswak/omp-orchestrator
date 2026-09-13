@@ -1615,6 +1615,7 @@ dependencies = [
  "asupersync",
  "build-stamp",
  "decision-ledger",
+ "input-manifest",
  "lifecycle-event",
  "lifecycle-monitor",
  "serde",

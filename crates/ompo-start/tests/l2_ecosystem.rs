@@ -7,7 +7,8 @@
 
 use ompo_start::inception::{
     hook_source_identity_report, initialize, list_backups, read_inception, restore_backup,
-    HookIdentityStatus, InceptionError, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
+    CargoWorkspaceError, HookIdentityStatus, InceptionError, PROJECT_AGENTS_OWNERSHIP_STAMP,
+    SCHEMA_VERSION,
 };
 use std::path::Path;
 use std::process::Command;
@@ -71,9 +72,17 @@ fn commit_hook_source_change(root: &Path, bytes: &[u8]) {
 fn repository_fixture() -> TempDir {
     let directory = tempfile::tempdir().expect("fixture directory");
     std::fs::create_dir(directory.path().join("docs")).expect("docs directory");
-    for name in ["CLAUDE.md", "Cargo.toml", "README.md", "SCHEMAS.toml"] {
+    for name in ["CLAUDE.md", "README.md", "SCHEMAS.toml"] {
         std::fs::write(directory.path().join(name), b"fixture\n").expect("control file");
     }
+    std::fs::create_dir(directory.path().join("src")).expect("fixture src directory");
+    std::fs::write(directory.path().join("src/lib.rs"), b"pub fn fixture() {}\n")
+        .expect("fixture library");
+    std::fs::write(
+        directory.path().join("Cargo.toml"),
+        b"[package]\nname = \"ompo-start\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    )
+    .expect("Cargo metadata fixture");
     write_project_agents_stamp(directory.path());
     // zb2p companion: the gated trust entry requires a ready tracker
     // (bead zb2p). Initialize `.beads` here so gated legs measure their
@@ -1626,4 +1635,199 @@ fn toolchain_pin_gates_trust_entry() {
             output.display()
         );
     }
+}
+
+fn do8n_metadata(package: &str, members: &[&str]) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "packages": [{"name": package, "id": format!("path+file:///fixture#{package}@0.1.0")}],
+        "workspace_members": members,
+    }))
+    .expect("metadata fixture JSON")
+}
+
+#[test]
+fn cargo_workspace_current_member_is_derived() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::{
+        cargo_workspace_member_report, CURRENT_WORKSPACE_PACKAGE,
+    };
+    let report = cargo_workspace_member_report(
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &InputManifest::full(),
+    )
+    .expect("fresh Cargo metadata contains the current crate");
+    assert!(!report.package_ids.is_empty(), "package set is nonempty");
+    assert!(
+        !report.workspace_member_ids.is_empty(),
+        "workspace-member set is nonempty"
+    );
+    assert!(
+        report.package_ids.contains(&report.current_package_id)
+            && report
+                .workspace_member_ids
+                .contains(&report.current_package_id),
+        "{CURRENT_WORKSPACE_PACKAGE} must occur in both derived sets"
+    );
+}
+
+#[test]
+fn cargo_workspace_missing_cargo_is_typed() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::cargo_workspace_member_report_with_program;
+    let repository = repository_fixture();
+    let output = repository.path().join(".omp-orchestrator/inception.json");
+    let missing = repository.path().join("definitely-missing-cargo");
+    let error = cargo_workspace_member_report_with_program(
+        repository.path(),
+        &InputManifest::full(),
+        &missing,
+    )
+    .expect_err("missing Cargo must halt");
+    assert!(matches!(error, CargoWorkspaceError::CargoMissing { .. }));
+    let text = error.to_string();
+    assert!(
+        text.contains("CARGO_WORKSPACE_CARGO_MISSING") && text.contains("remedy="),
+        "missing Cargo needs distinct remediation: {text}"
+    );
+    assert!(!output.exists(), "a Cargo refusal writes no trust artifact");
+}
+
+#[test]
+fn cargo_workspace_metadata_failure_is_typed() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::cargo_workspace_member_report_with_program;
+    let repository = repository_fixture();
+    let error = cargo_workspace_member_report_with_program(
+        repository.path(),
+        &InputManifest::full(),
+        Path::new("false"),
+    )
+    .expect_err("nonzero metadata command must halt");
+    assert!(matches!(error, CargoWorkspaceError::MetadataFailed { .. }));
+    assert!(error.to_string().contains("CARGO_WORKSPACE_METADATA_FAILED"));
+}
+
+#[test]
+fn cargo_workspace_malformed_json_is_typed() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::cargo_workspace_member_from_output;
+    let error = cargo_workspace_member_from_output(b"not-json", &InputManifest::full())
+        .expect_err("malformed metadata must halt");
+    assert!(matches!(
+        error,
+        CargoWorkspaceError::MetadataMalformed { .. }
+    ));
+}
+
+#[test]
+fn cargo_workspace_empty_packages_is_typed() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::cargo_workspace_member_from_output;
+    let metadata = serde_json::to_vec(&serde_json::json!({
+        "packages": [],
+        "workspace_members": ["fixture-member"],
+    }))
+    .expect("metadata JSON");
+    let error = cargo_workspace_member_from_output(&metadata, &InputManifest::full())
+        .expect_err("empty packages must halt");
+    assert!(matches!(
+        error,
+        CargoWorkspaceError::Empty { field: "packages" }
+    ));
+}
+
+#[test]
+fn cargo_workspace_empty_members_is_typed() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::cargo_workspace_member_from_output;
+    let metadata = do8n_metadata("ompo-start", &[]);
+    let error = cargo_workspace_member_from_output(&metadata, &InputManifest::full())
+        .expect_err("empty workspace members must halt");
+    assert!(matches!(
+        error,
+        CargoWorkspaceError::Empty {
+            field: "workspace_members"
+        }
+    ));
+}
+
+#[test]
+fn cargo_workspace_current_crate_absent_is_typed() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::cargo_workspace_member_from_output;
+    let id = "path+file:///fixture#different@0.1.0";
+    let metadata = do8n_metadata("different", &[id]);
+    let error = cargo_workspace_member_from_output(&metadata, &InputManifest::full())
+        .expect_err("missing current crate must halt");
+    assert!(matches!(
+        error,
+        CargoWorkspaceError::CurrentCrateAbsent { .. }
+    ));
+    assert!(
+        error
+            .to_string()
+            .contains("CARGO_WORKSPACE_CURRENT_CRATE_ABSENT")
+    );
+}
+
+fn cargo_input_refusal(input: &input_manifest::InputManifest) -> CargoWorkspaceError {
+    ompo_start::inception::cargo_workspace_member_from_output(b"{}", input)
+        .expect_err("non-FULL input must halt before parsing")
+}
+
+#[test]
+fn cargo_workspace_non_full_inputs_are_typed() {
+    let cases = [
+        (
+            input_manifest::InputManifest::partial("package_head", 1, "do8n-fixture")
+                .expect("valid bounded input"),
+            true,
+            "CARGO_WORKSPACE_INPUT_PARTIAL",
+        ),
+        (
+            input_manifest::InputManifest::refused("fixture withheld metadata")
+                .expect("valid refused input"),
+            false,
+            "CARGO_WORKSPACE_INPUT_REFUSED",
+        ),
+    ];
+    for (input, partial, reason_code) in cases {
+        let error = cargo_input_refusal(&input);
+        assert_eq!(
+            matches!(error, CargoWorkspaceError::PartialInput { .. }),
+            partial,
+            "PARTIAL and REFUSED remain distinct: {error}"
+        );
+        assert!(error.to_string().contains(reason_code), "wrong cause: {error}");
+    }
+}
+/// do8n wiring leg: the derived member verdict is consumed immediately after
+/// git canonicalization. Every pre-existing trust gate retains its relative
+/// order and no trust artifact exists when Cargo membership refuses.
+#[test]
+fn cargo_workspace_member_verdict_gates_l2_entry() {
+    use ompo_start::inception::initialize_gated;
+    let repository = repository_fixture();
+    std::fs::write(
+        repository.path().join("Cargo.toml"),
+        b"[package]\nname = \"different\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
+    )
+    .expect("foreign Cargo package");
+    let output = repository.path().join(".omp-orchestrator/cargo-member-refused.json");
+    let error = initialize_gated(repository.path(), &output)
+        .expect_err("foreign current package must halt at the L2 entry");
+    assert!(
+        matches!(
+            &error,
+            InceptionError::CargoWorkspace(CargoWorkspaceError::CurrentCrateAbsent { .. })
+        ),
+        "Cargo member gate must be the refusing layer, got: {error}"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("CARGO_WORKSPACE_CURRENT_CRATE_ABSENT"),
+        "wrong gated-entry cause: {error}"
+    );
+    assert!(!output.exists(), "Cargo refusal must precede trust writes");
 }

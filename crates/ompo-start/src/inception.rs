@@ -7,6 +7,7 @@
 //! tool names, and an explicit trust status, then reads the JSON back before
 //! returning success.
 
+use input_manifest::InputManifest;
 use sha2::{Digest, Sha256};
 use lifecycle_event::{
     default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
@@ -71,6 +72,76 @@ const REQUIRED_KEYS: &[&str] = &[
     "trust_status",
 ];
 const OPTIONAL_KEYS: &[&str] = &["evidence", "status", "degradations"];
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CargoWorkspaceError {
+    CargoMissing { program: String, detail: String },
+    MetadataFailed { detail: String },
+    MetadataMalformed { detail: String },
+    Empty { field: &'static str },
+    CurrentCrateAbsent { package: String, detail: String },
+    PartialInput {
+        bound_kind: String,
+        bound_value: u64,
+        source: String,
+    },
+    RefusedInput { reason: String },
+}
+
+impl CargoWorkspaceError {
+    const fn reason_code(&self) -> &'static str {
+        match self {
+            Self::CargoMissing { .. } => "CARGO_WORKSPACE_CARGO_MISSING",
+            Self::MetadataFailed { .. } => "CARGO_WORKSPACE_METADATA_FAILED",
+            Self::MetadataMalformed { .. } => "CARGO_WORKSPACE_METADATA_MALFORMED",
+            Self::Empty { .. } => "CARGO_WORKSPACE_EMPTY",
+            Self::CurrentCrateAbsent { .. } => "CARGO_WORKSPACE_CURRENT_CRATE_ABSENT",
+            Self::PartialInput { .. } => "CARGO_WORKSPACE_INPUT_PARTIAL",
+            Self::RefusedInput { .. } => "CARGO_WORKSPACE_INPUT_REFUSED",
+        }
+    }
+
+    const fn remediation(&self) -> &'static str {
+        match self {
+            Self::CargoMissing { .. } => "install Cargo or put the intended cargo executable on PATH",
+            Self::MetadataFailed { .. } => "run cargo metadata --no-deps --format-version 1 --offline and repair the reported manifest or workspace error",
+            Self::MetadataMalformed { .. } => "use Cargo JSON from cargo metadata --format-version 1; do not parse logs or prose",
+            Self::Empty { .. } => "declare a nonempty package and workspace-member set",
+            Self::CurrentCrateAbsent { .. } => "add the current crate to the workspace members or run from its owning workspace",
+            Self::PartialInput { .. } => "rerun over the full metadata input",
+            Self::RefusedInput { .. } => "resolve the input refusal before deriving workspace trust",
+        }
+    }
+}
+
+impl fmt::Display for CargoWorkspaceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "HUMAN_HALT {} ", self.reason_code())?;
+        match self {
+            Self::CargoMissing { program, detail } => {
+                write!(formatter, "program={program} detail={detail}")?
+            }
+            Self::MetadataFailed { detail } | Self::MetadataMalformed { detail } => {
+                write!(formatter, "detail={detail}")?
+            }
+            Self::Empty { field } => write!(formatter, "field={field}")?,
+            Self::CurrentCrateAbsent { package, detail } => {
+                write!(formatter, "package={package} detail={detail}")?
+            }
+            Self::PartialInput {
+                bound_kind,
+                bound_value,
+                source,
+            } => write!(
+                formatter,
+                "bound_kind={bound_kind} bound_value={bound_value} source={source}"
+            )?,
+            Self::RefusedInput { reason } => write!(formatter, "reason={reason}")?,
+        }
+        write!(formatter, " remedy={}", self.remediation())
+    }
+}
+
+impl std::error::Error for CargoWorkspaceError {}
 
 #[derive(Debug)]
 pub enum InceptionError {
@@ -79,6 +150,8 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// Cargo workspace membership refused before trust initialization.
+    CargoWorkspace(CargoWorkspaceError),
     /// The installed pre-commit hook cannot prove it was built from the
     /// repository's current source authority.
     HookIdentityRefused {
@@ -196,6 +269,7 @@ impl fmt::Display for InceptionError {
                 formatter,
                 "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
             ),
+            Self::CargoWorkspace(error) => write!(formatter, "{error}"),
             Self::HookIdentityRefused { path, status, detail } => write!(
                 formatter,
                 "HUMAN_HALT {} hook={} detail={} remedy={}",
@@ -367,24 +441,57 @@ fn identity_field(field: &'static str, value: &str) -> Result<String, InceptionE
     Ok(value.to_owned())
 }
 
-fn run_command_output(command: &mut Command) -> Result<std::process::Output, String> {
+#[derive(Debug)]
+enum BoundedCommandError {
+    Exit { code: Option<i32>, stderr: String },
+    TimedOut,
+    Unspawned {
+        kind: std::io::ErrorKind,
+        detail: String,
+    },
+}
+
+impl fmt::Display for BoundedCommandError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exit { code, stderr } => {
+                write!(formatter, "command exited {code:?}: {stderr}")
+            }
+            Self::TimedOut => write!(
+                formatter,
+                "command exceeded {}s",
+                IDENTITY_COMMAND_DEADLINE.as_secs()
+            ),
+            Self::Unspawned { detail, .. } => {
+                write!(formatter, "command could not start: {detail}")
+            }
+        }
+    }
+}
+
+fn run_command_output_typed(
+    command: &mut Command,
+) -> Result<std::process::Output, BoundedCommandError> {
     match subprocess_contract::bounded_output(command, IDENTITY_COMMAND_DEADLINE) {
         subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => {
             Ok(output)
         }
-        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
-            "command exited {:?}: {}",
-            output.status.code(),
-            String::from_utf8_lossy(&output.stderr).trim()
-        )),
-        subprocess_contract::BoundedOutcome::TimedOut => Err(format!(
-            "command exceeded {}s",
-            IDENTITY_COMMAND_DEADLINE.as_secs()
-        )),
+        subprocess_contract::BoundedOutcome::Completed(output) => Err(BoundedCommandError::Exit {
+            code: output.status.code(),
+            stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        }),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(BoundedCommandError::TimedOut),
         subprocess_contract::BoundedOutcome::Unspawned(error) => {
-            Err(format!("command could not start: {error}"))
+            Err(BoundedCommandError::Unspawned {
+                kind: error.kind(),
+                detail: error.to_string(),
+            })
         }
     }
+}
+
+fn run_command_output(command: &mut Command) -> Result<std::process::Output, String> {
+    run_command_output_typed(command).map_err(|error| error.to_string())
 }
 
 fn run_identity_command(
@@ -476,6 +583,168 @@ pub fn git_repo_toplevel(repo: &Path) -> Result<PathBuf, InceptionError> {
     }
 }
 
+
+/// Package whose membership authorizes this L2 entry. The member population
+/// is always derived from fresh Cargo metadata; no absolute count is stored.
+pub const CURRENT_WORKSPACE_PACKAGE: &str = "ompo-start";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CargoWorkspaceMemberReport {
+    pub input: InputManifest,
+    pub package_ids: BTreeSet<String>,
+    pub workspace_member_ids: BTreeSet<String>,
+    pub current_package_id: String,
+}
+
+impl From<CargoWorkspaceError> for InceptionError {
+    fn from(error: CargoWorkspaceError) -> Self {
+        Self::CargoWorkspace(error)
+    }
+}
+
+fn require_full_cargo_input(input: &InputManifest) -> Result<(), CargoWorkspaceError> {
+    match input {
+        InputManifest::Full => Ok(()),
+        InputManifest::Partial {
+            bound_kind,
+            bound_value,
+            source,
+        } => Err(CargoWorkspaceError::PartialInput {
+            bound_kind: bound_kind.clone(),
+            bound_value: *bound_value,
+            source: source.clone(),
+        }),
+        InputManifest::Refused { reason } => Err(CargoWorkspaceError::RefusedInput {
+            reason: reason.clone(),
+        }),
+    }
+}
+
+pub fn cargo_workspace_member_from_output(
+    output: &[u8],
+    input: &InputManifest,
+) -> Result<CargoWorkspaceMemberReport, CargoWorkspaceError> {
+    require_full_cargo_input(input)?;
+    let value: Value = serde_json::from_slice(output).map_err(|error| {
+        CargoWorkspaceError::MetadataMalformed {
+            detail: error.to_string(),
+        }
+    })?;
+    let packages = value
+        .get("packages")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CargoWorkspaceError::MetadataMalformed {
+            detail: "packages is missing or not an array".to_owned(),
+        })?;
+    if packages.is_empty() {
+        return Err(CargoWorkspaceError::Empty { field: "packages" });
+    }
+    let members = value
+        .get("workspace_members")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CargoWorkspaceError::MetadataMalformed {
+            detail: "workspace_members is missing or not an array".to_owned(),
+        })?;
+    if members.is_empty() {
+        return Err(CargoWorkspaceError::Empty {
+            field: "workspace_members",
+        });
+    }
+    let mut package_ids = BTreeSet::new();
+    let mut current_package_id = None;
+    for (index, package) in packages.iter().enumerate() {
+        let package = package
+            .as_object()
+            .ok_or_else(|| CargoWorkspaceError::MetadataMalformed {
+                detail: format!("packages[{index}] is not an object"),
+            })?;
+        let id = package
+            .get("id")
+            .and_then(Value::as_str)
+            .filter(|id| !id.trim().is_empty())
+            .ok_or_else(|| CargoWorkspaceError::MetadataMalformed {
+                detail: format!("packages[{index}].id is missing or empty"),
+            })?;
+        let name = package
+            .get("name")
+            .and_then(Value::as_str)
+            .filter(|name| !name.trim().is_empty())
+            .ok_or_else(|| CargoWorkspaceError::MetadataMalformed {
+                detail: format!("packages[{index}].name is missing or empty"),
+            })?;
+        package_ids.insert(id.to_owned());
+        if name == CURRENT_WORKSPACE_PACKAGE {
+            current_package_id = Some(id.to_owned());
+        }
+    }
+    let workspace_member_ids: BTreeSet<String> = members
+        .iter()
+        .enumerate()
+        .map(|(index, member)| {
+            member
+                .as_str()
+                .filter(|member| !member.trim().is_empty())
+                .map(str::to_owned)
+                .ok_or_else(|| CargoWorkspaceError::MetadataMalformed {
+                    detail: format!(
+                        "workspace_members[{index}] is not a nonempty string"
+                    ),
+                })
+        })
+        .collect::<Result<_, _>>()?;
+    let current_package_id = current_package_id.ok_or_else(|| {
+        CargoWorkspaceError::CurrentCrateAbsent {
+            package: CURRENT_WORKSPACE_PACKAGE.to_owned(),
+            detail: "package is absent from metadata packages".to_owned(),
+        }
+    })?;
+    if !workspace_member_ids.contains(&current_package_id) {
+        return Err(CargoWorkspaceError::CurrentCrateAbsent {
+            package: CURRENT_WORKSPACE_PACKAGE.to_owned(),
+            detail: "package id is absent from workspace_members".to_owned(),
+        });
+    }
+    Ok(CargoWorkspaceMemberReport {
+        input: input.clone(),
+        package_ids,
+        workspace_member_ids,
+        current_package_id,
+    })
+}
+
+pub fn cargo_workspace_member_report_with_program(
+    repo: &Path,
+    input: &InputManifest,
+    program: &Path,
+) -> Result<CargoWorkspaceMemberReport, CargoWorkspaceError> {
+    require_full_cargo_input(input)?;
+    let mut command = Command::new(program);
+    command.current_dir(repo).args([
+        "metadata",
+        "--no-deps",
+        "--format-version",
+        "1",
+        "--offline",
+    ]);
+    let output = run_command_output_typed(&mut command).map_err(|error| match error {
+        BoundedCommandError::Unspawned { kind, detail }
+            if kind == std::io::ErrorKind::NotFound => CargoWorkspaceError::CargoMissing {
+                program: program.display().to_string(),
+                detail,
+            },
+        other => CargoWorkspaceError::MetadataFailed {
+            detail: other.to_string(),
+        },
+    })?;
+    cargo_workspace_member_from_output(&output.stdout, input)
+}
+
+pub fn cargo_workspace_member_report(
+    repo: &Path,
+    input: &InputManifest,
+) -> Result<CargoWorkspaceMemberReport, CargoWorkspaceError> {
+    cargo_workspace_member_report_with_program(repo, input, Path::new("cargo"))
+}
 /// L2-BUILD-REMOTE-PERSONA-A (contract s1_l2_ecosystem.md): Persona A
 /// local-only remote rule.
 ///
@@ -2137,6 +2406,7 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 /// path stays caller-chosen; only the root canonicalizes.
 pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     let top = git_repo_toplevel(repo_root)?;
+    let _cargo_member = cargo_workspace_member_report(&top, &InputManifest::full())?;
     match claude_stamp_report(&top).status {
         AgentsStampStatus::Stamped => {}
         status => {
