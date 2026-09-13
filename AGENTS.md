@@ -58,12 +58,28 @@ file rather than the bottom.
 ## STANDING AUTHORIZATION — read this before you conclude you may not build
 
 **Current state, 2026-09-07. S1 IS AUTHORIZED TO BUILD. S2–S9 ARE FROZEN.**
+**Superseded-in-part 2026-09-13 (Joshua, this line):** freeze holds until the *current stage*
+burns down; then PLAN the next stage, then work it fully. Never plan ahead. Never dispatch
+S(n+1) while Sn has live beads. **STAGE LADDER is here, not downstream.**
 
 |scope|state|
 |---|---|
-|**S1** — any bead wired to an S1 layer gate or `gate-s1-djn8`|**AUTHORIZED**: crates, feature beads, tests, installs. Each lands behind its own gate with a known-bad leg.|
-|**S2–S9** — crates, beads, installs, canonical mapping changes|**FROZEN.** `gate-s1-djn8` blocks `gate-s2-ehx8`; S2 cannot start until S1 closes.|
+|**S1** — any bead with `s1` in labels, or id containing `s1-l` / `gate-s1`|**AUTHORIZED and THE ONLY DISPATCH LANE** until `gate-s1-djn8` can close.|
+|**S2–S9** — crates, beads, installs, canonical mapping changes|**FROZEN** until S1's done-bar. Then: PLAN that stage, then work it, then PLAN the next. `gate-s1-djn8` still blocks `gate-s2-ehx8`.|
 |`approval` fields|Still an HD row id. Building does not grant approval — it removes the reason approval could never be earned.|
+
+**STAGE LADDER (binding, Joshua 2026-09-13):**
+
+```
+burn Sn to its done-bar  →  PLAN S(n+1)  →  burn S(n+1)  →  PLAN S(n+2)  →  …
+```
+
+Current stage is **S1** until zero live S1 beads AND box `converged` AND Joshua approval
+(that is `gate-s1-djn8`'s acceptance — do not flip `draft` → `converged` to fake it).
+Every tick RE-DERIVES remaining live S1 (never cite a transcribed count). Dispatch and
+grade **only the current stage**. Off-lane P0/P1s wait. When S1 closes, the tick's census
+line switches to S2 and this paragraph is edited in place — not a new section 40 lines later.
+
 
 **The seven gate ids, COPY-PASTE THESE, never retype them:**
 
@@ -174,9 +190,11 @@ only authority on whether a specific bead can be worked right now.
 
 
 **Standing authorization, adopted from `frankensqlite/AGENTS.md:50` via `fh`:** swarm lanes work
-autonomously inside the authorized scope. Claim the next ready bead and proceed; never end a turn
-waiting for permission that this table already grants. **If you believe you are blocked from
-building, re-read this block first and attempt the transition second — the field may be lying.**
+autonomously inside the **current stage**. Claim the next ready *stage* bead and proceed; never
+end a turn waiting for permission that this table already grants; never pick an off-stage P1
+because `br ready` offered it. **If you believe you are blocked from building, re-read this
+block first and attempt the transition second — the field may be lying.**
+
 
 
 ## The one rule

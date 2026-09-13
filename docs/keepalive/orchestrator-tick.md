@@ -7,13 +7,35 @@ without this tick it stops the moment you go quiet. On 2026-09-08 the fleet sat 
 **NO AUTO-DISPATCH EXISTS AND NONE IS PERMITTED. You send project-aware dispatches by hand. This
 tick only guarantees you are ASKED every 20 minutes.**
 
-## RUN THESE FIVE, IN ORDER, EVERY TICK
+**CURRENT STAGE = S1 until S1 is closed. Then PLAN S2, then work S2 fully, then PLAN S3, and so
+on. Off-stage beads wait. The first line of every tick reply is the stage census.**
+
+## RUN THESE SIX, IN ORDER, EVERY TICK
+
+
+### 0. STAGE CENSUS — first line of the reply, every tick
+
+Re-derive. Never cite a count from the previous tick or from AGENTS.md.
+
+S1 membership: `labels` contains `s1` OR id contains `s1-l` OR id contains `gate-s1`.
+Live = `br list` (closed excluded by default). Closed = `br list --status closed`.
+
+Print, first:
+
+```
+S1 <HH:MMZ> live N (open A · blocked B · in_progress C · grading D) · closed E · all F
+tick-20m: closed X · new Y · net Y-X
+```
+
+`new` = rows whose `created_at` is inside the window. Remaining = previous live − closed + new.
+When live S1 hits 0, stop dispatching S1 and start the PLAN-S2 beat — not before.
 
 ### 1. CHECK ALL WORKERS
 
 ```
 tick-monitor observe --session omp-orchestrator
 ```
+
 
 Never `capture-pane | grep`. Panes are **%19 idx2 · %20 idx3 · %7 idx4 · %8 idx5**.
 `ntm --robot-send` takes the **INDEX**, not the `%ID`.
@@ -59,15 +81,15 @@ br ready --json --limit 0        <- returns a BARE LIST. `.get('issues')` on it 
 br list --status closed --json   <- `br list` EXCLUDES closed rows by default.
 ```
 
-Order of value, highest first:
+Order of value, highest first — **and every row must be the CURRENT STAGE (S1 today):**
 
-1. **Grade-ready beads** (`status=grading`) — route to a **NON-AUTHOR**, different **PANE**.
-   Grading outruns new work: unclosed finished work makes `br ready` keep serving it, which is how a
-   pane correctly reports `NO_ELIGIBLE_TARGET` and goes idle beside a full queue.
-2. **Author-held beads** — release them: `br update <id> --status grading --assignee ''`. An author
-   cannot grade its own work however the packet is worded.
-3. **The current milestone's critical path.** Name it in the packet so the pane knows what it serves.
-4. **P0s in `br ready`.**
+1. **Grade-ready CURRENT-STAGE beads** (`status=grading`) — route to a **NON-AUTHOR**, different
+   **PANE**. Off-stage grading waits. Grading outruns new work inside the stage.
+2. **Author-held CURRENT-STAGE beads** — release them: `br update <id> --status grading --assignee ''`.
+3. **The current stage's critical path.** Name the stage in the packet. Today: S1-L* BUILD/TEST,
+   then remaining S1 P0s. Not `br ready` P0s from other stages.
+4. **P0s in `br ready` that are S1.** Everything else waits.
+
 
 **Re-derive every COUNT a bead's acceptance asserts BEFORE dispatching it.** 170 of 755 non-terminal
 beads cite a hard count; three of three sampled were stale, and one would have authorised deleting a
@@ -166,9 +188,11 @@ Option (B), the pane-side RPC bridge is DEFERRED as the typed endgame, so **`fph
 blocked on purpose — do not force them.** (C) filed upstream.
 
 **JOSHUA'S RULING 2026-09-08, verbatim: *"so unlock s1 and keep it going and not focus on s2."***
-**S2 IS DROPPED.** Do not plan it, do not dispatch its beads, do not touch `boxes/S2.toml` or
-`arc-s2-plan-gate-u4vq`. **The one exception is `gate-s1-djn8`**, because an unexecutable S1 gate
-means S1 can never be marked done — that is S1 unlock work, not S2 work.
+**Amended 2026-09-13 at this line:** S2 stays dropped **until S1's done-bar**. Then PLAN S2, then
+work S2 fully, then PLAN S3. Do not plan S2 while any S1 bead is live. Do not touch
+`boxes/S2.toml` or `arc-s2-plan-gate-u4vq` until that PLAN beat. **`gate-s1-djn8` is S1 unlock
+work, not S2 work.**
+
 
 **⛔ "S1-READY" IS A READINESS GATE, NOT A DONE GATE, AND PANE 1 CONFLATED THEM ON 2026-09-08.**
 `docs/plan/flow/S1-READY.md` line 1: *"the fh-backed criteria for when S1 may be BUILT."* Its ten
@@ -181,10 +205,12 @@ R1-R10  ALL TEN PASS  -- readiness only. R10 CLOSED 2026-09-08 on EXECUTION, bot
           fsu7  (a) CLOSED  one --run, 2857 s, 88 unique crate rows banked, set_difference=0,
                             PASS 59 / FAIL 17 / UNMEASURABLE 12, sha256 verified byte-identical
           etyur (b) CLOSED  DONE ALREADY-FIXED/PREMISE-FALSE, graded by a non-author
-S1 ITSELF  NOT DONE  -- ~164 non-closed S1 beads (l0 43 · l1 5 · l2 6 · l3 24 · l4 31 · l5 30)
-THE DONE-BAR lives ONLY in gate-s1-djn8's acceptance field: zero open S1 beads AND
+S1 ITSELF  NOT DONE  -- RE-DERIVE live S1 every tick (step 0). The ~164 figure below is
+          HISTORICAL (2026-09-08) and is NOT the remaining count.
+          (historical snapshot: l0 43 · l1 5 · l2 6 · l3 24 · l4 31 · l5 30)
+THE DONE-BAR lives ONLY in gate-s1-djn8's acceptance field: zero live S1 beads AND
           agreement.status == "converged" AND a refutation that CHANGED the box AND Joshua approval.
-```
+
 
 **AND BOTH STAGE GATES ARE CURRENTLY UNEXECUTABLE — `33ze6`.** `gate-s1-djn8` and `gate-s2-ehx8`
 name `docs/plan/flow/boxes/s1.json` / `s2.json`; **neither exists** (only `S1.toml`…`S9.toml` do),
