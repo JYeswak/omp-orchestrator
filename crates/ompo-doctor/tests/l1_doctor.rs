@@ -1653,3 +1653,65 @@ fn second_repair_is_zero_actions_given_identical_hashes() {
         third.reason_code
     );
 }
+
+/// L1 SCOPE-UNKNOWN (bead jrvj): a scope-selected probe whose record is
+/// omitted stays UNKNOWN -- the metric reports UNMEASURED naming the
+/// missing probe, never a ratio over a short denominator. Composes the
+/// real scope resolver with the real metric (no test-only unknown
+/// state): the lib-unit PARTIAL leg covers the metric alone; this one
+/// covers the scope -> metric path at integration level.
+///
+/// KNOWN-BAD: publishing a ratio over the short set (measuring the
+/// present records as if they were the whole scope) greens the omission
+/// below and this leg fails: a partial scope would read as measured,
+/// which is the vacuous Pass this row exists to prevent.
+#[test]
+fn scope_does_not_vacuously_pass_unknown() {
+    use ompo_doctor::{probe_answer_metric, ProbeDecision, PROBES};
+    let selected =
+        ompo_doctor::scope_probe_names("system").expect("the system scope is declared");
+    fn decision(name: &str) -> ProbeDecision {
+        ProbeDecision {
+            name: name.to_owned(),
+            status: "OK".to_owned(),
+            reason_code: format!("L1_PROBE_{}_SCOPED_FIXTURE", name.replace('-', "_").to_ascii_uppercase()),
+            detail: "scope fixture".to_owned(),
+            presence: Some(format!("/fixture/{name}")),
+            version: Some("fixture-version".to_owned()),
+        }
+    }
+    // Positive control: every selected probe recorded measures OK with
+    // its denominator.
+    let complete: Vec<ProbeDecision> = selected
+        .iter()
+        .map(|name| decision(name))
+        .collect();
+    let good = probe_answer_metric(PROBES, &complete);
+    assert_eq!(
+        good.verdict, "MEASURED_OK",
+        "a complete scope measures, got {}",
+        good.verdict
+    );
+    assert_eq!(good.ratio, Some(1.0));
+    // Omit one requested record: UNMEASURED naming the missing probe,
+    // never Pass, never a ratio.
+    let mut partial = complete;
+    let dropped = partial.remove(2).name;
+    let metric = probe_answer_metric(PROBES, &partial);
+    assert_eq!(
+        metric.verdict, "UNMEASURED",
+        "an omitted requested record must be UNMEASURED, got {}",
+        metric.verdict
+    );
+    assert_eq!(
+        metric.reason_code,
+        format!("L1_METRIC_PARTIAL_PROBE_SET missing={dropped}"),
+        "the unknown must name its record, got {}",
+        metric.reason_code
+    );
+    assert_eq!(
+        metric.ratio, None,
+        "a partial scope must publish no ratio, got {:?}",
+        metric.ratio
+    );
+}
