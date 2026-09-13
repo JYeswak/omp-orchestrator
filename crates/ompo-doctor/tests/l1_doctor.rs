@@ -1607,3 +1607,49 @@ fn every_absent_has_remediation() {
         }
     }
 }
+
+/// L1-IDEMPOTENCE conditional law (contract s1_l1_doctor.md): same scope
+/// plus identical before-state yields zero repair mutations on the next
+/// run. Uses the real `repair` and the shared `stale_repair_fixture` --
+/// never a test-only idempotence mechanism: a copy would agree with the
+/// subject by construction.
+///
+/// KNOWN-BAD: neutralizing the already-valid short-circuit (every run
+/// writes) keeps the first acting green and reds the quiet arm below: a
+/// repair that cannot stay quiet re-repairs identical state forever.
+/// Drift is the companion direction, asserted directly: changed bytes
+/// invalidate the no-op premise and a new action appears, never a false
+/// zero.
+#[test]
+fn second_repair_is_zero_actions_given_identical_hashes() {
+    use ompo_doctor::health_repair::{repair, RepairMode};
+    let (directory, artifact) = stale_repair_fixture();
+    // Positive control: the stale artifact makes the first repair act.
+    let first = repair(directory.path(), "inception", RepairMode::Apply).expect("first repair acts");
+    assert!(
+        !first.applied.is_empty(),
+        "a stale artifact must produce an action"
+    );
+    // Identical hashes: the second repair is exactly zero actions with
+    // the typed quiet reason, never a bare empty success.
+    let second = repair(directory.path(), "inception", RepairMode::Apply).expect("second repair runs");
+    assert!(
+        second.applied.is_empty(),
+        "identical hashes must stay quiet, got {:?}",
+        second.applied
+    );
+    assert_eq!(
+        second.reason_code, "REPAIR_NOT_NEEDED_ALREADY_VALID",
+        "quiet must carry its reason, got {}",
+        second.reason_code
+    );
+    // Drift: changed bytes invalidate the no-op premise; a new action
+    // appears rather than a false zero.
+    std::fs::write(&artifact, b"{\"drifted\":true}\n").expect("drift lands");
+    let third = repair(directory.path(), "inception", RepairMode::Apply).expect("drifted repair runs");
+    assert!(
+        !third.applied.is_empty(),
+        "drifted content must reopen the repair, got quiet {}",
+        third.reason_code
+    );
+}
