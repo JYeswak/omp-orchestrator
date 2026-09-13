@@ -1065,6 +1065,16 @@ fn wrong_version_is_stale() {
             version: version.map(str::to_owned),
         }
     }
+    // Positive control: the paired healthy input answers. Without this arm
+    // a dead authority (`answered` returning false for everything) passes
+    // every assertion below -- the leg would certify an exclusion it never
+    // exercised. No version floor is declared anywhere (ProbeSpec carries
+    // name/command/args only), so "healthy" is both signals with OK status,
+    // never a floor comparison.
+    assert!(
+        answered(&decision("tmux", "OK", Some("tmux 1.0"), Some("tmux 1.0"))),
+        "the paired healthy input must answer"
+    );
     // Wrong version, both signals present: present but not OK, and the row
     // keeps its STALE status -- it is not remapped to absence.
     let stale = decision("tmux", "STALE", Some("tmux 1.0"), Some("tmux 0.1"));
