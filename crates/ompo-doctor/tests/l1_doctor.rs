@@ -1142,3 +1142,75 @@ fn rch_probe_emits_two_signals() {
         );
     }
 }
+
+#[test]
+fn tmux_probe_emits_two_signals() {
+    use ompo_doctor::{answered, ProbeDecision, PROBES};
+    let spec = PROBES
+        .iter()
+        .find(|spec| spec.name == "tmux")
+        .expect("tmux is a declared probe");
+    assert_eq!(spec.command, "tmux", "tmux probe runs tmux");
+    assert_eq!(
+        spec.args,
+        &["-V"],
+        "tmux probe reads the version surface"
+    );
+    fn decision(status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: "tmux".to_owned(),
+            status: status.to_owned(),
+            reason_code: "L1_PROBE_TMUX_SCOPED_FIXTURE".to_owned(),
+            detail: "tmux scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Healthy: endpoint identity plus version answers.
+    let healthy = decision("OK", Some("tmux 3.6a"), Some("tmux 3.6a"));
+    // NOTE: fixture version strings are shaped data, not minimums; no probe
+    // declares a version floor, so STALE is unmeasured by construction here.
+    assert!(answered(&healthy), "identity plus version must answer");
+    // KNOWN-BAD shape, asserted directly: presence without version is not OK.
+    let present_no_version = decision("OK", Some("tmux 3.6a"), None);
+    assert!(
+        !answered(&present_no_version),
+        "a present tmux with no version response must not be OK"
+    );
+    // Unsupported answers are not OK either: only the two signals certify.
+    let unsupported = decision("SUPPORTED", Some("tmux 3.6a"), Some("tmux 3.6a"));
+    assert!(
+        !answered(&unsupported),
+        "an unsupported status must not read as OK"
+    );
+    // The live row, both lanes: OK implies both signals; anything else
+    // is a typed absence with a namespaced reason -- never bare ABSENT and
+    // never an UNRUN reading as refusal or health.
+    let repo = tempfile::tempdir().expect("tmux fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    let row = summary
+        .probes
+        .iter()
+        .find(|probe| probe.name == "tmux")
+        .expect("run_doctor must report a tmux row");
+    if row.status == "OK" {
+        assert!(
+            row.presence.as_ref().is_some_and(|value| !value.is_empty())
+                && row.version.as_ref().is_some_and(|value| !value.is_empty()),
+            "an OK tmux row must carry both signals: {row:?}"
+        );
+    } else {
+        assert!(
+            [
+                "ABSENT_FAMILY",
+                "ABSENT_SPECIFIC",
+                "UNPROBEABLE",
+                "UNMEASURED",
+                "STALE",
+                "PAUSED"
+            ]
+            .contains(&row.status.as_str()),
+            "a non-OK tmux row must be typed absence, got: {row:?}"
+        );
+    }
+}
