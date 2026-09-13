@@ -40,6 +40,15 @@ fn repository_fixture() -> TempDir {
         std::fs::write(directory.path().join(name), b"fixture\n").expect("control file");
     }
     write_project_agents_stamp(directory.path());
+    // zb2p companion: the gated trust entry requires a ready tracker
+    // (bead zb2p). Initialize `.beads` here so gated legs measure their
+    // own gate, not the tracker gate.
+    std::fs::create_dir(directory.path().join(".beads")).expect("beads dir");
+    std::fs::write(
+        directory.path().join(".beads/issues.jsonl"),
+        "{\"id\":\"fixture-0001\",\"title\":\"fixture\"}\n",
+    )
+    .expect("beads issues");
     std::fs::write(directory.path().join("docs/decisions.jsonl"), b"{}\n")
         .expect("decision ledger");
     run_git(directory.path(), &["init", "-q"]);
@@ -1119,4 +1128,132 @@ fn agents_stamp_gates_trust_entry() {
         AgentsStampStatus::GitUnavailable,
         "stamp without git is GitUnavailable"
     );
+}
+
+/// L2-TEST-BEADS (bead zb2p): the reachable L2 trust-flow entry admits a
+/// ready tracker and refuses every other tracker state before
+/// initialization or dispatch can continue. Consumes the read-only
+/// [`beads_init_report`] probe at `initialize_gated` -- never a second
+/// tracker client, and fixtures are isolated tempdirs, never the live
+/// tracker. Project identity is the first row's id prefix (see the
+/// reporter's NO-CLAIM); writability is permission-bit evidence.
+///
+/// KNOWN-BAD: bypass the beads report at the entry (proceed regardless)
+/// and the restrictive arms below pass silently: uninitialized trust
+/// would advance with no evidence anything was required. Message AND
+/// exit are pinned on the mutation run.
+#[test]
+fn beads_init_gates_trust_entry() {
+    use ompo_start::inception::{beads_init_report, initialize_gated, BeadsInitStatus};
+    use std::os::unix::fs::PermissionsExt;
+    // Healthy: stamped control files plus an initialized isolated
+    // tracker reach the trust branch -- initialize runs, the artifact
+    // lands, and the report names the fixture project identity.
+    // (The fixture stamps AGENTS.md and initializes `.beads`; CLAUDE.md
+    // is stamped here so the earlier gates pass and this leg measures
+    // the tracker gate alone.)
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    let report = beads_init_report(repository.path());
+    assert_eq!(report.status, BeadsInitStatus::Ready, "fixture tracker is ready");
+    assert_eq!(
+        report.project_identity.as_deref(),
+        Some("fixture"),
+        "report names the fixture project identity"
+    );
+    assert!(report.readable && report.writable, "ready means readable and writable");
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/init-gated-beads.json");
+    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    assert!(
+        output.exists(),
+        "a trusted entry writes its artifact"
+    );
+    // Restrictive matrix: every non-Ready tracker state refuses typed
+    // before initialize runs, with the tracker path and the remedy
+    // named. Control files stay stamped throughout, so each refusal is
+    // the tracker gate firing.
+    let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
+        ("missing", Box::new(|root| {
+            let dir = root.join(".beads");
+            if dir.is_dir() {
+                std::fs::remove_dir_all(&dir).expect("remove beads dir");
+            }
+        })),
+        ("uninitialized-empty", Box::new(|root| {
+            // Hermetic: a previous arm may have removed the dir or left a
+            // directory mask at the file path.
+            let dir = root.join(".beads");
+            if !dir.is_dir() {
+                std::fs::create_dir(&dir).expect("recreate beads dir");
+            }
+            let file = dir.join("issues.jsonl");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, b"").expect("empty issues");
+        })),
+        ("uninitialized-absent", Box::new(|root| {
+            let file = root.join(".beads/issues.jsonl");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            } else {
+                let _ = std::fs::remove_file(&file);
+            }
+        })),
+        ("unreadable", Box::new(|root| {
+            // (no chmod hazard): identity can never be established.
+            let file = root.join(".beads/issues.jsonl");
+            if !file.is_dir() {
+                let _ = std::fs::remove_file(&file);
+                std::fs::create_dir(&file).expect("directory mask");
+            }
+        })),
+        ("unreadable-garbage", Box::new(|root| {
+            // Valid UTF-8 with no usable id: initialized bytes, missing
+            // project identity. Treated as unreadable -- identity cannot
+            // be established either way.
+            let file = root.join(".beads/issues.jsonl");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, b"not json at all\n").expect("garbage issues");
+        })),
+        ("unwritable", Box::new(|root| {
+            // Permission-bit evidence, read -- never an access proof, so
+            // this holds for every uid including root (see reporter).
+            let file = root.join(".beads/issues.jsonl");
+            if file.is_dir() {
+                std::fs::remove_dir_all(&file).expect("clear mask");
+            }
+            std::fs::write(&file, "{\"id\":\"fixture-0001\"}\n").expect("restore issues");
+            let mut permissions = std::fs::metadata(&file).expect("metadata").permissions();
+            permissions.set_mode(0o444);
+            std::fs::set_permissions(&file, permissions).expect("deny write bits");
+        })),
+    ];
+    for (name, arrange) in cases {
+        arrange(repository.path());
+        let output = repository
+            .path()
+            .join(format!(".omp-orchestrator/init-gated-beads-{name}.json"));
+        let error =
+            initialize_gated(repository.path(), &output).expect_err("unready must refuse");
+        let text = error.to_string();
+        assert!(
+            text.contains("HUMAN_HALT") && text.contains(".beads"),
+            "{name} refusal must be typed and name the tracker, got: {text}"
+        );
+        assert!(
+            text.contains("br init") || text.contains("readable and writable"),
+            "{name} refusal must carry remediation, got: {text}"
+        );
+        assert!(
+            !output.exists(),
+            "a refused entry must write nothing, found {}",
+            output.display()
+        );
+    }
 }

@@ -74,6 +74,16 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// Init refused over a `.beads` tracker whose init report is not
+    /// Ready at the gated entry: the L2 trust flow requires an
+    /// initialized, readable, writable tracker before initialization or
+    /// dispatch can continue. No opt-in override exists on the gated
+    /// entry by design -- initialize the tracker (`br init`), restore
+    /// its state, and ensure it is readable and writable.
+    BeadsInitRefused {
+        path: PathBuf,
+        status: BeadsInitStatus,
+    },
     /// Init refused over an AGENTS.md whose stamp report is not Stamped
     /// at the gated entry: same trust rule as [`UntrustedClaudeMd`],
     /// with the AGENTS.md path. Deliberately distinct from
@@ -138,6 +148,11 @@ impl fmt::Display for InceptionError {
             Self::Write { path, detail } => write!(
                 formatter,
                 "INCEPTION_WRITE_FAILED path={} detail={detail}",
+                path.display()
+            ),
+            Self::BeadsInitRefused { path, status } => write!(
+                formatter,
+                "HUMAN_HALT refusing init over {status:?} tracker state path={} (initialize the tracker with `br init`, restore its state, and ensure it is readable and writable)",
                 path.display()
             ),
             Self::Readback { path, detail } => write!(
@@ -1473,6 +1488,89 @@ pub fn claude_stamp_report(repo: &Path) -> AgentsStampReport {
     stamp_report(repo, "CLAUDE.md")
 }
 
+/// L2-BUILD-BEADS (bead zb2p): tracker initialization state with project
+/// identity. Reports four facts about the `.beads` tracker beside the
+/// repo root: the project identity (the id prefix of the first issue
+/// row -- the scope `br` files under), whether the required state was
+/// readable, whether its permission bits allow writing, and the joined
+/// status. Read-only by construction: one directory probe, one file
+/// read, one metadata read -- never a second tracker client, never a
+/// write. Identity comes from the first row only (see NO-CLAIM in the
+/// entry leg); writability is permission-bit evidence, not an access
+/// proof (a privileged uid may override bits -- fail-closed by design).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BeadsInitStatus {
+    Ready,
+    Missing,
+    Unreadable,
+    Uninitialized,
+    Unwritable,
+}
+
+/// The tracker init report: project identity plus state flags.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BeadsInitReport {
+    pub project_identity: Option<String>,
+    pub readable: bool,
+    pub writable: bool,
+    pub status: BeadsInitStatus,
+}
+
+/// Project identity from one issue row: the id prefix `br` scopes under
+/// (`omp-orchestrator-01tzb` -> `omp-orchestrator`). A row without a
+/// hyphenated id carries no usable identity.
+fn beads_project_identity(first_line: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(first_line).ok()?;
+    let id = value.get("id")?.as_str()?;
+    let (prefix, _) = id.rsplit_once('-')?;
+    (!prefix.is_empty()).then(|| prefix.to_owned())
+}
+
+/// Probe the `.beads` tracker initialization state: directory presence,
+/// required-state readability (the issues file reads and yields a
+/// project identity), and permission-bit writability. Missing directory
+/// reads as Missing; a missing or empty issues file reads as
+/// Uninitialized (no identity to establish); an unreadable or
+/// unparseable one reads as Unreadable; denied write bits read as
+/// Unwritable. Ready only when all three answer.
+pub fn beads_init_report(repo: &Path) -> BeadsInitReport {
+    let unready = |status: BeadsInitStatus| BeadsInitReport {
+        project_identity: None,
+        readable: false,
+        writable: false,
+        status,
+    };
+    if !repo.join(".beads").is_dir() {
+        return unready(BeadsInitStatus::Missing);
+    }
+    let file = repo.join(".beads/issues.jsonl");
+    let text = match fs::read_to_string(&file) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return unready(BeadsInitStatus::Uninitialized)
+        }
+        Err(_) => return unready(BeadsInitStatus::Unreadable),
+    };
+    let first = match text.lines().find(|line| !line.trim().is_empty()) {
+        Some(first) => first,
+        None => return unready(BeadsInitStatus::Uninitialized),
+    };
+    let identity = match beads_project_identity(first) {
+        Some(identity) => identity,
+        None => return unready(BeadsInitStatus::Unreadable),
+    };
+    let writable = fs::metadata(&file).is_ok_and(|meta| !meta.permissions().readonly());
+    BeadsInitReport {
+        project_identity: Some(identity),
+        readable: true,
+        writable,
+        status: if writable {
+            BeadsInitStatus::Ready
+        } else {
+            BeadsInitStatus::Unwritable
+        },
+    }
+}
 pub fn initialize(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     initialize_inner(repo_root, output, false)
 }
@@ -1484,15 +1582,16 @@ pub fn initialize_trusted(repo_root: &Path, output: &Path) -> Result<InitReport,
 }
 
 /// L2 entry for operator-driven init: the repository check gates before
-/// any downstream L2 state continues, and the CLAUDE.md stamp check
-/// gates before trust-dependent continuation. A real repository with a
-/// stamped control file proceeds with its canonical root; any other
-/// stamp state refuses typed before `initialize` runs. This lives
-/// beside -- never inside -- shared [`initialize`]: doctor repair flows
-/// tolerate non-git checkouts by design (git identity degrades to
-/// "missing"), and gating them would trade measured-green repair legs
-/// for zero new capability. The output path stays caller-chosen; only
-/// the root canonicalizes.
+/// any downstream L2 state continues, the CLAUDE.md and AGENTS.md stamp
+/// checks gate before trust-dependent continuation, and the `.beads`
+/// tracker init check gates before initialization or dispatch can
+/// continue. A real repository with stamped control files and a ready
+/// tracker proceeds with its canonical root; any other state refuses
+/// typed before `initialize` runs. This lives beside -- never inside --
+/// shared [`initialize`]: doctor repair flows tolerate non-git checkouts
+/// by design (git identity degrades to "missing"), and gating them would
+/// trade measured-green repair legs for zero new capability. The output
+/// path stays caller-chosen; only the root canonicalizes.
 pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, InceptionError> {
     let top = git_repo_toplevel(repo_root)?;
     match claude_stamp_report(&top).status {
@@ -1512,7 +1611,16 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
                 status,
             })
         }
-}
+    }
+    match beads_init_report(&top).status {
+        BeadsInitStatus::Ready => {}
+        status => {
+            return Err(InceptionError::BeadsInitRefused {
+                path: top.join(".beads"),
+                status,
+            })
+        }
+    }
     initialize(&top, output)
 }
 
