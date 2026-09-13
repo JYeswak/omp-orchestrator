@@ -1291,3 +1291,85 @@ fn socraticode_probe_emits_two_signals() {
         );
     }
 }
+
+/// L1-TEST-PROBE-SOCRATICODE (contract s1_l1_doctor.md): a present service
+/// with no index record stays UNKNOWN -- never guessed OK. The two-signal
+/// leg covers answer/refusal shapes; this one covers the recordless shape:
+/// no observation row at all is UNMEASURED with UNKNOWN_NO_RECORD (never a
+/// 0/N green), and a recordless row in a full set holds the metric below
+/// floor with the probe named.
+///
+/// KNOWN-BAD: guessing on an empty observation set (MEASURED verdict or any
+/// ratio over zero records) greens the unknown below and this leg fails: an
+/// unobserved service would count as measured, which is the false-green
+/// this row exists to prevent.
+#[test]
+fn socraticode_probe_preserves_unknown() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    fn decision(name: &str, status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: name.to_owned(),
+            status: status.to_owned(),
+            reason_code: format!("L1_PROBE_{}_SCOPED_FIXTURE", name.replace('-', "_").to_ascii_uppercase()),
+            detail: "socraticode scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Positive control: endpoint identity plus version answers.
+    assert!(
+        answered(&decision("socraticode", "OK", Some("/fixture/socraticode"), Some("socraticode 1.2.0"))),
+        "identity plus version must answer"
+    );
+    // Service present, no index record: no observation row exists, so there
+    // is nothing to answer -- and the metric must say UNKNOWN, not 0/N.
+    let recordless = decision("socraticode", "UNMEASURED", Some("/fixture/socraticode"), None);
+    assert!(
+        !answered(&recordless),
+        "a recordless service must not answer, even when present"
+    );
+    let metric = probe_answer_metric(PROBES, &[]);
+    assert_eq!(
+        metric.verdict, "UNMEASURED",
+        "no index record must be UNMEASURED, got {}",
+        metric.verdict
+    );
+    assert_eq!(
+        metric.reason_code, "UNKNOWN_NO_RECORD",
+        "no index record must name its reason, got {}",
+        metric.reason_code
+    );
+    assert!(
+        metric.ratio.is_none(),
+        "an unmeasured band must carry no ratio, not 0.0"
+    );
+    // Below-floor companion: a full set whose socraticode row carries no
+    // index evidence stays below floor with the probe named.
+    let mut full: Vec<ProbeDecision> = PROBES
+        .iter()
+        .map(|spec| {
+            decision(
+                spec.name,
+                "OK",
+                Some("/fixture/bin"),
+                Some("fixture 1.0"),
+            )
+        })
+        .collect();
+    if let Some(row) = full.iter_mut().find(|row| row.name == "socraticode") {
+        row.version = None;
+        row.status = "UNMEASURED".to_owned();
+    }
+    let metric = probe_answer_metric(PROBES, &full);
+    assert_eq!(
+        metric.verdict, "MEASURED_BELOW_FLOOR",
+        "one recordless probe of {} must hold the metric below floor: {}",
+        PROBES.len(),
+        metric.reason_code
+    );
+    assert!(
+        metric.reason_code.contains(&format!("answered={}", PROBES.len() - 1)),
+        "below-floor reason must carry the count: {}",
+        metric.reason_code
+    );
+}
