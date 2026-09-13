@@ -18,12 +18,19 @@ path = "src/main.rs"
 [[bin]]
 name = "fake-rch-reclaim-owner"
 path = "tests/fake_rch_reclaim_owner.rs"
+
+[[bin]]
+name = "fake-box-transport"
+path = "src/bin/fake_box_transport.rs"
 [[test]]
 name = "reclaimer"
 path = "tests/reclaimer.rs"
 [[test]]
 name = "sweep_cli"
 path = "tests/sweep_cli.rs"
+[[test]]
+name = "retire_export"
+path = "tests/retire_export.rs"
 [dependencies]
 asupersync = { workspace = true }
 serde = { version = "1", features = ["derive"] }

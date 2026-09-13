@@ -680,6 +680,14 @@ only) is CORRECT and has **no disposal clause** — tracked as `4ftow`. **Optimi
 is rounding error; the pools are the whole problem**, and `rch gc`'s 12-hour idle window means an
 active fleet never self-reclaims them.
 
+**FOURTH CLAUSE (bead `4ftow`): RETIRE AT REPORT.** When your grade is reported, retire its
+export in the same breath: `reclaim-sweep --base /Users/josh/Developer --worker <the box your
+build ran on> --retire <your export basename> [--apply]` (dry run first). The verb drops
+only `.rch-target*` pools enumerated under that export on that box, refuses a busy worker
+with exit 2 (retry later -- a 0 there would report disposal that never happened), and
+proves each drop by absence. Unreported exports are never named and therefore never
+touched. Mac-side export dirs stay yours to hand-reap (40 MB, not the leak).
+
 ⛔ **AND THE EXPORT MUST CARRY *HEAD CONTENT*, NOT YOUR WORKTREE — OVERLAY ONLY THE FILES YOU
 AUTHORED.** Measured 2026-09-12: an export died with `cannot find allowance_referents in crate`
 because it carried a WORKTREE copy of a shared file that held a peer's **half-written call site**.

@@ -288,6 +288,60 @@ pub fn validate_candidate(
     Ok(ValidatedCandidate { candidate, rule })
 }
 
+/// Validate a `--retire` export name (bead 4ftow). The name is a BASENAME,
+/// never a path: the verb joins it under `--base` itself, so a `/`, a `..`,
+/// whitespace, or a shell metacharacter in argv can never address outside
+/// the export scope. An invalid name is a usage error, never a silent
+/// narrowing to zero pools (which would read as a clean retire).
+#[must_use]
+pub fn parse_retire_export(name: &str) -> Result<String, ReclaimError> {
+    if name.is_empty() {
+        return Err(ReclaimError::InvalidRetireExport {
+            detail: "retire export name is empty".to_owned(),
+        });
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(ReclaimError::InvalidRetireExport {
+            detail: format!("retire export {name:?} is a path, not a basename"),
+        });
+    }
+    if name == ".." || name == "." {
+        return Err(ReclaimError::InvalidRetireExport {
+            detail: format!("retire export {name:?} traverses parents"),
+        });
+    }
+    if name.chars().any(|character| {
+        character.is_whitespace()
+            || matches!(
+                character,
+                ';' | '&' | '|' | '`' | '$' | '>' | '<' | '\'' | '"' | '*' | '?' | '!' | '~'
+            )
+    }) {
+        return Err(ReclaimError::InvalidRetireExport {
+            detail: format!("retire export {name:?} carries whitespace or metacharacters"),
+        });
+    }
+    if Path::new(name)
+        .components()
+        .any(|component| component == Component::ParentDir)
+    {
+        return Err(ReclaimError::InvalidRetireExport {
+            detail: format!("retire export {name:?} traverses parents"),
+        });
+    }
+    Ok(name.to_owned())
+}
+
+/// Whether a basename enumerated under a retired export is a pool the verb
+/// may drop. Pools come from the remote listing, never from argv, and this
+/// predicate is the second gate after [`validate_candidate`]: only
+/// `.rch-target*` entries are pools; anything else under the export is
+/// someone's live work, not reclaimable residue.
+#[must_use]
+pub fn is_retire_pool_basename(basename: &str) -> bool {
+    basename == ".rch-target" || basename.starts_with(".rch-target-")
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ActiveBuild {
     pub id: String,
@@ -458,6 +512,9 @@ pub enum ReclaimError {
     Runtime {
         detail: String,
     },
+    InvalidRetireExport {
+        detail: String,
+    },
 }
 impl fmt::Display for ReclaimError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -499,6 +556,9 @@ impl fmt::Display for ReclaimError {
                 "CONTABO_RECLAIM_COMMAND_FAILED worker={worker} operation={operation} detail={detail}"
             ),
             Self::Runtime { detail } => write!(formatter, "CONTABO_RECLAIM_RUNTIME {detail}"),
+            Self::InvalidRetireExport { detail } => {
+                write!(formatter, "CONTABO_RECLAIM_INVALID_RETIRE_EXPORT {detail}")
+            }
         }
     }
 }
@@ -511,6 +571,12 @@ pub enum RunOutcome {
     Planned,
     Reclaimed,
     SkippedLiveBuild,
+    /// Retire-only: the worker was busy, so nothing was deleted and the
+    /// grader must retry later (bead 4ftow). SkippedLiveBuild exits 0, which
+    /// is correct for a sweep (try the next box) and a silent pass for a
+    /// retire (the grade reports disposal that never happened). Deferral is
+    /// "did not finish": exit 2, beside FleetOutcome::DeferredActiveBuild.
+    Deferred,
     Unknown,
     Unreachable,
     Refused,
@@ -528,9 +594,9 @@ pub enum RunOutcome {
 impl RunOutcome {
     pub const fn exit_code(&self) -> u8 {
         match self {
-            Self::Planned | Self::Reclaimed | Self::SkippedLiveBuild => 0,
             Self::Refused => 1,
-            Self::Unknown | Self::Unreachable | Self::OracleRefused => 2,
+            Self::Planned | Self::Reclaimed | Self::SkippedLiveBuild => 0,
+            Self::Unknown | Self::Unreachable | Self::OracleRefused | Self::Deferred => 2,
             Self::IntegrityRefused => 3,
             Self::Vacuous => 4,
             Self::DeleteFailed => 5,
@@ -696,6 +762,7 @@ impl FleetReport {
             match report.outcome {
                 RunOutcome::Planned | RunOutcome::Reclaimed => {}
                 RunOutcome::SkippedLiveBuild => deferred_active_workers += 1,
+                RunOutcome::Deferred => deferred_active_workers += 1,
                 RunOutcome::Unknown
                 | RunOutcome::Unreachable
                 | RunOutcome::Refused
@@ -1134,6 +1201,9 @@ mod conformance_tests {
         // Deferred moved 3 -> 2: deferral is "did not finish", and exit 3
         // now means exactly one thing -- the counter lied.
         assert_eq!(RunOutcome::SkippedLiveBuild.exit_code(), 0);
+        // Retire-only Deferred (bead 4ftow): a busy worker defers, never silently
+        // passes -- SkippedLiveBuild's 0 would report disposal that never happened.
+        assert_eq!(RunOutcome::Deferred.exit_code(), 2);
         assert_eq!(FleetOutcome::DeferredActiveBuild.exit_code(), 2);
         assert_eq!(FleetOutcome::IntegrityRefused.exit_code(), 3);
         assert_eq!(FleetOutcome::Vacuous.exit_code(), 4);
@@ -1375,6 +1445,55 @@ mod conformance_tests {
             assert_eq!(read_twin_state(&dangling), TwinState::Absent);
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Retire-name validation (bead 4ftow): basenames pass, paths and
+    /// metacharacters refuse with a NAMED error. A refused name must never
+    /// narrow to zero pools downstream and read as clean.
+    #[test]
+    fn retire_export_names_validate_as_basenames() {
+        assert_eq!(
+            parse_retire_export("omp-head-export-poumg6-41966").expect("valid basename"),
+            "omp-head-export-poumg6-41966".to_owned()
+        );
+        for bad in [
+            "",
+            "a/b",
+            "..",
+            ".",
+            "a b",
+            "a;b",
+            "a|b",
+            "a$b",
+            "a*b",
+            "..\\x",
+        ] {
+            assert!(
+                parse_retire_export(bad).is_err(),
+                "retire name {bad:?} must refuse"
+            );
+        }
+        let error = parse_retire_export("a/b").expect_err("path must refuse");
+        assert!(
+            error.to_string().contains("INVALID_RETIRE_EXPORT"),
+            "refusal must name its code: {error}"
+        );
+    }
+
+    /// Pool predicate (bead 4ftow): only `.rch-target*` basenames enumerated
+    /// under the export are droppable. Anything else is someone's live work.
+    #[test]
+    fn retire_pool_basename_admits_only_pools() {
+        assert!(is_retire_pool_basename(".rch-target"));
+        assert!(is_retire_pool_basename(
+            ".rch-target-contabo-4-pool-9fce9d6739375f7cae8bcfc4b2e0b25b"
+        ));
+        for other in ["omp-head-export-poumg6-41966", ".rch-tmp", "grade-x", "", ".rch"] {
+            assert!(
+                !is_retire_pool_basename(other),
+                "non-pool {other:?} must not be droppable"
+            );
+        }
     }
 }
 

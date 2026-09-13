@@ -450,6 +450,375 @@ pub async fn run_selected(
     }
 }
 
+/// Report-keyed single-export disposal (bead 4ftow): drop the worker-side
+/// pools keyed to one retired grade export. The grader invokes this at
+/// report time with its own export basename and the worker its build ran
+/// on; an export nobody names is never enumerated, so an unreported grade's
+/// pool survives by construction (item 5, first half).
+///
+/// Authorization is the explicit invocation, not a twin or an age: no
+/// registry is consulted and none is maintained, so there is no register
+/// to drift. Pool basenames come from the remote listing, never from argv;
+/// argv names only the export scope, and every enumerated pool passes
+/// [`validate_candidate`] plus [`is_retire_pool_basename`] before deletion.
+/// A busy worker DEFERS (exit 2, retry later) -- SkippedLiveBuild's 0 would
+/// report disposal that never happened. Zero pools is [`Vacuous`] exit 4,
+/// never clean. Every dropped pool is proven absent by a post-delete
+/// `test -e` (item 5, second half); df-integrity is deliberately not
+/// consulted (single known scope, verified absence instead).
+pub async fn retire_export(
+    cx: &Cx,
+    base: &Path,
+    worker: WorkerSpec,
+    export: &str,
+    mode: ReclaimMode,
+) -> Result<ReclaimReport, ReclaimError> {
+    use crate::model::{is_retire_pool_basename, parse_retire_export};
+    validate_base(base)?;
+    let export = parse_retire_export(export)?;
+    let mut report = ReclaimReport::new(worker, mode);
+    let control = match control_snapshot(cx, worker).await {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = error.to_string();
+            return Ok(report);
+        }
+    };
+    if !control.matches_worker(worker) {
+        report.outcome = RunOutcome::Unknown;
+        report.detail = format!(
+            "CONTROL_HOST_MISMATCH worker={} selected_host={} control_host={}",
+            worker.id, worker.host, control.worker_host
+        );
+        return Ok(report);
+    }
+    report.guards.push(format!(
+        "control-plane worker={} host={} status={} active_builds={} used_slots={}",
+        control.worker_id,
+        control.worker_host,
+        control.worker_status,
+        control.active_builds.len(),
+        control.used_slots
+    ));
+    let remote = remote_processes(cx, worker).await;
+    append_process_guard(&mut report, &remote);
+    match decide_guards(&control, &remote) {
+        GuardDecision::Authorized => {}
+        GuardDecision::SkippedLiveBuild { detail, .. } => {
+            // Retire-only mapping: a sweep skips and retries the next box
+            // (exit 0); a retire that exits 0 without deleting reports a
+            // disposal that never happened. Deferral is "did not finish".
+            report.outcome = RunOutcome::Deferred;
+            report.detail = format!("retire_deferred_live_build {detail}");
+            return Ok(report);
+        }
+        GuardDecision::Unknown { detail } => {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = detail;
+            return Ok(report);
+        }
+        GuardDecision::Unreachable { detail } => {
+            report.outcome = RunOutcome::Unreachable;
+            report.detail = detail;
+            return Ok(report);
+        }
+    }
+    let export_dir = base.join(&export);
+    // Missing export is vacuous with its own reason, not "no pools" and not
+    // a find failure: the grader named a scope the box does not have, and a
+    // find error would read as a broken box instead of a wrong name.
+    match remote_exists(cx, worker, &export_dir).await {
+        Ok(true) => {}
+        Ok(false) => {
+            report.outcome = crate::model::vacuous_listing_outcome();
+            report.detail =
+                format!("RETIRE_NO_SUCH_EXPORT export={export}: the box has no such export dir");
+            return Ok(report);
+        }
+        Err(error) => {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = format!("retire_export_probe_failed export={export} detail={error}");
+            return Ok(report);
+        }
+    }
+    let listing = match list_retire_pools(cx, worker, &export_dir).await {
+        Ok(listing) => listing,
+        Err(error) => {
+            report.outcome = RunOutcome::Unreachable;
+            report.detail = error.to_string();
+            return Ok(report);
+        }
+    };
+    let pools = match parse_listing(&listing) {
+        Ok(CandidateSet::Empty) => {
+            report.outcome = crate::model::vacuous_listing_outcome();
+            report.detail = format!(
+                "RETIRE_VACUOUS export={export}: no pools under the retired export"
+            );
+            return Ok(report);
+        }
+        Ok(CandidateSet::NonEmpty(pools)) => pools,
+        Err(error) => {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = error.to_string();
+            return Ok(report);
+        }
+    };
+    let mut valid = Vec::with_capacity(pools.len());
+    let mut refusals = Vec::new();
+    for pool in pools {
+        cx.checkpoint().map_err(|_| ReclaimError::Runtime {
+            detail: "cancelled during retire validation".to_owned(),
+        })?;
+        let Some(basename) = pool
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned)
+        else {
+            refusals.push(ReclaimRefusal {
+                path: pool.path,
+                reason: crate::model::RefusalReason::NotWhitelisted,
+                detail: "retire pool has no UTF-8 basename".to_owned(),
+            });
+            continue;
+        };
+        if !is_retire_pool_basename(&basename) {
+            refusals.push(ReclaimRefusal {
+                path: pool.path,
+                reason: crate::model::RefusalReason::NotWhitelisted,
+                detail: format!(
+                    "retire drops only .rch-target* pools; basename={basename}"
+                ),
+            });
+            continue;
+        }
+        let resolved = if pool.kind == EntryKind::Symlink {
+            match remote_realpath(cx, worker, &pool.path).await {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    refusals.push(ReclaimRefusal {
+                        path: pool.path,
+                        reason: crate::model::RefusalReason::SymlinkTargetUnreadable,
+                        detail: error.to_string(),
+                    });
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+        match validate_candidate(base, pool, resolved.as_deref()) {
+            Ok(candidate) => valid.push(candidate),
+            Err(refusal) => refusals.push(refusal),
+        }
+    }
+    report.candidates = valid
+        .iter()
+        .map(|candidate| candidate.candidate.path.display().to_string())
+        .collect();
+    report.refused = refusals.iter().map(ToString::to_string).collect();
+    if !refusals.is_empty() {
+        report.outcome = RunOutcome::Refused;
+        report.detail = "one or more pools failed whitelist or containment".to_owned();
+        return Ok(report);
+    }
+    if mode == ReclaimMode::DryRun {
+        report.outcome = RunOutcome::Planned;
+        report.directories = valid.len();
+        report.detail =
+            "DRY_RUN: retire planned, nothing deleted; re-run with --apply to drop".to_owned();
+        return Ok(report);
+    }
+    let mut reclaimed_bytes: u64 = 0;
+    for candidate in &valid {
+        cx.checkpoint().map_err(|_| ReclaimError::Runtime {
+            detail: "cancelled before retire delete".to_owned(),
+        })?;
+        let control = match control_snapshot(cx, worker).await {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                report.outcome = RunOutcome::Unknown;
+                report.detail = format!("retire_before_delete={error}");
+                return Ok(report);
+            }
+        };
+        if !control.matches_worker(worker) {
+            report.outcome = RunOutcome::Unknown;
+            report.detail = format!(
+                "retire_before_delete=CONTROL_HOST_MISMATCH worker={} selected_host={} control_host={}",
+                worker.id, worker.host, control.worker_host
+            );
+            return Ok(report);
+        }
+        let remote = remote_processes(cx, worker).await;
+        match decide_guards(&control, &remote) {
+            GuardDecision::Authorized => {}
+            GuardDecision::SkippedLiveBuild { detail, .. } => {
+                report.outcome = RunOutcome::Deferred;
+                report.detail = format!("retire_before_delete=deferred {detail}");
+                return Ok(report);
+            }
+            GuardDecision::Unknown { detail } => {
+                report.outcome = RunOutcome::Unknown;
+                report.detail = format!("retire_before_delete={detail}");
+                return Ok(report);
+            }
+            GuardDecision::Unreachable { detail } => {
+                report.outcome = RunOutcome::Unreachable;
+                report.detail = format!("retire_before_delete={detail}");
+                return Ok(report);
+            }
+        }
+        let path = candidate.candidate.path.display().to_string();
+        // Honest bytes BEFORE the delete: du of an absent path is 0 KB, and
+        // booking that would under-report by the whole pool. A du failure
+        // fails closed (Unknown) rather than booking zero.
+        let kb = match du_kb(cx, worker, &candidate.candidate.path).await {
+            Ok(kb) => kb,
+            Err(error) => {
+                report.outcome = RunOutcome::Unknown;
+                report.detail = format!("retire_du_failed path={path} detail={error}");
+                return Ok(report);
+            }
+        };
+        let existed = match remote_exists(cx, worker, &candidate.candidate.path).await {
+            Ok(existed) => existed,
+            Err(error) => {
+                report.outcome = RunOutcome::Unknown;
+                report.detail = format!("retire_existence_probe_failed path={path} detail={error}");
+                return Ok(report);
+            }
+        };
+        let mut stderr = String::new();
+        let rm_success = if existed {
+            match delete_candidate(cx, worker, &candidate.candidate.path).await {
+                Ok(()) => true,
+                Err(error) => {
+                    stderr = error.to_string();
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        // Absence proof (item 5, second half): rm exit 0 is not the verdict;
+        // the path must read absent afterwards. A success that persists is
+        // folded into Failed with its own stderr, so the counters stay
+        // single-sourced through apply_delete_observation.
+        let absent_after = match remote_exists(cx, worker, &candidate.candidate.path).await {
+            Ok(absent) => !absent,
+            Err(error) => {
+                report.outcome = RunOutcome::Unknown;
+                report.detail =
+                    format!("retire_absence_probe_failed path={path} detail={error}");
+                return Ok(report);
+            }
+        };
+        if rm_success && !absent_after {
+            stderr = format!("rm succeeded but the path persists {stderr}").trim().to_owned();
+        }
+        let applied = crate::model::apply_delete_observation(
+            &path,
+            existed,
+            rm_success && absent_after,
+            &stderr,
+            kb.saturating_mul(1024),
+        );
+        reclaimed_bytes += applied.bytes_delta;
+        report.directories += applied.dir_delta;
+        report.absent_before += applied.absent_delta;
+        if let Some(line) = applied.failure_line {
+            report.failures.push(line);
+        }
+    }
+    report.bytes = reclaimed_bytes;
+    if report.failures.is_empty() {
+        report.outcome = RunOutcome::Reclaimed;
+        report.detail = format!("RETIRE_COMPLETE export={export} pools={}", valid.len());
+    } else {
+        report.outcome = RunOutcome::DeleteFailed;
+        report.detail = "one or more pool deletes failed or unverified".to_owned();
+    }
+    Ok(report)
+}
+
+/// Scoped pool listing: `.rch-target*` entries directly under one export
+/// dir, in the `parse_listing` shape. The export scope comes from validated
+/// argv; pool names come from the box. Anything the box returns that is not
+/// pool-shaped is refused downstream, never deleted.
+async fn list_retire_pools(
+    cx: &Cx,
+    worker: WorkerSpec,
+    export_dir: &Path,
+) -> Result<String, ReclaimError> {
+    let export_dir = export_dir.to_string_lossy().into_owned();
+    let output = run_command(
+        cx,
+        ssh(
+            worker,
+            &[
+                "find",
+                &export_dir,
+                "-mindepth",
+                "1",
+                "-maxdepth",
+                "1",
+                "-name",
+                ".rch-target*",
+                "-printf",
+                "'%p\\t%y\\t%s\\n'",
+            ],
+        ),
+        worker.id,
+        "retire-pool-list",
+    )
+    .await?;
+    if !output.success {
+        return Err(ReclaimError::Output {
+            worker: worker.id.to_owned(),
+            operation: "retire-pool-list",
+            detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Honest bytes for one pool: `du -sk` (KiB) scaled to bytes. The listing's
+/// `%s` is directory-metadata size, not recursive content; booking that
+/// would under-report by orders of magnitude and poison the counter the
+/// integrity check trusts.
+async fn du_kb(cx: &Cx, worker: WorkerSpec, path: &Path) -> Result<u64, ReclaimError> {
+    let path = path.to_string_lossy().into_owned();
+    let output = run_command(
+        cx,
+        ssh(worker, &["du", "-sk", "--", &path]),
+        worker.id,
+        "retire-du",
+    )
+    .await?;
+    if !output.success {
+        return Err(ReclaimError::Output {
+            worker: worker.id.to_owned(),
+            operation: "retire-du",
+            detail: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        });
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| ReclaimError::Probe {
+            worker: worker.id.to_owned(),
+            detail: "du -sk emitted no size field".to_owned(),
+        })?
+        .parse::<u64>()
+        .map_err(|error| ReclaimError::Probe {
+            worker: worker.id.to_owned(),
+            detail: format!("du -sk size not numeric: {error}"),
+        })
+}
+
 pub async fn run_workers_sequentially<F>(
     cx: &Cx,
     base: &Path,
