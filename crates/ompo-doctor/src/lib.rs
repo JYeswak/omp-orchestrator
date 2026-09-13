@@ -756,15 +756,33 @@ fn doctor_run_id() -> String {
     format!("ompo-doctor-{nanos}-{}", std::process::id())
 }
 
+/// L1-BUILD-REMEDIATION (contract s1_l1_doctor.md): every absent verdict
+/// carries a NAMED remediation, because a bare "rerun" on a missing tool is
+/// advice to repeat a measurement whose subject does not exist. Family and
+/// specific absences remediate differently -- installing a whole family is
+/// not the same act as repairing one binary -- so the two arms must not
+/// collapse into one string. All other statuses keep the generic rerun line.
 fn remediation_for(decisions: &[ProbeDecision]) -> Vec<String> {
     decisions
         .iter()
         .filter(|decision| decision.status != "OK")
         .map(|decision| {
-            format!(
-                "rerun probe={} reason={}",
-                decision.name, decision.reason_code
-            )
+            if decision.status == ProbeVerdict::AbsentFamily.status() {
+                format!(
+                    "install tool family for probe={} reason={}",
+                    decision.name, decision.reason_code
+                )
+            } else if decision.status == ProbeVerdict::AbsentSpecific.status() {
+                format!(
+                    "install tool for probe={} reason={}",
+                    decision.name, decision.reason_code
+                )
+            } else {
+                format!(
+                    "rerun probe={} reason={}",
+                    decision.name, decision.reason_code
+                )
+            }
         })
         .collect()
 }
@@ -1482,5 +1500,67 @@ mod tests {
         assert_eq!(ProbeVerdict::AbsentSpecific.status(), "ABSENT_SPECIFIC");
         assert_eq!(ProbeVerdict::Unprobeable.status(), "UNPROBEABLE");
         assert_eq!(ProbeVerdict::Unmeasured.status(), "UNMEASURED");
+    }
+
+    /// L1-BUILD-REMEDIATION (row o0nl): every absent verdict -- family or
+    /// specific -- carries a NON-EMPTY named remediation, because "rerun" on
+    /// a missing tool repeats a measurement whose subject does not exist.
+    /// Uses production `remediation_for`, so deleting either absent arm (the
+    /// known-bad: collapse to the generic rerun line) reds here. AbsentFamily
+    /// has no live producer in run_probe today, so the family row is a
+    /// fixture decision -- the table, not the producer, is under test.
+    #[test]
+    fn absent_cases_carry_named_remediation() {
+        use super::{remediation_for, ProbeVerdict};
+        fn row(name: &str, status: &str) -> ProbeDecision {
+            ProbeDecision {
+                name: name.to_owned(),
+                status: status.to_owned(),
+                reason_code: format!("L1_PROBE_{status}"),
+                detail: "fixture".to_owned(),
+                presence: None,
+                version: None,
+            }
+        }
+        let decisions = vec![
+            row("gone-family-tool", ProbeVerdict::AbsentFamily.status()),
+            row("gone-binary", ProbeVerdict::AbsentSpecific.status()),
+            row("fine", ProbeVerdict::Ok.status()),
+            row("slow", ProbeVerdict::Unmeasured.status()),
+        ];
+        let remediations = remediation_for(&decisions);
+        // OK contributes nothing: three non-OK rows, three remediations.
+        assert_eq!(
+            remediations.len(),
+            3,
+            "every non-OK decision remediates, got {remediations:?}"
+        );
+        let (family, specific) = (&remediations[0], &remediations[1]);
+        for (label, text, probe) in [
+            ("family", family, "gone-family-tool"),
+            ("specific", specific, "gone-binary"),
+        ] {
+            assert!(
+                !text.is_empty(),
+                "{label} remediation must be non-empty"
+            );
+            assert!(
+                text.contains(probe),
+                "{label} remediation names its probe, got {text:?}"
+            );
+            assert!(
+                !text.starts_with("rerun"),
+                "{label} absence must not advise a rerun, got {text:?}"
+            );
+        }
+        assert_ne!(
+            family, specific,
+            "family and specific remediations must differ, got {family:?}"
+        );
+        assert!(
+            remediations[2].starts_with("rerun"),
+            "non-absent statuses keep the generic line, got {:?}",
+            remediations[2]
+        );
     }
 }
