@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! THE SINGLE-INSTANCE RUN LOCK (bead cp-qyxk), and the two ways it has failed in production.
+//! THE SINGLE-INSTANCE RUN LOCK (bead control-plane#cp-qyxk), and the two ways it has failed in production.
 //!
 //! MEASURED 2026-08-24T00:4xZ: 5 fleet-monitor and 6 controller-tick processes running
 //! CONCURRENTLY, oldest fleet-monitor 22m22s, load average 80.65. Cron fires at 3/23/43 while one

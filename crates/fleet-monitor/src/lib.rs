@@ -34,7 +34,7 @@
 //! ── THE VERDICT CONTRACT (fh G1, frankengraphdb `gate_verdict.sh`) ─────────────────────────
 //! Every verdict line goes to STDOUT at column 0 in BOTH directions; stderr carries usage errors
 //! only. Measured in this repo: `gate-catalog-check --catalog /nonexistent.toml 2>/dev/null`
-//! prints NOTHING and exits 1 — a RED invisible to `gate > log` (bead cp-ehcor). This crate does
+//! prints NOTHING and exits 1 — a RED invisible to `gate > log` (bead control-plane#cp-ehcor). This crate does
 //! not reproduce that shape.
 
 use std::collections::BTreeSet;

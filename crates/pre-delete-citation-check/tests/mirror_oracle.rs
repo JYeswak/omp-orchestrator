@@ -16,7 +16,7 @@ use pre_delete_citation_check::{
 };
 
 /// A closed bead whose ONLY citation of the deleted path is in a comment. This is the exact
-/// shape the crate's own module header names (`cp-3k9jq`: a 104-char close_reason with zero
+/// shape the crate's own module header names (`control-plane#cp-3k9jq`: a 104-char close_reason with zero
 /// path citations, three comment citations) and the shape 14 live beads have.
 const COMMENT_ONLY_CITATION: &str = concat!(
     r#"{"id":"fx-comment-only","status":"closed","close_reason":"DONE superseded by a Rust crate","#,

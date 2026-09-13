@@ -3,8 +3,8 @@
 //! pre-delete-citation-check — refuses deleting a file that any CLOSED bead cites.
 //!
 //! THE DEFECT, AS RECORDED 2026-08-31: `45c613d` deleted four bin/ scripts. Two surfaced
-//! HOURS later as close-evidence RED (cp-op5uu BAD_PATH bin/omp-idle-dispatch.sh,
-//! cp-3k9jq BAD_PATH bin/fleet-composite.py), with everything downstream UNRUN — a
+//! HOURS later as close-evidence RED (control-plane#cp-op5uu BAD_PATH bin/omp-idle-dispatch.sh,
+//! control-plane#cp-3k9jq BAD_PATH bin/fleet-composite.py), with everything downstream UNRUN — a
 //! gate refusing every dispatch, far from the mistake that caused it.
 //!
 //! THAT INCIDENT DID NOT HAPPEN IN THIS CHECKOUT, and this header used to imply it did.
@@ -26,7 +26,7 @@
 //! false-positive on day one. `git log --diff-filter=D` is the probe that settles it, and
 //! in THIS repository it returns empty, which is why the number is attributed, not asserted.
 //!
-//! SCANS close_reason AND comments: cp-3k9jq's close_reason is 104 chars with zero
+//! SCANS close_reason AND comments: control-plane#cp-3k9jq's close_reason is 104 chars with zero
 //! path citations, but its comments cite bin/fleet-composite.py in three places. A
 //! gate scanning only close reasons passes this deletion and the incident recurs.
 //!
@@ -193,7 +193,7 @@ pub fn parse_staged_deletions(git_output: &str) -> Vec<String> {
 /// structurally vacuous, not merely untested.
 ///
 /// WHY THAT IS THE WHOLE POINT OF THE CRATE. This module's own header records the incident:
-/// `cp-3k9jq`'s close_reason is 104 chars with zero path citations while its comments cite
+/// `control-plane#cp-3k9jq`'s close_reason is 104 chars with zero path citations while its comments cite
 /// `bin/fleet-composite.py` in three places, and *"a gate scanning only close reasons passes
 /// this deletion and the incident recurs."* Measured in THIS tracker: **14 closed beads cite
 /// a `bin/` or `.flywheel/` path ONLY in comments and never in close_reason** -- one of them
@@ -672,7 +672,7 @@ mod tests {
 
     #[test]
     fn close_reason_citation_is_detected() {
-        // KNOWN-BAD 1: cp-op5uu's close_reason cites bin/omp-idle-dispatch.sh
+        // KNOWN-BAD 1 (control-plane#cp-op5uu): close_reason cites bin/omp-idle-dispatch.sh
         let bead = bead(
             "cp-op5uu",
             "MECHANISM: bin/omp-idle-dispatch.sh, cron 1,11,21,31,41,51",
@@ -686,7 +686,7 @@ mod tests {
 
     #[test]
     fn comment_citation_is_detected() {
-        // KNOWN-BAD 2: cp-3k9jq's close_reason has ZERO paths but its comments
+        // KNOWN-BAD 2 (control-plane#cp-3k9jq): close_reason has ZERO paths but its comments
         // cite bin/fleet-composite.py. A gate scanning only close reasons passes
         // this deletion — leg 2 decides whether the gate is worth having.
         let bead = bead(

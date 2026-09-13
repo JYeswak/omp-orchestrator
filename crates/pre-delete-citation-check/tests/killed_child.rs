@@ -121,7 +121,9 @@ fn empty_closed_bead_records_are_an_error_not_a_pass() {
     }
 }
 
-/// The original incident specimen, carried through the oracle that actually runs.
+/// The original incident specimen (control-plane#cp-op5uu: foreign-shaped row, bare id by necessity
+/// -- the foreign tracker uses the cp- prefix, so the vector stays byte-identical), carried
+/// through the oracle that actually runs.
 #[test]
 fn closed_status_predicate_detects_cp_op5uu() {
     let jsonl =

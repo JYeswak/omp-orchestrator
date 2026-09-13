@@ -393,7 +393,7 @@ pub const LOOP_COVERAGE: &[LayerCoverage] = &[
         failure_modes: &[
             "2026-08-27 publisher/reader path split (defect 3)",
             "2026-08-20 14 dispatched events, ZERO verifications",
-            "cp-g7n arrival is not submission",
+            "control-plane#cp-g7n arrival is not submission",
         ],
         mandatory_proofs: &[ProofLevel::Unit, ProofLevel::Logs],
         proof_artifacts: &[
