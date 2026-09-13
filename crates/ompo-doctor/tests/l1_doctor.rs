@@ -425,3 +425,150 @@ fn agent_mail_probe_is_scoped() {
         metric.unprobeable
     );
 }
+
+/// L1-TEST-PROBE-BR (contract s1_l1_doctor.md `L1-BUILD-PROBE-BR`): presence
+/// plus required version. Uses the real `PROBES` declaration, the real
+/// `answered` authority, the real metric, and one live `run_doctor` row --
+/// never copies of their arms.
+///
+/// KNOWN-BAD: dropping the version conjunct from `answered` greens the
+/// versionless `br` row below and this leg fails: presence alone would
+/// certify a probe that answered nothing. Verdict AND reason code are
+/// pinned throughout: one field alone cannot tell a refusal from a miscount.
+/// Typed absence is none of OK, bare ABSENT, or UNRUN -- each unrun shape
+/// carries its own status and reason.
+#[test]
+fn br_probe_emits_two_signals() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    // (a) The declaration this row governs: exactly one `br` probe running
+    // `br --version`. If the row's subject is renamed or re-argved, this
+    // fails where a behavioral leg would pass over the wrong probe.
+    let br_specs: Vec<_> = PROBES.iter().filter(|spec| spec.name == "br").collect();
+    assert_eq!(
+        br_specs.len(),
+        1,
+        "exactly one declared br probe must exist"
+    );
+    assert_eq!(br_specs[0].command, "br", "br probe runs br");
+    assert_eq!(
+        br_specs[0].args,
+        &["--version"],
+        "br probe reads the version surface"
+    );
+    fn decision(status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: "br".to_owned(),
+            status: status.to_owned(),
+            reason_code: "L1_PROBE_BR_SCOPED_FIXTURE".to_owned(),
+            detail: "br scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // (b) The law on the br shape: identity plus version answers; either
+    // signal missing does not -- even when the status string claims OK.
+    assert!(
+        answered(&decision("OK", Some("/fixture/br"), Some("br 0.4.1"))),
+        "identity plus version must answer"
+    );
+    assert!(
+        !answered(&decision("OK", Some("/fixture/br"), None)),
+        "a present br with no version response must not be OK"
+    );
+    assert!(
+        !answered(&decision("ABSENT_SPECIFIC", None, None)),
+        "absence must not answer"
+    );
+    // (c) The live row, both lanes: OK implies both signals; anything else
+    // is a typed absence with a namespaced reason -- never bare ABSENT and
+    // never an UNRUN reading as refusal or health.
+    let repo = tempfile::tempdir().expect("br fixture repo");
+    let summary = ompo_doctor::run_doctor(repo.path(), "system").expect("doctor runs");
+    let row = summary
+        .probes
+        .iter()
+        .find(|probe| probe.name == "br")
+        .expect("run_doctor must report a br row");
+    if row.status == "OK" {
+        assert!(
+            row.presence.as_ref().is_some_and(|value| !value.is_empty())
+                && row.version.as_ref().is_some_and(|value| !value.is_empty()),
+            "an OK br row must carry both signals: {row:?}"
+        );
+    } else {
+        assert!(
+            [
+                "ABSENT_FAMILY",
+                "ABSENT_SPECIFIC",
+                "UNPROBEABLE",
+                "UNMEASURED",
+                "STALE",
+                "PAUSED"
+            ]
+            .contains(&row.status.as_str()),
+            "a non-OK br row must be typed absence, never bare ABSENT or UNRUN: {row:?}"
+        );
+        assert!(
+            row.reason_code.starts_with("L1_PROBE_BR_"),
+            "absence must carry a namespaced reason: {row:?}"
+        );
+    }
+}
+
+#[test]
+fn bv_probe_emits_two_signals() {
+    use ompo_doctor::{answered, probe_answer_metric, ProbeDecision, PROBES};
+    let spec = PROBES
+        .iter()
+        .find(|spec| spec.name == "bv")
+        .expect("bv is a declared probe");
+    fn decision(name: &str, status: &str, presence: Option<&str>, version: Option<&str>) -> ProbeDecision {
+        ProbeDecision {
+            name: name.to_owned(),
+            status: status.to_owned(),
+            reason_code: format!("L1_PROBE_{}_SCOPED_FIXTURE", name.replace('-', "_").to_ascii_uppercase()),
+            detail: "bv scoped fixture".to_owned(),
+            presence: presence.map(str::to_owned),
+            version: version.map(str::to_owned),
+        }
+    }
+    // Healthy: endpoint identity plus version answers.
+    let healthy = decision("bv", "OK", Some("bv 0.3.1"), Some("bv 0.3.1"));
+    assert!(answered(&healthy), "identity plus version must answer");
+    // KNOWN-BAD shape, asserted directly: presence without version is not OK.
+    // The status string does not certify; the two signals do.
+    let present_no_version = decision("bv", "OK", Some("bv 0.3.1"), None);
+    assert!(
+        !answered(&present_no_version),
+        "a present bv with no version response must not be OK"
+    );
+    // Typed absence: an observed ABSENT_SPECIFIC row, not an unmeasured gap.
+    let absent = decision("bv", "ABSENT_SPECIFIC", None, None);
+    assert!(!answered(&absent), "absence must not answer");
+    let metric = probe_answer_metric(std::slice::from_ref(spec), &[absent]);
+    assert_ne!(
+        metric.verdict, "UNMEASURED",
+        "an observed absence is measured, never unmeasured: {}",
+        metric.reason_code
+    );
+    // UNRUN is not absence: no rows at all is UNMEASURED with a reason.
+    let unrun = probe_answer_metric(std::slice::from_ref(spec), &[]);
+    assert_eq!(unrun.verdict, "UNMEASURED", "no rows must be unmeasured");
+    assert_eq!(
+        unrun.reason_code, "UNKNOWN_NO_RECORD",
+        "no rows must name its reason"
+    );
+    // Wrong version is STALE when observed: counted in the stale band,
+    // never OK, ABSENT_SPECIFIC, or UNPROBEABLE.
+    let stale = decision("bv", "STALE", Some("bv 0.3.1"), Some("bv 0.0.0"));
+    assert!(!answered(&stale), "a stale row answers nothing itself");
+    let stale_metric = probe_answer_metric(
+        std::slice::from_ref(spec),
+        &[decision("bv", "OK", Some("bv 0.3.1"), Some("bv 0.3.1")), stale],
+    );
+    assert_eq!(
+        stale_metric.stale_count,
+        Some(1),
+        "an observed STALE row must be counted, not absorbed"
+    );
+}
