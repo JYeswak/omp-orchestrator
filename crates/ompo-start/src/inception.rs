@@ -74,6 +74,16 @@ pub enum InceptionError {
     Write { path: PathBuf, detail: String },
     Readback { path: PathBuf, detail: String },
     IdentityUnavailable { field: &'static str, detail: String },
+    /// Init refused over an AGENTS.md whose stamp report is not Stamped
+    /// at the gated entry: same trust rule as [`UntrustedClaudeMd`],
+    /// with the AGENTS.md path. Deliberately distinct from
+    /// [`UntrustedAgentsMd`], which remains the shared-`initialize`
+    /// refusal with its `trusted_init` override (no such flag exists on
+    /// the gated entry by design -- stamp the file).
+    AgentsStampRefused {
+        path: PathBuf,
+        status: AgentsStampStatus,
+    },
     /// Init refused over a CLAUDE.md whose stamp report is not Stamped:
     /// the L2 trust flow requires the stamped control file before any
     /// trust-dependent continuation. No opt-in override exists on the
@@ -138,6 +148,11 @@ impl fmt::Display for InceptionError {
             Self::IdentityUnavailable { field, detail } => write!(
                 formatter,
                 "INCEPTION_IDENTITY_UNAVAILABLE field={field} detail={detail}"
+            ),
+            Self::AgentsStampRefused { path, status } => write!(
+                formatter,
+                "HUMAN_HALT refusing init over {status:?} AGENTS.md path={} (stamp it with the project token to opt in; no flag bypasses this)",
+                path.display()
             ),
             Self::UntrustedClaudeMd { path, status } => write!(
                 formatter,
@@ -1489,6 +1504,15 @@ pub fn initialize_gated(repo_root: &Path, output: &Path) -> Result<InitReport, I
             })
         }
     }
+    match agents_stamp_report(&top).status {
+        AgentsStampStatus::Stamped => {}
+        status => {
+            return Err(InceptionError::AgentsStampRefused {
+                path: top.join("AGENTS.md"),
+                status,
+            })
+        }
+}
     initialize(&top, output)
 }
 

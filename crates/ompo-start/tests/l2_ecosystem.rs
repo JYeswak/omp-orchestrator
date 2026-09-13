@@ -1022,3 +1022,101 @@ fn claude_stamp_gates_trust_entry() {
         "stamp without git is GitUnavailable"
     );
 }
+
+/// L2-TEST-AGENTS-STAMP (bead 43x7): the reachable L2 trust-flow entry
+/// admits a stamped AGENTS.md and refuses every other AGENTS stamp state
+/// before trust-dependent continuation. Reuses the shared stamp core and
+/// the `initialize_gated` seam beside the CLAUDE report -- no duplicate
+/// core, no second stamp vocabulary.
+///
+/// KNOWN-BAD: bypass the AGENTS report at the entry (proceed regardless)
+/// and the restrictive arms below pass silently: unstamped trust would
+/// advance with no evidence anything was required. Message AND exit
+/// are pinned on the mutation run.
+#[test]
+fn agents_stamp_gates_trust_entry() {
+    use ompo_start::inception::{agents_stamp_report, initialize_gated, AgentsStampStatus};
+    // Healthy: stamped AGENTS.md and stamped CLAUDE.md in a live repo
+    // reach the trust branch -- initialize runs and writes the artifact.
+    // (The fixture stamps AGENTS.md; CLAUDE.md is stamped here so the
+    // CLAUDE gate passes and this leg measures the AGENTS gate alone.)
+    let repository = repository_fixture();
+    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped claude");
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/init-gated-agents.json");
+    initialize_gated(repository.path(), &output).expect("stamped entry proceeds");
+    assert!(
+        output.exists(),
+        "a trusted entry writes its artifact"
+    );
+    // Restrictive matrix: every non-Stamped AGENTS.md state refuses typed
+    // before initialize runs, with the file and the remedy named. CLAUDE.md
+    // stays stamped throughout, so each refusal is the AGENTS gate firing.
+    let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
+        ("empty", Box::new(|root| {
+            std::fs::write(root.join("AGENTS.md"), b"").expect("empty file");
+        })),
+        ("foreign", Box::new(|root| {
+            std::fs::write(root.join("AGENTS.md"), b"foreign stuff\n").expect("foreign file");
+        })),
+        ("corrupt", Box::new(|root| {
+            std::fs::write(root.join("AGENTS.md"), b"\xff\xfe invalid \x00 bytes\n")
+                .expect("corrupt file");
+        })),
+        ("unreadable", Box::new(|root| {
+            // Hermetic: a previous arm may have left a directory here.
+            let path = root.join("AGENTS.md");
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).expect("clear dir");
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+            std::fs::create_dir(&path).expect("directory mask");
+        })),
+        ("missing", Box::new(|root| {
+            let path = root.join("AGENTS.md");
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).expect("clear dir");
+            } else {
+                std::fs::remove_file(&path).expect("remove file");
+            }
+        })),
+    ];
+    for (name, arrange) in cases {
+        arrange(repository.path());
+        let output = repository
+            .path()
+            .join(format!(".omp-orchestrator/init-gated-agents-{name}.json"));
+        let error =
+            initialize_gated(repository.path(), &output).expect_err("unstamped must refuse");
+        let text = error.to_string();
+        assert!(
+            text.contains("HUMAN_HALT") && text.contains("AGENTS.md"),
+            "{name} refusal must be typed and name the file, got: {text}"
+        );
+        assert!(
+            text.contains("remedy:") || text.contains("stamp it"),
+            "{name} refusal must carry remediation, got: {text}"
+        );
+        assert!(
+            !output.exists(),
+            "a refused entry must write nothing, found {}",
+            output.display()
+        );
+    }
+    // GitUnavailable is a report-level state: a stamped file with no
+    // usable git observes identity without revision.
+    let nogit = tempfile::tempdir().expect("no-git fixture");
+    std::fs::write(nogit.path().join("AGENTS.md"), b"fixture omp-orchestrator\n")
+        .expect("stamped non-repo file");
+    std::fs::write(nogit.path().join(".git"), b"gitdir: /nonexistent/43x7r\n")
+        .expect("broken gitdir");
+    let report = agents_stamp_report(nogit.path());
+    assert_eq!(
+        report.status,
+        AgentsStampStatus::GitUnavailable,
+        "stamp without git is GitUnavailable"
+    );
+}
