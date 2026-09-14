@@ -290,6 +290,7 @@ fn production_metric_inputs(
     started_at_ms: Option<u64>,
     phase: &installer::skill_install::SkillPhaseReport,
     path_hits: &[PathBuf],
+    durability_metric: installer::DurabilityMetric,
 ) -> installer::InstallMetricInputs {
     installer::InstallMetricInputs::production(
         started_at_ms,
@@ -297,6 +298,7 @@ fn production_metric_inputs(
         path_hits.len(),
         phase.backups.len(),
         &phase.outcomes,
+        durability_metric,
     )
 }
 
@@ -396,8 +398,16 @@ fn run_install(
     // `check` binds here (not inside the Ok arm) because the skills phase
     // and the summary report below both consume the installed identity.
     // First-aid scoping by pane=%49 for an active peer hunk; logic untouched.
+    let mut durability_metric = installer::DurabilityMetric::default();
     let check = match installer::verify_sha256_before_install(&source, expected_sha256, || {
-        installer::install_binary(&source, bin_dir, &head, &ownership)
+        installer::install_binary_with_durability(
+            &source,
+            bin_dir,
+            &head,
+            &ownership,
+            &mut durability_metric,
+            None,
+        )
     }) {
         Ok(check) => {
             println!("  INSTALLED {binary_name}: {check}");
@@ -476,7 +486,12 @@ fn run_install(
         &std::env::var("PATH").unwrap_or_default(),
     );
     let manifest = installer::InputManifest::Full { digest: digest_hex };
-    let metric_inputs = production_metric_inputs(install_started_at_ms, &phase, &path_hits);
+    let metric_inputs = production_metric_inputs(
+        install_started_at_ms,
+        &phase,
+        &path_hits,
+        durability_metric,
+    );
     let (assembled, correlated) = match installer::assemble_and_correlate_install_report(
         repo_root,
         &phase.scan,

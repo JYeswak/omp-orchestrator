@@ -1498,6 +1498,9 @@ fn durability_metric_counts_missing_parent_sync() {
     let empty = DurabilityMetric::default();
     assert_eq!(empty.coverage(), None, "{empty:?}");
     assert_eq!(empty.verdict(), MetricVerdict::Unmeasured, "{empty:?}");
+    let empty_error = installer::materialize_durability_metric(empty)
+        .expect_err("empty durability scope must be typed unmeasurable");
+    assert!(empty_error.to_string().contains("ZERO_DENOMINATOR"), "{empty_error}");
     assert_eq!(MetricVerdict::Unmeasured.to_string(), "UNMEASURED");
 
     // One rename attempt recorded with NO parent sync: coverage is below 1.0
@@ -1524,6 +1527,11 @@ fn durability_metric_counts_missing_parent_sync() {
     assert_eq!(coverage, 0.0, "{metric:?}");
     assert_eq!(metric.verdict(), MetricVerdict::Red, "{metric:?}");
     assert_eq!(MetricVerdict::Red.to_string(), "RED");
+    let missing_parent_delta = installer::materialize_durability_metric(metric)
+        .expect("an attempted missing-parent metric is measurable");
+    assert_eq!(missing_parent_delta.verdict.as_str(), "RED");
+    assert_eq!(missing_parent_delta.numerator, Some(0));
+    assert_eq!(missing_parent_delta.denominator, Some(1));
     assert!(metric.invariant_holds(), "{metric:?}");
 
     // KNOWN-GOOD CONTROL so the metric is not RED for everything: a second
@@ -2459,6 +2467,10 @@ fn metric_inputs(
             .iter()
             .filter(|row| row.outcome == "merged")
             .count(),
+        durability_metric: installer::DurabilityMetric {
+            atomic_rename_attempts: 1,
+            parent_fsync_successes: 1,
+        },
         thresholds: installer::InstallMetricThresholds::production(),
     }
 }
@@ -3396,7 +3408,6 @@ fn make_executable(path: &Path) {
 }
 
 fn monitor_fixture(name: &str, stale: bool) -> MonitorFixture {
-    use lifecycle_event::{EmitOutcome, Layer};
     let repo = TempDir::new(&format!("83pe-{name}"));
     write_inception_host_capabilities(repo.path());
     let bin_dir = repo.path().join("bin");
@@ -3446,13 +3457,9 @@ fn monitor_fixture(name: &str, stale: bool) -> MonitorFixture {
         &manifest,
     )
     .expect("monitor report seals and correlates");
-    let readback = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &attempt, &manifest, &sealed
-        .report
-        .install_metrics
-        .as_ref()
-        .expect("metric home")
-        .deltas)
-    .expect("monitor lifecycle row");
+    let readback = sealed
+        .emit_verified_event(repo.path(), &attempt, &manifest)
+        .expect("monitor lifecycle row");
     if stale {
         let journal = lifecycle_event::default_repo_journal(repo.path());
         let text = fs::read_to_string(&journal).expect("journal read");
@@ -3662,6 +3669,10 @@ fn qod0_metric_inputs() -> installer::InstallMetricInputs {
         path_hits: 1,
         backups_written: 1,
         files_mutated: 1,
+        durability_metric: installer::DurabilityMetric {
+            atomic_rename_attempts: 1,
+            parent_fsync_successes: 1,
+        },
         thresholds: installer::InstallMetricThresholds::production(),
     }
 }
@@ -3697,6 +3708,9 @@ fn qod0_three_metrics_are_distinct_and_delta_reads_production_report() {
     assert_eq!(report.metrics.deltas[1].observed, 1);
     assert_eq!(report.metrics.deltas[2].numerator, Some(1));
     assert_eq!(report.metrics.deltas[2].denominator, Some(1));
+    assert_eq!(report.durability_metric.numerator, Some(1));
+    assert_eq!(report.durability_metric.denominator, Some(1));
+    assert_eq!(report.durability_metric.verdict.as_str(), "PASS");
     assert!(report.fresh && report.readback_bytes > 0);
 }
 
@@ -3713,11 +3727,21 @@ fn qod0_metric_event_carries_report_deltas_and_attempt_identity() {
         .as_ref()
         .expect("metric home");
     assert_eq!(event["attempt"], expected.attempt_identity.attempt);
-    assert_eq!(event["metrics"].as_array().map(Vec::len), Some(3));
+    assert_eq!(event["metrics"].as_array().map(Vec::len), Some(4));
     assert_eq!(
         event["metrics"][0],
         expected.deltas[0].to_json_value(),
         "the lifecycle event carries the report's materialized delta"
+    );
+    let expected_durability = fixture
+        .sealed
+        .report
+        .durability_metric
+        .expect("durability metric home");
+    assert_eq!(
+        event["metrics"][3],
+        expected_durability.to_json_value(),
+        "the lifecycle event carries the separate durability metric"
     );
 }
 

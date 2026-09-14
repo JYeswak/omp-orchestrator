@@ -568,6 +568,37 @@ impl DurabilityMetric {
 
 /// What a durable publication actually did, so a caller can assert the steps
 /// rather than infer them from the absence of an error.
+
+pub const DURABILITY_COVERAGE_SCALE: u64 = 1_000_000;
+pub const DURABILITY_COVERAGE_EXPECTATION: MetricExpectation = MetricExpectation {
+    metric: "L0_DURABILITY_COVERAGE",
+    unit: "ppm",
+    expected: DURABILITY_COVERAGE_SCALE,
+};
+
+/// Materialize the durability ratio for the persisted report and lifecycle event.
+/// Empty scope and impossible counters are typed errors, never passing ratios.
+pub fn materialize_durability_metric(
+    metric: DurabilityMetric,
+) -> Result<MetricDelta, InstallMetricUnmeasurable> {
+    if !metric.invariant_holds() {
+        return Err(InstallMetricUnmeasurable::DurabilityInvariant {
+            parent_fsync_successes: metric.parent_fsync_successes,
+            atomic_rename_attempts: metric.atomic_rename_attempts,
+        });
+    }
+    measure_ratio_metric(
+        DURABILITY_COVERAGE_EXPECTATION,
+        Some(MetricThreshold {
+            tolerance: 0,
+            direction: MetricDirection::AtLeast,
+        }),
+        metric.parent_fsync_successes,
+        metric.atomic_rename_attempts,
+        DURABILITY_COVERAGE_SCALE,
+    )
+    .map_err(Into::into)
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DurabilityRecord {
     pub file_synced: bool,
@@ -632,6 +663,7 @@ pub struct InstallMetricInputs {
     pub path_hits: usize,
     pub backups_written: usize,
     pub files_mutated: usize,
+    pub durability_metric: DurabilityMetric,
     pub thresholds: InstallMetricThresholds,
 }
 
@@ -643,6 +675,7 @@ impl InstallMetricInputs {
         path_hits: usize,
         backups_written: usize,
         outcomes: &[AgentOutcome],
+        durability_metric: DurabilityMetric,
     ) -> Self {
         Self {
             started_at_ms,
@@ -653,6 +686,7 @@ impl InstallMetricInputs {
                 .iter()
                 .filter(|row| row.outcome == "merged")
                 .count(),
+            durability_metric,
             thresholds: InstallMetricThresholds::production(),
         }
     }
@@ -689,6 +723,11 @@ impl InstallMetrics {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallMetricUnmeasurable {
     MissingHome,
+    DurabilityMetricMissing,
+    DurabilityInvariant {
+        parent_fsync_successes: u64,
+        atomic_rename_attempts: u64,
+    },
     WriterAbsent { path: PathBuf },
     InputNotFull { state: String },
     TimestampMissing { field: &'static str },
@@ -704,6 +743,16 @@ impl fmt::Display for InstallMetricUnmeasurable {
         match self {
             Self::MissingHome => f.write_str(
                 "INSTALL_METRIC_UNMEASURABLE reason=MISSING_METRIC_HOME",
+            ),
+            Self::DurabilityMetricMissing => f.write_str(
+                "INSTALL_METRIC_UNMEASURABLE reason=MISSING_DURABILITY_METRIC_HOME",
+            ),
+            Self::DurabilityInvariant {
+                parent_fsync_successes,
+                atomic_rename_attempts,
+            } => write!(
+                f,
+                "INSTALL_METRIC_UNMEASURABLE reason=DURABILITY_INVARIANT parent_fsync_successes={parent_fsync_successes} atomic_rename_attempts={atomic_rename_attempts}"
             ),
             Self::WriterAbsent { path } => write!(
                 f,
@@ -755,6 +804,7 @@ impl From<MetricMeasureError> for InstallMetricUnmeasurable {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallMetricDeltaReport {
     pub metrics: InstallMetrics,
+    pub durability_metric: MetricDelta,
     pub readback_bytes: usize,
     pub age_ms: u64,
     pub fresh: bool,
@@ -763,9 +813,12 @@ pub struct InstallMetricDeltaReport {
 impl InstallMetricDeltaReport {
     #[must_use]
     pub fn exit_code(&self) -> u8 {
-        match self.metrics.overall_verdict() {
-            MetricDeltaVerdict::Pass => 0,
-            MetricDeltaVerdict::Red => 1,
+        if self.metrics.overall_verdict() == MetricDeltaVerdict::Red
+            || self.durability_metric.verdict == MetricDeltaVerdict::Red
+        {
+            1
+        } else {
+            0
         }
     }
 }
@@ -1437,6 +1490,7 @@ pub struct InstallReport {
     pub identity: IdentityCheck,
     pub attempt_identity: AttemptIdentity,
     pub install_metrics: Option<InstallMetrics>,
+    pub durability_metric: Option<MetricDelta>,
 }
 
 impl fmt::Display for InstallReport {
@@ -1546,6 +1600,7 @@ pub fn seal_install_report(
         identity,
         attempt_identity,
         install_metrics: None,
+        durability_metric: None,
     };
     if report.digest.is_empty() {
         return Err(InstallError::IncompleteInstallReport {
@@ -1555,10 +1610,19 @@ pub fn seal_install_report(
     Ok(report)
 }
 /// Bind the materialized metric record into the report's content identity.
-fn attach_install_metrics(mut report: InstallReport, metrics: InstallMetrics) -> InstallReport {
-    let canonical = format!("{}|metrics={}", report.digest, metrics.record_digest);
+fn attach_install_metrics(
+    mut report: InstallReport,
+    metrics: InstallMetrics,
+    durability_metric: MetricDelta,
+) -> InstallReport {
+    let durability_json = durability_metric.to_json_value().to_string();
+    let canonical = format!(
+        "{}|metrics={}|durability={durability_json}",
+        report.digest, metrics.record_digest
+    );
     report.digest = format!("{:016x}", fnv1a64(canonical.as_bytes()));
     report.install_metrics = Some(metrics);
+    report.durability_metric = Some(durability_metric);
     report
 }
 
@@ -1678,6 +1742,22 @@ fn install_metrics_json(metrics: &InstallMetrics) -> serde_json::Value {
     })
 }
 
+fn durability_metric_json(metric: MetricDelta) -> serde_json::Value {
+    let mut value = metric.to_json_value();
+    let object = value
+        .as_object_mut()
+        .expect("MetricDelta::to_json_value always returns an object");
+    object.insert(
+        "parent_fsync_successes".to_owned(),
+        serde_json::json!(metric.numerator),
+    );
+    object.insert(
+        "atomic_rename_attempts".to_owned(),
+        serde_json::json!(metric.denominator),
+    );
+    value
+}
+
 fn install_report_document(report: &InstallReport, manifest: &InputManifest) -> String {
     let outcomes: Vec<serde_json::Value> = report
         .agent_outcomes
@@ -1698,6 +1778,10 @@ fn install_report_document(report: &InstallReport, manifest: &InputManifest) -> 
         .install_metrics
         .as_ref()
         .map(install_metrics_json)
+        .unwrap_or(serde_json::Value::Null);
+    let durability_metric = report
+        .durability_metric
+        .map(durability_metric_json)
         .unwrap_or(serde_json::Value::Null);
     let value = serde_json::json!({
         "schema_version": "install-report.v1",
@@ -1721,6 +1805,7 @@ fn install_report_document(report: &InstallReport, manifest: &InputManifest) -> 
         },
         "input_manifest": input_manifest_json(manifest),
         "install_metrics": install_metrics,
+        "durability_metric": durability_metric,
     });
     let mut document =
         serde_json::to_string_pretty(&value).expect("serializing a JSON Value cannot fail");
@@ -1834,6 +1919,29 @@ fn metric_threshold_from_row(
     })
 }
 
+fn parse_durability_metric(
+    root: &serde_json::Map<String, serde_json::Value>,
+    path: &Path,
+) -> Result<MetricDelta, InstallMetricUnmeasurable> {
+    let value = root
+        .get("durability_metric")
+        .filter(|value| !value.is_null())
+        .ok_or(InstallMetricUnmeasurable::DurabilityMetricMissing)?;
+    let row = metric_object(value, path, "durability_metric")?;
+    let metric = DurabilityMetric {
+        parent_fsync_successes: metric_u64(row, path, "parent_fsync_successes")?,
+        atomic_rename_attempts: metric_u64(row, path, "atomic_rename_attempts")?,
+    };
+    let recomputed = materialize_durability_metric(metric)?;
+    if durability_metric_json(recomputed) != *value {
+        return Err(metric_readback_error(
+            path,
+            "durability metric record/readback mismatch",
+        ));
+    }
+    Ok(recomputed)
+}
+
 fn parse_install_metrics(
     root: &serde_json::Map<String, serde_json::Value>,
     path: &Path,
@@ -1903,6 +2011,8 @@ fn parse_install_metrics(
             .map_err(|_| metric_readback_error(path, "backups_written exceeds usize"))?,
         files_mutated: usize::try_from(metric_u64(backup_ratio, path, "denominator")?)
             .map_err(|_| metric_readback_error(path, "files_mutated exceeds usize"))?,
+        // Parsed separately from the three qod0 install metrics.
+        durability_metric: DurabilityMetric::default(),
         thresholds: InstallMetricThresholds {
             duration: Some(metric_threshold_from_row(
                 duration,
@@ -1988,9 +2098,11 @@ pub fn read_install_metric_deltas(
         return Err(metric_readback_error(&path, "unsupported schema_version"));
     }
     let metrics = parse_install_metrics(root, &path)?;
+    let durability_metric = parse_durability_metric(root, &path)?;
     let age_ms = validate_install_metric_freshness(&metrics, now_ms)?;
     Ok(InstallMetricDeltaReport {
         metrics,
+        durability_metric,
         readback_bytes: bytes.len(),
         age_ms,
         fresh: true,
@@ -2007,6 +2119,7 @@ impl InstallMetricDeltaReport {
             "age_ms": self.age_ms,
             "readback_bytes": self.readback_bytes,
             "metrics": install_metrics_json(&self.metrics),
+            "durability_metric": durability_metric_json(self.durability_metric),
         })
         .to_string()
     }
@@ -2168,9 +2281,11 @@ pub fn assemble_install_report(
         identity.clone(),
         attempt_identity.clone(),
     )?;
+    let durability_metric = materialize_durability_metric(metric_inputs.durability_metric)
+        .map_err(InstallError::InstallMetricUnmeasurable)?;
     let metrics = materialize_install_metrics(metric_inputs, attempt_identity, manifest)
         .map_err(InstallError::InstallMetricUnmeasurable)?;
-    let report = attach_install_metrics(report, metrics);
+    let report = attach_install_metrics(report, metrics, durability_metric);
     let artifact = repo_root.join(INSTALL_REPORT_ARTIFACT);
     let document = install_report_document(&report, manifest);
     let (persistence, readback_bytes) =
@@ -2668,12 +2783,18 @@ pub fn correlate_install_report(
             detail: error.to_string(),
         }
     })?;
+    parse_durability_metric(object, &canonical).map_err(|error| {
+        InstallReportCause::MetricUnmeasurable {
+            path: canonical.clone(),
+            detail: error.to_string(),
+        }
+    })?;
     validate_sealed_report_document(&contents, &canonical, sealed, manifest)?;
     Ok(CorrelatedInstallReport {
         readback_bytes: contents.len(),
         path_hits: path_hits.len(),
         host_capabilities: 3,
-        metric_count: metrics.deltas.len(),
+        metric_count: metrics.deltas.len() + 1,
     })
 }
 /// L0-B12-obs-writer (bead xic2): attempt identity carried explicitly on
@@ -2974,6 +3095,15 @@ impl SealedInstallReport {
                 detail: InstallMetricUnmeasurable::MissingHome.to_string(),
             }
         })?;
+        let durability_metric = self.report.durability_metric.ok_or_else(|| {
+            lifecycle_event::EmitError::Io {
+                op: "durability_metric",
+                detail: InstallMetricUnmeasurable::DurabilityMetricMissing.to_string(),
+            }
+        })?;
+        let mut deltas = Vec::with_capacity(metrics.deltas.len() + 1);
+        deltas.extend(metrics.deltas);
+        deltas.push(durability_metric);
         emit_s1(
             repo_root,
             Layer::L0,
@@ -2982,7 +3112,7 @@ impl SealedInstallReport {
             "INSTALL_VERIFIED",
             identity,
             manifest,
-            &metrics.deltas,
+            &deltas,
         )
     }
 
@@ -3028,6 +3158,7 @@ pub struct InstallObserveGate {
     pub freshness_threshold_ms: u64,
     pub fresh: bool,
     pub metrics: InstallMetrics,
+    pub durability_metric: MetricDelta,
     pub metric_age_ms: u64,
     pub metric_fresh: bool,
 }
@@ -3282,6 +3413,7 @@ pub fn gate_observability(
 fn verify_metric_event(
     repo_root: &Path,
     metrics: &InstallMetrics,
+    durability_metric: MetricDelta,
 ) -> Result<(), ObserveGateError> {
     let journal = default_repo_journal(repo_root);
     let text = std::fs::read_to_string(&journal).map_err(|error| ObserveGateError {
@@ -3323,12 +3455,15 @@ fn verify_metric_event(
             reason: "INSTALL_METRIC_UNMEASURABLE reason=WRITER_ABSENT field=event.metrics"
                 .to_owned(),
         })?;
-    let expected: Vec<serde_json::Value> = metrics
-        .deltas
-        .iter()
-        .copied()
-        .map(MetricDelta::to_json_value)
-        .collect();
+    let mut expected = Vec::with_capacity(metrics.deltas.len() + 1);
+    expected.extend(
+        metrics
+            .deltas
+            .iter()
+            .copied()
+            .map(MetricDelta::to_json_value),
+    );
+    expected.push(durability_metric.to_json_value());
     if actual != &expected {
         return Err(ObserveGateError {
             stage: ObserveStage::Gate,
@@ -3363,8 +3498,9 @@ pub fn gate_correlated_observability(
             reason: error.to_string(),
         }
     })?;
-    verify_metric_event(repo_root, &metric_report.metrics)?;
-    if report.metric_count != metric_report.metrics.deltas.len() {
+    let durability_metric = metric_report.durability_metric;
+    verify_metric_event(repo_root, &metric_report.metrics, durability_metric)?;
+    if report.metric_count != metric_report.metrics.deltas.len() + 1 {
         return Err(ObserveGateError {
             stage: ObserveStage::Gate,
             reason: "INSTALL_METRIC_UNMEASURABLE reason=CORRELATED_COUNT_MISMATCH".to_owned(),
@@ -3390,6 +3526,7 @@ pub fn gate_correlated_observability(
         last_ts: gate.last_ts,
         age_ms: gate.age_ms,
         metrics: metric_report.metrics,
+        durability_metric,
         metric_age_ms: metric_report.age_ms,
         metric_fresh: metric_report.fresh,
         freshness_threshold_ms: gate.freshness_threshold_ms,
@@ -3410,7 +3547,7 @@ fn render_install_observation(gate: &InstallObserveGate) -> String {
         })
         .unwrap_or_else(|| ("not-required".to_owned(), "None".to_owned(), "none", true));
     let [duration, path_hits, backup_ratio] = gate.metrics.deltas;
-    format!(
+    let mut rendered = format!(
         "  OBSERVE rows={} last_ts={} age_ms={} freshness_threshold_ms={} fresh={} manifest_state=FULL manifest_digest={} report_path={} report_inode={:?} report_sha256={} report_bytes={} report_file_fsynced={} report_parent_fsynced={} path_hits={} host_capabilities={} installed_path={} installed_inode={} installed_sha256={} installed_identity={} metric_verdict={} metric_age_ms={} metric_fresh={} install_started_at_ms={} verified_path_at_ms={} duration_observed={} duration_expected={} duration_threshold={} duration_delta={} path_hits_observed={} path_hits_delta={} backups_written={:?} files_mutated={:?} backup_ratio_ppm={} backup_ratio_delta={}",
         gate.rows,
         gate.last_ts,
@@ -3445,19 +3582,37 @@ fn render_install_observation(gate: &InstallObserveGate) -> String {
         backup_ratio.denominator,
         backup_ratio.observed,
         backup_ratio.delta,
+    );
+    write!(
+        rendered,
+        " durability_verdict={} durability_coverage_ppm={} parent_fsync_successes={:?} atomic_rename_attempts={:?}",
+        gate.durability_metric.verdict.as_str(),
+        gate.durability_metric.observed,
+        gate.durability_metric.numerator,
+        gate.durability_metric.denominator,
     )
+    .expect("writing to String cannot fail");
+    rendered
 }
 
 fn metric_red_exit(
     repo_root: &Path,
     identity: &AttemptIdentity,
     manifest: &InputManifest,
-    metrics: &InstallMetrics,
+    gate: &InstallObserveGate,
 ) -> Option<ExitCode> {
-    if metrics.overall_verdict() == MetricDeltaVerdict::Pass {
+    if gate.metrics.overall_verdict() == MetricDeltaVerdict::Pass
+        && gate.durability_metric.verdict == MetricDeltaVerdict::Pass
+    {
         return None;
     }
-    eprintln!("INSTALLER METRIC RED: {}", metrics.record_digest);
+    eprintln!(
+        "INSTALLER METRIC RED: {} durability={} parent_fsync_successes={:?} atomic_rename_attempts={:?}",
+        gate.metrics.record_digest,
+        gate.durability_metric.verdict.as_str(),
+        gate.durability_metric.numerator,
+        gate.durability_metric.denominator,
+    );
     let _ = emit_refusal(
         repo_root,
         Layer::L0,
@@ -3482,7 +3637,7 @@ pub fn guard_observability_success(
     match gate {
         Ok(gate) => {
             println!("{}", render_install_observation(&gate));
-            if let Some(exit) = metric_red_exit(repo_root, identity, manifest, &gate.metrics) {
+            if let Some(exit) = metric_red_exit(repo_root, identity, manifest, &gate) {
                 return exit;
             }
         }
