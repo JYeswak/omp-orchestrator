@@ -2851,6 +2851,10 @@ fn fx3d_refusing_layer_state_never_gate_ok() {
     let rows = xic2_journal_rows(repo.path());
     assert_eq!(rows.len(), 2, "both rows are durable");
     assert!(
+        rows.iter().any(|row| row.contains("\"reason_code\":\"INSTALL_OBSERVE_REFUSED\"")),
+        "the refusal row carries its stable reason code"
+    );
+    assert!(
         !rows.iter().any(|row| row.contains("GATE_OK")),
         "no verdict line ever reaches the journal"
     );
