@@ -2669,13 +2669,9 @@ fn fx3d_production_gate(
         correlated.readback_bytes > 0,
         "correlation must preserve a nonzero readback"
     );
-    let readback = installer::emit_s1(repo, Layer::L0, "S1.L0", EmitOutcome::Emitted, reason, &identity, manifest, &assembled
-        .report
-        .install_metrics
-        .as_ref()
-        .expect("metric home")
-        .deltas)
-    .expect("production emit must answer with readback");
+    let readback = assembled
+        .emit_verified_event(repo, &identity, manifest)
+        .expect("production emit must answer with readback");
     assert_eq!(readback.lines, 1, "one emit appends exactly one row");
     let gate = installer::gate_correlated_observability(
         repo,
@@ -3051,13 +3047,9 @@ fn r19i_good_report_correlates_and_supplies_b15() {
         report.host_capabilities, 3,
         "os, arch and filesystem are consumed from inception"
     );
-    let readback = installer::emit_s1(repo.path(), Layer::L0, "S1.L0", EmitOutcome::Emitted, "INSTALL_VERIFIED", &attempt, &manifest, &sealed
-        .report
-        .install_metrics
-        .as_ref()
-        .expect("metric home")
-        .deltas)
-    .expect("current lifecycle row lands");
+    let readback = sealed
+        .emit_verified_event(repo.path(), &attempt, &manifest)
+        .expect("current lifecycle row lands");
     let gate = installer::gate_correlated_observability(
         repo.path(),
         &manifest,
