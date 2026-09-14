@@ -131,3 +131,66 @@ fn a_changed_hash_is_a_nonzero_action_with_a_one_to_one_backup() {
         "the counted snapshot exists on disk"
     );
 }
+
+/// FAILURE ATOMICITY (ctjf): a snapshot failure refuses BEFORE publication
+/// and leaves the original destination bytes untouched.
+///
+/// Fault injection, not a mock: `backups` is sabotaged as a regular FILE so
+/// `create_dir_all` fails inside `snapshot_existing`. The `?` on that call is
+/// the guard; ignoring its error would publish over unbacked content while
+/// every other leg in this file stays green.
+#[test]
+fn snapshot_failure_refuses_before_publication_and_preserves_original_bytes() {
+    let repository = repository_fixture();
+    let output = repository.path().join(".omp-orchestrator/inception.json");
+
+    initialize(repository.path(), &output).expect("first init");
+
+    let superseded = b"superseded-before-failed-snapshot\n";
+    std::fs::write(&output, superseded).expect("supersede artifact");
+
+    // Sabotage the backup directory as a regular file.
+    let backup_dir = output.parent().expect("artifact parent").join("backups");
+    assert!(
+        !backup_dir.exists(),
+        "no backup dir before sabotage"
+    );
+    std::fs::write(&backup_dir, b"not a directory\n").expect("sabotage backups path");
+
+    let refusal =
+        initialize(repository.path(), &output).expect_err("a failed snapshot must refuse");
+    let rendered = refusal.to_string();
+    assert!(
+        rendered.contains("INCEPTION_WRITE_FAILED"),
+        "refusal must carry the typed write verdict: {rendered}"
+    );
+    assert!(
+        rendered.contains("backup directory failed"),
+        "refusal must name the snapshot stage that failed: {rendered}"
+    );
+    assert_eq!(
+        std::fs::read(&output).expect("destination bytes"),
+        superseded,
+        "a refused snapshot must not publish: original bytes survive"
+    );
+
+    // KNOWN-GOOD: remove the sabotage and the same init succeeds, snapshotting
+    // exactly the preserved bytes. Without this the refusal above could be
+    // satisfied by an init that never works at all.
+    std::fs::remove_file(&backup_dir).expect("remove sabotage");
+    let recovered = initialize(repository.path(), &output).expect("init after sabotage removal");
+    assert_eq!(recovered.files_mutated, 1);
+    assert_eq!(recovered.backups_written, 1);
+    assert_eq!(recovered.backup_ratio_verdict, "BACKUP_RATIO_OK_1_TO_1");
+    let backups = list_backups(&output).expect("backup listing");
+    assert_eq!(
+        backups.len(),
+        1,
+        "one replacement, one content-keyed backup"
+    );
+    assert_eq!(
+        std::fs::read(&backups[0].path).expect("backup bytes"),
+        superseded,
+        "the snapshot holds the bytes that were replaced"
+    );
+}
