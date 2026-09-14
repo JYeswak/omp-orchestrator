@@ -1058,6 +1058,42 @@ fn run_parity(rest: &[String]) -> ExitCode {
     ExitCode::from(probe.exit_code)
 }
 
+/// L2-BUILD-INCEPTION-FOUNDATION (4228): append the S1 FOUNDATION row for a
+/// just-published inception and read the linkage back. Reuses
+/// `append_s1_foundation` and `s1_rows_citing_inception` verbatim -- no second
+/// writer, no second schema.
+///
+/// Returns `(appended, linked_rows)`. Every failure is a typed
+/// `INCEPTION_READBACK_FAILED` carrying the foundation path and the original
+/// cause, never a generic success/unknown, so the caller blocks init success
+/// on it with the message intact.
+fn append_init_foundation(
+    foundation_path: &std::path::Path,
+) -> Result<(bool, usize), ompo_start::inception::InceptionError> {
+    use ompo_start::inception::InceptionError;
+    let appended = ompo_start::append_s1_foundation(foundation_path).map_err(|error| {
+        InceptionError::Readback {
+            path: foundation_path.to_owned(),
+            detail: format!("FOUNDATION_APPEND_FAILED {error}"),
+        }
+    })?;
+    let text = std::fs::read_to_string(foundation_path).map_err(|error| {
+        InceptionError::Readback {
+            path: foundation_path.to_owned(),
+            detail: format!("FOUNDATION_READBACK_FAILED {error}"),
+        }
+    })?;
+    let rows = ompo_start::s1_rows_citing_inception(&text);
+    if rows.is_empty() {
+        return Err(InceptionError::Readback {
+            path: foundation_path.to_owned(),
+            detail: "FOUNDATION_LINKAGE_MISSING no stage=S1 row cites inception.json after append"
+                .to_owned(),
+        });
+    }
+    Ok((appended, rows.len()))
+}
+
 /// `ompo init` — the missing command surface over `ompo_start::inception::initialize`.
 ///
 /// The mechanism is NOT reimplemented here. This routes to the existing write+reprobe
@@ -1114,6 +1150,19 @@ fn run_init(rest: &[String]) -> ExitCode {
         &ompo_start::inception::TrustedInitConsent::Absent,
     ) {
         Ok(report) => {
+            // L2-BUILD-INCEPTION-FOUNDATION (4228): the accepted inception is
+            // published; the S1 FOUNDATION row must land and read back linked
+            // before this command may report success. A refused init never
+            // reaches this arm, so refusal emits neither artifact.
+            let foundation_path = repo.join("docs/plan/FOUNDATION.jsonl");
+            let (foundation_appended, foundation_rows) =
+                match append_init_foundation(&foundation_path) {
+                    Ok(receipt) => receipt,
+                    Err(error) => {
+                        eprintln!("ompo init: {error}");
+                        return ExitCode::from(1);
+                    }
+                };
             if json {
                 let value = umbrella::envelope(
                     "init",
@@ -1127,10 +1176,10 @@ fn run_init(rest: &[String]) -> ExitCode {
                         // zo6l: the 1:1 law's two counts plus the verdict. The
                         // ratio alone is ambiguous — a virgin write is
                         // legitimately 0:1 — so `preexisting` travels with it.
-                        "files_mutated": report.files_mutated,
-                        "backups_written": report.backups_written,
-                        "preexisting": report.preexisting,
                         "backup_ratio_verdict": report.backup_ratio_verdict,
+                        "foundation_artifact": foundation_path.display().to_string(),
+                        "foundation_appended": foundation_appended,
+                        "foundation_rows": foundation_rows,
                     }),
                 );
                 match serde_json::to_string(&value) {
@@ -1144,7 +1193,7 @@ fn run_init(rest: &[String]) -> ExitCode {
                 // actions=0 on a second run is the IDEMPOTENCE receipt, so it is a named
                 // integer rather than a silent success.
                 println!(
-                    "OMPO_INIT artifact={} actions={} files_mutated={} backups_written={} preexisting={} backup_ratio={} journal_rows={} monitor_rows={} backup={}",
+                    "OMPO_INIT artifact={} actions={} files_mutated={} backups_written={} preexisting={} backup_ratio={} journal_rows={} monitor_rows={} backup={} foundation_artifact={} foundation_appended={} foundation_rows={}",
                     destination.display(),
                     report.actions,
                     report.files_mutated,
@@ -1156,7 +1205,10 @@ fn run_init(rest: &[String]) -> ExitCode {
                     report
                         .backup
                         .as_ref()
-                        .map_or_else(|| "none".to_owned(), |p| p.display().to_string())
+                        .map_or_else(|| "none".to_owned(), |p| p.display().to_string()),
+                    foundation_path.display(),
+                    foundation_appended,
+                    foundation_rows
                 );
             }
             ExitCode::SUCCESS
