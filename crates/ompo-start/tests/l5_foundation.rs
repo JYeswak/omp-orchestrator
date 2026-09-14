@@ -6,8 +6,8 @@ use ompo_start::{append_s1_foundation, s1_rows_citing_inception, INCEPTION_REF};
 fn writer_appends_s1_row_citing_inception() {
     let dir = tempfile::tempdir().expect("scratch");
     let path = dir.path().join("FOUNDATION.jsonl");
-    assert!(append_s1_foundation(&path).expect("first append"));
-    assert!(!append_s1_foundation(&path).expect("idempotent"));
+    assert!(append_s1_foundation(&path, INCEPTION_REF).expect("first append"));
+    assert!(!append_s1_foundation(&path, INCEPTION_REF).expect("idempotent"));
     let jsonl = std::fs::read_to_string(&path).expect("read");
     let rows = s1_rows_citing_inception(&jsonl);
     assert_eq!(rows.len(), 1);
@@ -33,7 +33,7 @@ fn append_preserves_existing_rows_byte_identically() {
     let path = dir.path().join("FOUNDATION.jsonl");
     let seed = "{\"stage\":\"S0\",\"note\":\"prior row one\"}\n{\"stage\":\"S0\",\"note\":\"prior row two\"}\n";
     std::fs::write(&path, seed).expect("seed lands");
-    assert!(append_s1_foundation(&path).expect("append onto seeded file"));
+    assert!(append_s1_foundation(&path, INCEPTION_REF).expect("append onto seeded file"));
     let after = std::fs::read_to_string(&path).expect("read");
     assert!(
         after.starts_with(seed),

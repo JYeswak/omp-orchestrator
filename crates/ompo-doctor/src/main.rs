@@ -1069,9 +1069,10 @@ fn run_parity(rest: &[String]) -> ExitCode {
 /// on it with the message intact.
 fn append_init_foundation(
     foundation_path: &std::path::Path,
+    inception_ref: &str,
 ) -> Result<(bool, usize), ompo_start::inception::InceptionError> {
     use ompo_start::inception::InceptionError;
-    let appended = ompo_start::append_s1_foundation(foundation_path).map_err(|error| {
+    let appended = ompo_start::append_s1_foundation(foundation_path, inception_ref).map_err(|error| {
         InceptionError::Readback {
             path: foundation_path.to_owned(),
             detail: format!("FOUNDATION_APPEND_FAILED {error}"),
@@ -1155,8 +1156,14 @@ fn run_init(rest: &[String]) -> ExitCode {
             // before this command may report success. A refused init never
             // reaches this arm, so refusal emits neither artifact.
             let foundation_path = repo.join("docs/plan/FOUNDATION.jsonl");
+            let default_inception = repo.join(".omp-orchestrator/inception.json");
+            let inception_ref = if destination == default_inception {
+                ompo_start::INCEPTION_REF.to_owned()
+            } else {
+                destination.display().to_string()
+            };
             let (foundation_appended, foundation_rows) =
-                match append_init_foundation(&foundation_path) {
+                match append_init_foundation(&foundation_path, &inception_ref) {
                     Ok(receipt) => receipt,
                     Err(error) => {
                         eprintln!("ompo init: {error}");

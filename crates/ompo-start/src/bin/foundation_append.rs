@@ -10,7 +10,7 @@ fn main() -> ExitCode {
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("docs/plan/FOUNDATION.jsonl"));
-    match append_s1_foundation(&path) {
+    match append_s1_foundation(&path, ompo_start::INCEPTION_REF) {
         Ok(true) => {
             println!("FOUNDATION_APPENDED {}", path.display());
             ExitCode::SUCCESS

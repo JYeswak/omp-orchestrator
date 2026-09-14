@@ -402,6 +402,39 @@ fn composed_init_emits_linked_foundation_row_and_stays_idempotent() {
         1,
         "FOUNDATION_LINKAGE: rerun must leave exactly one linked row"
     );
+    // Custom output path: the composed row must cite the emitted path, not the default constant.
+    let custom_repo = gated_repo_fixture();
+    let custom_root = custom_repo.path();
+    let custom_inception = custom_root.join(".omp-orchestrator/custom-inception.json");
+    let (custom_code, custom_stdout, custom_stderr) = ompo(&[
+        "init",
+        "--repo",
+        &custom_root.display().to_string(),
+        "--output",
+        &custom_inception.display().to_string(),
+        "--json",
+    ]);
+    assert_eq!(
+        custom_code,
+        Some(0),
+        "FOUNDATION_LINKAGE: custom-output init must succeed, stderr: {custom_stderr}"
+    );
+    let custom_value: Value =
+        serde_json::from_str(&custom_stdout).expect("FOUNDATION_LINKAGE: custom init JSON");
+    assert_eq!(custom_value["data"]["foundation_rows"], 1);
+    let custom_foundation = custom_root.join("docs/plan/FOUNDATION.jsonl");
+    let custom_text = std::fs::read_to_string(&custom_foundation)
+        .expect("FOUNDATION_LINKAGE: custom foundation artifact");
+    let custom_rows = ompo_start::s1_rows_citing_inception(&custom_text);
+    let custom_ref = custom_inception.display().to_string();
+    assert_eq!(custom_rows.len(), 1);
+    assert!(
+        custom_rows[0]
+            .get("output_refs")
+            .and_then(Value::as_array)
+            .is_some_and(|refs| refs.iter().any(|r| r.as_str() == Some(custom_ref.as_str()))),
+        "FOUNDATION_LINKAGE: custom row must cite emitted inception path {custom_ref}"
+    );
     println!(
         "READBACK composed init ok rows=1 idempotent foundation={}",
         foundation.display()

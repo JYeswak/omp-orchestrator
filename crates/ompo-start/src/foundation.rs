@@ -13,12 +13,12 @@ pub const STAGE: &str = "S1";
 pub const INCEPTION_REF: &str = ".omp-orchestrator/inception.json";
 pub const SOURCE: &str = "l5-foundation-append";
 
-pub fn s1_row() -> Value {
+pub fn s1_row(inception_ref: &str) -> Value {
     json!({
         "schema_version": SCHEMA_VERSION,
         "stage": STAGE,
         "input_refs": ["L5 portal write", "L5-READBACK"],
-        "output_refs": [INCEPTION_REF, "S2 planning foundation"],
+        "output_refs": [inception_ref, "S2 planning foundation"],
         "owner": "S1 L5 implementation lane",
         "crates": [{
             "name": "ompo-start",
@@ -50,7 +50,7 @@ fn already_appended(jsonl: &str) -> bool {
 
 /// Append the L5 S1 row unless this writer has already landed it.
 /// Returns true when a row was written.
-pub fn append_s1_foundation(path: &Path) -> io::Result<bool> {
+pub fn append_s1_foundation(path: &Path, inception_ref: &str) -> io::Result<bool> {
     let existing = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(err) if err.kind() == io::ErrorKind::NotFound => String::new(),
@@ -63,7 +63,7 @@ pub fn append_s1_foundation(path: &Path) -> io::Result<bool> {
         fs::create_dir_all(parent)?;
     }
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-    let mut line = serde_json::to_string(&s1_row()).map_err(io::Error::other)?;
+    let mut line = serde_json::to_string(&s1_row(inception_ref)).map_err(io::Error::other)?;
     line.push('\n');
     file.write_all(line.as_bytes())?;
     file.flush()?;
