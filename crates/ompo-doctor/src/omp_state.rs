@@ -36,8 +36,8 @@
 
 use crate::umbrella;
 use omp_rpc_session::{
-    run_session, OmpCommand, RpcError, RpcRequest, RpcSessionConfig, SelectedResponses, TimeoutPhase,
-    NO_CLAIM_BOUNDARY,
+    run_session, OmpCommand, ProtocolError, RpcError, RpcRequest, RpcSessionConfig, SelectedResponses,
+    TimeoutPhase, NO_CLAIM_BOUNDARY,
 };
 use serde_json::{json, Value};
 
@@ -277,6 +277,13 @@ pub fn classify_error_for<T>(error: &RpcError) -> OmpReadOutcome<T> {
         RpcError::Timeout { phase } => OmpReadOutcome::TimedOut {
             phase: timeout_phase(*phase).to_owned(),
         },
+        RpcError::Protocol(ProtocolError::ResponseRejected { command, error, .. }) => {
+            OmpReadOutcome::Refused {
+                detail: error
+                    .clone()
+                    .unwrap_or_else(|| format!("omp refused {command} without an error string")),
+            }
+        }
         RpcError::Protocol(protocol) => OmpReadOutcome::TransportFailed {
             detail: format!("protocol: {protocol}"),
         },

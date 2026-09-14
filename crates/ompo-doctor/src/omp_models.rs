@@ -29,6 +29,8 @@ pub struct ModelSummary {
     pub max_tokens: Option<u64>,
     pub reasoning: Option<bool>,
     pub supports_computer_use: Option<bool>,
+    /// OMP extension metadata, retained with its native JSON shape when present.
+    pub extensions: Option<Value>,
 }
 
 /// Typed summary plus the complete forward-compatible payload.
@@ -70,14 +72,17 @@ fn string_field(value: &Value, key: &str) -> Option<String> {
 /// Summarize one raw model without dropping malformed members.
 #[must_use]
 pub fn summarize(value: &Value) -> ModelSummary {
+    let number_field = |key| value.get(key).and_then(Value::as_u64);
+    let boolean_field = |key| value.get(key).and_then(Value::as_bool);
     ModelSummary {
         id: string_field(value, "id"),
         name: string_field(value, "name"),
         provider: string_field(value, "provider"),
-        context_window: value.get("contextWindow").and_then(Value::as_u64),
-        max_tokens: value.get("maxTokens").and_then(Value::as_u64),
-        reasoning: value.get("reasoning").and_then(Value::as_bool),
-        supports_computer_use: value.get("supportsComputerUse").and_then(Value::as_bool),
+        context_window: number_field("contextWindow"),
+        max_tokens: number_field("maxTokens"),
+        reasoning: boolean_field("reasoning"),
+        supports_computer_use: boolean_field("supportsComputerUse"),
+        extensions: value.get("extensions").cloned(),
     }
 }
 
@@ -149,6 +154,7 @@ pub fn envelope(outcome: &ModelsOutcome) -> Value {
                 "max_tokens": model.max_tokens,
                 "reasoning": model.reasoning,
                 "supports_computer_use": model.supports_computer_use,
+                "extensions": model.extensions,
             })).collect::<Vec<_>>(),
             "reason_code": outcome.reason_code(),
             "raw": models.raw,
@@ -257,5 +263,45 @@ mod tests {
         assert_eq!(envelope["data"]["reason_code"], "OMP_MODELS_NO_PAYLOAD");
         assert!(envelope["data"].get("models").is_none());
         assert!(envelope["data"].get("count").is_none());
+    }
+}
+
+#[cfg(test)]
+mod review_regressions {
+    use super::*;
+
+    #[test]
+    fn extensions_preserve_native_shape_and_absence() {
+        let expected = json!({"tools": ["computer_use"], "metadata": {"source": "catalog"}});
+        let projected = project(
+            &json!({"models": [{"id": "extended", "extensions": expected.clone()}]}),
+            "stopped",
+            2,
+        )
+        .expect("models array");
+        assert_eq!(projected.models[0].extensions.as_ref(), Some(&expected));
+        let outcome = ModelsOutcome::Answered(Box::new(projected));
+        assert_eq!(
+            envelope(&outcome)["data"]["models"][0]["extensions"],
+            expected
+        );
+        assert_eq!(summarize(&json!({})).extensions, None);
+    }
+
+    #[test]
+    fn native_model_refusal_is_degraded_not_unknown() {
+        let outcome: ModelsOutcome =
+            crate::omp_state::classify_error_for(&omp_rpc_session::RpcError::Protocol(
+                omp_rpc_session::ProtocolError::ResponseRejected {
+                    id: "models".to_owned(),
+                    command: ADOPTED_METHOD.to_owned(),
+                    error: Some("model catalog disabled".to_owned()),
+                },
+            ));
+        assert!(matches!(outcome, ModelsOutcome::Refused { .. }));
+        assert_eq!(outcome.reason_code(), "OMP_MODELS_REFUSED");
+        assert_eq!(outcome.exit_code(), EXIT_REFUSED);
+        assert_eq!(outcome.envelope_status(), "DEGRADED");
+        assert_eq!(outcome.detail(), "model catalog disabled");
     }
 }

@@ -1,18 +1,27 @@
 //! Observable CLI contract for the `ompo models` OMP RPC projection.
 
 use serde_json::Value;
-use std::process::Command;
+use std::process::{Command, Output};
+use std::time::Duration;
 
-fn ompo() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_ompo"))
+const PROCESS_DEADLINE: Duration = Duration::from_secs(20);
+
+fn run_ompo(args: &[&str]) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ompo"));
+    command.args(args);
+    let outcome = subprocess_contract::bounded_output(&mut command, PROCESS_DEADLINE);
+    let subprocess_contract::BoundedOutcome::Completed(output) = outcome else {
+        panic!(
+            "ompo test subprocess did not complete within {}s: {outcome:?}",
+            PROCESS_DEADLINE.as_secs()
+        );
+    };
+    output
 }
 
 #[test]
 fn models_verb_is_reachable_and_never_falls_through_to_unknown() {
-    let output = ompo()
-        .args(["models", "--json"])
-        .output()
-        .expect("ompo runs");
+    let output = run_ompo(&["models", "--json"]);
     assert!(
         matches!(output.status.code(), Some(0) | Some(1) | Some(4)),
         "models must return its typed outcome vocabulary: status={:?} stderr={}",
@@ -36,17 +45,13 @@ fn models_verb_is_reachable_and_never_falls_through_to_unknown() {
 
 #[test]
 fn capabilities_and_help_expose_the_models_verb() {
-    let capabilities = ompo()
-        .args(["capabilities", "--json"])
-        .output()
-        .expect("capabilities runs");
+    let capabilities = run_ompo(&["capabilities", "--json"]);
     assert!(capabilities.status.success());
     let value: Value = serde_json::from_slice(&capabilities.stdout).expect("capabilities JSON");
     let verbs = value["data"]["verbs"].as_array().expect("verbs array");
     assert!(verbs.iter().any(|verb| verb.as_str() == Some("models")));
 
-    let help = ompo().arg("--help").output().expect("help runs");
+    let help = run_ompo(&["--help"]);
     assert!(help.status.success());
     assert!(String::from_utf8_lossy(&help.stdout).contains("models [--json]"));
 }
-
