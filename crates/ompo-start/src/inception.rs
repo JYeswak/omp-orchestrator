@@ -79,7 +79,7 @@ const REQUIRED_KEYS: &[&str] = &[
     "required_tools",
     "trust_status",
 ];
-const OPTIONAL_KEYS: &[&str] = &["evidence", "status", "degradations"];
+const OPTIONAL_KEYS: &[&str] = &["evidence", "status", "degradations", "template_identity"];
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CargoWorkspaceError {
     CargoMissing { program: String, detail: String },
@@ -393,6 +393,8 @@ pub enum TrustedInitConsent {
         repository_scope: PathBuf,
         source_revision: String,
         policy_sha256: String,
+        template_path: PathBuf,
+        template_input: InputManifest,
     },
 }
 
@@ -404,8 +406,111 @@ pub enum TrustedInitDecision {
         repository_scope: PathBuf,
         source_revision: String,
         policy_sha256: String,
+        template_identity: TemplateIdentity,
     },
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TemplateIdentity {
+    pub canonical_path: String,
+    pub source_sha256: String,
+    pub source_revision: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemplateIdentityError {
+    Missing { path: PathBuf },
+    Unreadable { path: PathBuf, detail: String },
+    AuthorityRootEscape { authority_root: PathBuf, template_path: PathBuf },
+    Empty { path: PathBuf },
+    Malformed { field: &'static str, detail: String },
+    RevisionUnresolvable { path: PathBuf, detail: String },
+    SourceChanged {
+        path: PathBuf,
+        expected_sha256: String,
+        actual_sha256: String,
+        expected_revision: String,
+        actual_revision: String,
+    },
+    PartialInput { bound_kind: String, bound_value: u64, source: String },
+    RefusedInput { reason: String },
+}
+
+impl fmt::Display for TemplateIdentityError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Missing { path } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_MISSING",
+                format_args!("path={}", path.display()),
+                "restore the exact template source before trusted initialization",
+            ),
+            Self::Unreadable { path, detail } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_UNREADABLE",
+                format_args!("path={} detail={detail}", path.display()),
+                "restore read access to the template source",
+            ),
+            Self::AuthorityRootEscape { authority_root, template_path } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_AUTHORITY_ESCAPE",
+                format_args!(
+                    "authority_root={} template_path={}",
+                    authority_root.display(),
+                    template_path.display()
+                ),
+                "choose a template whose canonical path is inside the repository authority root",
+            ),
+            Self::Empty { path } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_EMPTY",
+                format_args!("path={}", path.display()),
+                "restore nonempty template source bytes",
+            ),
+            Self::Malformed { field, detail } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_MALFORMED",
+                format_args!("field={field} detail={detail}"),
+                "re-capture template identity from canonical source bytes and a live revision",
+            ),
+            Self::RevisionUnresolvable { path, detail } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_REVISION_UNRESOLVABLE",
+                format_args!("path={} detail={detail}", path.display()),
+                "commit the template source and restore a resolvable repository HEAD",
+            ),
+            Self::SourceChanged {
+                path,
+                expected_sha256,
+                actual_sha256,
+                expected_revision,
+                actual_revision,
+            } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_SOURCE_CHANGED",
+                format_args!(
+                    "path={} expected_sha256={expected_sha256} actual_sha256={actual_sha256} expected_revision={expected_revision} actual_revision={actual_revision}",
+                    path.display()
+                ),
+                "re-capture consent after the template source and repository revision stop changing",
+            ),
+            Self::PartialInput { bound_kind, bound_value, source } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_INPUT_PARTIAL",
+                format_args!("bound_kind={bound_kind} bound_value={bound_value} source={source}"),
+                "re-run identity capture over the full template source",
+            ),
+            Self::RefusedInput { reason } => write_human_halt(
+                formatter,
+                "TEMPLATE_IDENTITY_INPUT_REFUSED",
+                format_args!("reason={reason}"),
+                "resolve the input refusal before trusted initialization",
+            ),
+        }
+    }
+}
+
+impl std::error::Error for TemplateIdentityError {}
 
 #[derive(Debug)]
 pub enum InceptionError {
@@ -420,6 +525,8 @@ pub enum InceptionError {
     AgentMailRegistration(AgentMailRegistrationError),
     /// Repository-to-RCH lane mapping could not be read consistently.
     RchLane(RchLaneError),
+    /// Template identity could not be established before trusted initialization.
+    TemplateIdentity(TemplateIdentityError),
     /// A foreign AGENTS.md reached an explicit consent-taking entry with no consent.
     TrustedInitConsentMissing {
         path: PathBuf,
@@ -559,6 +666,7 @@ impl fmt::Display for InceptionError {
             Self::CargoWorkspace(error) => write!(formatter, "{error}"),
             Self::AgentMailRegistration(error) => write!(formatter, "{error}"),
             Self::RchLane(error) => write!(formatter, "{error}"),
+            Self::TemplateIdentity(error) => write!(formatter, "{error}"),
             Self::TrustedInitConsentMissing { path, policy_sha256 } => write_human_halt(
                 formatter,
                 "TRUSTED_INIT_CONSENT_MISSING",
@@ -658,6 +766,12 @@ impl fmt::Display for InceptionError {
 
 impl std::error::Error for InceptionError {}
 
+impl From<TemplateIdentityError> for InceptionError {
+    fn from(error: TemplateIdentityError) -> Self {
+        Self::TemplateIdentity(error)
+    }
+}
+
 impl InceptionError {
     #[must_use]
     pub const fn exit_code(&self) -> u8 {
@@ -682,6 +796,7 @@ pub struct InceptionManifest {
     pub host_capabilities: HostCapabilities,
     pub required_tools: Vec<String>,
     pub trust_status: TrustStatus,
+    pub template_identity: Option<TemplateIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -689,6 +804,7 @@ pub struct InceptionReadback {
     pub project_id: String,
     pub repo_identity: RepoIdentity,
     pub control_files_complete: bool,
+    pub template_identity: Option<TemplateIdentity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2404,6 +2520,7 @@ fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError>
             reason_code: "TRUST_DECISION_REQUIRED".to_owned(),
             control_files_complete: true,
         },
+        template_identity: None,
     })
 }
 
@@ -2441,6 +2558,30 @@ fn render_repo_identity(output: &mut String, identity: &RepoIdentity) {
     writeln!(output, "  }},").expect("writing to String cannot fail");
 }
 
+
+fn render_template_identity(output: &mut String, identity: &TemplateIdentity) {
+    writeln!(output, "  \"template_identity\": {{").expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "    \"canonical_path\": {},",
+        json_string(&identity.canonical_path)
+    )
+    .expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "    \"source_sha256\": {},",
+        json_string(&identity.source_sha256)
+    )
+    .expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "    \"source_revision\": {}",
+        json_string(&identity.source_revision)
+    )
+    .expect("writing to String cannot fail");
+    writeln!(output, "  }},").expect("writing to String cannot fail");
+}
+
 fn render_manifest(manifest: &InceptionManifest) -> String {
     let mut output = String::from("{\n");
     writeln!(
@@ -2456,6 +2597,9 @@ fn render_manifest(manifest: &InceptionManifest) -> String {
     )
     .expect("writing to String cannot fail");
     render_repo_identity(&mut output, &manifest.repo_identity);
+    if let Some(identity) = &manifest.template_identity {
+        render_template_identity(&mut output, identity);
+    }
 
     writeln!(output, "  \"control_files\": {{").expect("writing to String cannot fail");
     for (index, (path, present)) in manifest.control_files.iter().enumerate() {
@@ -3009,6 +3153,59 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValida
             .to_owned(),
     };
 
+    let template_identity = match object.get("template_identity") {
+        None => None,
+        Some(_) => {
+            let template = required_object(object, "template_identity", "template_identity")?;
+            reject_extra_keys(
+                template,
+                &["canonical_path", "source_sha256", "source_revision"],
+                "template_identity.",
+            )?;
+            let canonical_path = required_string(
+                template,
+                "canonical_path",
+                "template_identity.canonical_path",
+            )?
+            .to_owned();
+            let source_sha256 = required_string(
+                template,
+                "source_sha256",
+                "template_identity.source_sha256",
+            )?
+            .to_owned();
+            if source_sha256.len() != 64
+                || !source_sha256
+                    .chars()
+                    .all(|character| character.is_ascii_digit() || matches!(character, 'a'..='f'))
+            {
+                return Err(ReadbackValidationError::Invalid {
+                    key: "template_identity.source_sha256".to_owned(),
+                    detail: "expected 64 lowercase hexadecimal characters".to_owned(),
+                });
+            }
+            let source_revision = required_string(
+                template,
+                "source_revision",
+                "template_identity.source_revision",
+            )?
+            .to_owned();
+            if !(7..=64).contains(&source_revision.len())
+                || !source_revision.chars().all(|character| character.is_ascii_hexdigit())
+            {
+                return Err(ReadbackValidationError::Invalid {
+                    key: "template_identity.source_revision".to_owned(),
+                    detail: "expected 7..=64 hexadecimal characters".to_owned(),
+                });
+            }
+            Some(TemplateIdentity {
+                canonical_path,
+                source_sha256,
+                source_revision,
+            })
+        }
+    };
+
     let control_files = required_object(object, "control_files", "control_files")?;
     reject_extra_keys(control_files, REQUIRED_CONTROL_FILES, "control_files.")?;
     for relative in REQUIRED_CONTROL_FILES {
@@ -3081,6 +3278,7 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValida
         project_id,
         repo_identity,
         control_files_complete: true,
+        template_identity,
     })
 }
 
@@ -3232,6 +3430,191 @@ pub const PROJECT_AGENTS_OWNERSHIP_STAMP: &str = "omp-orchestrator";
 /// Trust gate (cbl7/jlna): resolve owned policy or validate a caller-supplied
 /// consent record. Missing control files are refused by build_manifest first;
 /// no environment variable, global flag, or mutable side file is consulted.
+fn require_full_template_input(input: &InputManifest) -> Result<(), TemplateIdentityError> {
+    match input {
+        InputManifest::Full => Ok(()),
+        InputManifest::Partial {
+            bound_kind,
+            bound_value,
+            source,
+        } => Err(TemplateIdentityError::PartialInput {
+            bound_kind: bound_kind.clone(),
+            bound_value: *bound_value,
+            source: source.clone(),
+        }),
+        InputManifest::Refused { reason } => Err(TemplateIdentityError::RefusedInput {
+            reason: reason.clone(),
+        }),
+    }
+}
+
+fn revision_and_source_at_head(
+    authority_root: &Path,
+    canonical_template: &Path,
+) -> Result<(String, Vec<u8>), TemplateIdentityError> {
+    let mut revision_command = Command::new("git");
+    revision_command
+        .arg("-C")
+        .arg(authority_root)
+        .args(["rev-parse", "HEAD"]);
+    let revision_output = run_command_output_typed(&mut revision_command).map_err(|error| {
+        TemplateIdentityError::RevisionUnresolvable {
+            path: canonical_template.to_owned(),
+            detail: error.to_string(),
+        }
+    })?;
+    let revision = String::from_utf8(revision_output.stdout)
+        .map_err(|error| TemplateIdentityError::Malformed {
+            field: "source_revision",
+            detail: error.to_string(),
+        })?
+        .trim()
+        .to_owned();
+    if !(7..=64).contains(&revision.len())
+        || !revision.chars().all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(TemplateIdentityError::Malformed {
+            field: "source_revision",
+            detail: format!("expected 7..=64 hexadecimal characters, found={revision:?}"),
+        });
+    }
+    let relative = canonical_template
+        .strip_prefix(authority_root)
+        .map_err(|_| TemplateIdentityError::AuthorityRootEscape {
+            authority_root: authority_root.to_owned(),
+            template_path: canonical_template.to_owned(),
+        })?;
+    let relative = relative.to_str().ok_or_else(|| TemplateIdentityError::Malformed {
+        field: "canonical_path",
+        detail: "template path is not UTF-8".to_owned(),
+    })?;
+    let object = format!("{revision}:{relative}");
+    let mut show_command = Command::new("git");
+    show_command
+        .arg("-C")
+        .arg(authority_root)
+        .args(["show", object.as_str()]);
+    let output = run_command_output_typed(&mut show_command).map_err(|error| {
+        TemplateIdentityError::RevisionUnresolvable {
+            path: canonical_template.to_owned(),
+            detail: error.to_string(),
+        }
+    })?;
+    Ok((revision, output.stdout))
+}
+
+pub fn capture_template_identity(
+    authority_root: &Path,
+    template_path: &Path,
+    input: &InputManifest,
+) -> Result<TemplateIdentity, TemplateIdentityError> {
+    require_full_template_input(input)?;
+    let authority_root = authority_root
+        .canonicalize()
+        .map_err(|error| TemplateIdentityError::Malformed {
+            field: "authority_root",
+            detail: error.to_string(),
+        })?;
+    let canonical_template = template_path.canonicalize().map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            TemplateIdentityError::Missing {
+                path: template_path.to_owned(),
+            }
+        } else {
+            TemplateIdentityError::Unreadable {
+                path: template_path.to_owned(),
+                detail: error.to_string(),
+            }
+        }
+    })?;
+    if !canonical_template.starts_with(&authority_root) {
+        return Err(TemplateIdentityError::AuthorityRootEscape {
+            authority_root,
+            template_path: canonical_template,
+        });
+    }
+    let source = fs::read(&canonical_template).map_err(|error| TemplateIdentityError::Unreadable {
+        path: canonical_template.clone(),
+        detail: error.to_string(),
+    })?;
+    if source.is_empty() {
+        return Err(TemplateIdentityError::Empty {
+            path: canonical_template,
+        });
+    }
+    let canonical_path = canonical_template
+        .to_str()
+        .ok_or_else(|| TemplateIdentityError::Malformed {
+            field: "canonical_path",
+            detail: "template path is not UTF-8".to_owned(),
+        })?
+        .to_owned();
+    let source_sha256 = sha256_hex(&source);
+    let (source_revision, committed_source) =
+        revision_and_source_at_head(&authority_root, &canonical_template)?;
+    if committed_source != source {
+        return Err(TemplateIdentityError::SourceChanged {
+            path: canonical_template,
+            expected_sha256: sha256_hex(&committed_source),
+            actual_sha256: source_sha256,
+            expected_revision: source_revision.clone(),
+            actual_revision: source_revision,
+        });
+    }
+    Ok(TemplateIdentity {
+        canonical_path,
+        source_sha256,
+        source_revision,
+    })
+}
+
+pub fn verify_template_identity_current(
+    authority_root: &Path,
+    identity: &TemplateIdentity,
+) -> Result<(), TemplateIdentityError> {
+    let canonical_template = PathBuf::from(&identity.canonical_path);
+    let authority_root = authority_root
+        .canonicalize()
+        .map_err(|error| TemplateIdentityError::Malformed {
+            field: "authority_root",
+            detail: error.to_string(),
+        })?;
+    if !canonical_template.starts_with(&authority_root) {
+        return Err(TemplateIdentityError::AuthorityRootEscape {
+            authority_root,
+            template_path: canonical_template,
+        });
+    }
+    let source = fs::read(&canonical_template).map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            TemplateIdentityError::Missing {
+                path: canonical_template.clone(),
+            }
+        } else {
+            TemplateIdentityError::Unreadable {
+                path: canonical_template.clone(),
+                detail: error.to_string(),
+            }
+        }
+    })?;
+    let actual_sha256 = sha256_hex(&source);
+    let (actual_revision, committed_source) =
+        revision_and_source_at_head(&authority_root, &canonical_template)?;
+    if actual_sha256 != identity.source_sha256
+        || actual_revision != identity.source_revision
+        || committed_source != source
+    {
+        return Err(TemplateIdentityError::SourceChanged {
+            path: canonical_template,
+            expected_sha256: identity.source_sha256.clone(),
+            actual_sha256,
+            expected_revision: identity.source_revision.clone(),
+            actual_revision,
+        });
+    }
+    Ok(())
+}
+
 fn trusted_init_decision(
     repo_root: &Path,
     consent: Option<&TrustedInitConsent>,
@@ -3269,6 +3652,8 @@ fn trusted_init_decision(
         repository_scope,
         source_revision: provided_source_revision,
         policy_sha256: provided_policy_sha256,
+        template_path,
+        template_input,
     } = consent
     else {
         return Err(InceptionError::TrustedInitConsentMissing {
@@ -3326,11 +3711,14 @@ fn trusted_init_decision(
             provided_policy_sha256: provided_policy_sha256.clone(),
         });
     }
+    let template_identity =
+        capture_template_identity(&canonical, template_path, template_input)?;
     Ok(TrustedInitDecision::ExplicitConsent {
         decision_id: decision_id.clone(),
         repository_scope: canonical,
         source_revision: provided_source_revision.clone(),
         policy_sha256,
+        template_identity,
     })
 }
 
@@ -3771,9 +4159,17 @@ fn initialize_inner(
     output: &Path,
     consent: Option<&TrustedInitConsent>,
 ) -> Result<InitReport, InceptionError> {
-    let manifest = build_manifest(repo_root)?;
-    let bytes = render_manifest(&manifest).into_bytes();
+    let mut manifest = build_manifest(repo_root)?;
     let trusted_init = trusted_init_decision(repo_root, consent)?;
+    let template_identity = match &trusted_init {
+        TrustedInitDecision::OwnedPolicy => None,
+        TrustedInitDecision::ExplicitConsent { template_identity, .. } => {
+            verify_template_identity_current(repo_root, template_identity)?;
+            Some(template_identity.clone())
+        }
+    };
+    manifest.template_identity = template_identity;
+    let bytes = render_manifest(&manifest).into_bytes();
     // ONE pre-state read answers both questions: did the artifact exist, and
     // does its content differ. Reading twice would let the two answers come
     // from two different moments.
@@ -3870,10 +4266,17 @@ fn write_inception_inner(
     output: &Path,
     consent: Option<&TrustedInitConsent>,
 ) -> Result<InceptionManifest, InceptionError> {
-    let manifest = build_manifest(repo_root)?;
+    let mut manifest = build_manifest(repo_root)?;
     let trusted_init = trusted_init_decision(repo_root, consent)?;
+    let template_identity = match &trusted_init {
+        TrustedInitDecision::OwnedPolicy => None,
+        TrustedInitDecision::ExplicitConsent { template_identity, .. } => {
+            verify_template_identity_current(repo_root, template_identity)?;
+            Some(template_identity.clone())
+        }
+    };
+    manifest.template_identity = template_identity;
     let bytes = render_manifest(&manifest).into_bytes();
-    let _trusted_init = trusted_init;
     let should_write = match fs::read(output) {
         Ok(existing) if existing == bytes => false,
         Ok(_) => {
@@ -3951,6 +4354,8 @@ fn fixture() -> (TempDir, PathBuf) {
         format!("fixture {PROJECT_AGENTS_OWNERSHIP_STAMP}\n"),
     )
     .expect("fixture stamp");
+    fs::write(directory.path().join("template.md"), b"template source\n")
+        .expect("template source");
     run_test_git(directory.path(), &["init", "-q"]);
     run_test_git(directory.path(), &["add", "."]);
     run_test_git(
@@ -3984,6 +4389,8 @@ mod tests {
             repository_scope,
             source_revision,
             policy_sha256,
+            template_path: root.join("template.md"),
+            template_input: InputManifest::full(),
         }
     }
     #[test]
@@ -4157,7 +4564,16 @@ mod tests {
                 .expect("optional fixture JSON");
         let object = value.as_object_mut().expect("manifest object");
         for key in OPTIONAL_KEYS {
-            object.insert((*key).to_owned(), Value::String("optional".to_owned()));
+            let value = if *key == "template_identity" {
+                serde_json::json!({
+                    "canonical_path": "/template",
+                    "source_sha256": "a".repeat(64),
+                    "source_revision": "0123456789abcdef",
+                })
+            } else {
+                Value::String("optional".to_owned())
+            };
+            object.insert((*key).to_owned(), value);
         }
         fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode optional fixture"))
             .expect("write optional fixture");

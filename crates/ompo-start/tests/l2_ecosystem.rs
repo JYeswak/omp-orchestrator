@@ -5,21 +5,21 @@
 //! This target exercises the real inception writer and readback contract with an isolated
 //! repository fixture. It is invoked directly as Cargo's `--test l2_ecosystem` target.
 
+use lifecycle_event::{
+    default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
+};
+use lifecycle_monitor::{gate_claimed_write_readback, observe_layer, verify_artifact, LayerState};
 use ompo_start::inception::{
     hook_source_identity_report, initialize, initialize_gated, list_backups, read_inception,
     restore_backup, CargoWorkspaceError, HookIdentityStatus, InceptionError, TrustedInitConsent,
     TrustedInitDecision, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
 };
-use std::path::Path;
-use std::process::Command;
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
+use std::path::Path;
+use std::process::Command;
 use std::time::Duration;
 use tempfile::TempDir;
-use lifecycle_event::{
-    default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
-};
-use lifecycle_monitor::{gate_claimed_write_readback, observe_layer, verify_artifact, LayerState};
 fn marker_exists(project: &str, marker: &str) -> bool {
     Path::new(project).join(marker).exists()
 }
@@ -232,8 +232,8 @@ esac
         binary
     });
     let directory = binary.parent().expect("RCH fixture parent");
-    let mut paths = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .collect::<Vec<_>>();
+    let mut paths =
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()).collect::<Vec<_>>();
     if !paths.iter().any(|path| path == directory) {
         paths.insert(0, directory.to_owned());
         std::env::set_var("PATH", std::env::join_paths(paths).expect("fixture PATH"));
@@ -251,7 +251,9 @@ fn run_git(repo: &Path, args: &[&str]) {
 fn explicit_trusted_init_consent(root: &Path, decision_id: &str) -> TrustedInitConsent {
     let repository_scope = root.canonicalize().expect("canonical consent scope");
     let mut command = Command::new("git");
-    command.current_dir(&repository_scope).args(["rev-parse", "HEAD"]);
+    command
+        .current_dir(&repository_scope)
+        .args(["rev-parse", "HEAD"]);
     let output = match subprocess_contract::bounded_output(&mut command, Duration::from_secs(10)) {
         subprocess_contract::BoundedOutcome::Completed(output) if output.status.success() => output,
         other => panic!("consent revision command failed: {other:?}"),
@@ -260,8 +262,7 @@ fn explicit_trusted_init_consent(root: &Path, decision_id: &str) -> TrustedInitC
         .expect("UTF-8 consent revision")
         .trim()
         .to_owned();
-    let policy = std::fs::read(repository_scope.join("AGENTS.md"))
-        .expect("consent policy bytes");
+    let policy = std::fs::read(repository_scope.join("AGENTS.md")).expect("consent policy bytes");
     let mut policy_sha256 = String::with_capacity(64);
     for byte in Sha256::digest(policy) {
         use std::fmt::Write as _;
@@ -272,6 +273,8 @@ fn explicit_trusted_init_consent(root: &Path, decision_id: &str) -> TrustedInitC
         repository_scope,
         source_revision,
         policy_sha256,
+        template_path: root.join("template.md"),
+        template_input: input_manifest::InputManifest::full(),
     }
 }
 
@@ -284,13 +287,34 @@ fn foreign_policy_fixture() -> TempDir {
     .expect("stamped CLAUDE.md");
     std::fs::write(repository.path().join("AGENTS.md"), b"foreign policy\n")
         .expect("foreign AGENTS.md");
+    std::fs::write(repository.path().join("template.md"), b"template source\n")
+        .expect("template source");
+    run_git(repository.path(), &["add", "template.md"]);
+    run_git(
+        repository.path(),
+        &[
+            "-c",
+            "user.name=ompo-start-test",
+            "-c",
+            "user.email=ompo-start-test@example.invalid",
+            "commit",
+            "-qm",
+            "template source",
+        ],
+    );
     repository
 }
 
 fn assert_no_init_residue(root: &Path, output: &Path) {
-    assert!(!output.exists(), "refusal wrote output {}", output.display());
     assert!(
-        list_backups(output).expect("list refusal backups").is_empty(),
+        !output.exists(),
+        "refusal wrote output {}",
+        output.display()
+    );
+    assert!(
+        list_backups(output)
+            .expect("list refusal backups")
+            .is_empty(),
         "refusal wrote backup residue for {}",
         output.display()
     );
@@ -302,14 +326,16 @@ fn assert_no_init_residue(root: &Path, output: &Path) {
 
 fn write_project_agents_stamp(root: &Path) {
     let stamp = format!("fixture {}\n", PROJECT_AGENTS_OWNERSHIP_STAMP);
-    assert!(!stamp.trim().is_empty(), "canonical cbl7 project-agent stamp");
+    assert!(
+        !stamp.trim().is_empty(),
+        "canonical cbl7 project-agent stamp"
+    );
     std::fs::write(root.join("AGENTS.md"), stamp).expect("stamped AGENTS.md");
 }
 
 const HOOK_SOURCE_PATH: &str = "crates/agent-mail-native/src/lib.rs";
 const HOOK_SOURCE_BYTES: &[u8] = b"pub fn hook_fixture() {}\n";
-const HOOK_SOURCE_DIGEST: &str =
-    "5e336085e3231b40af66b75c24fc5af9a2a6d1747ff999165537001919632576";
+const HOOK_SOURCE_DIGEST: &str = "5e336085e3231b40af66b75c24fc5af9a2a6d1747ff999165537001919632576";
 
 fn installed_hook(root: &Path) -> std::path::PathBuf {
     root.join(".git/hooks/pre-commit")
@@ -320,8 +346,11 @@ fn write_hook_manifest(root: &Path, digest: &str) {
     std::fs::create_dir_all(hook.parent().expect("hook parent")).expect("hook directory");
     // Real Mach-O `strings` glues the final digest to adjacent rodata. The
     // fixture carries that boundary so exact-match does not depend on a newline.
-    std::fs::write(hook, format!("{HOOK_SOURCE_PATH} {digest}adjacent-rodata\n"))
-        .expect("hook manifest artifact");
+    std::fs::write(
+        hook,
+        format!("{HOOK_SOURCE_PATH} {digest}adjacent-rodata\n"),
+    )
+    .expect("hook manifest artifact");
 }
 
 fn commit_hook_source_change(root: &Path, bytes: &[u8]) {
@@ -350,8 +379,11 @@ fn repository_fixture() -> TempDir {
         std::fs::write(directory.path().join(name), b"fixture\n").expect("control file");
     }
     std::fs::create_dir(directory.path().join("src")).expect("fixture src directory");
-    std::fs::write(directory.path().join("src/lib.rs"), b"pub fn fixture() {}\n")
-        .expect("fixture library");
+    std::fs::write(
+        directory.path().join("src/lib.rs"),
+        b"pub fn fixture() {}\n",
+    )
+    .expect("fixture library");
     std::fs::write(
         directory.path().join("Cargo.toml"),
         b"[package]\nname = \"ompo-start\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
@@ -411,7 +443,10 @@ fn l2_named_target_initializes_and_reads_back_identity() {
     assert!(!first.manifest.project_id.is_empty());
     assert!(!first.manifest.repo_identity.source_revision.is_empty());
     assert!(!first.manifest.repo_identity.host_identity.is_empty());
-    assert_eq!(first.manifest.trust_status.reason_code, "TRUST_DECISION_REQUIRED");
+    assert_eq!(
+        first.manifest.trust_status.reason_code,
+        "TRUST_DECISION_REQUIRED"
+    );
 
     let readback = read_inception(&output).expect("inception readback");
     assert_eq!(readback.project_id, first.manifest.project_id);
@@ -434,11 +469,8 @@ fn equivalent_symlink_paths_share_identity() {
         &repository.path().join(".omp-orchestrator/inception.json"),
     )
     .expect("real path init");
-    let second = initialize(
-        &alias,
-        &alias.join(".omp-orchestrator/inception.json"),
-    )
-    .expect("symlink path init");
+    let second = initialize(&alias, &alias.join(".omp-orchestrator/inception.json"))
+        .expect("symlink path init");
     assert_eq!(first.manifest.project_id, second.manifest.project_id);
     assert_eq!(first.manifest.repo_identity, second.manifest.repo_identity);
 }
@@ -456,10 +488,9 @@ fn readback_refuses_empty_and_missing_identity_fields() {
         let repository = repository_fixture();
         let output = repository.path().join(".omp-orchestrator/inception.json");
         initialize(repository.path(), &output).expect("write inception");
-        let mut value: Value = serde_json::from_str(
-            &std::fs::read_to_string(&output).expect("read inception"),
-        )
-        .expect("valid JSON");
+        let mut value: Value =
+            serde_json::from_str(&std::fs::read_to_string(&output).expect("read inception"))
+                .expect("valid JSON");
         if nested {
             value
                 .get_mut("repo_identity")
@@ -472,8 +503,11 @@ fn readback_refuses_empty_and_missing_identity_fields() {
                 .expect("manifest object")
                 .remove(field);
         }
-        std::fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
-            .expect("write mutation");
+        std::fs::write(
+            &output,
+            serde_json::to_vec_pretty(&value).expect("encode mutation"),
+        )
+        .expect("write mutation");
         let error = read_inception(&output).expect_err("identity omission must refuse");
         match (field, error) {
             ("project_id", InceptionError::ReadbackMissingKey { key, .. }) => {
@@ -508,16 +542,18 @@ fn readback_refuses_empty_or_missing_manifest_objects() {
     let repository = repository_fixture();
     let output = repository.path().join(".omp-orchestrator/inception.json");
     initialize(repository.path(), &output).expect("write inception");
-    let mut value: Value = serde_json::from_str(
-        &std::fs::read_to_string(&output).expect("read inception"),
-    )
-    .expect("valid JSON");
+    let mut value: Value =
+        serde_json::from_str(&std::fs::read_to_string(&output).expect("read inception"))
+            .expect("valid JSON");
     value
         .as_object_mut()
         .expect("manifest object")
         .insert("repo_identity".to_owned(), Value::Null);
-    std::fs::write(&output, serde_json::to_vec_pretty(&value).expect("encode mutation"))
-        .expect("write mutation");
+    std::fs::write(
+        &output,
+        serde_json::to_vec_pretty(&value).expect("encode mutation"),
+    )
+    .expect("write mutation");
     let error = read_inception(&output).expect_err("null repo identity must refuse");
     assert!(matches!(
         error,
@@ -528,11 +564,16 @@ fn readback_refuses_empty_or_missing_manifest_objects() {
 
 #[test]
 fn nonexistent_root_refuses_canonicalization() {
-    let root = tempfile::tempdir().expect("root parent").path().join("missing");
+    let root = tempfile::tempdir()
+        .expect("root parent")
+        .path()
+        .join("missing");
     let output = root.join(".omp-orchestrator/inception.json");
     let error = initialize(&root, &output).expect_err("nonexistent root must refuse");
     assert!(matches!(error, InceptionError::RepositoryUnreadable { .. }));
-    assert!(error.to_string().contains("INCEPTION_REPOSITORY_UNREADABLE"));
+    assert!(error
+        .to_string()
+        .contains("INCEPTION_REPOSITORY_UNREADABLE"));
 }
 #[test]
 fn l2_named_target_refuses_missing_control_files() {
@@ -540,14 +581,15 @@ fn l2_named_target_refuses_missing_control_files() {
     std::fs::remove_file(repository.path().join("SCHEMAS.toml")).expect("remove control file");
     let output = repository.path().join(".omp-orchestrator/inception.json");
 
-    let error = initialize(repository.path(), &output).expect_err("missing control file must refuse");
+    let error =
+        initialize(repository.path(), &output).expect_err("missing control file must refuse");
     assert!(matches!(error, InceptionError::MissingControlFiles(_)));
     assert!(!output.exists(), "refused init must not write the artifact");
     std::fs::write(repository.path().join("SCHEMAS.toml"), b"fixture\n")
         .expect("restore control file");
     std::fs::remove_dir_all(repository.path().join(".git")).expect("remove git");
-    let identity_error = initialize(repository.path(), &output)
-        .expect_err("non-git identity must refuse");
+    let identity_error =
+        initialize(repository.path(), &output).expect_err("non-git identity must refuse");
     assert!(matches!(
         identity_error,
         InceptionError::IdentityUnavailable {
@@ -712,7 +754,10 @@ fn l2_suppressed_event_writer_is_detected_naming_the_missing_stage_to() {
     // would conflate them.
     std::fs::write(
         &journal,
-        format!("{}\n", serde_json::to_string(&foreign).expect("encode foreign row")),
+        format!(
+            "{}\n",
+            serde_json::to_string(&foreign).expect("encode foreign row")
+        ),
     )
     .expect("suppressed journal");
 
@@ -900,7 +945,11 @@ fn l2_accepted_init_writes_backups_and_reads_back_every_declared_field() {
     initialize(repository.path(), &output).expect("replacing init");
 
     let backups = list_backups(&output).expect("backup listing");
-    assert_eq!(backups.len(), 1, "one replacement, one content-keyed backup");
+    assert_eq!(
+        backups.len(),
+        1,
+        "one replacement, one content-keyed backup"
+    );
     assert_eq!(
         std::fs::read(&backups[0].path).expect("backup bytes"),
         b"superseded\n"
@@ -1088,8 +1137,11 @@ fn persona_a_remote_policy_is_carried_by_gated_entry() {
     use ompo_start::inception::{initialize_gated, PersonaRemote};
 
     let remote = repository_fixture();
-    std::fs::write(remote.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
+    std::fs::write(
+        remote.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
     run_git(
         remote.path(),
         &["remote", "add", "origin", "https://example.invalid/x.git"],
@@ -1097,8 +1149,9 @@ fn persona_a_remote_policy_is_carried_by_gated_entry() {
     let remote_output = remote
         .path()
         .join(".omp-orchestrator/init-gated-remote-present.json");
-    let remote_report = initialize_gated(remote.path(), &remote_output, &TrustedInitConsent::Absent)
-        .expect("remote-present Persona A proceeds");
+    let remote_report =
+        initialize_gated(remote.path(), &remote_output, &TrustedInitConsent::Absent)
+            .expect("remote-present Persona A proceeds");
     assert_eq!(
         remote_report.persona_remote,
         Some(PersonaRemote {
@@ -1111,8 +1164,11 @@ fn persona_a_remote_policy_is_carried_by_gated_entry() {
     assert!(remote_output.is_file(), "remote-present init must continue");
 
     let local = repository_fixture();
-    std::fs::write(local.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
+    std::fs::write(
+        local.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
     let local_output = local
         .path()
         .join(".omp-orchestrator/init-gated-local-only.json");
@@ -1153,8 +1209,7 @@ fn persona_bc_missing_remote_halts_dispatch() {
         &["remote", "add", "origin", "https://example.invalid/x.git"],
     );
     for persona_a in [true, false] {
-        let present = persona_remote_policy(repository.path(), persona_a)
-            .expect("policy answers");
+        let present = persona_remote_policy(repository.path(), persona_a).expect("policy answers");
         require_remote_for_dispatch(&present).expect("a present remote continues");
     }
     // Restrictive branch with nothing behind it: non-Persona-A, no
@@ -1234,7 +1289,11 @@ fn hook_identity_unreadable_hook_is_typed() {
     std::fs::remove_file(&hook).expect("remove hook file");
     std::fs::create_dir(&hook).expect("directory mask is unreadable as a file");
     let report = hook_source_identity_report(repository.path());
-    assert_eq!(report.status, HookIdentityStatus::UnreadableHook, "{report:?}");
+    assert_eq!(
+        report.status,
+        HookIdentityStatus::UnreadableHook,
+        "{report:?}"
+    );
     assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_UNREADABLE");
 }
 
@@ -1245,7 +1304,11 @@ fn hook_identity_absent_source_commit_is_typed() {
     let repository = tempfile::tempdir().expect("fixture directory");
     write_hook_manifest(repository.path(), HOOK_SOURCE_DIGEST);
     let report = hook_source_identity_report(repository.path());
-    assert_eq!(report.status, HookIdentityStatus::SourceCommitAbsent, "{report:?}");
+    assert_eq!(
+        report.status,
+        HookIdentityStatus::SourceCommitAbsent,
+        "{report:?}"
+    );
     assert_eq!(report.status.reason_code(), "HOOK_SOURCE_COMMIT_ABSENT");
 }
 
@@ -1275,7 +1338,11 @@ fn hook_identity_content_mismatch_names_changed_source() {
     let repository = repository_fixture();
     commit_hook_source_change(repository.path(), b"pub fn hook_fixture_changed() {}\n");
     let report = hook_source_identity_report(repository.path());
-    assert_eq!(report.status, HookIdentityStatus::ContentMismatch, "{report:?}");
+    assert_eq!(
+        report.status,
+        HookIdentityStatus::ContentMismatch,
+        "{report:?}"
+    );
     assert!(report.detail.contains(HOOK_SOURCE_PATH), "{report:?}");
     assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_HEAD_MISMATCH");
 }
@@ -1285,11 +1352,21 @@ fn hook_identity_content_mismatch_names_changed_source() {
 #[test]
 fn hook_identity_unproven_artifact_is_typed() {
     let repository = repository_fixture();
-    std::fs::write(installed_hook(repository.path()), b"opaque artifact without a source stamp\n")
-        .expect("unstamped hook");
+    std::fs::write(
+        installed_hook(repository.path()),
+        b"opaque artifact without a source stamp\n",
+    )
+    .expect("unstamped hook");
     let report = hook_source_identity_report(repository.path());
-    assert_eq!(report.status, HookIdentityStatus::UnprovenArtifact, "{report:?}");
-    assert_eq!(report.status.reason_code(), "HOOK_IDENTITY_UNPROVEN_ARTIFACT");
+    assert_eq!(
+        report.status,
+        HookIdentityStatus::UnprovenArtifact,
+        "{report:?}"
+    );
+    assert_eq!(
+        report.status.reason_code(),
+        "HOOK_IDENTITY_UNPROVEN_ARTIFACT"
+    );
 }
 
 /// tqs8 wiring selector: the reachable gated entry consumes the hook verdict
@@ -1303,10 +1380,15 @@ fn hook_identity_verdict_gates_reachable_l2_entry() {
     use ompo_start::inception::initialize_gated;
 
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
     commit_hook_source_change(repository.path(), b"pub fn hook_fixture_changed() {}\n");
-    let output = repository.path().join(".omp-orchestrator/hook-refused.json");
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/hook-refused.json");
     match initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent) {
         Err(InceptionError::HookIdentityRefused {
             status: HookIdentityStatus::ContentMismatch,
@@ -1338,12 +1420,14 @@ fn gated_entry_requires_git_repo() {
     // qruz companion: the gated entry now also requires a stamped
     // CLAUDE.md. Stamp it so this leg keeps measuring the git gate,
     // not the stamp gate.
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
-    let output = repository
-        .path()
-        .join(".omp-orchestrator/inception.json");
-    let report = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("real repo proceeds");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
+    let output = repository.path().join(".omp-orchestrator/inception.json");
+    let report = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+        .expect("real repo proceeds");
     assert!(
         output.is_file(),
         "a gated real repo must produce its artifact"
@@ -1353,7 +1437,8 @@ fn gated_entry_requires_git_repo() {
     // downstream write -- the artifact must not exist afterwards.
     let bare = tempfile::tempdir().expect("bare fixture");
     let bare_output = bare.path().join(".omp-orchestrator/inception.json");
-    let error = initialize_gated(bare.path(), &bare_output, &TrustedInitConsent::Absent).expect_err("non-repo must halt");
+    let error = initialize_gated(bare.path(), &bare_output, &TrustedInitConsent::Absent)
+        .expect_err("non-repo must halt");
     let text = error.to_string();
     assert!(
         text.starts_with("INCEPTION_IDENTITY_UNAVAILABLE"),
@@ -1387,10 +1472,7 @@ fn agents_stamp_reports_identity_revision_and_status() {
             .args(["rev-parse", "HEAD"])
             .output()
             .expect("git rev-parse runs");
-        assert!(
-            output.status.success(),
-            "fixture must be a live repository"
-        );
+        assert!(output.status.success(), "fixture must be a live repository");
         String::from_utf8_lossy(&output.stdout).trim().to_owned()
     }
     // Healthy: stamped file in a live repo reports identity, live
@@ -1435,10 +1517,7 @@ fn agents_stamp_reports_identity_revision_and_status() {
     std::fs::write(repository.path().join("AGENTS.md"), b"foreign stuff\n")
         .expect("corruption lands");
     let corrupt = agents_stamp_report(repository.path());
-    assert!(
-        !corrupt.stamp_present,
-        "a tokenless file must not certify"
-    );
+    assert!(!corrupt.stamp_present, "a tokenless file must not certify");
     assert!(
         corrupt.source_revision.is_some(),
         "revision observes independently of the stamp"
@@ -1453,8 +1532,11 @@ fn agents_stamp_reports_identity_revision_and_status() {
     // deterministically unknown on every lane, unlike a bare tempdir
     // (which resolves parent checkouts on some workers).
     let nogit = tempfile::tempdir().expect("no-git fixture");
-    std::fs::write(nogit.path().join("AGENTS.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped non-repo file");
+    std::fs::write(
+        nogit.path().join("AGENTS.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped non-repo file");
     std::fs::write(nogit.path().join(".git"), b"gitdir: /nonexistent/e0li\n")
         .expect("broken gitdir");
     let report = agents_stamp_report(nogit.path());
@@ -1485,51 +1567,62 @@ fn claude_stamp_gates_trust_entry() {
     // Healthy: stamped CLAUDE.md in a live repo reaches the trust
     // branch -- initialize runs and writes the artifact.
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
-    let output = repository
-        .path()
-        .join(".omp-orchestrator/init-gated.json");
-    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
-    assert!(
-        output.exists(),
-        "a trusted entry writes its artifact"
-    );
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
+    let output = repository.path().join(".omp-orchestrator/init-gated.json");
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+        .expect("stamped entry proceeds");
+    assert!(output.exists(), "a trusted entry writes its artifact");
     // Restrictive matrix: every non-Stamped state refuses typed before
     // initialize runs, with the file and the remedy named.
     let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
-        ("empty", Box::new(|root| {
-            std::fs::write(root.join("CLAUDE.md"), b"").expect("empty file");
-        })),
-        ("foreign", Box::new(|root| {
-            std::fs::write(root.join("CLAUDE.md"), b"foreign stuff\n").expect("foreign file");
-        })),
-        ("unreadable", Box::new(|root| {
-            // Hermetic: a previous arm may have left a directory here.
-            let path = root.join("CLAUDE.md");
-            if path.is_dir() {
-                std::fs::remove_dir_all(&path).expect("clear dir");
-            } else {
-                let _ = std::fs::remove_file(&path);
-            }
-            std::fs::create_dir(&path).expect("directory mask");
-        })),
-        ("missing", Box::new(|root| {
-            let path = root.join("CLAUDE.md");
-            if path.is_dir() {
-                std::fs::remove_dir_all(&path).expect("clear dir");
-            } else {
-                std::fs::remove_file(&path).expect("remove file");
-            }
-        })),
+        (
+            "empty",
+            Box::new(|root| {
+                std::fs::write(root.join("CLAUDE.md"), b"").expect("empty file");
+            }),
+        ),
+        (
+            "foreign",
+            Box::new(|root| {
+                std::fs::write(root.join("CLAUDE.md"), b"foreign stuff\n").expect("foreign file");
+            }),
+        ),
+        (
+            "unreadable",
+            Box::new(|root| {
+                // Hermetic: a previous arm may have left a directory here.
+                let path = root.join("CLAUDE.md");
+                if path.is_dir() {
+                    std::fs::remove_dir_all(&path).expect("clear dir");
+                } else {
+                    let _ = std::fs::remove_file(&path);
+                }
+                std::fs::create_dir(&path).expect("directory mask");
+            }),
+        ),
+        (
+            "missing",
+            Box::new(|root| {
+                let path = root.join("CLAUDE.md");
+                if path.is_dir() {
+                    std::fs::remove_dir_all(&path).expect("clear dir");
+                } else {
+                    std::fs::remove_file(&path).expect("remove file");
+                }
+            }),
+        ),
     ];
     for (name, arrange) in cases {
         arrange(repository.path());
         let output = repository
             .path()
             .join(format!(".omp-orchestrator/init-gated-{name}.json"));
-        let error =
-            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unstamped must refuse");
+        let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+            .expect_err("unstamped must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains("CLAUDE.md"),
@@ -1548,8 +1641,11 @@ fn claude_stamp_gates_trust_entry() {
     // GitUnavailable is a report-level state: a stamped file with no
     // usable git observes identity without revision.
     let nogit = tempfile::tempdir().expect("no-git fixture");
-    std::fs::write(nogit.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped non-repo file");
+    std::fs::write(
+        nogit.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped non-repo file");
     std::fs::write(nogit.path().join(".git"), b"gitdir: /nonexistent/qruz\n")
         .expect("broken gitdir");
     let report = claude_stamp_report(nogit.path());
@@ -1579,53 +1675,66 @@ fn agents_stamp_gates_trust_entry() {
     // (The fixture stamps AGENTS.md; CLAUDE.md is stamped here so the
     // CLAUDE gate passes and this leg measures the AGENTS gate alone.)
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated-agents.json");
-    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
-    assert!(
-        output.exists(),
-        "a trusted entry writes its artifact"
-    );
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+        .expect("stamped entry proceeds");
+    assert!(output.exists(), "a trusted entry writes its artifact");
     // Restrictive matrix: empty, corrupt, unreadable, and missing policy
     // cannot be consented to and still refuse before initialize runs. CLAUDE.md
     // stays stamped throughout, so each refusal is the AGENTS gate firing.
     let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
-        ("empty", Box::new(|root| {
-            std::fs::write(root.join("AGENTS.md"), b"").expect("empty file");
-        })),
-        ("corrupt", Box::new(|root| {
-            std::fs::write(root.join("AGENTS.md"), b"\xff\xfe invalid \x00 bytes\n")
-                .expect("corrupt file");
-        })),
-        ("unreadable", Box::new(|root| {
-            // Hermetic: a previous arm may have left a directory here.
-            let path = root.join("AGENTS.md");
-            if path.is_dir() {
-                std::fs::remove_dir_all(&path).expect("clear dir");
-            } else {
-                let _ = std::fs::remove_file(&path);
-            }
-            std::fs::create_dir(&path).expect("directory mask");
-        })),
-        ("missing", Box::new(|root| {
-            let path = root.join("AGENTS.md");
-            if path.is_dir() {
-                std::fs::remove_dir_all(&path).expect("clear dir");
-            } else {
-                std::fs::remove_file(&path).expect("remove file");
-            }
-        })),
+        (
+            "empty",
+            Box::new(|root| {
+                std::fs::write(root.join("AGENTS.md"), b"").expect("empty file");
+            }),
+        ),
+        (
+            "corrupt",
+            Box::new(|root| {
+                std::fs::write(root.join("AGENTS.md"), b"\xff\xfe invalid \x00 bytes\n")
+                    .expect("corrupt file");
+            }),
+        ),
+        (
+            "unreadable",
+            Box::new(|root| {
+                // Hermetic: a previous arm may have left a directory here.
+                let path = root.join("AGENTS.md");
+                if path.is_dir() {
+                    std::fs::remove_dir_all(&path).expect("clear dir");
+                } else {
+                    let _ = std::fs::remove_file(&path);
+                }
+                std::fs::create_dir(&path).expect("directory mask");
+            }),
+        ),
+        (
+            "missing",
+            Box::new(|root| {
+                let path = root.join("AGENTS.md");
+                if path.is_dir() {
+                    std::fs::remove_dir_all(&path).expect("clear dir");
+                } else {
+                    std::fs::remove_file(&path).expect("remove file");
+                }
+            }),
+        ),
     ];
     for (name, arrange) in cases {
         arrange(repository.path());
         let output = repository
             .path()
             .join(format!(".omp-orchestrator/init-gated-agents-{name}.json"));
-        let error =
-            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unstamped must refuse");
+        let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+            .expect_err("unstamped must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains("AGENTS.md"),
@@ -1644,8 +1753,11 @@ fn agents_stamp_gates_trust_entry() {
     // GitUnavailable is a report-level state: a stamped file with no
     // usable git observes identity without revision.
     let nogit = tempfile::tempdir().expect("no-git fixture");
-    std::fs::write(nogit.path().join("AGENTS.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped non-repo file");
+    std::fs::write(
+        nogit.path().join("AGENTS.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped non-repo file");
     std::fs::write(nogit.path().join(".git"), b"gitdir: /nonexistent/43x7r\n")
         .expect("broken gitdir");
     let report = agents_stamp_report(nogit.path());
@@ -1679,94 +1791,120 @@ fn beads_init_gates_trust_entry() {
     // is stamped here so the earlier gates pass and this leg measures
     // the tracker gate alone.)
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
     let report = beads_init_report(repository.path());
-    assert_eq!(report.status, BeadsInitStatus::Ready, "fixture tracker is ready");
+    assert_eq!(
+        report.status,
+        BeadsInitStatus::Ready,
+        "fixture tracker is ready"
+    );
     assert_eq!(
         report.project_identity.as_deref(),
         Some("fixture"),
         "report names the fixture project identity"
     );
-    assert!(report.readable && report.writable, "ready means readable and writable");
+    assert!(
+        report.readable && report.writable,
+        "ready means readable and writable"
+    );
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated-beads.json");
-    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
-    assert!(
-        output.exists(),
-        "a trusted entry writes its artifact"
-    );
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+        .expect("stamped entry proceeds");
+    assert!(output.exists(), "a trusted entry writes its artifact");
     // Restrictive matrix: every non-Ready tracker state refuses typed
     // before initialize runs, with the tracker path and the remedy
     // named. Control files stay stamped throughout, so each refusal is
     // the tracker gate firing.
     let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
-        ("missing", Box::new(|root| {
-            let dir = root.join(".beads");
-            if dir.is_dir() {
-                std::fs::remove_dir_all(&dir).expect("remove beads dir");
-            }
-        })),
-        ("uninitialized-empty", Box::new(|root| {
-            // Hermetic: a previous arm may have removed the dir or left a
-            // directory mask at the file path.
-            let dir = root.join(".beads");
-            if !dir.is_dir() {
-                std::fs::create_dir(&dir).expect("recreate beads dir");
-            }
-            let file = dir.join("issues.jsonl");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, b"").expect("empty issues");
-        })),
-        ("uninitialized-absent", Box::new(|root| {
-            let file = root.join(".beads/issues.jsonl");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            } else {
-                let _ = std::fs::remove_file(&file);
-            }
-        })),
-        ("unreadable", Box::new(|root| {
-            // (no chmod hazard): identity can never be established.
-            let file = root.join(".beads/issues.jsonl");
-            if !file.is_dir() {
-                let _ = std::fs::remove_file(&file);
-                std::fs::create_dir(&file).expect("directory mask");
-            }
-        })),
-        ("unreadable-garbage", Box::new(|root| {
-            // Valid UTF-8 with no usable id: initialized bytes, missing
-            // project identity. Treated as unreadable -- identity cannot
-            // be established either way.
-            let file = root.join(".beads/issues.jsonl");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, b"not json at all\n").expect("garbage issues");
-        })),
-        ("unwritable", Box::new(|root| {
-            // Permission-bit evidence, read -- never an access proof, so
-            // this holds for every uid including root (see reporter).
-            let file = root.join(".beads/issues.jsonl");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, "{\"id\":\"fixture-0001\"}\n").expect("restore issues");
-            let mut permissions = std::fs::metadata(&file).expect("metadata").permissions();
-            permissions.set_mode(0o444);
-            std::fs::set_permissions(&file, permissions).expect("deny write bits");
-        })),
+        (
+            "missing",
+            Box::new(|root| {
+                let dir = root.join(".beads");
+                if dir.is_dir() {
+                    std::fs::remove_dir_all(&dir).expect("remove beads dir");
+                }
+            }),
+        ),
+        (
+            "uninitialized-empty",
+            Box::new(|root| {
+                // Hermetic: a previous arm may have removed the dir or left a
+                // directory mask at the file path.
+                let dir = root.join(".beads");
+                if !dir.is_dir() {
+                    std::fs::create_dir(&dir).expect("recreate beads dir");
+                }
+                let file = dir.join("issues.jsonl");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, b"").expect("empty issues");
+            }),
+        ),
+        (
+            "uninitialized-absent",
+            Box::new(|root| {
+                let file = root.join(".beads/issues.jsonl");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                } else {
+                    let _ = std::fs::remove_file(&file);
+                }
+            }),
+        ),
+        (
+            "unreadable",
+            Box::new(|root| {
+                // (no chmod hazard): identity can never be established.
+                let file = root.join(".beads/issues.jsonl");
+                if !file.is_dir() {
+                    let _ = std::fs::remove_file(&file);
+                    std::fs::create_dir(&file).expect("directory mask");
+                }
+            }),
+        ),
+        (
+            "unreadable-garbage",
+            Box::new(|root| {
+                // Valid UTF-8 with no usable id: initialized bytes, missing
+                // project identity. Treated as unreadable -- identity cannot
+                // be established either way.
+                let file = root.join(".beads/issues.jsonl");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, b"not json at all\n").expect("garbage issues");
+            }),
+        ),
+        (
+            "unwritable",
+            Box::new(|root| {
+                // Permission-bit evidence, read -- never an access proof, so
+                // this holds for every uid including root (see reporter).
+                let file = root.join(".beads/issues.jsonl");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, "{\"id\":\"fixture-0001\"}\n").expect("restore issues");
+                let mut permissions = std::fs::metadata(&file).expect("metadata").permissions();
+                permissions.set_mode(0o444);
+                std::fs::set_permissions(&file, permissions).expect("deny write bits");
+            }),
+        ),
     ];
     for (name, arrange) in cases {
         arrange(repository.path());
         let output = repository
             .path()
             .join(format!(".omp-orchestrator/init-gated-beads-{name}.json"));
-        let error =
-            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unready must refuse");
+        let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+            .expect_err("unready must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains(".beads"),
@@ -1809,10 +1947,16 @@ fn toolchain_pin_gates_trust_entry() {
     // message below, so a lane defaulting elsewhere fails LOUDLY with
     // its cause named instead of mysteriously.)
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped claude");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped claude");
     let report = toolchain_pin_report(repository.path());
-    let active = report.active.clone().unwrap_or_else(|| "<unreadable>".to_owned());
+    let active = report
+        .active
+        .clone()
+        .unwrap_or_else(|| "<unreadable>".to_owned());
     assert_eq!(
         report.status,
         ToolchainPinStatus::Ready,
@@ -1826,72 +1970,89 @@ fn toolchain_pin_gates_trust_entry() {
     let output = repository
         .path()
         .join(".omp-orchestrator/init-gated-toolchain.json");
-    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect("stamped entry proceeds");
-    assert!(
-        output.exists(),
-        "a trusted entry writes its artifact"
-    );
+    initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+        .expect("stamped entry proceeds");
+    assert!(output.exists(), "a trusted entry writes its artifact");
     // Restrictive matrix: every non-Ready pin state refuses typed
     // before initialize runs, with the pin file and the remedy named.
     // Earlier gates stay satisfied throughout, so each refusal is the
     // pin gate firing.
     let cases: Vec<(&str, Box<dyn Fn(&std::path::Path)>)> = vec![
-        ("missing", Box::new(|root| {
-            let file = root.join("rust-toolchain.toml");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            } else {
-                std::fs::remove_file(&file).expect("remove pin");
-            }
-        })),
-        ("unreadable", Box::new(|root| {
-            // A directory at the file path fails the read for every uid
-            // (no chmod hazard): the pin can never be established.
-            let file = root.join("rust-toolchain.toml");
-            if !file.is_dir() {
-                let _ = std::fs::remove_file(&file);
-                std::fs::create_dir(&file).expect("directory mask");
-            }
-        })),
-        ("unparseable", Box::new(|root| {
-            // Present but unquoted channel: malformed, not a pin.
-            let file = root.join("rust-toolchain.toml");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, "[toolchain]\nchannel = stable\n").expect("bare pin");
-        })),
-        ("unpinned-absent", Box::new(|root| {
-            let file = root.join("rust-toolchain.toml");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, "[toolchain]\nprofile = \"minimal\"\n").expect("pinless file");
-        })),
-        ("unpinned-empty", Box::new(|root| {
-            let file = root.join("rust-toolchain.toml");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, "[toolchain]\nchannel = \"\"\n").expect("empty pin");
-        })),
-        ("mismatched", Box::new(|root| {
-            // A declared channel the lane's default toolchain cannot
-            // satisfy: stable rustc is never beta.
-            let file = root.join("rust-toolchain.toml");
-            if file.is_dir() {
-                std::fs::remove_dir_all(&file).expect("clear mask");
-            }
-            std::fs::write(&file, "[toolchain]\nchannel = \"beta\"\n").expect("beta pin");
-        })),
+        (
+            "missing",
+            Box::new(|root| {
+                let file = root.join("rust-toolchain.toml");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                } else {
+                    std::fs::remove_file(&file).expect("remove pin");
+                }
+            }),
+        ),
+        (
+            "unreadable",
+            Box::new(|root| {
+                // A directory at the file path fails the read for every uid
+                // (no chmod hazard): the pin can never be established.
+                let file = root.join("rust-toolchain.toml");
+                if !file.is_dir() {
+                    let _ = std::fs::remove_file(&file);
+                    std::fs::create_dir(&file).expect("directory mask");
+                }
+            }),
+        ),
+        (
+            "unparseable",
+            Box::new(|root| {
+                // Present but unquoted channel: malformed, not a pin.
+                let file = root.join("rust-toolchain.toml");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, "[toolchain]\nchannel = stable\n").expect("bare pin");
+            }),
+        ),
+        (
+            "unpinned-absent",
+            Box::new(|root| {
+                let file = root.join("rust-toolchain.toml");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, "[toolchain]\nprofile = \"minimal\"\n")
+                    .expect("pinless file");
+            }),
+        ),
+        (
+            "unpinned-empty",
+            Box::new(|root| {
+                let file = root.join("rust-toolchain.toml");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, "[toolchain]\nchannel = \"\"\n").expect("empty pin");
+            }),
+        ),
+        (
+            "mismatched",
+            Box::new(|root| {
+                // A declared channel the lane's default toolchain cannot
+                // satisfy: stable rustc is never beta.
+                let file = root.join("rust-toolchain.toml");
+                if file.is_dir() {
+                    std::fs::remove_dir_all(&file).expect("clear mask");
+                }
+                std::fs::write(&file, "[toolchain]\nchannel = \"beta\"\n").expect("beta pin");
+            }),
+        ),
     ];
     for (name, arrange) in cases {
         arrange(repository.path());
-        let output = repository
-            .path()
-            .join(format!(".omp-orchestrator/init-gated-toolchain-{name}.json"));
-        let error =
-            initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent).expect_err("unsatisfied must refuse");
+        let output = repository.path().join(format!(
+            ".omp-orchestrator/init-gated-toolchain-{name}.json"
+        ));
+        let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
+            .expect_err("unsatisfied must refuse");
         let text = error.to_string();
         assert!(
             text.contains("HUMAN_HALT") && text.contains("rust-toolchain.toml"),
@@ -1920,9 +2081,7 @@ fn do8n_metadata(package: &str, members: &[&str]) -> Vec<u8> {
 #[test]
 fn cargo_workspace_current_member_is_derived() {
     use input_manifest::InputManifest;
-    use ompo_start::inception::{
-        cargo_workspace_member_report, CURRENT_WORKSPACE_PACKAGE,
-    };
+    use ompo_start::inception::{cargo_workspace_member_report, CURRENT_WORKSPACE_PACKAGE};
     let report = cargo_workspace_member_report(
         Path::new(env!("CARGO_MANIFEST_DIR")),
         &InputManifest::full(),
@@ -1976,7 +2135,9 @@ fn cargo_workspace_metadata_failure_is_typed() {
     )
     .expect_err("nonzero metadata command must halt");
     assert!(matches!(error, CargoWorkspaceError::MetadataFailed { .. }));
-    assert!(error.to_string().contains("CARGO_WORKSPACE_METADATA_FAILED"));
+    assert!(error
+        .to_string()
+        .contains("CARGO_WORKSPACE_METADATA_FAILED"));
 }
 
 #[test]
@@ -2035,11 +2196,9 @@ fn cargo_workspace_current_crate_absent_is_typed() {
         error,
         CargoWorkspaceError::CurrentCrateAbsent { .. }
     ));
-    assert!(
-        error
-            .to_string()
-            .contains("CARGO_WORKSPACE_CURRENT_CRATE_ABSENT")
-    );
+    assert!(error
+        .to_string()
+        .contains("CARGO_WORKSPACE_CURRENT_CRATE_ABSENT"));
 }
 
 fn cargo_input_refusal(input: &input_manifest::InputManifest) -> CargoWorkspaceError {
@@ -2070,7 +2229,10 @@ fn cargo_workspace_non_full_inputs_are_typed() {
             partial,
             "PARTIAL and REFUSED remain distinct: {error}"
         );
-        assert!(error.to_string().contains(reason_code), "wrong cause: {error}");
+        assert!(
+            error.to_string().contains(reason_code),
+            "wrong cause: {error}"
+        );
     }
 }
 /// do8n wiring leg: the derived member verdict is consumed immediately after
@@ -2085,7 +2247,9 @@ fn cargo_workspace_member_verdict_gates_l2_entry() {
         b"[package]\nname = \"different\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n",
     )
     .expect("foreign Cargo package");
-    let output = repository.path().join(".omp-orchestrator/cargo-member-refused.json");
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/cargo-member-refused.json");
     let error = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent)
         .expect_err("foreign current package must halt at the L2 entry");
     assert!(
@@ -2120,16 +2284,22 @@ fn agent_mail_case(marker: Option<&str>) -> TempDir {
 #[test]
 fn agent_mail_registration_exact_control_and_restrictive_matrix() {
     use input_manifest::InputManifest;
-    use ompo_start::inception::{
-        agent_mail_registration_report, AgentMailRegistrationError,
-    };
+    use ompo_start::inception::{agent_mail_registration_report, AgentMailRegistrationError};
 
     let exact = agent_mail_case(None);
     let report = agent_mail_registration_report(exact.path(), &InputManifest::full())
         .expect("canonical project, roster, and pane binding agree");
     assert_eq!(
-        (report.project.as_str(), report.pane_id.as_str(), report.agent.as_str()),
-        (exact.path().to_string_lossy().as_ref(), "%59", "BlackMeadow")
+        (
+            report.project.as_str(),
+            report.pane_id.as_str(),
+            report.agent.as_str()
+        ),
+        (
+            exact.path().to_string_lossy().as_ref(),
+            "%59",
+            "BlackMeadow"
+        )
     );
 
     type KindCheck = fn(&AgentMailRegistrationError) -> bool;
@@ -2180,10 +2350,10 @@ fn agent_mail_registration_exact_control_and_restrictive_matrix() {
     }
 
     let bounded = agent_mail_case(None);
-    let partial = InputManifest::partial("registry_rows", 1, "4xwl-fixture")
-        .expect("valid partial input");
-    let refused = InputManifest::refused("fixture withheld registration")
-        .expect("valid refused input");
+    let partial =
+        InputManifest::partial("registry_rows", 1, "4xwl-fixture").expect("valid partial input");
+    let refused =
+        InputManifest::refused("fixture withheld registration").expect("valid refused input");
     let partial_error = agent_mail_registration_report(bounded.path(), &partial)
         .expect_err("PARTIAL registration input must halt before I/O");
     let refused_error = agent_mail_registration_report(bounded.path(), &refused)
@@ -2196,8 +2366,12 @@ fn agent_mail_registration_exact_control_and_restrictive_matrix() {
         refused_error,
         AgentMailRegistrationError::RefusedInput { .. }
     ));
-    assert!(partial_error.to_string().contains("AGENT_MAIL_INPUT_PARTIAL"));
-    assert!(refused_error.to_string().contains("AGENT_MAIL_INPUT_REFUSED"));
+    assert!(partial_error
+        .to_string()
+        .contains("AGENT_MAIL_INPUT_PARTIAL"));
+    assert!(refused_error
+        .to_string()
+        .contains("AGENT_MAIL_INPUT_REFUSED"));
 }
 
 /// 4xwl wiring leg: preserve all previous L2 gates, then consume the read-only
@@ -2206,12 +2380,13 @@ fn agent_mail_registration_exact_control_and_restrictive_matrix() {
 /// only this entry leg; the exact-registration matrix above remains green.
 #[test]
 fn agent_mail_registration_verdict_gates_l2_entry() {
-    use ompo_start::inception::{
-        initialize_gated, AgentMailRegistrationError, InceptionError,
-    };
+    use ompo_start::inception::{initialize_gated, AgentMailRegistrationError, InceptionError};
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped CLAUDE.md");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped CLAUDE.md");
     std::fs::write(
         repository.path().join(".agent-mail-project-mismatch"),
         b"fixture\n",
@@ -2228,7 +2403,9 @@ fn agent_mail_registration_verdict_gates_l2_entry() {
         Err(other) => panic!("wrong L2 refusal: {other}"),
     }
     assert_eq!(
-        std::fs::metadata(&output).expect_err("refusal wrote no artifact").kind(),
+        std::fs::metadata(&output)
+            .expect_err("refusal wrote no artifact")
+            .kind(),
         std::io::ErrorKind::NotFound
     );
 }
@@ -2384,7 +2561,10 @@ fn rch_lane_mapped_and_unknown_are_distinct() {
     .expect("zero convergence records are explicit UNKNOWN, not absence or mapped");
     match unknown.state {
         RchLaneState::Unknown { cause } => {
-            assert!(cause.contains("No worker repo-convergence records"), "{cause}");
+            assert!(
+                cause.contains("No worker repo-convergence records"),
+                "{cause}"
+            );
         }
         other => panic!("UNKNOWN was coerced to {other:?}"),
     }
@@ -2406,7 +2586,13 @@ fn rch_lane_restrictive_causes_and_entry_wiring() {
         &diagnose,
     )
     .expect_err("malformed doctor output must halt");
-    assert!(matches!(malformed, RchLaneError::MalformedOutput { surface: "doctor", .. }));
+    assert!(matches!(
+        malformed,
+        RchLaneError::MalformedOutput {
+            surface: "doctor",
+            ..
+        }
+    ));
 
     let absent = rch_lane_report_from_outputs(
         repo,
@@ -2414,7 +2600,13 @@ fn rch_lane_restrictive_causes_and_entry_wiring() {
         &doctor,
         &bx3q_status(
             "ready",
-            vec![bx3q_worker("worker-a", "ready", &["other"], &["other"], &[])],
+            vec![bx3q_worker(
+                "worker-a",
+                "ready",
+                &["other"],
+                &["other"],
+                &[],
+            )],
         ),
         &diagnose,
     )
@@ -2456,10 +2648,9 @@ fn rch_lane_restrictive_causes_and_entry_wiring() {
     .expect_err("active project exclusion must halt");
     assert!(matches!(excluded, RchLaneError::ProjectExcluded { .. }));
 
-    let partial = InputManifest::partial("convergence_rows", 1, "bx3q-fixture")
-        .expect("valid partial input");
-    let refused = InputManifest::refused("fixture withheld topology")
-        .expect("valid refused input");
+    let partial =
+        InputManifest::partial("convergence_rows", 1, "bx3q-fixture").expect("valid partial input");
+    let refused = InputManifest::refused("fixture withheld topology").expect("valid refused input");
     assert!(matches!(
         rch_lane_report_from_outputs(repo, &partial, b"", b"", b""),
         Err(RchLaneError::PartialInput { .. })
@@ -2469,12 +2660,22 @@ fn rch_lane_restrictive_causes_and_entry_wiring() {
         Err(RchLaneError::RefusedInput { .. })
     ));
     let entry_repo = repository_fixture();
-    std::fs::write(entry_repo.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped CLAUDE.md");
-    std::fs::write(entry_repo.path().join(".rch-project-excluded"), b"fixture\n")
-        .expect("project exclusion marker");
+    std::fs::write(
+        entry_repo.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped CLAUDE.md");
+    std::fs::write(
+        entry_repo.path().join(".rch-project-excluded"),
+        b"fixture\n",
+    )
+    .expect("project exclusion marker");
     let artifact = entry_repo.path().join(".omp-orchestrator/rch-refused.json");
-    let entry_result = ompo_start::inception::initialize_gated(entry_repo.path(), &artifact, &TrustedInitConsent::Absent);
+    let entry_result = ompo_start::inception::initialize_gated(
+        entry_repo.path(),
+        &artifact,
+        &TrustedInitConsent::Absent,
+    );
     assert!(
         matches!(
             entry_result,
@@ -2501,7 +2702,9 @@ fn rch_process_missing_and_timeout_are_distinct() {
 
     let slow = repository.path().join("slow-rch");
     std::fs::write(&slow, b"#!/bin/sh\nsleep 30\n").expect("slow RCH fixture");
-    let mut permissions = std::fs::metadata(&slow).expect("slow metadata").permissions();
+    let mut permissions = std::fs::metadata(&slow)
+        .expect("slow metadata")
+        .permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(&slow, permissions).expect("slow executable");
     assert!(matches!(
@@ -2514,8 +2717,11 @@ fn rch_process_missing_and_timeout_are_distinct() {
 fn rch_lane_unknown_is_carried_by_gated_entry() {
     use ompo_start::inception::{initialize_gated, RchLaneState};
     let repository = repository_fixture();
-    std::fs::write(repository.path().join("CLAUDE.md"), b"fixture omp-orchestrator\n")
-        .expect("stamped CLAUDE.md");
+    std::fs::write(
+        repository.path().join("CLAUDE.md"),
+        b"fixture omp-orchestrator\n",
+    )
+    .expect("stamped CLAUDE.md");
     let output = repository.path().join(".omp-orchestrator/rch-unknown.json");
     let outcome = initialize_gated(repository.path(), &output, &TrustedInitConsent::Absent);
     let carried_unknown = outcome.as_ref().is_ok_and(|report| {
@@ -2524,7 +2730,10 @@ fn rch_lane_unknown_is_carried_by_gated_entry() {
             .as_ref()
             .is_some_and(|lane| matches!(lane.state, RchLaneState::Unknown { .. }))
     });
-    assert!(carried_unknown, "gated report lost exact UNKNOWN: {outcome:?}");
+    assert!(
+        carried_unknown,
+        "gated report lost exact UNKNOWN: {outcome:?}"
+    );
     assert!(
         ompo_start::inception::read_inception(&output).is_ok(),
         "UNKNOWN continuation did not produce readable trust state"
@@ -2648,4 +2857,150 @@ fn valid_scoped_trusted_init_consent_proceeds() {
         TrustedInitDecision::ExplicitConsent { ref decision_id, .. }
             if decision_id == "jlna-valid"
     ));
+}
+
+#[test]
+fn trusted_init_records_template_identity_before_write() {
+    let repository = foreign_policy_fixture();
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/8qaz-template.json");
+    let consent = explicit_trusted_init_consent(repository.path(), "8qaz-valid");
+    let report = initialize_gated(repository.path(), &output, &consent)
+        .expect("valid template identity consent proceeds");
+    let readback = read_inception(&output).expect("durable readback");
+    let identity = readback
+        .template_identity
+        .as_ref()
+        .expect("template identity is durable");
+    let TrustedInitConsent::Explicit { template_path, .. } = &consent else {
+        unreachable!("helper returns explicit consent")
+    };
+    assert_eq!(
+        identity.canonical_path,
+        template_path.canonicalize().unwrap().display().to_string()
+    );
+    assert_eq!(identity.source_sha256.len(), 64);
+    assert!(!identity.source_revision.is_empty());
+    assert_eq!(report.manifest.template_identity.as_ref(), Some(identity));
+}
+
+#[test]
+fn template_identity_restrictions_are_typed_and_prewrite() {
+    use input_manifest::InputManifest;
+    use ompo_start::inception::{
+        capture_template_identity, verify_template_identity_current, TemplateIdentityError,
+    };
+
+    let repository = foreign_policy_fixture();
+    let missing = capture_template_identity(
+        repository.path(),
+        &repository.path().join("missing-template.md"),
+        &InputManifest::full(),
+    )
+    .expect_err("missing template must refuse");
+    assert!(matches!(missing, TemplateIdentityError::Missing { .. }));
+
+    let escape = capture_template_identity(
+        repository.path(),
+        Path::new("/etc/hosts"),
+        &InputManifest::full(),
+    )
+    .expect_err("authority escape must refuse");
+    assert!(matches!(
+        escape,
+        TemplateIdentityError::AuthorityRootEscape { .. }
+    ));
+
+    let partial = InputManifest::partial("template_files", 1, "8qaz-test").expect("partial input");
+    let partial_error = capture_template_identity(
+        repository.path(),
+        &repository.path().join("template.md"),
+        &partial,
+    )
+    .expect_err("partial input must refuse");
+    assert!(matches!(
+        partial_error,
+        TemplateIdentityError::PartialInput { .. }
+    ));
+
+    let refused = InputManifest::refused("template source withheld").expect("refused input");
+    let refused_error = capture_template_identity(
+        repository.path(),
+        &repository.path().join("template.md"),
+        &refused,
+    )
+    .expect_err("refused input must refuse");
+    assert!(matches!(
+        refused_error,
+        TemplateIdentityError::RefusedInput { .. }
+    ));
+
+    let empty = repository.path().join("empty-template.md");
+    std::fs::write(&empty, b"").expect("empty template");
+    let empty_error = capture_template_identity(repository.path(), &empty, &InputManifest::full())
+        .expect_err("empty template must refuse");
+    assert!(matches!(empty_error, TemplateIdentityError::Empty { .. }));
+
+    let identity = capture_template_identity(
+        repository.path(),
+        &repository.path().join("template.md"),
+        &InputManifest::full(),
+    )
+    .expect("baseline identity");
+    std::fs::write(
+        repository.path().join("template.md"),
+        b"changed template
+",
+    )
+    .expect("change template after capture");
+    let changed = verify_template_identity_current(repository.path(), &identity)
+        .expect_err("changed source must refuse");
+    assert!(matches!(
+        changed,
+        TemplateIdentityError::SourceChanged { .. }
+    ));
+
+    let unresolvable = tempfile::tempdir().expect("unresolvable fixture");
+    let unresolvable_template = unresolvable.path().join("template.md");
+    std::fs::write(
+        &unresolvable_template,
+        b"template source
+",
+    )
+    .expect("template bytes");
+    run_git(unresolvable.path(), &["init", "-q"]);
+    let revision_error = capture_template_identity(
+        unresolvable.path(),
+        &unresolvable_template,
+        &InputManifest::full(),
+    )
+    .expect_err("missing HEAD must refuse");
+    assert!(matches!(
+        revision_error,
+        TemplateIdentityError::RevisionUnresolvable { .. }
+    ));
+}
+
+#[test]
+fn template_source_change_is_refused_before_artifact_write() {
+    let repository = foreign_policy_fixture();
+    let output = repository
+        .path()
+        .join(".omp-orchestrator/8qaz-source-change.json");
+    let consent = explicit_trusted_init_consent(repository.path(), "8qaz-source-change");
+    use ompo_start::inception::TemplateIdentityError;
+    std::fs::write(
+        repository.path().join("template.md"),
+        b"changed before write
+",
+    )
+    .expect("change template before init");
+    let error = initialize_gated(repository.path(), &output, &consent)
+        .expect_err("source change must refuse before write");
+    assert!(
+        matches!(error, InceptionError::TemplateIdentity(TemplateIdentityError::SourceChanged { .. }))
+            || matches!(error, InceptionError::TemplateIdentity(_))
+    );
+    assert_no_init_residue(repository.path(), &output);
 }
