@@ -4154,6 +4154,63 @@ pub fn initialize_gated(
     Ok(report)
 }
 
+/// L2-BUILD-REPROBE (2zrz): fresh post-write re-probe of the predicates the
+/// pre-write path accepted.
+///
+/// `read_inception` proves the bytes on disk parse and match the in-memory
+/// manifest; it cannot prove the repository still says the same thing. This
+/// re-runs the same observations `build_manifest` made before the write --
+/// repository identity via `source_revision`, required control-file presence
+/// via `control_file_presence` -- against the live repository and refuses on
+/// any divergence, BEFORE any success evidence is emitted. A halt therefore
+/// leaves zero new `INIT_REPROBE_OK` rows: no success is ever reported from
+/// stale pre-write evidence.
+///
+/// The required-tools predicate needs no fresh observation here: it is a
+/// declaration, not a measurement, and `read_inception` already re-validates
+/// its membership against the post-write bytes on every path.
+///
+/// Shared by `initialize_inner` and `write_inception_inner`: one mechanism,
+/// no parallel re-probe API.
+pub fn verify_post_write_predicates(
+    repo_root: &Path,
+    manifest: &InceptionManifest,
+    output: &Path,
+) -> Result<(), InceptionError> {
+    let canonical =
+        repo_root
+            .canonicalize()
+            .map_err(|error| InceptionError::RepositoryUnreadable {
+                path: repo_root.to_owned(),
+                detail: format!("post-write re-probe canonicalize failed: {error}"),
+            })?;
+    let fresh_revision = source_revision(&canonical)?;
+    if fresh_revision != manifest.repo_identity.source_revision {
+        return Err(InceptionError::Readback {
+            path: output.to_owned(),
+            detail: format!(
+                "POST_WRITE_PREDICATE_CHANGED predicate=identity expected={} observed={}",
+                manifest.repo_identity.source_revision, fresh_revision
+            ),
+        });
+    }
+    let fresh_presence = control_file_presence(&canonical);
+    let missing: Vec<String> = fresh_presence
+        .iter()
+        .filter_map(|(path, present)| (!present).then_some(path.clone()))
+        .collect();
+    if !missing.is_empty() {
+        return Err(InceptionError::Readback {
+            path: output.to_owned(),
+            detail: format!(
+                "POST_WRITE_PREDICATE_CHANGED predicate=control_files missing={}",
+                missing.join(",")
+            ),
+        });
+    }
+    Ok(())
+}
+
 fn initialize_inner(
     repo_root: &Path,
     output: &Path,
@@ -4199,6 +4256,9 @@ fn initialize_inner(
             ),
         });
     }
+    // L2-BUILD-REPROBE (2zrz): fresh re-probe before any success evidence.
+    // A halt here emits nothing: zero new INIT_REPROBE_OK rows.
+    verify_post_write_predicates(repo_root, &manifest, output)?;
     let journal_path = default_repo_journal(repo_root);
     let journal_rows = emit_init_event(repo_root)?;
     let monitor_rows =
@@ -4306,6 +4366,9 @@ fn write_inception_inner(
             ),
         });
     }
+    // L2-BUILD-REPROBE (2zrz): fresh re-probe before any success evidence.
+    // A halt here emits nothing: zero new INIT_REPROBE_OK rows.
+    verify_post_write_predicates(repo_root, &manifest, output)?;
     if should_write {
         emit_init_event(repo_root)?;
         // L5 writer (5iwj): the write+fsync+readback success chokepoint records one
