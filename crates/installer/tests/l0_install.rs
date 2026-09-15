@@ -2620,13 +2620,12 @@ fn request_without_installed<'a>(
 fn fx3d_production_gate(
     repo: &Path,
     manifest: &installer::InputManifest,
-    reason: &str,
+    _reason: &str,
 ) -> (
     std::process::ExitCode,
     usize,
     Vec<String>,
 ) {
-    use lifecycle_event::{EmitOutcome, Layer};
     // Verified digest over fixed fixture bytes (B03 known-answer): the
     // FULL manifest carries a real digest, never a placeholder.
     const FIXTURE_HEX: &str =
@@ -3023,11 +3022,10 @@ fn r19i_rewrite_report(path: &Path, edit: impl FnOnce(&mut serde_json::Value)) {
     let mut updated = serde_json::to_string_pretty(&value).expect("updated report JSON");
     updated.push('\n');
     fs::write(path, updated).expect("updated report lands");
-}
 
+}
 #[test]
 fn r19i_good_report_correlates_and_supplies_b15() {
-    use lifecycle_event::{EmitOutcome, Layer};
     let (repo, sealed, identity, attempt, manifest) = r19i_report_fixture(
         "good",
         vec![PathBuf::from("/usr/local/bin/installer-shadow")],

@@ -1,0 +1,35 @@
+{
+  "schema_version": "inception.v1",
+  "project_id": "omp-3d83b4276e7dcbc0",
+  "repo_identity": {
+    "canonical_path": "/Users/josh/Developer/omp-orchestrator",
+    "git_marker": "directory"
+  },
+  "control_files": {
+    "AGENTS.md": true,
+    "CLAUDE.md": true,
+    "Cargo.toml": true,
+    "README.md": true,
+    "SCHEMAS.toml": true,
+    "docs/decisions.jsonl": true
+  },
+  "host_capabilities": {
+    "os": "macos",
+    "arch": "aarch64",
+    "filesystem": "local"
+  },
+  "required_tools": [
+    "git",
+    "cargo",
+    "br",
+    "bv",
+    "ntm",
+    "am",
+    "jq"
+  ],
+  "trust_status": {
+    "status": "unverified",
+    "reason_code": "TRUST_DECISION_REQUIRED",
+    "control_files_complete": true
+  }
+}

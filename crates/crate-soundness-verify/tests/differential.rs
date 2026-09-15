@@ -38,10 +38,7 @@ fn differential_list_crates_compares_nonempty_cases_and_sees_bad_probe() {
         }
         assert!(compared > 0, "anti-vacuity: zero differential cases");
     } else {
-        println!(
-            "DIFFERENTIAL_MISSING_SIDE=shell detail={}",
-            shell.display()
-        );
+        println!("DIFFERENTIAL_MISSING_SIDE=shell detail={}", shell.display());
     }
     let expected = b"DERIVED_CRATE_SET count=0";
     let actual = Command::new(&rust)

@@ -43,7 +43,7 @@ fn resolve_bundle() -> Result<PathBuf, String> {
         }
         _ => {
             return Err(
-                "omp is not on PATH; set OMP_BUNDLE to the installed dist/cli.js".to_owned()
+                "omp is not on PATH; set OMP_BUNDLE to the installed dist/cli.js".to_owned(),
             )
         }
     };
@@ -135,10 +135,14 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+
     let set = match derive_command_set(&case_sites(&text)) {
         Ok(set) => set,
         Err(error) => {
-            eprintln!("OMP_SURFACE_ERROR reason={} next_action=inspect-the-anchor", describe(&error));
+            eprintln!(
+                "OMP_SURFACE_ERROR reason={} next_action=inspect-the-anchor",
+                describe(&error)
+            );
             return ExitCode::from(2);
         }
     };
@@ -158,7 +162,6 @@ fn main() -> ExitCode {
         text.len(),
         sha256_hex(text.as_bytes())
     );
-
     println!(
         "OMP_RPC_COMMAND_SET inbound={} outbound={} seam_gap_bytes={} anchor={}",
         set.inbound.len(),
@@ -216,9 +219,15 @@ fn describe(error: &DeriveError) -> String {
 /// Crate directory names whose `src/` carries `needle`.
 fn grep_crates(repo: &Path, needle: &str) -> Vec<String> {
     let mut command = Command::new("git");
-    command
-        .current_dir(repo)
-        .args(["grep", "-l", "--no-index", "-F", needle, "--", "crates/*/src/*"]);
+    command.current_dir(repo).args([
+        "grep",
+        "-l",
+        "--no-index",
+        "-F",
+        needle,
+        "--",
+        "crates/*/src/*",
+    ]);
     let out = match subprocess_contract::bounded_output(&mut command, Duration::from_secs(60)) {
         subprocess_contract::BoundedOutcome::Completed(output) => output,
         // A refusal here must NOT read as "no consumers": that is the same collapse as
@@ -257,10 +266,9 @@ fn repo_root() -> Result<PathBuf, String> {
                 Ok(PathBuf::from(path))
             }
         }
-        subprocess_contract::BoundedOutcome::Completed(output) => Err(format!(
-            "git rev-parse exited {:?}",
-            output.status.code()
-        )),
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            Err(format!("git rev-parse exited {:?}", output.status.code()))
+        }
         subprocess_contract::BoundedOutcome::TimedOut => Err("git rev-parse timed out".to_owned()),
         subprocess_contract::BoundedOutcome::Unspawned(error) => Err(error.to_string()),
     }

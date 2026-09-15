@@ -1,0 +1,16 @@
+schema = 'omp-lifecycle-flow/v1'
+contract = 'flow/CONTRACT.md'
+box_files = [
+  'flow/boxes/S1.toml',
+  'flow/boxes/S2.toml',
+  'flow/boxes/S3.toml',
+  'flow/boxes/S4.toml',
+  'flow/boxes/S5a.toml',
+  'flow/boxes/S5b.toml',
+  'flow/boxes/S6a.toml',
+  'flow/boxes/S6b.toml',
+  'flow/boxes/S6c.toml',
+  'flow/boxes/S7.toml',
+  'flow/boxes/S8.toml',
+  'flow/boxes/S9.toml',
+]

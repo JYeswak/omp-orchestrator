@@ -21,7 +21,6 @@ pub enum HoldIntent {
     Grade,
 }
 
-
 /// Zero in-flight holders is a typed state, distinct from a holder the tracker
 /// cannot name (empty/placeholder pane on an in-flight identity).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,7 +38,10 @@ pub enum CrossPaneRefuse {
         target_pane: String,
         identity_key: String,
     },
-    HolderUnnamed { bead: String, identity_key: String },
+    HolderUnnamed {
+        bead: String,
+        identity_key: String,
+    },
 }
 
 impl fmt::Display for CrossPaneRefuse {
@@ -205,8 +207,7 @@ mod tests {
         }];
         assert!(matches!(scan(&unnamed), HolderScan::Unnamed { .. }));
         assert_ne!(scan(&[]), scan(&unnamed));
-        admit("lef1", "%8", "in_progress", &[])
-            .expect("ZERO_HOLDERS is allow, not unnamed");
+        admit("lef1", "%8", "in_progress", &[]).expect("ZERO_HOLDERS is allow, not unnamed");
         let error = admit("lef1", "%8", "in_progress", &unnamed).expect_err("unnamed refuses");
         assert!(error.to_string().contains("CROSS_PANE_HOLDER_UNNAMED"));
         assert!(error.to_string().contains("distinct_from=ZERO_HOLDERS"));

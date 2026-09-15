@@ -10,8 +10,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
-use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::Duration;
+use subprocess_contract::{bounded_output, BoundedOutcome};
 fn is_executable(path: &Path) -> bool {
     #[cfg(unix)]
     {
@@ -267,7 +267,10 @@ pub fn run_binary(
     timeout: Duration,
 ) -> ChildResult {
     let mut command = Command::new(binary);
-    command.args(args).current_dir(cwd).env("CARGO_TARGET_DIR", target_dir);
+    command
+        .args(args)
+        .current_dir(cwd)
+        .env("CARGO_TARGET_DIR", target_dir);
     match bounded_output(&mut command, timeout) {
         BoundedOutcome::Completed(output) => ChildResult {
             status: Some(output.status),

@@ -56,7 +56,10 @@ fn fires_on_known_bad() {
     facts.test_fn_names = BTreeSet::new();
     let rows = assess_crate(&facts, &Allowances::default());
     let status = status_of(&rows, Part::Tests);
-    assert!(status.refuses(), "a lib with no tests/ must refuse: {status:?}");
+    assert!(
+        status.refuses(),
+        "a lib with no tests/ must refuse: {status:?}"
+    );
     let PartStatus::Missing { detail } = status else {
         panic!("expected Missing, got {status:?}")
     };
@@ -126,8 +129,10 @@ fn passes_known_good() {
 fn mutation_goes_red() {
     let mut facts = complete("inbox-monitor");
     assert!(
-        matches!(status_of(&assess_crate(&facts, &Allowances::default()), Part::Tests),
-            PartStatus::Present { .. }),
+        matches!(
+            status_of(&assess_crate(&facts, &Allowances::default()), Part::Tests),
+            PartStatus::Present { .. }
+        ),
         "baseline must be GREEN on part 4 or the mutation below is unattributable"
     );
     // The mutation: remove exactly `fires_on_known_bad` and nothing else.
@@ -154,7 +159,11 @@ fn mutation_goes_red() {
 fn empty_scan_is_error() {
     let outcome = verdict(&[], 0, &Allowances::default());
     assert!(matches!(&outcome, GateVerdict::Unrun { reason } if reason.contains("SCAN_EMPTY")));
-    assert_eq!(outcome.exit_code(), 2, "the bead specifies exit 2 for SCAN_EMPTY");
+    assert_eq!(
+        outcome.exit_code(),
+        2,
+        "the bead specifies exit 2 for SCAN_EMPTY"
+    );
     assert_ne!(outcome.exit_code(), 0, "an empty scan must never be a pass");
 
     // And the OTHER vacuity: crates scanned, zero rows produced, is the assessor broken —
@@ -223,12 +232,16 @@ fn a_systemic_ceiling_refuses_slack_as_well_as_breach() {
     );
     let breach = ceiling_breaches(&rows, &systemic(1));
     assert!(
-        breach.iter().any(|r| r.contains("CEILING_BREACHED") && r.contains("live=2")),
+        breach
+            .iter()
+            .any(|r| r.contains("CEILING_BREACHED") && r.contains("live=2")),
         "{breach:?}"
     );
     let slack = ceiling_breaches(&rows, &systemic(5));
     assert!(
-        slack.iter().any(|r| r.contains("CEILING_HAS_SLACK") && r.contains("live=2")),
+        slack
+            .iter()
+            .any(|r| r.contains("CEILING_HAS_SLACK") && r.contains("live=2")),
         "a ceiling above the live count cannot detect the next regression: {slack:?}"
     );
     // And the whole verdict refuses on a breach even though every cell is ALLOWED.
@@ -284,8 +297,15 @@ fn not_applicable_is_distinct_from_present() {
     let rows = assess_crate(&facts, &Allowances::default());
     for part in [Part::Fuzz, Part::Slo] {
         let status = status_of(&rows, part);
-        assert!(matches!(status, PartStatus::NotApplicable { .. }), "{status:?}");
-        assert_eq!(status.word(), "n/a", "the report must show n/a, not present");
+        assert!(
+            matches!(status, PartStatus::NotApplicable { .. }),
+            "{status:?}"
+        );
+        assert_eq!(
+            status.word(),
+            "n/a",
+            "the report must show n/a, not present"
+        );
         assert!(!status.refuses());
     }
     // A fuzzable kernel with no target is a DIFFERENT answer for the same crate name.
@@ -309,14 +329,26 @@ fn a_malformed_allowance_row_is_named_not_skipped() {
     // Each absence names the field, and an empty owner is refused as loudly as a missing
     // one — "owner = \"\"" is the shape a permanent exception takes.
     for (text, needle) in [
-        ("[[allowance]]\ncrate = \"x\"\npart = 5\nowner = \"josh\"\n", "dies_when"),
-        ("[[allowance]]\ncrate = \"x\"\npart = 5\ndies_when = \"y\"\n", "owner"),
+        (
+            "[[allowance]]\ncrate = \"x\"\npart = 5\nowner = \"josh\"\n",
+            "dies_when",
+        ),
+        (
+            "[[allowance]]\ncrate = \"x\"\npart = 5\ndies_when = \"y\"\n",
+            "owner",
+        ),
         (
             "[[allowance]]\ncrate = \"x\"\npart = 5\nowner = \"\"\ndies_when = \"y\"\n",
             "owner",
         ),
-        ("[[allowance]]\ncrate = \"x\"\npart = 99\nowner = \"j\"\ndies_when = \"y\"\n", "99"),
-        ("[[systemic]]\npart = 6\nowner = \"j\"\ndies_when = \"y\"\n", "ceiling"),
+        (
+            "[[allowance]]\ncrate = \"x\"\npart = 99\nowner = \"j\"\ndies_when = \"y\"\n",
+            "99",
+        ),
+        (
+            "[[systemic]]\npart = 6\nowner = \"j\"\ndies_when = \"y\"\n",
+            "ceiling",
+        ),
     ] {
         let error = parse_allowances(text).expect_err("must refuse");
         assert!(error.contains("ALLOWANCE_MALFORMED"), "{error}");
@@ -348,7 +380,11 @@ fn both_wired_callers_resolve_in_this_tree() {
         UNWIRED_ALLOWANCE.is_empty(),
         "a gate that is not invoked is worth zero; this allowance is empty BY DESIGN"
     );
-    assert_eq!(WIRED_CALLERS.len(), 2, "the bead names exactly two call sites");
+    assert_eq!(
+        WIRED_CALLERS.len(),
+        2,
+        "the bead names exactly two call sites"
+    );
     for (path, why) in WIRED_CALLERS {
         let full = root.join(path);
         assert!(full.is_file(), "declared caller {path} does not exist");

@@ -228,7 +228,10 @@ fn l1_unused_must_use_is_denied_and_the_producer_does_not_return_option() {
     // no code inherits is the BUILT-vs-WIRED defect at the manifest layer.
     for crate_name in ["finding", "finding-dispatch"] {
         let manifest = std::fs::read_to_string(
-            repo_root().join("crates").join(crate_name).join("Cargo.toml"),
+            repo_root()
+                .join("crates")
+                .join(crate_name)
+                .join("Cargo.toml"),
         )
         .unwrap_or_default();
         assert!(

@@ -18,8 +18,8 @@ use agent_mail_native::journey::{
     self, AgentName, InboxRequest, ProjectKey, ResumePoint, SendRequest,
 };
 use agent_mail_native::{CursorQuery, DeliveryCursor, Endpoint, MailClient, MailError};
-use asupersync::Cx;
 use asupersync::runtime::RuntimeBuilder;
+use asupersync::Cx;
 use std::future::Future;
 use std::time::Duration;
 
@@ -241,9 +241,7 @@ fn round_trip_send_read_ack_and_cursor_advances_without_replay_or_gap() {
 
         // The cursor MUST have advanced past the baseline.
         assert!(
-            first_read
-                .next_cursor
-                .advanced_beyond(baseline.cursor()),
+            first_read.next_cursor.advanced_beyond(baseline.cursor()),
             "cursor did not advance: baseline {} -> next {}",
             baseline.cursor(),
             first_read.next_cursor
@@ -399,8 +397,7 @@ fn a_dead_port_is_unreachable_not_an_empty_inbox() {
         let cx = Cx::current().expect("cx");
 
         // Reserve a port, then release it, so nothing is listening on it.
-        let listener =
-            std::net::TcpListener::bind("127.0.0.1:0").expect("bind an ephemeral port");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind an ephemeral port");
         let port = listener.local_addr().expect("local addr").port();
         drop(listener);
 

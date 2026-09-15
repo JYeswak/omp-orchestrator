@@ -284,7 +284,10 @@ mod tests {
     fn the_seam_splits_inbound_commands_from_outbound_events() {
         let sites = case_sites(&fixture());
         let set = derive_command_set(&sites).expect("fixture must derive");
-        assert_eq!(set.inbound, vec!["negotiate_protocol", "get_state", "login"]);
+        assert_eq!(
+            set.inbound,
+            vec!["negotiate_protocol", "get_state", "login"]
+        );
         assert_eq!(set.outbound, vec!["message_update", "turn_end"]);
         assert!(
             set.seam_gap > 2_000,

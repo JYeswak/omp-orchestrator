@@ -12,8 +12,7 @@ use std::collections::BTreeSet;
 pub const SURVIVE_GATE_UNWIRED: bool = true;
 
 /// Exact measured 2026-09-05 uds-loop unwired payload. Must stay byte-identical.
-pub const MEASURED_UNWIRED: &str =
-    "POSITIVE_CONTROL_FAILED: no-shell-gate must be reachable";
+pub const MEASURED_UNWIRED: &str = "POSITIVE_CONTROL_FAILED: no-shell-gate must be reachable";
 
 /// k0i6 empty-census token. Owned by uds-k0i6; this crate must not weaken it.
 pub const K0I6_POSITIVE_CONTROL_FAILED: &str =
@@ -43,14 +42,9 @@ impl FatalReason {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TickOutcome {
-    NoDispatch {
-        line: String,
-        skip_reap: bool,
-    },
+    NoDispatch { line: String, skip_reap: bool },
     Dispatch,
-    Fatal {
-        line: String,
-    },
+    Fatal { line: String },
 }
 
 #[must_use]
@@ -285,7 +279,8 @@ pub fn grade_mixed(capture: &mut Capture) -> Result<(), String> {
         return Err("MIXED_PID_UNSTABLE".to_owned());
     }
     capture.assertion_count += 1;
-    if !capture.rows[0].line.contains("GATE_UNWIRED") || !capture.rows[1].line.contains("GATE_UNWIRED")
+    if !capture.rows[0].line.contains("GATE_UNWIRED")
+        || !capture.rows[1].line.contains("GATE_UNWIRED")
     {
         return Err("MIXED_PREFIX_NOT_REFUSAL".to_owned());
     }
@@ -336,7 +331,10 @@ mod tests {
         let mut cap = drive_resident(&[unwired(), unwired(), unwired()], true, 77234);
         grade_known_bad(&mut cap, 3, &expected).expect("known-bad");
         assert!(cap.assertion_count >= 3);
-        assert!(cap.rows.iter().all(|r| r.pid == 77234 && !r.exited && r.skipped_reap));
+        assert!(cap
+            .rows
+            .iter()
+            .all(|r| r.pid == 77234 && !r.exited && r.skipped_reap));
         assert_eq!(
             cap.rows.iter().map(|r| r.tick).collect::<Vec<_>>(),
             vec![1, 2, 3]
@@ -377,8 +375,12 @@ mod tests {
     #[test]
     fn mutation_goes_red() {
         let mut cap = drive_resident(&[unwired(), unwired(), unwired()], false, 100);
-        let err = grade_known_bad(&mut cap, 3, &gate_unwired_line(&[MEASURED_UNWIRED.to_owned()]))
-            .expect_err("survive=false must RED");
+        let err = grade_known_bad(
+            &mut cap,
+            3,
+            &gate_unwired_line(&[MEASURED_UNWIRED.to_owned()]),
+        )
+        .expect_err("survive=false must RED");
         assert!(
             err.contains("PID_UNSTABLE")
                 || err.contains("TICK_RESET")
@@ -387,7 +389,14 @@ mod tests {
             "{err}"
         );
         assert!(cap.rows.iter().any(|r| r.exited));
-        assert!(cap.rows.iter().map(|r| r.pid).collect::<BTreeSet<_>>().len() > 1);
+        assert!(
+            cap.rows
+                .iter()
+                .map(|r| r.pid)
+                .collect::<BTreeSet<_>>()
+                .len()
+                > 1
+        );
         assert!(cap.rows.iter().all(|r| r.tick == 1));
     }
 
@@ -467,4 +476,3 @@ mod tests {
             .to_owned()
     }
 }
-

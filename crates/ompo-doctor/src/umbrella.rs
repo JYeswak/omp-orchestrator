@@ -57,7 +57,13 @@ pub const VERBS: &[&str] = &[
     // it was simply missing its usage line, which `every_verb_appears_in_usage`
     // demanded on the test's first day. That is the parity leg working, not a
     // collision to revert.
-    "state", "stats", "messages", "models", "ps", "parity",];
+    "state",
+    "stats",
+    "messages",
+    "models",
+    "ps",
+    "parity",
+];
 
 /// The adapter roster. Never empty: `build.rs` refuses to generate an empty one, and
 /// [`roster_or_error`] is the runtime guard for the same property.
@@ -122,7 +128,8 @@ impl ProbeId {
                      segment={segment:?} required=^omp(\\.[a-z][a-z0-9_-]*){{2,}}$"
                 ));
             }
-            if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-') {
+            if !chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+            {
                 return Err(format!(
                     "UAD_PROBE_ID_INVALID id={raw:?} reason=illegal_character \
                      segment={segment:?} required=^omp(\\.[a-z][a-z0-9_-]*){{2,}}$"
@@ -159,7 +166,10 @@ pub fn capabilities() -> Result<Value, String> {
     let roster = roster_or_error()?;
     let mut probe_ids = Vec::new();
     for probe in crate::PROBES {
-        let id = ProbeId::new(&format!("omp.identity.binary.{}", probe.name.replace('-', "_")))?;
+        let id = ProbeId::new(&format!(
+            "omp.identity.binary.{}",
+            probe.name.replace('-', "_")
+        ))?;
         probe_ids.push(id.as_str().to_owned());
     }
     Ok(envelope(
@@ -345,13 +355,15 @@ mod tests {
     fn a_bare_probe_segment_is_a_construction_error() {
         let error = ProbeId::new("omp.identity").expect_err("two segments must be refused");
         assert!(error.contains("reason=too_few_segments"), "got {error:?}");
-        assert!(error.contains("required="), "the refusal must state the shape: {error:?}");
+        assert!(
+            error.contains("required="),
+            "the refusal must state the shape: {error:?}"
+        );
 
         let rooted = ProbeId::new("identity.binary.tmux").expect_err("a missing omp root refuses");
         assert!(rooted.contains("reason=missing_omp_root"), "got {rooted:?}");
 
-        let shouty =
-            ProbeId::new("omp.Identity.binary").expect_err("an uppercase segment refuses");
+        let shouty = ProbeId::new("omp.Identity.binary").expect_err("an uppercase segment refuses");
         assert!(
             shouty.contains("reason=segment_must_start_lowercase"),
             "got {shouty:?}"

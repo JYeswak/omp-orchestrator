@@ -501,7 +501,9 @@ pub fn untracked_in_closure(repo: &Path, root: &str) -> Result<Vec<PathBuf>, Che
         .flatten()
         .filter_map(|entry| {
             let name = entry.file_name().to_string_lossy().to_string();
-            std::fs::read_to_string(entry.path().join("Cargo.toml")).map(|t| (name, t)).ok()
+            std::fs::read_to_string(entry.path().join("Cargo.toml"))
+                .map(|t| (name, t))
+                .ok()
         })
         .collect();
     let crates = closure_crates(root, &manifests);
@@ -579,7 +581,10 @@ mod tests {
         assert_eq!(verdict.scanned, 3);
         let line = verdict.render("demo", false);
         assert!(line.contains("b.rs:DIFFERS_FROM_HEAD"), "{line}");
-        assert!(!line.contains("a.rs"), "a clean input must not be named: {line}");
+        assert!(
+            !line.contains("a.rs"),
+            "a clean input must not be named: {line}"
+        );
     }
 
     #[test]
@@ -652,12 +657,9 @@ mod tests {
         assert!(detail.contains("not a git repository"));
         assert!(error.to_string().contains("TREE_UNREADABLE"));
 
-        let clean = assess(
-            &inputs,
-            &[],
-            &|_| HeadRead::Found(b"x".to_vec()),
-            &|_| DiskRead::Found(b"x".to_vec()),
-        )
+        let clean = assess(&inputs, &[], &|_| HeadRead::Found(b"x".to_vec()), &|_| {
+            DiskRead::Found(b"x".to_vec())
+        })
         .expect("readable");
         assert_ne!(
             error.to_string(),
@@ -696,7 +698,10 @@ mod tests {
             DriftKind::DiffersFromHead.code(),
             DriftKind::AbsentInHead.code()
         );
-        assert_ne!(DriftKind::AbsentOnDisk.code(), DriftKind::AbsentInHead.code());
+        assert_ne!(
+            DriftKind::AbsentOnDisk.code(),
+            DriftKind::AbsentInHead.code()
+        );
     }
 
     #[test]
@@ -709,7 +714,10 @@ mod tests {
             &|_| DiskRead::Absent,
         )
         .expect("readable");
-        assert_eq!(verdict.drift, vec![(p("deleted.rs"), DriftKind::AbsentOnDisk)]);
+        assert_eq!(
+            verdict.drift,
+            vec![(p("deleted.rs"), DriftKind::AbsentOnDisk)]
+        );
     }
 
     #[test]
@@ -738,7 +746,10 @@ mod tests {
         .into_iter()
         .collect();
         let closure = closure_crates("root", &manifests);
-        assert!(closure.contains("omp-types"), "transitive [dependencies] edge: {closure:?}");
+        assert!(
+            closure.contains("omp-types"),
+            "transitive [dependencies] edge: {closure:?}"
+        );
         assert!(
             !closure.contains("text-structure"),
             "a dependency's [dev-dependencies] are not compiled: {closure:?}"
@@ -823,10 +834,7 @@ mod tests {
                     verdict.scanned > 0,
                     "a real crate's closure is never empty: {verdict:?}"
                 );
-                println!(
-                    "{}",
-                    verdict.render("kernel-only-operator-hook", false)
-                );
+                println!("{}", verdict.render("kernel-only-operator-hook", false));
                 // The tier is derived, never asserted as a constant: this leg
                 // must stay honest whether or not the repo is clean today.
                 assert_eq!(
@@ -916,8 +924,11 @@ mod tests {
 
         // KNOWN-BAD: dirty the DEPENDENCY, not the subject, because the whole
         // point is that a crate's verdict depends on files outside it.
-        std::fs::write(repo.join("crates/leaf/src/lib.rs"), "pub fn leaf() { /* x */ }\n")
-            .expect("dirty the dependency");
+        std::fs::write(
+            repo.join("crates/leaf/src/lib.rs"),
+            "pub fn leaf() { /* x */ }\n",
+        )
+        .expect("dirty the dependency");
         let dirty = check_crate(repo, "subject").expect("still readable");
         assert_eq!(
             dirty.drift,

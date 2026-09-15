@@ -166,14 +166,12 @@ fn the_default_author_is_excluded_or_every_pane_reads_ambiguous() {
     ];
     let bindings = derive_bindings("b", &comments, &defaults());
     let map = pane_map(&bindings);
-    assert_eq!(
-        map.len(),
-        1,
-        "only the actored ACK may bind; got {map:?}"
-    );
+    assert_eq!(map.len(), 1, "only the actored ACK may bind; got {map:?}");
     assert_eq!(
         map["%1408"],
-        ["AmberGate".to_owned()].into_iter().collect::<BTreeSet<_>>()
+        ["AmberGate".to_owned()]
+            .into_iter()
+            .collect::<BTreeSet<_>>()
     );
 
     // POSITIVE CONTROL on the same reader: with an EMPTY default set the same input does
@@ -186,7 +184,9 @@ fn the_default_author_is_excluded_or_every_pane_reads_ambiguous() {
     // The roster is DERIVED from the bindings. There is no setter, by design.
     assert_eq!(
         roster_from(&bindings),
-        ["AmberGate".to_owned()].into_iter().collect::<BTreeSet<_>>()
+        ["AmberGate".to_owned()]
+            .into_iter()
+            .collect::<BTreeSet<_>>()
     );
 }
 
@@ -219,7 +219,12 @@ fn a_correctly_bound_bead_resolves_end_to_end() {
         other => panic!("expected Bound, got {other:?}"),
     }
     let text = resolve(&row, &roster(), &defaults(), &live).to_string();
-    for needle in ["HOLDER ", "agent=AmberGate", "pane=%1408", "source=tick-monitor"] {
+    for needle in [
+        "HOLDER ",
+        "agent=AmberGate",
+        "pane=%1408",
+        "source=tick-monitor",
+    ] {
         assert!(text.contains(needle), "{text}");
     }
 }
@@ -300,15 +305,28 @@ fn both_illegal_states_are_found_and_a_legal_bead_produces_nothing() {
 
     // The two findings are DISTINCT and each names its own repair, because the repairs are
     // opposite: one adds a status, the other removes an assignee.
-    let half = classify_state("b1", "open", "AmberGate").unwrap().to_string();
+    let half = classify_state("b1", "open", "AmberGate")
+        .unwrap()
+        .to_string();
     let orphan = classify_state("b2", "in_progress", "").unwrap().to_string();
-    assert!(half.contains("HALF_CLAIM") && half.contains("next_action="), "{half}");
-    assert!(orphan.contains("ORPHAN_CLAIM") && orphan.contains("next_action="), "{orphan}");
+    assert!(
+        half.contains("HALF_CLAIM") && half.contains("next_action="),
+        "{half}"
+    );
+    assert!(
+        orphan.contains("ORPHAN_CLAIM") && orphan.contains("next_action="),
+        "{orphan}"
+    );
     assert_ne!(half, orphan);
 
     // And an illegal state pre-empts the holder question: a bead in an illegal state has no
     // well-defined holder, so reporting one would be a guess.
-    let row = bead("b1", "open", "AmberGate", &[("AmberGate", "ACK b1 on %1408")]);
+    let row = bead(
+        "b1",
+        "open",
+        "AmberGate",
+        &[("AmberGate", "ACK b1 on %1408")],
+    );
     assert!(matches!(
         resolve(&row, &roster(), &defaults(), &live),
         HolderVerdict::Illegal(StateFinding::HalfClaim { .. })

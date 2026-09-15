@@ -365,8 +365,9 @@ pub fn live_probe(requirement: HostRequirement) -> bool {
         HostRequirement::UnrelocatedTargetDir => match std::env::var_os("CARGO_TARGET_DIR") {
             None => true,
             Some(value) if value.is_empty() => true,
-            Some(value) => repo_root()
-                .is_some_and(|repo| PathBuf::from(value) == repo.join("target")),
+            Some(value) => {
+                repo_root().is_some_and(|repo| PathBuf::from(value) == repo.join("target"))
+            }
         },
     }
 }
@@ -459,7 +460,10 @@ mod tests {
         );
         assert_eq!(leg.absent, expected);
         let line = leg.render();
-        assert!(line.contains(&format!("absent={}", expected.len())), "{line}");
+        assert!(
+            line.contains(&format!("absent={}", expected.len())),
+            "{line}"
+        );
         // The named absence is still pinned by NAME, not by position.
         assert!(line.contains("br:MISSING_EXECUTABLE"), "{line}");
         assert!(

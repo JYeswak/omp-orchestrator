@@ -206,7 +206,10 @@ fn run_selftest() -> ExitCode {
             "--state-file",
         ])
         .arg(&state);
-        completed_output("dispatcher-deadman selftest", spawn_timeout(cmd, Duration::from_secs(5)))
+        completed_output(
+            "dispatcher-deadman selftest",
+            spawn_timeout(cmd, Duration::from_secs(5)),
+        )
     };
     let mut fail = 0;
     let h = run("0", "0", "healthy", "no_work");

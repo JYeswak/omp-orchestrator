@@ -35,7 +35,10 @@ impl fmt::Display for ParseError {
 
 pub fn parse_jsm_suggest(text: &str) -> Result<JsmSuggest, ParseError> {
     let value: Value = serde_json::from_str(text.trim()).map_err(|_| ParseError::InvalidJson)?;
-    let success = value.get("success").and_then(Value::as_bool).unwrap_or(false);
+    let success = value
+        .get("success")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let rows = value
         .get("suggestions")
         .and_then(Value::as_array)

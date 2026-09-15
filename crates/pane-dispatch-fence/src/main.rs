@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-use pane_dispatch_fence as _;
 use asupersync::Cx;
 use asupersync::process::Command;
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::types::Budget;
+use pane_dispatch_fence as _;
 use std::{
     env,
     fs::{self, File, OpenOptions, TryLockError},

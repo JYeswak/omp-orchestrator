@@ -1,0 +1,11 @@
+priority=1
+labels=omp-surface,verb-wiring,s1
+---
+WHAT: Wire classified OMP surfaces into reachable ompo verbs and callers; the map is populated but only five of nineteen verbs currently consume an OMP surface.
+WHY: Joshua directed that every OMP surface be mapped, integrated, and built into CLI before S2. A declaration without a reachable verb is BUILT_NOT_WIRED and cannot serve the orchestrator.
+ACCEPTANCE: 1. Re-run omp-surface-align before and after and paste ALIGN_COVERAGE for the claimed kind.
+2. Every claimed surface has a real [package.metadata.omp_surface] consumes row in its consuming crate Cargo.toml with kind, name, and a crate-relative call_site.
+3. Every claimed surface is called by a reachable ompo verb; the caller chain ends at a workflow, hook, crontab, launchd row, or Command::new from a triggered crate.
+4. Every non-consumed surface is either unclassified with an explicit reason or carries owner, reason, and dies_when; no unowned allowance is added.
+5. The aligner emits ALIGN_UNCLASSIFIED or ALIGN_ORPHAN_DECLARATION for unmapped input; no silent skip is accepted.
+6. Remote verification includes both Remote command finished: exit=<N> and test result: lines.

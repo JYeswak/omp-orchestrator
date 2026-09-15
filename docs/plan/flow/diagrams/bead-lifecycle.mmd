@@ -1,0 +1,47 @@
+flowchart TD
+  IDEA["idea or plan section"] --> S4["S4 materialize. Target: crate-atom-gate --report --json then plan-materialize. Today: hand files in docs/plan/dag/"]
+  S4 --> LINT{"bead-lint: crate: and arrow: labels?"}
+  LINT -->|no| RLINT["REFUSE. Do not file"]
+  LINT -->|yes| OPEN["br create. status Open. class label: impl or grade or research"]
+
+  OPEN --> SEL["S5a select. MUST be bv --robot-triage plus loop-queue-filter. MUST NOT be br ready FIFO"]
+  SEL --> CLASS{"work class this tick?"}
+  CLASS -->|grade starving| GRADE["pick IssueStatus::Grading first. Post-mortem M2"]
+  CLASS -->|research starving| RES["pick label research-needed"]
+  CLASS -->|impl articulation| IMPL["bv PageRank articulation point. Not easy leaf"]
+  GRADE --> CLAIM
+  RES --> CLAIM
+  IMPL --> CLAIM
+
+  CLAIM["attempt claim. bead-availability Availability::Available"] --> CLQ{"claim?"}
+  CLQ -->|ClaimFenceError any arm| NEXT["retain blocker chain. next rank. dispatcher-deadman watches eligible with no packet"]
+  NEXT --> SEL
+  CLQ -->|ok in_progress assigned| FENCE["S5b dispatch-claim-fence authorize_bead_dispatch_as"]
+  FENCE --> PERMIT{"DispatchPermit?"}
+  PERMIT -->|ClaimRequired or AssignedElsewhere or PacketAddsScope| REF["REFUSED. bead stays claimable"]
+  REF --> SEL
+  PERMIT -->|Bead| SEND["ntm --robot-send via subprocess-contract and Cx. TransportKind::NtmRobotSend"]
+
+  SEND --> ACK["ack-stage. ACK token on pane_id comment"]
+  ACK --> DEC{"receiver decision?"}
+  DEC -->|Accepted| WIP["S6b work. omp-rpc-session GetState plus tick-monitor two-capture"]
+  DEC -->|Denied reason| DENY["status Open. label research-needed. class=research. original blocks on new research bead. finding crate files the gap"]
+  DENY --> SEL
+  ACK -->|no ACK| INDET["Indeterminate. not delivery. not progress"]
+  INDET --> SEL
+
+  WIP --> DONE{"implementer claims done?"}
+  DONE -->|yes| GRADEQ["status Grading. MUST be a different agent"]
+  GRADEQ --> SEL
+  DONE -->|no| WIP
+
+  GRADE --> CLOSE{"verify-dispatch bead status only. ClosePrefix?"}
+  CLOSE -->|MutationVerified or Done or Approved or WontFix| CLOSED["closed. LifecycleEvent written. orchestrator sees who when why"]
+  CLOSE -->|PolicyRefused or Empty or Unread| BACK["stays Grading. not closed"]
+  BACK --> SEL
+
+  LEDGER["every transition appends LifecycleEvent: bead, class, actor, pane, reason_code, why-now. Human reads omp-orchestrator portal one_next_action. Agent reads --json"]
+  CLAIM --> LEDGER
+  SEND --> LEDGER
+  DEC --> LEDGER
+  CLOSE --> LEDGER

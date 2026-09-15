@@ -15,9 +15,7 @@
 //! `git config user.name` + `$USER` for the non-agent default author set. Nothing here
 //! maintains a mapping — membership is derived, per this bead's rule.
 
-use bead_holder::{
-    audit, resolve, AuditError, BeadRow, Liveness, LIVENESS_SOURCE,
-};
+use bead_holder::{audit, resolve, AuditError, BeadRow, Liveness, LIVENESS_SOURCE};
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::{Command, ExitCode};
 use std::time::Duration;
@@ -180,8 +178,8 @@ fn default_authors() -> BTreeSet<String> {
 /// the same id. Merging rather than replacing keeps fields a partial record omitted.
 fn read_tracker(repo: &std::path::Path) -> Result<Vec<BeadRow>, String> {
     let path = repo.join(".beads/issues.jsonl");
-    let text = std::fs::read_to_string(&path)
-        .map_err(|error| format!("{}: {error}", path.display()))?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
     let mut merged: BTreeMap<String, serde_json::Map<String, serde_json::Value>> = BTreeMap::new();
     for line in text.lines() {
         let line = line.trim();
@@ -295,9 +293,9 @@ fn bounded(command: &mut Command, what: &str) -> Result<String, String> {
             output.status.code(),
             String::from_utf8_lossy(&output.stderr).trim()
         )),
-        subprocess_contract::BoundedOutcome::TimedOut => {
-            Err(format!("{what} exceeded its deadline; a timeout is not a verdict"))
-        }
+        subprocess_contract::BoundedOutcome::TimedOut => Err(format!(
+            "{what} exceeded its deadline; a timeout is not a verdict"
+        )),
         subprocess_contract::BoundedOutcome::Unspawned(error) => {
             Err(format!("{what} could not be spawned: {error}"))
         }

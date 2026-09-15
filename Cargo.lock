@@ -448,6 +448,7 @@ dependencies = [
  "build-stamp",
  "serde",
  "serde_json",
+ "subprocess-contract",
 ]
 
 [[package]]
@@ -1150,6 +1151,7 @@ name = "installer"
 version = "0.1.0"
 dependencies = [
  "lifecycle-event",
+ "lifecycle-monitor",
  "serde_json",
  "sha2 0.10.9",
  "staged-build-gate",
@@ -1385,6 +1387,8 @@ dependencies = [
 name = "no-shell-gate"
 version = "0.1.0"
 dependencies = [
+ "agent-mail-native",
+ "asupersync",
  "asupersync-conformance",
  "convergence-stamp",
  "crate-atom-gate",
@@ -1604,6 +1608,7 @@ dependencies = [
  "ompo-start",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "subprocess-contract",
  "tempfile",
 ]

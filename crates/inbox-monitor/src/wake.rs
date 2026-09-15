@@ -173,9 +173,11 @@ pub fn pgrep_pattern(pattern: &str) -> Result<Vec<u32>, ProbeError> {
                 if line.is_empty() {
                     continue;
                 }
-                let pid = line.parse::<u32>().map_err(|_| ProbeError::WakeProbeEmpty {
-                    detail: format!("pgrep printed a non-pid line: {line}"),
-                })?;
+                let pid = line
+                    .parse::<u32>()
+                    .map_err(|_| ProbeError::WakeProbeEmpty {
+                        detail: format!("pgrep printed a non-pid line: {line}"),
+                    })?;
                 pids.push(pid);
             }
             Ok(pids)
@@ -278,7 +280,12 @@ mod tests {
     fn missing_next_cursor_is_no_cursor_reported() {
         let err = cursor_keyed_wake(Some(10), None, Some(0)).expect_err("no next");
         assert!(
-            matches!(err, ProbeError::NoCursorReported { field: "next_cursor" }),
+            matches!(
+                err,
+                ProbeError::NoCursorReported {
+                    field: "next_cursor"
+                }
+            ),
             "{err:?}"
         );
     }

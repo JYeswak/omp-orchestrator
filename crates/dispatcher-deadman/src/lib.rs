@@ -9,8 +9,8 @@
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use subprocess_contract::{bounded_output, BoundedOutcome};
 use std::time::{Duration, Instant};
+use subprocess_contract::{bounded_output, BoundedOutcome};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DispatcherDeadmanRule {

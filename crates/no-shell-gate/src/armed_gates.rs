@@ -151,4 +151,71 @@ mod tests {
                  from one that works")
         );
     }
+
+    /// ITEM C: the registry matches the arm-guards in the shipped binary
+    /// source, IN BOTH DIRECTIONS. An unwatched guard (fourth arm lands,
+    /// registry not extended) and a row without a call site (guard
+    /// removed, row left) both redden. Comment-stripped before matching:
+    /// doc prose naming a var is not a guard.
+    #[test]
+    fn registry_matches_arm_guards_both_directions() {
+        let source = text_structure::code_only(include_str!("bin/pre-commit-gate.rs"));
+        let guards = arm_guard_vars(&source);
+        let mut registered: Vec<String> =
+            ARMED_GATES.iter().map(|gate| gate.var.to_owned()).collect();
+        registered.sort();
+        assert_eq!(
+            guards, registered,
+            "registry and shipped arm-guards disagree: guards={guards:?} registry={registered:?}"
+        );
+    }
+
+    /// The extractor survives a MEANING-PRESERVING respelling (rustfmt
+    /// line-split between the read and the comparison) and still excludes a
+    /// config-style read with no `== Ok("1")`. An exact-string pin would do
+    /// the first wrong (InvMapRed's measured sibling); a bare-name pin
+    /// would do the second wrong.
+    #[test]
+    fn extractor_survives_respellings_ignores_config_reads() {
+        let split = "    if std::env::var(\"OMP_FOURTH_GATE\")\n        .as_deref()\n        == Ok(\"1\") {\n";
+        assert_eq!(arm_guard_vars(split), vec!["OMP_FOURTH_GATE".to_owned()]);
+        let config = "    let path = std::env::var_os(\"OMP_OTHER_GATE\")\n        .map(PathBuf::from);\n";
+        assert!(
+            arm_guard_vars(config).is_empty(),
+            "a path override with no comparison is not an arm-guard"
+        );
+        assert!(arm_guard_vars("fn main() {}").is_empty());
+    }
+}
+
+/// Window in which an `Ok("1")` comparison must follow an env read for the
+/// read to count as an ARM-guard. Line-anchoring would redden on a rustfmt
+/// split (InvMapRed's measured sibling: an exact-string pin reporting a
+/// gate ARMED after a line-split); a bounded window survives
+/// meaning-preserving respellings while still excluding distant prose.
+const ARM_WINDOW: usize = 150;
+
+/// Vars read as `== Ok("1")` arm-guards in (comment-stripped) source:
+/// `env::var("NAME")` with NAME ending in `_GATE` and the comparison inside
+/// the window. Config-style reads (`var_os` path overrides with no
+/// comparison) never match: different shape, different class.
+pub fn arm_guard_vars(code: &str) -> Vec<String> {
+    let mut vars = Vec::new();
+    let mut rest = code;
+    while let Some(start) = rest.find("env::var(\"") {
+        let after = &rest[start + "env::var(\"".len()..];
+        let Some(end) = after.find('"') else {
+            break;
+        };
+        let name = &after[..end];
+        let tail = &after[end..];
+        let window = &tail[..tail.len().min(ARM_WINDOW)];
+        if name.ends_with("_GATE") && window.contains("Ok(\"1\")") {
+            vars.push(name.to_owned());
+        }
+        rest = &after[end + 1..];
+    }
+    vars.sort();
+    vars.dedup();
+    vars
 }

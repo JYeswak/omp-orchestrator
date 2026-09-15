@@ -219,7 +219,10 @@ impl std::fmt::Display for DigestError {
                  an empty scan set is an ERROR, not a pass",
             ),
             Self::Unreadable { path, detail } => {
-                write!(formatter, "UNREADABLE_COVERED_SOURCE path={path} detail={detail}")
+                write!(
+                    formatter,
+                    "UNREADABLE_COVERED_SOURCE path={path} detail={detail}"
+                )
             }
         }
     }
@@ -247,7 +250,10 @@ pub fn hook_source_files(repo_root: &Path) -> Vec<PathBuf> {
 
     let mut files = Vec::new();
     for crate_name in HOOK_SOURCE_CRATES {
-        collect(&repo_root.join("crates").join(crate_name).join("src"), &mut files);
+        collect(
+            &repo_root.join("crates").join(crate_name).join("src"),
+            &mut files,
+        );
     }
     files.sort();
     files
@@ -268,7 +274,11 @@ pub fn hook_source_manifest(repo_root: &Path) -> Result<String, DigestError> {
         // collector walks -- asking a different question than the scan would reintroduce the
         // conflation this replaces.
         let any_crate_present = HOOK_SOURCE_CRATES.iter().any(|crate_name| {
-            repo_root.join("crates").join(crate_name).join("src").is_dir()
+            repo_root
+                .join("crates")
+                .join(crate_name)
+                .join("src")
+                .is_dir()
         });
         return Err(if any_crate_present {
             DigestError::EmptySourceSet

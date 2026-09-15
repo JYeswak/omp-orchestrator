@@ -1,0 +1,12 @@
+priority=1
+labels=correctness,ci,registry-drift
+---
+WHAT: omp-orchestrator CI red is two STALE ADVISORY_ALLOWANCE rows: s1-coverage and contabo-reclaim are now REACHABLE
+WHY: Authoritative run 34666855450 headSha 5d3ef562 GATE_RUNNER_FAILING count=2 names=no-shell-gate,omp-orchestrator. The flagship crate's only failing_tests entry is an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails (census_membership.rs:359). Message: STALE ALLOWANCE ROWS s1-coverage (now REACHABLE) and contabo-reclaim (now REACHABLE). Discriminator: crates/omp-orchestrator/src/lib.rs and tests/census_membership.rs are byte-identical at 5d3ef562, HEAD 73cd903, and the worktree -- this is COMMITTED product, not worktree dirt. advisory_gates() is !is_reachable, so a Reachable crate cannot appear on the naming leg; the lib.rs comment claiming those two tests contradict is false on this census. s1-coverage is invoked from .github/workflows/gate.yml. contabo-reclaim is invoked from .github/workflows/contabo-reclaim.yml. The rows are the defect the ratchet exists to catch. Do not raise a ceiling. Do not touch crates/omp-orchestrator/src/cross_pane_hold.rs (peer in-flight, numstat 5/4).
+ACCEPTANCE: ACCEPTANCE
+1. Discriminator recorded: lib.rs + census_membership.rs identical at CI sha 5d3ef562, HEAD, and worktree. Class = PRODUCT (registry drift), not BLIND/ABSENT/FOSSIL/ROOT.
+2. Delete the s1-coverage and contabo-reclaim rows from ADVISORY_ALLOWANCE in crates/omp-orchestrator/src/lib.rs. Do not raise ADVISORY_CEILING. Do not edit cross_pane_hold.rs.
+3. Remote: RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p omp-orchestrator --test census_membership --no-fail-fast
+   Expect test result: ok with an_allowance_row_for_a_wired_or_absent_crate_is_stale_and_fails AND every_advisory_unreachable_row_is_named_in_the_allowance both passing. Paste Remote command finished: exit=<N> AND test result:.
+4. If naming goes red after the delete, STOP -- that is the documented contradiction returning; do not amnesty. Report NEEDS-RULING.
+5. Export mutations only; never plant in the shared checkout. Name legs that cannot discriminate the mutant.

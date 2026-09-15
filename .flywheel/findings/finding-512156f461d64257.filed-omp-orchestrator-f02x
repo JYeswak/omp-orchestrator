@@ -1,0 +1,6 @@
+priority=1
+labels=provenance,supervisor,claim-path
+---
+WHAT: main.rs:1920-1927 -- the half_claimed_by_receiver branch of the supervisor claim path passes --assignee and --status with NO --actor, one branch over from :1916 which does pass it.
+WHY: Same defect class as crates/finding own publisher (fixed 37ac5ff): an omitted --actor makes br fall back to the ambient git identity, crediting a human for agent work. 32.9% of this repo beads read created_by=josh. This is the supervisor own tracker write, so it misattributes every half-claim it performs.
+ACCEPTANCE: 1. main.rs:1920-1927 passes --actor. 2. READ crates/omp-orchestrator/src/main.rs:7776 FIRST -- it asserts the exact argv shape of the sibling branch at :1916; changing claim argv without reading that test is how a green suite starts lying. 3. Fires-on-known-bad: remove the flag, a leg reddens naming the field. 4. Mutation with byte-identical restore.

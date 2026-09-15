@@ -12,13 +12,19 @@ use ack_stage::{
     AckStageResult, TransportReceipt,
 };
 
+use crate::packet_admission::{self, PacketAdmission};
 use crate::uds_target_gate::{
     observe_uds_target_gate, uds_cycle_admission, uds_cycle_allows_new_claim_or_dispatch,
     UdsCycleAdmission, UdsObserveInput,
 };
+use crate::{
+    applicable, census_gates, cross_pane_hold, decide, dispatch_packet, read_idle_authorization,
+    GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision,
+};
 use ack_spine::ledger::StepKind;
-use decision_ledger::{HeartbeatAction, HumanClause};
-use agent_mail_native::identity::{format_sender_header, resolve_pane_identity, BindingStatus, PaneIdentity};
+use agent_mail_native::identity::{
+    format_sender_header, resolve_pane_identity, BindingStatus, PaneIdentity,
+};
 use agent_mail_native::journey::{
     self as mail, AgentName, DeliveryReceipt, ProjectKey, SendRequest,
 };
@@ -27,6 +33,7 @@ use asupersync::process::{Command, Output};
 use asupersync::runtime::RuntimeBuilder;
 use asupersync::time::{sleep, timeout};
 use asupersync::Cx;
+use decision_ledger::{HeartbeatAction, HumanClause};
 use dispatch_claim_fence::{
     authorize, authorize_with_identities, parse_br_show_json, BeadSnapshot, ClaimFenceError,
     DispatchIntent, IdentityRecord, IdentityRegistries,
@@ -48,16 +55,11 @@ use ntm_fleet_monitor::bead_lifecycle::{
 };
 use ntm_fleet_monitor::parse_activity_json;
 use ntm_fleet_monitor::{classify, Approved, Intent, TypedAction};
-use crate::packet_admission::{self, PacketAdmission};
-use omp_types::{DispatchAdmissibility, DispatchPacketClass};
-use crate::{
-    applicable, census_gates, cross_pane_hold, decide, dispatch_packet, read_idle_authorization,
-    GateCensus, Observation, PaneObservation, QueueState, SupervisorDecision,
-};
 use omp_rpc_session::{
     run_session, OmpCommand, RpcError, RpcSessionConfig, NO_CLAIM_BOUNDARY, OMP_RPC_SCHEMA_VERSION,
     OMP_SURFACE,
 };
+use omp_types::{DispatchAdmissibility, DispatchPacketClass};
 use orchestration_tick_gate::{
     append_receipt, build_receipt, PaneDisposition, Receipt, TickVerdict,
 };
@@ -355,7 +357,9 @@ fn parse_grade_claim_args(args: &[String]) -> Result<Option<GradeClaimRequest>, 
                 return Err("CONFIG_REFUSED grade --claim --grader requires a pane".to_owned());
             };
             if loop_queue_filter::select::tmux_pane_id(pane).is_none() {
-                return Err(format!("CONFIG_REFUSED grade --grader pane is not a tmux pane id: {pane}"));
+                return Err(format!(
+                    "CONFIG_REFUSED grade --grader pane is not a tmux pane id: {pane}"
+                ));
             }
             grader = Some(pane.clone());
             rest = &tail[1..];
@@ -364,7 +368,10 @@ fn parse_grade_claim_args(args: &[String]) -> Result<Option<GradeClaimRequest>, 
             rest = tail;
         }
     }
-    Ok(Some(GradeClaimRequest { config_args, grader }))
+    Ok(Some(GradeClaimRequest {
+        config_args,
+        grader,
+    }))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -521,12 +528,14 @@ async fn record_grader_assignment(
         "--assignee".to_owned(),
         claim.grader_assignee.clone(),
     ];
-    let output = invoke(cx, config, &config.br, &args).await.map_err(|error| {
-        format!(
+    let output = invoke(cx, config, &config.br, &args)
+        .await
+        .map_err(|error| {
+            format!(
             "GRADE_CLAIM_FAILED bead={} grader_pane={} reason=RECORD_COMMAND_FAILED error={error}",
             claim.bead, claim.grader_pane
         )
-    })?;
+        })?;
     require_success(&config.br, output).map_err(|error| {
         format!(
             "GRADE_CLAIM_FAILED bead={} grader_pane={} reason=TRACKER_REFUSED detail={error}",
@@ -584,20 +593,13 @@ fn default_tick_monitor_state(heartbeat_ledger: &Path, session: &str) -> PathBuf
 }
 
 fn default_pending_dispatch(heartbeat_ledger: &Path, session: &str) -> PathBuf {
-    heartbeat_ledger.with_file_name(format!(
-        "omp-orchestrator-{session}.pending-dispatch"
-    ))
+    heartbeat_ledger.with_file_name(format!("omp-orchestrator-{session}.pending-dispatch"))
 }
 
 /// A second session in one HOME must not reuse a fixed state/pending path.
-fn refuse_session_path_collision(
-    session: &str,
-    paths: &[(&str, &Path)],
-) -> Result<(), String> {
+fn refuse_session_path_collision(session: &str, paths: &[(&str, &Path)]) -> Result<(), String> {
     if paths.is_empty() {
-        return Err(
-            "SESSION_PATH_COLLISION empty scan set is ERROR, never a pass".to_owned(),
-        );
+        return Err("SESSION_PATH_COLLISION empty scan set is ERROR, never a pass".to_owned());
     }
     for (label, path) in paths {
         let name = path
@@ -613,7 +615,6 @@ fn refuse_session_path_collision(
     }
     Ok(())
 }
-
 
 impl Config {
     fn from_args(args: &[String]) -> Result<Self, String> {
@@ -1054,11 +1055,15 @@ fn receipt_string(
 ) -> Result<String, String> {
     match object.get(field).and_then(Value::as_str) {
         Some(value) if !value.is_empty() => Ok(value.to_owned()),
-        Some(_) => Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=empty")),
-        None if object.contains_key(field) => {
-            Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_type"))
-        }
-        None => Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=missing")),
+        Some(_) => Err(format!(
+            "NTM_SEND_RECEIPT_MALFORMED field={field} reason=empty"
+        )),
+        None if object.contains_key(field) => Err(format!(
+            "NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_type"
+        )),
+        None => Err(format!(
+            "NTM_SEND_RECEIPT_MALFORMED field={field} reason=missing"
+        )),
     }
 }
 
@@ -1067,10 +1072,14 @@ fn receipt_strings(
     field: &'static str,
 ) -> Result<Vec<String>, String> {
     let Some(value) = object.get(field) else {
-        return Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=missing"));
+        return Err(format!(
+            "NTM_SEND_RECEIPT_MALFORMED field={field} reason=missing"
+        ));
     };
     let Some(values) = value.as_array() else {
-        return Err(format!("NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_type"));
+        return Err(format!(
+            "NTM_SEND_RECEIPT_MALFORMED field={field} reason=wrong_type"
+        ));
     };
     values
         .iter()
@@ -1166,15 +1175,18 @@ fn parse_ntm_send_receipt(
         .and_then(Value::as_object)
         .ok_or_else(|| "NTM_SEND_RECEIPT_MALFORMED field=outcome reason=missing".to_owned())?;
     if outcome.get("success").and_then(Value::as_bool) != Some(true) {
-        return Err(
-            "NTM_SEND_RECEIPT_MALFORMED field=outcome.success reason=not_true".to_owned(),
-        );
+        return Err("NTM_SEND_RECEIPT_MALFORMED field=outcome.success reason=not_true".to_owned());
     }
     let Some(admission_values) = operation.get("admissions").and_then(Value::as_array) else {
-        return Err("NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=missing_or_wrong_type".to_owned());
+        return Err(
+            "NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=missing_or_wrong_type"
+                .to_owned(),
+        );
     };
     if admission_values.is_empty() {
-        return Err("NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=empty".to_owned());
+        return Err(
+            "NTM_SEND_RECEIPT_MALFORMED field=operation.admissions reason=empty".to_owned(),
+        );
     }
     let mut admissions = Vec::with_capacity(admission_values.len());
     for value in admission_values {
@@ -1283,7 +1295,9 @@ fn validate_ntm_send_receipt(
         ));
     }
     let expected_sha = packet_digest(packet.as_bytes());
-    let expected_sha = expected_sha.strip_prefix("sha256:").unwrap_or(&expected_sha);
+    let expected_sha = expected_sha
+        .strip_prefix("sha256:")
+        .unwrap_or(&expected_sha);
     if receipt.payload_sha256 != expected_sha {
         return Err(format!(
             "NTM_SEND_RECEIPT_REFUSED reason=payload_digest_mismatch expected={expected_sha} got={}",
@@ -1302,9 +1316,7 @@ fn validate_ntm_send_receipt(
         .iter()
         .find(|admission| ntm_target_matches(&admission.target, pane))
         .ok_or_else(|| {
-            format!(
-                "NTM_SEND_RECEIPT_REFUSED reason=target_admission_missing pane={pane}"
-            )
+            format!("NTM_SEND_RECEIPT_REFUSED reason=target_admission_missing pane={pane}")
         })?;
     if target_admitted.state != "submitted" {
         return Err(format!(
@@ -1347,14 +1359,10 @@ async fn query_ntm_send_receipt(
     )
     .await
     .map_err(|error| {
-        format!(
-            "NTM_SEND_RECEIPT_REFUSED pane={pane} operation_id={operation_id} error={error}"
-        )
+        format!("NTM_SEND_RECEIPT_REFUSED pane={pane} operation_id={operation_id} error={error}")
     })?;
     parse_ntm_send_receipt(output.status.code(), &output.stdout, &output.stderr).map_err(|error| {
-        format!(
-            "NTM_SEND_RECEIPT_REFUSED pane={pane} operation_id={operation_id} {error}"
-        )
+        format!("NTM_SEND_RECEIPT_REFUSED pane={pane} operation_id={operation_id} {error}")
     })
 }
 
@@ -1396,13 +1404,11 @@ async fn send_ntm_with_receipt(
     let send_args = ntm_send_args(&config.session, pane, staged, &operation_id);
     let output = invoke(cx, config, &config.ntm, &send_args).await?;
     let stdout = require_success(&config.ntm, output)?;
-    let transport = TransportReceipt::capture_ntm(&stdout).map_err(|error| {
-        format!("DISPATCH_BLOCKED bead={bead} malformed ntm receipt: {error}")
-    })?;
+    let transport = TransportReceipt::capture_ntm(&stdout)
+        .map_err(|error| format!("DISPATCH_BLOCKED bead={bead} malformed ntm receipt: {error}"))?;
     let durable = query_ntm_send_receipt(cx, config, &operation_id, pane).await?;
-    validate_ntm_send_receipt(&durable, &operation_id, packet, pane).map_err(|error| {
-        format!("DISPATCH_BLOCKED bead={bead} pane={pane} {error}")
-    })?;
+    validate_ntm_send_receipt(&durable, &operation_id, packet, pane)
+        .map_err(|error| format!("DISPATCH_BLOCKED bead={bead} pane={pane} {error}"))?;
     write_ntm_send_receipt(config, tick, pane, bead, &durable)?;
     Ok(transport)
 }
@@ -1418,14 +1424,20 @@ fn classify_ompo_ps_output(output: &Output) -> OmpoPsEvidence {
         return OmpoPsEvidence::Unmeasured { reason };
     }
     let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) else {
-        return OmpoPsEvidence::Unmeasured { reason: "ompo_ps_invalid_json" };
+        return OmpoPsEvidence::Unmeasured {
+            reason: "ompo_ps_invalid_json",
+        };
     };
     let data = value.get("data").unwrap_or(&value);
     let project_scopes = data
         .get("project_scope_count")
         .and_then(Value::as_u64)
         .and_then(|count| usize::try_from(count).ok())
-        .or_else(|| data.get("project_scopes").and_then(Value::as_array).map(Vec::len));
+        .or_else(|| {
+            data.get("project_scopes")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+        });
     let daemon_count = data
         .get("daemon_row_count")
         .and_then(Value::as_u64)
@@ -1446,7 +1458,9 @@ fn classify_ompo_ps_output(output: &Output) -> OmpoPsEvidence {
             project_scopes,
             daemon_count,
         },
-        _ => OmpoPsEvidence::Unmeasured { reason: "ompo_ps_invalid_shape" },
+        _ => OmpoPsEvidence::Unmeasured {
+            reason: "ompo_ps_invalid_shape",
+        },
     }
 }
 
@@ -1908,9 +1922,8 @@ async fn reconcile_completions(cx: &Cx, config: &Config, tick: u64) -> Result<us
         return Ok(0);
     };
     let spine_path = crate::spine_emit::spine_ledger_path(&config.heartbeat_ledger);
-    let recorded = crate::spine_emit::recorded_closures(
-        &fs::read_to_string(&spine_path).unwrap_or_default(),
-    );
+    let recorded =
+        crate::spine_emit::recorded_closures(&fs::read_to_string(&spine_path).unwrap_or_default());
     let mut candidates: Vec<(String, String)> = Vec::new();
     for line in heartbeat.lines().rev() {
         if !line.contains("\"DISPATCHED\"") {
@@ -2103,9 +2116,7 @@ async fn close_and_read_back(cx: &Cx, config: &Config, bead: &str, reason: &str)
         Ok(leases) => leases,
         Err(detail) => {
             return CloseReadback::PolicyRefused {
-                refusal: format!(
-                    "CLOSE_REFUSED_RESERVATION_CHECK bead={bead} detail={detail}"
-                ),
+                refusal: format!("CLOSE_REFUSED_RESERVATION_CHECK bead={bead} detail={detail}"),
             };
         }
     };
@@ -2718,7 +2729,6 @@ async fn prepare_bead_dispatch(
     degraded_authorized: bool,
     admitted_pane_count: usize,
 ) -> Result<(BeadSnapshot, String, PacketAdmission), String> {
-
     let initial = load_bead_snapshot(cx, config, bead).await?;
     let receiver_agent = receiver_agent_for_dispatch(config, pane, bead, &initial)?;
     ensure_dispatch_receiver_identity(identities, bead, pane, &receiver_agent)?;
@@ -2729,7 +2739,13 @@ async fn prepare_bead_dispatch(
                 "DISPATCH_BLOCKED bead={bead} pane={pane} reason=LIFECYCLE_LEDGER_UNREADABLE error={error}"
             )
         })?;
-    if let Err(refuse) = cross_pane_hold::admit_with_intent(hold_intent, bead, pane, initial.status_label(), &in_flight) {
+    if let Err(refuse) = cross_pane_hold::admit_with_intent(
+        hold_intent,
+        bead,
+        pane,
+        initial.status_label(),
+        &in_flight,
+    ) {
         return Err(format!(
             "DISPATCH_BLOCKED bead={bead} pane={pane} reason={refuse} owner=josh next_action=wait-for-reap-or-abandon"
         ));
@@ -2941,17 +2957,30 @@ fn begin_dispatch_lifecycle(
         ("run_id".to_owned(), lifecycle_run_id().to_owned()),
         ("build_id".to_owned(), BUILD_ID.to_owned()),
         ("pid".to_owned(), std::process::id().to_string()),
-        ("admission".to_owned(), admission.verdict.as_str().to_owned()),
-        ("packet_class".to_owned(), admission.packet_class.as_str().to_owned()),
+        (
+            "admission".to_owned(),
+            admission.verdict.as_str().to_owned(),
+        ),
+        (
+            "packet_class".to_owned(),
+            admission.packet_class.as_str().to_owned(),
+        ),
     ];
     if let DispatchAdmissibility::Degraded { .. } = admission.verdict {
         selected_fields.push((
             "refused_class".to_owned(),
-            admission.refused_class().expect("degraded has a refused class").as_str().to_owned(),
+            admission
+                .refused_class()
+                .expect("degraded has a refused class")
+                .as_str()
+                .to_owned(),
         ));
         selected_fields.push((
             "naming_gate".to_owned(),
-            admission.naming_gate().expect("degraded names its gate").to_owned(),
+            admission
+                .naming_gate()
+                .expect("degraded names its gate")
+                .to_owned(),
         ));
         selected_fields.push((
             "admitted_pane_count".to_owned(),
@@ -3048,7 +3077,13 @@ pub fn gate_peer_grading_for_pane(
     tick: u64,
     grader_pane: &str,
 ) -> Result<PeerGradeGate, String> {
-    gate_peer_grading_inner(config, observation, tick, Some(grader_pane), "__orchestrator__")
+    gate_peer_grading_inner(
+        config,
+        observation,
+        tick,
+        Some(grader_pane),
+        "__orchestrator__",
+    )
 }
 
 fn peer_grade_error_detail(error: &loop_queue_filter::select::AssignGradeError) -> String {
@@ -3138,7 +3173,8 @@ fn gate_peer_grading_inner(
         .join("\n");
     if candidate_jsonl.is_empty() {
         return Err(
-            "PEER_GRADING_LEDGER_UNREADABLE reason=receiver_verified_tracker_row_missing".to_owned(),
+            "PEER_GRADING_LEDGER_UNREADABLE reason=receiver_verified_tracker_row_missing"
+                .to_owned(),
         );
     }
     let ledger_text = fs::read_to_string(&config.bead_lifecycle_ledger).map_err(|error| {
@@ -3638,8 +3674,7 @@ async fn send_and_verify(
     loop {
         cx.checkpoint()
             .map_err(|_| "CANCELLED while verifying receiver receipt".to_owned())?;
-        let (post_send, pane_capture) =
-            post_send_observation(cx, config, pane, codex).await;
+        let (post_send, pane_capture) = post_send_observation(cx, config, pane, codex).await;
         if let receiver_receipt::PostSendObservation::Present(observation) = &post_send {
             if first_working.is_none()
                 && matches!(
@@ -5364,8 +5399,12 @@ fn packet_sender_header(
     session: &str,
     project: &ProjectKey,
 ) -> Result<String, String> {
-    let header = format_sender_header(identity, session, project)
-        .map_err(|error| format!("SENDER_IDENTITY_REFUSED pane={} error={error}", identity.pane_id))?;
+    let header = format_sender_header(identity, session, project).map_err(|error| {
+        format!(
+            "SENDER_IDENTITY_REFUSED pane={} error={error}",
+            identity.pane_id
+        )
+    })?;
     if !header.starts_with("FROM:")
         || !header
             .lines()
@@ -5398,11 +5437,13 @@ async fn render_packet_with_sender(
         why_now,
         traps,
     )
-    .map_err(|error| format!(
-        "DISPATCH_PACKET_REFUSED bead={} pane={} error={error}",
-        snapshot.id(),
-        pane.unwrap_or("<none>")
-    ))?;
+    .map_err(|error| {
+        format!(
+            "DISPATCH_PACKET_REFUSED bead={} pane={} error={error}",
+            snapshot.id(),
+            pane.unwrap_or("<none>")
+        )
+    })?;
     packet.insert_str(0, &sender_header);
     Ok(packet)
 }
@@ -5895,7 +5936,6 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
             .join(",")
     );
 
-
     // eg0m: THE CLOSE HALF, RECONCILED EVERY TICK — ahead of the pending-dispatch
     // fence and every other branch that can abort, for the reason `leht` measured:
     // a lane placed after something that can refuse does not run every cycle. This
@@ -5935,35 +5975,31 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     // fails closed to a human. Neither is weakened here; both are now per-pane.
     let (marker_blocked_panes, marker_cleared_beads): (Vec<String>, Vec<String>) =
         match process_pending_markers(config, tick)? {
-        MarkerFence::Proceed(outcome) => {
-            if outcome.cleared.is_empty() && outcome.blocked_panes.is_empty() {
-                write_heartbeat(
-                    config,
-                    tick,
-                    "NO_PENDING_DISPATCH",
-                    "owner=loop next_action=continue",
-                )?;
+            MarkerFence::Proceed(outcome) => {
+                if outcome.cleared.is_empty() && outcome.blocked_panes.is_empty() {
+                    write_heartbeat(
+                        config,
+                        tick,
+                        "NO_PENDING_DISPATCH",
+                        "owner=loop next_action=continue",
+                    )?;
+                }
+                let cleared_beads = outcome.cleared.iter().map(|row| row.1.clone()).collect();
+                (outcome.blocked_panes, cleared_beads)
             }
-            let cleared_beads = outcome
-                .cleared
-                .iter()
-                .map(|row| row.1.clone())
-                .collect();
-            (outcome.blocked_panes, cleared_beads)
-        }
-        MarkerFence::StopUndatable {
-            detail,
-            reason,
-            marker_path,
-        } => {
-            write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
-            println!(
+            MarkerFence::StopUndatable {
+                detail,
+                reason,
+                marker_path,
+            } => {
+                write_heartbeat(config, tick, "DISPATCH_RETRY_BLOCKED", &detail)?;
+                println!(
                 "DISPATCH_RETRY_BLOCKED reason={reason} owner=josh next_action=inspect-or-clear-pending-dispatch scope=fleet marker={} detail={detail}",
                 marker_path.display()
             );
-            return Ok(());
-        }
-    };
+                return Ok(());
+            }
+        };
 
     // HD-0001 (docs/decisions.jsonl): "tick loop continues as long as we're keeping
     // our docs up to date". A buyer condition, so it gates the tick — and it is
@@ -6109,7 +6145,9 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
     let readiness = bead_availability::collect_ready_live(cx, &config.br)
         .await
         .map_err(|error| {
-            format!("QUEUE_VISIBILITY_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}")
+            format!(
+                "QUEUE_VISIBILITY_UNREADABLE owner=josh next_action=repair-br-or-escalate: {error}"
+            )
         })?;
     if !readiness.recovered.is_empty() {
         let ids = readiness.recovered_ids();
@@ -6364,7 +6402,12 @@ async fn run_cycle(cx: &Cx, config: &Config, tick: u64) -> Result<(), String> {
                     "cleared_beads={} next_action=await-new-ready",
                     marker_cleared_beads.join(",")
                 );
-                write_heartbeat(config, tick, "DISPATCH_MARKER_CLEARED_NO_ALTERNATE", &detail)?;
+                write_heartbeat(
+                    config,
+                    tick,
+                    "DISPATCH_MARKER_CLEARED_NO_ALTERNATE",
+                    &detail,
+                )?;
                 println!("DISPATCH_MARKER_CLEARED_NO_ALTERNATE {detail}");
                 return Ok(());
             }
@@ -6936,9 +6979,7 @@ async fn run_supervisor(cx: &Cx, config: Config) -> Result<(), String> {
             eprintln!("SUPERVISOR_REFUSED {error}");
             // A PER-TICK REFUSAL IS A VERDICT, NOT A CRASH — the loop continues
             // unless SURVIVE_GATE_UNWIRED is mutated to false (the crash-loop shape).
-            if error.contains("GATE_UNWIRED")
-                && !crate::resident_tick::SURVIVE_GATE_UNWIRED
-            {
+            if error.contains("GATE_UNWIRED") && !crate::resident_tick::SURVIVE_GATE_UNWIRED {
                 return Err(error);
             }
         }
@@ -7003,7 +7044,8 @@ async fn render_dispatch_command(
         Some(&receiver_agent),
         request.why_now.as_deref(),
         traps.as_deref(),
-    ).await
+    )
+    .await
 }
 
 fn close_readback_exit(outcome: CloseReadback) -> std::process::ExitCode {
@@ -7069,7 +7111,6 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
             eprintln!("SUPERVISOR_FATAL runtime_build detail={error}");
             return std::process::ExitCode::from(1);
         }
-
     };
     if let Some(request) = grade_request {
         // The invoker is the OBSERVER (it may be working — observers may work
@@ -7143,8 +7184,7 @@ pub fn run(args: Vec<String>) -> std::process::ExitCode {
     }
 
     let result = runtime.block_on(async move {
-        let cx =
-            Cx::current().ok_or_else(|| "SUPERVISOR_FATAL no_runtime_context".to_owned())?;
+        let cx = Cx::current().ok_or_else(|| "SUPERVISOR_FATAL no_runtime_context".to_owned())?;
         if config.omp_quick {
             run_omp_quick(&cx, &config)
                 .await
@@ -7268,9 +7308,10 @@ mod tests {
         validate_ntm_send_receipt(&receipt, operation_id, packet, "%5")
             .expect("receipt binds the submitted payload to the target");
         assert_eq!(receipt.status, "completed");
-        assert_eq!(ntm_send_receipt_args(operation_id), vec![
-            "--robot-send-receipt=omp-ntm-send-test-good"
-        ]);
+        assert_eq!(
+            ntm_send_receipt_args(operation_id),
+            vec!["--robot-send-receipt=omp-ntm-send-test-good"]
+        );
     }
 
     #[test]
@@ -7279,28 +7320,34 @@ mod tests {
         let error = parse_ntm_send_receipt(Some(1), raw, b"").expect_err("missing receipt");
 
         assert!(error.contains("NTM_SEND_RECEIPT_FAILED"));
-        assert!(error.contains("exit=1"), "the command exit code is evidence: {error}");
-        assert!(error.contains("error_code=NOT_FOUND"), "the daemon code is evidence: {error}");
+        assert!(
+            error.contains("exit=1"),
+            "the command exit code is evidence: {error}"
+        );
+        assert!(
+            error.contains("error_code=NOT_FOUND"),
+            "the daemon code is evidence: {error}"
+        );
         assert!(
             error.contains("message=send operation 'missing-op' not found"),
             "the daemon message identifies the missing receipt: {error}"
         );
-        assert!(!error.contains("completed"), "missing receipt cannot be read as delivery");
+        assert!(
+            !error.contains("completed"),
+            "missing receipt cannot be read as delivery"
+        );
     }
 
     #[test]
     fn empty_ntm_admissions_are_unknown_not_a_vacuous_pass() {
         let packet = "receipt anti-vacuity\\n";
         let operation_id = "omp-ntm-send-test-empty";
-        let mut value: Value = serde_json::from_str(&good_ntm_receipt_json(packet, operation_id, "5"))
-            .expect("fixture JSON");
+        let mut value: Value =
+            serde_json::from_str(&good_ntm_receipt_json(packet, operation_id, "5"))
+                .expect("fixture JSON");
         value["operation"]["admissions"] = Value::Array(Vec::new());
-        let error = parse_ntm_send_receipt(
-            Some(0),
-            value.to_string().as_bytes(),
-            b"",
-        )
-        .expect_err("an empty admission set is not evidence");
+        let error = parse_ntm_send_receipt(Some(0), value.to_string().as_bytes(), b"")
+            .expect_err("an empty admission set is not evidence");
 
         assert_eq!(
             error,
@@ -7317,7 +7364,9 @@ mod tests {
             "omp-ntm-send-test-wiring",
         );
         assert_eq!(args[0], "--robot-send=omp-orchestrator");
-        assert!(args.iter().any(|arg| arg == "--op-id=omp-ntm-send-test-wiring"));
+        assert!(args
+            .iter()
+            .any(|arg| arg == "--op-id=omp-ntm-send-test-wiring"));
         assert!(args.iter().any(|arg| arg == "--msg-file=/state/packet.txt"));
     }
     /// The four repo shapes the docs gate must distinguish. Measured 2026-09-05:
@@ -7363,12 +7412,8 @@ mod tests {
         );
         let now = row["ts_unix"].as_u64().expect("timestamp");
         assert!(
-            redispatch_cooldown_age(
-                &line,
-                "omp-orchestrator-capacity-1",
-                now.saturating_add(1)
-            )
-            .is_some(),
+            redispatch_cooldown_age(&line, "omp-orchestrator-capacity-1", now.saturating_add(1))
+                .is_some(),
             "a requeued bead must remain on cooldown"
         );
     }
@@ -7884,7 +7929,11 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         assert_eq!(outcome.cleared.len(), 1);
         assert_eq!(outcome.cleared[0].1, latched);
         assert_eq!(outcome.cleared[0].2, "DISPATCH_INTENT_EXPIRED");
-        let ready = vec![latched.to_owned(), next.to_owned(), "omp-orchestrator-third".to_owned()];
+        let ready = vec![
+            latched.to_owned(),
+            next.to_owned(),
+            "omp-orchestrator-third".to_owned(),
+        ];
         let cleared_beads: Vec<String> = outcome.cleared.iter().map(|row| row.1.clone()).collect();
         let (selected, skipped) =
             select_ready_skipping_cooldown(&ready, "", now_unix(), &cleared_beads);
@@ -8306,18 +8355,15 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
 
     #[test]
     fn second_session_refuses_reusing_session_a_fixed_pending_path() {
-        let shared = PathBuf::from("/home/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch");
-        let error = refuse_session_path_collision(
-            "B",
-            &[("pending_dispatch", shared.as_path())],
-        )
-        .expect_err("session B must not reuse the unscoped basename");
+        let shared =
+            PathBuf::from("/home/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch");
+        let error = refuse_session_path_collision("B", &[("pending_dispatch", shared.as_path())])
+            .expect_err("session B must not reuse the unscoped basename");
+        assert!(error.starts_with("SESSION_PATH_COLLISION"), "{error}");
         assert!(
-            error.starts_with("SESSION_PATH_COLLISION"),
-            "{error}"
-        );
-        assert!(
-            error.contains("path=/home/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch"),
+            error.contains(
+                "path=/home/josh/.local/state/flywheel/omp-orchestrator.pending-dispatch"
+            ),
             "{error}"
         );
         assert!(error.contains("session=B"), "{error}");
@@ -8326,10 +8372,7 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
     #[test]
     fn session_path_collision_empty_scan_is_error() {
         let error = refuse_session_path_collision("B", &[]).expect_err("empty");
-        assert!(
-            error.contains("empty scan set"),
-            "{error}"
-        );
+        assert!(error.contains("empty scan set"), "{error}");
     }
 
     #[test]
@@ -8342,7 +8385,8 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         let b =
             Config::from_args(&["--session".to_owned(), "omp-orchestrator".to_owned()]).unwrap();
         assert_ne!(
-            a.pending_dispatch, b.pending_dispatch,
+            a.pending_dispatch,
+            b.pending_dispatch,
             "{} vs {}",
             a.pending_dispatch.display(),
             b.pending_dispatch.display()
@@ -8356,8 +8400,6 @@ printf '%s\n' '{"success":true,"agents":[{"pane":"4","agent_type":"omp-claude","
         )
         .expect("session A keys must be clean");
     }
-
-
 
     #[test]
     fn two_configs_different_sessions_resolve_different_state_paths() {
@@ -8941,7 +8983,9 @@ exit 2
              deliberately, because every guard is a leg the workers stop asserting"
         );
         assert_eq!(
-            source.matches(concat!("HostRequirement::", "TmuxPane")).count(),
+            source
+                .matches(concat!("HostRequirement::", "TmuxPane"))
+                .count(),
             4,
             "four legs need a tmux pane; widening or narrowing that must be visible"
         );
@@ -9047,10 +9091,7 @@ exit 2
         )
         .expect("write cargo config");
 
-        let args = vec![
-            "--repo".to_owned(),
-            tmp.display().to_string(),
-        ];
+        let args = vec!["--repo".to_owned(), tmp.display().to_string()];
         let config = Config::from_args(&args).expect("config");
 
         // The resolver takes the environment value as data. Passing None exercises
@@ -9890,7 +9931,8 @@ run
 Done: exit 0
 Stop: now
 "#;
-        let admission = packet_admission::evaluate(packet, false, false).expect("fresh packet admission");
+        let admission =
+            packet_admission::evaluate(packet, false, false).expect("fresh packet admission");
         begin_dispatch_lifecycle(&config, "%7", &pane, "bead", packet, 7, &admission, 1)
             .expect("retained two-capture evidence must authorize without the label");
     }
@@ -9907,27 +9949,31 @@ Stop: now
         let (config, _state, _args, _supervisor) = open_bead_br_fixture(&temp, bead);
         let pane = retained_dispatchable_pane("%1408");
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
-        let result = runtime.block_on(async {
-            let cx = Cx::current().expect("runtime context");
-            let identities = test_identity_registries();
-            prepare_bead_dispatch(
-                &cx,
-                &config,
-                "%1408",
-                &pane,
-                bead,
-                &identities,
-                17,
-                true,
-                cross_pane_hold::HoldIntent::Grade,
-                false,
-                true,
-                2,
-            )
-            .await
-        })
-        .expect("degraded grading packet should be admitted");
-        assert!(matches!(result.2.verdict, DispatchAdmissibility::Degraded { .. }));
+        let result = runtime
+            .block_on(async {
+                let cx = Cx::current().expect("runtime context");
+                let identities = test_identity_registries();
+                prepare_bead_dispatch(
+                    &cx,
+                    &config,
+                    "%1408",
+                    &pane,
+                    bead,
+                    &identities,
+                    17,
+                    true,
+                    cross_pane_hold::HoldIntent::Grade,
+                    false,
+                    true,
+                    2,
+                )
+                .await
+            })
+            .expect("degraded grading packet should be admitted");
+        assert!(matches!(
+            result.2.verdict,
+            DispatchAdmissibility::Degraded { .. }
+        ));
         let heartbeat = std::fs::read_to_string(&config.heartbeat_ledger).expect("heartbeat");
         for field in [
             "ADMISSION_DEGRADED",
@@ -9966,7 +10012,6 @@ Stop: now
     }
     #[test]
     fn peer_grade_assignment_uses_any_idle_non_author_without_reservation() {
-
         let (temp, config) = isolated_fixture_config();
         std::fs::create_dir_all(config.repo.join(".beads")).unwrap();
         std::fs::write(
@@ -10110,7 +10155,8 @@ Stop: now
             "{heartbeat}"
         );
 
-        let PeerGradeGate::Claimed(claim) = gate_peer_grading(&config, &mut observation, 77).unwrap()
+        let PeerGradeGate::Claimed(claim) =
+            gate_peer_grading(&config, &mut observation, 77).unwrap()
         else {
             panic!("a finished peer bead must claim grading before new work");
         };
@@ -10126,7 +10172,6 @@ Stop: now
             .is_empty(),
             "selecting a grade must not create a pane-pinned reservation"
         );
-
 
         assert!(
             observation.panes.iter().any(|pane| pane.pane_id == "%1414"),
@@ -10275,7 +10320,10 @@ Stop: now
     fn grade_observation(panes: Vec<PaneObservation>) -> Observation {
         Observation {
             panes,
-            queue: QueueState { ready_count: 1, readable: true },
+            queue: QueueState {
+                ready_count: 1,
+                readable: true,
+            },
             gate_census: Some(GateCensus { rows: Vec::new() }),
         }
     }
@@ -10286,7 +10334,8 @@ Stop: now
         // acquisition must succeed for the idle peer. Under the old pre-check
         // this errored current_pane_not_dispatchable before reaching selection.
         let (_temp, config) = grade_fixture();
-        let mut observation = grade_observation(vec![grade_working_pane("%26"), grade_idle_pane("%1414")]);
+        let mut observation =
+            grade_observation(vec![grade_working_pane("%26"), grade_idle_pane("%1414")]);
         let PeerGradeGate::Claimed(claim) =
             gate_peer_grading_inner(&config, &mut observation, 77, None, "%26")
                 .expect("working observer must acquire")
@@ -10330,7 +10379,10 @@ Stop: now
             grade_observation(vec![grade_idle_pane("%26"), grade_working_pane("%1408")]);
         let error = gate_peer_grading_for_pane(&config, &mut observation, 77, "%1408")
             .expect_err("carrying preferred pane must refuse");
-        assert!(error.contains("reason=preferred_grader_not_idle"), "{error}");
+        assert!(
+            error.contains("reason=preferred_grader_not_idle"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -10511,14 +10563,19 @@ Stop: now
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            record_grader_assignment(&cx, &config, &claim).await.expect("record writes");
+            record_grader_assignment(&cx, &config, &claim)
+                .await
+                .expect("record writes");
         });
         let body = std::fs::read_to_string(args).expect("claim command receipt");
         assert!(body.contains("update"), "{body}");
         assert!(body.contains(bead), "{body}");
         assert!(body.contains("--assignee"), "{body}");
         assert!(body.contains("pane1414-%1414"), "{body}");
-        assert!(!body.contains("--status"), "stage machine owns status: {body}");
+        assert!(
+            !body.contains("--status"),
+            "stage machine owns status: {body}"
+        );
     }
 
     #[test]
@@ -10541,7 +10598,9 @@ Stop: now
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         let error = runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            record_grader_assignment(&cx, &config, &claim).await.expect_err("refusal must surface")
+            record_grader_assignment(&cx, &config, &claim)
+                .await
+                .expect_err("refusal must surface")
         });
         assert!(error.contains("GRADE_CLAIM_FAILED"), "{error}");
         assert!(error.contains("TRACKER_REFUSED"), "{error}");
@@ -10797,7 +10856,10 @@ exit 2
             caller.liveness, "CONFIRMED_IDLE",
             "caller pane %26 reads {caller:?}; an idle caller cannot exercise the catch-22"
         );
-        assert!(caller.is_working, "caller must be carrying work: {caller:?}");
+        assert!(
+            caller.is_working,
+            "caller must be carrying work: {caller:?}"
+        );
         assert!(
             !caller.is_dispatchable,
             "a WORKING caller is not dispatchable -- exactly what the old pre-check refused on: {caller:?}"
@@ -10873,7 +10935,6 @@ exit 2
         assert!(wrong.contains("--assign"), "{wrong}");
     }
 
-
     #[test]
     fn grade_claim_parser_requires_the_claim_flag() {
         let request = parse_grade_claim_args(&[
@@ -10884,7 +10945,10 @@ exit 2
         ])
         .expect("valid grade claim syntax")
         .expect("grade claim request");
-        assert_eq!(request.config_args, vec!["--repo".to_owned(), "/repo".to_owned()]);
+        assert_eq!(
+            request.config_args,
+            vec!["--repo".to_owned(), "/repo".to_owned()]
+        );
         assert_eq!(request.grader, None);
         let error =
             parse_grade_claim_args(&["grade".to_owned()]).expect_err("bare grade must refuse");
@@ -10904,7 +10968,10 @@ exit 2
         .expect("grader flag parses")
         .expect("grade claim request");
         assert_eq!(request.grader, Some("%8".to_owned()));
-        assert_eq!(request.config_args, vec!["--repo".to_owned(), "/repo".to_owned()]);
+        assert_eq!(
+            request.config_args,
+            vec!["--repo".to_owned(), "/repo".to_owned()]
+        );
         let error = parse_grade_claim_args(&[
             "grade".to_owned(),
             "--claim".to_owned(),
@@ -10913,8 +10980,12 @@ exit 2
         ])
         .expect_err("malformed grader must refuse");
         assert!(error.contains("CONFIG_REFUSED"), "{error}");
-        let missing = parse_grade_claim_args(&["grade".to_owned(), "--claim".to_owned(), "--grader".to_owned()])
-            .expect_err("missing grader value must refuse");
+        let missing = parse_grade_claim_args(&[
+            "grade".to_owned(),
+            "--claim".to_owned(),
+            "--grader".to_owned(),
+        ])
+        .expect_err("missing grader value must refuse");
         assert!(missing.contains("CONFIG_REFUSED"), "{missing}");
     }
 
@@ -11115,17 +11186,14 @@ exit 2
         let runtime = RuntimeBuilder::current_thread().build().expect("runtime");
         let result = runtime.block_on(async {
             let cx = Cx::current().expect("runtime context");
-            close_and_read_back(
-                &cx,
-                &config,
-                "omp-orchestrator-test-bead",
-                "DONE: verified",
-            )
-            .await
+            close_and_read_back(&cx, &config, "omp-orchestrator-test-bead", "DONE: verified").await
         });
         match result {
             CloseReadback::PolicyRefused { refusal } => {
-                assert!(refusal.contains("CLOSE_REFUSED_RESERVATION_LEASE"), "{refusal}");
+                assert!(
+                    refusal.contains("CLOSE_REFUSED_RESERVATION_LEASE"),
+                    "{refusal}"
+                );
                 assert!(refusal.contains("reservation_id=112933"), "{refusal}");
                 assert!(refusal.contains("holder=WildStone"), "{refusal}");
                 assert!(refusal.contains("path=var/agent-tmp/lease"), "{refusal}");

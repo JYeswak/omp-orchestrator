@@ -133,19 +133,21 @@ pub fn prior_send_count(heartbeat_jsonl: &str, spine_jsonl: &str, bead: &str) ->
         .filter(|line| line.contains("\"DISPATCHED\""))
         .filter(|line| line.contains(&needle) || line.contains(&needle_q))
         .count();
-    let from_spine = spine_jsonl.lines().filter(|line| {
-        let Ok(value) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
-            return false;
-        };
-        let kind = value.get("kind").and_then(|k| k.as_str()).unwrap_or("");
-        if kind != StepKind::PacketSent.as_str() && kind != StepKind::Redispatched.as_str() {
-            return false;
-        }
-        value.get("bead").and_then(|b| b.as_str()) == Some(bead)
-    }).count();
+    let from_spine = spine_jsonl
+        .lines()
+        .filter(|line| {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line.trim()) else {
+                return false;
+            };
+            let kind = value.get("kind").and_then(|k| k.as_str()).unwrap_or("");
+            if kind != StepKind::PacketSent.as_str() && kind != StepKind::Redispatched.as_str() {
+                return false;
+            }
+            value.get("bead").and_then(|b| b.as_str()) == Some(bead)
+        })
+        .count();
     from_heartbeat + from_spine
 }
-
 
 /// Where the supervisor's spine ledger lives, derived from the heartbeat path.
 ///
@@ -311,7 +313,10 @@ mod tests {
     #[test]
     fn a_redispatch_is_a_distinct_kind_on_the_wire() {
         assert_eq!(StepKind::Redispatched.as_str(), "redispatched");
-        assert_ne!(StepKind::Redispatched.as_str(), StepKind::PacketSent.as_str());
+        assert_ne!(
+            StepKind::Redispatched.as_str(),
+            StepKind::PacketSent.as_str()
+        );
     }
 
     /// Spine `packet_sent` is a prior send even when heartbeat has no DISPATCHED
@@ -327,7 +332,6 @@ mod tests {
         assert_eq!(prior_send_count(hb, "", "omp-orchestrator-eg0m"), 1);
         assert_eq!(prior_send_count(hb, spine, "omp-orchestrator-eg0m"), 2);
     }
-
 
     /// The persisted-ledger reader, both directions.
     #[test]

@@ -183,10 +183,13 @@ pub fn adopted_subset() -> MetricVector {
                 denominator: "available_agent_slots".to_string(),
                 countermetric: "idle_beside_ready_queue".to_string(),
                 adopted: true,
-                why: "AGENTS.md: an idle worker beside a ready queue is the conductor's \
+                why: format!(
+                    "AGENTS.md: an idle worker beside a ready queue is the conductor's \
                       failure. Productive slots / available slots; the countermetric is idle \
-                      slots while br ready is nonempty."
-                    .to_string(),
+                      slots while {} {} is nonempty.",
+                    finding::BR,
+                    loop_queue_filter::READY_SUBCOMMAND
+                ),
             },
         ],
         measurements: Vec::new(),

@@ -6,8 +6,8 @@
 //! so the mechanism must be checkable without a live pane.
 
 use ack_spine::completion::{
-    assert_completions_not_vacuous, bead_token, classify_completion, completion_row,
-    is_ack_row, parse_completion, CompletionOutcome, CompletionParseError,
+    assert_completions_not_vacuous, bead_token, classify_completion, completion_row, is_ack_row,
+    parse_completion, CompletionOutcome, CompletionParseError,
 };
 use ack_spine::followup::{classify_followup, followup_action, FollowUpAction, FollowUpVerdict};
 
@@ -132,8 +132,14 @@ fn no_input_is_both_finished_and_silent() {
         }
     }
     // ANTI-VACUITY: the non-overlap above is trivially true if neither ever fires.
-    assert!(finished > 0, "no input produced Finished: the leg is vacuous");
-    assert!(silent > 0, "no input produced SilentPastDeadline: the leg is vacuous");
+    assert!(
+        finished > 0,
+        "no input produced Finished: the leg is vacuous"
+    );
+    assert!(
+        silent > 0,
+        "no input produced SilentPastDeadline: the leg is vacuous"
+    );
 }
 
 /// DEFECT 2, THE ONE THE BEAD DOES NOT NAME. An ACK is not a verdict, so it must NOT
@@ -205,10 +211,7 @@ fn a_completion_row_reaches_finished_without_closing_the_bead() {
         90,
         true,
     );
-    assert!(matches!(
-        silent,
-        FollowUpVerdict::SilentPastDeadline { .. }
-    ));
+    assert!(matches!(silent, FollowUpVerdict::SilentPastDeadline { .. }));
     assert!(matches!(
         followup_action(&silent),
         FollowUpAction::NeedsFollowUp(_)
@@ -221,7 +224,10 @@ fn a_completion_row_reaches_finished_without_closing_the_bead() {
 fn a_malformed_completion_is_named_rather_than_ignored() {
     // Empty verdict.
     assert_eq!(
-        parse_completion("DONE ipg.19 on %1408 -- verdict= evidence=x frees=%1408", BEAD),
+        parse_completion(
+            "DONE ipg.19 on %1408 -- verdict= evidence=x frees=%1408",
+            BEAD
+        ),
         Err(CompletionParseError::EmptyField { field: "verdict" })
     );
     // Missing the fields section entirely.

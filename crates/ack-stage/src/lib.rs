@@ -53,6 +53,8 @@ impl TransportKind {
     pub const fn supports_delivery_claim(self) -> bool {
         matches!(self, Self::NtmRobotSend)
     }
+
+
 }
 
 /// A complete ntm per-target transport receipt, retained verbatim.
