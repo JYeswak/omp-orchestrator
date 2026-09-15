@@ -4199,7 +4199,7 @@ pub fn verify_post_write_predicates(
         return Err(InceptionError::Readback {
             path: output.to_owned(),
             detail: format!(
-                "POST_WRITE_PREDICATE_CHANGED predicate=identity expected={} observed={}",
+                "POST_WRITE_PREDICATE_CHANGED predicate=identity field=source_revision expected={} provided={}",
                 manifest.repo_identity.source_revision, fresh_revision
             ),
         });
