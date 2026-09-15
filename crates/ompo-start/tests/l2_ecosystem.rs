@@ -11,8 +11,9 @@ use lifecycle_event::{
 use lifecycle_monitor::{gate_claimed_write_readback, observe_layer, verify_artifact, LayerState};
 use ompo_start::inception::{
     hook_source_identity_report, initialize, initialize_gated, list_backups, read_inception,
-    restore_backup, CargoWorkspaceError, HookIdentityStatus, InceptionError, TrustedInitConsent,
-    TrustedInitDecision, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
+    restore_backup, verify_post_write_predicates, CargoWorkspaceError, HookIdentityStatus,
+    InceptionError, TrustedInitConsent, TrustedInitDecision, PROJECT_AGENTS_OWNERSHIP_STAMP,
+    SCHEMA_VERSION,
 };
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
@@ -517,6 +518,47 @@ fn readback_refuses_empty_and_missing_identity_fields() {
                 assert_eq!(key, format!("repo_identity.{field}"));
             }
             (field, error) => panic!("wrong typed refusal for {field}: {error}"),
+        }
+    }
+}
+#[test]
+fn foreign_root_or_revision_refuses_before_success_evidence() {
+    let repository = repository_fixture();
+    let output = repository.path().join(".omp-orchestrator/inception.json");
+    let first = initialize(repository.path(), &output).expect("healthy init");
+    verify_post_write_predicates(repository.path(), &first.manifest, &output)
+        .expect("healthy identity passes the real post-write guard");
+
+    let current_root = repository.path().canonicalize().expect("canonical root");
+    let current_revision = first.manifest.repo_identity.source_revision.clone();
+    let cases = [
+        (
+            "canonical_path",
+            current_root
+                .join("foreign-repository")
+                .display()
+                .to_string(),
+        ),
+        ("source_revision", "0".repeat(current_revision.len())),
+    ];
+    for (field, foreign) in cases {
+        let mut foreign_manifest = first.manifest.clone();
+        match field {
+            "canonical_path" => foreign_manifest.repo_identity.canonical_path = foreign.clone(),
+            "source_revision" => foreign_manifest.repo_identity.source_revision = foreign.clone(),
+            _ => unreachable!("case table is closed"),
+        }
+        let error = verify_post_write_predicates(repository.path(), &foreign_manifest, &output)
+            .expect_err("foreign identity must refuse before success evidence");
+        match error {
+            InceptionError::Readback { detail, .. } => {
+                assert!(detail.contains("POST_WRITE_PREDICATE_CHANGED"));
+                assert!(detail.contains("predicate=identity"));
+                assert!(detail.contains(&format!("expected={foreign}")));
+                assert!(detail.contains("provided="));
+                assert!(detail.contains(field));
+            }
+            error => panic!("foreign {field} used wrong refusal: {error}"),
         }
     }
 }

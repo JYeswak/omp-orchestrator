@@ -4184,6 +4184,16 @@ pub fn verify_post_write_predicates(
                 path: repo_root.to_owned(),
                 detail: format!("post-write re-probe canonicalize failed: {error}"),
             })?;
+    let fresh_canonical_path = canonical.display().to_string();
+    if fresh_canonical_path != manifest.repo_identity.canonical_path {
+        return Err(InceptionError::Readback {
+            path: output.to_owned(),
+            detail: format!(
+                "POST_WRITE_PREDICATE_CHANGED predicate=identity field=canonical_path expected={} provided={}",
+                manifest.repo_identity.canonical_path, fresh_canonical_path
+            ),
+        });
+    }
     let fresh_revision = source_revision(&canonical)?;
     if fresh_revision != manifest.repo_identity.source_revision {
         return Err(InceptionError::Readback {
