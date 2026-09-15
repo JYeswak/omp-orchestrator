@@ -469,3 +469,101 @@ fn refused_init_emits_neither_artifact() {
     );
     println!("READBACK refused init emits neither artifact");
 }
+
+/// NAMED ATOMICITY LEG 1 (mutation target): virgin inception plus an
+/// injected FOUNDATION failure removes the new artifact and reports both
+/// causes. Bypassing the rollback call must RED this leg (the new
+/// inception file remains) while the healthy composed control stays green.
+#[test]
+fn rollback_removes_virgin_inception_on_foundation_failure() {
+    let repo = gated_repo_fixture();
+    let root = repo.path();
+    let inception = root.join(".omp-orchestrator/inception.json");
+    let foundation = root.join("docs/plan/FOUNDATION.jsonl");
+    // Real filesystem seam: a directory at the artifact path fails the
+    // append read with EISDIR on every uid -- no mocks, no permissions.
+    std::fs::create_dir_all(&foundation).expect("directory seam at foundation path");
+    let (code, _stdout, stderr) = ompo(&["init", "--repo", &root.display().to_string()]);
+    assert_eq!(
+        code,
+        Some(1),
+        "ROLLBACK_ATOMIC: foundation failure must refuse with exit 1, stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("FOUNDATION_APPEND_FAILED"),
+        "ROLLBACK_ATOMIC: the original foundation cause must survive, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("ROLLBACK_OK inception=removed foundation=unchanged"),
+        "ROLLBACK_ATOMIC: the rollback receipt must name both outcomes, got: {stderr}"
+    );
+    assert!(
+        !inception.exists(),
+        "ROLLBACK_ATOMIC: virgin inception must be removed after rollback"
+    );
+    assert!(
+        foundation.is_dir(),
+        "ROLLBACK_ATOMIC: the foundation seam must stand untouched"
+    );
+    println!("READBACK virgin rollback removed inception, foundation unchanged");
+}
+
+/// NAMED ATOMICITY LEG 2 (mutation target): pre-existing inception plus an
+/// injected FOUNDATION failure restores exact pre-call bytes, and a later
+/// retry with the seam fixed succeeds. Bypassing the rollback call must RED
+/// this leg (replaced bytes persist) while the healthy control stays green.
+#[test]
+fn rollback_restores_preexisting_inception_byte_exact_and_retry_succeeds() {
+    let repo = gated_repo_fixture();
+    let root = repo.path();
+    let inception = root.join(".omp-orchestrator/inception.json");
+    let foundation = root.join("docs/plan/FOUNDATION.jsonl");
+    let (clean, _, clean_stderr) = ompo(&["init", "--repo", &root.display().to_string()]);
+    assert_eq!(
+        clean,
+        Some(0),
+        "ROLLBACK_ATOMIC: clean init must succeed first, stderr: {clean_stderr}"
+    );
+    // Tamper so the rerun takes the replace path (actions == 1, backup).
+    // The rollback target is these exact pre-call bytes, not a good state.
+    std::fs::write(&inception, b"tampered\n").expect("tamper inception");
+    let tampered_hash = sha256_hex(b"tampered\n");
+    std::fs::remove_file(&foundation).expect("remove foundation file");
+    std::fs::create_dir(&foundation).expect("directory seam at foundation path");
+    let (code, _stdout, stderr) = ompo(&["init", "--repo", &root.display().to_string()]);
+    assert_eq!(
+        code,
+        Some(1),
+        "ROLLBACK_ATOMIC: foundation failure must refuse with exit 1, stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("ROLLBACK_OK inception=restored foundation=unchanged"),
+        "ROLLBACK_ATOMIC: the rollback receipt must name both outcomes, got: {stderr}"
+    );
+    let restored = std::fs::read(&inception).expect("ROLLBACK_ATOMIC: inception readable");
+    assert_eq!(
+        sha256_hex(&restored),
+        tampered_hash,
+        "ROLLBACK_ATOMIC: pre-existing inception must be byte-exact pre-call state"
+    );
+    assert!(
+        foundation.is_dir(),
+        "ROLLBACK_ATOMIC: the foundation seam must stand untouched"
+    );
+    // Fix the seam: the retry deterministically succeeds with linkage.
+    std::fs::remove_dir(&foundation).expect("remove directory seam");
+    let (retry, _, retry_stderr) = ompo(&["init", "--repo", &root.display().to_string()]);
+    assert_eq!(
+        retry,
+        Some(0),
+        "ROLLBACK_ATOMIC: retry after seam fix must succeed, stderr: {retry_stderr}"
+    );
+    let text =
+        std::fs::read_to_string(&foundation).expect("ROLLBACK_ATOMIC: foundation readable");
+    assert_eq!(
+        ompo_start::s1_rows_citing_inception(&text).len(),
+        1,
+        "ROLLBACK_ATOMIC: retry must link exactly one row"
+    );
+    println!("READBACK replace rollback byte-exact, retry linked");
+}

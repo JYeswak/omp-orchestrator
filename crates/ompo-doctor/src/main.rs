@@ -1058,6 +1058,141 @@ fn run_parity(rest: &[String]) -> ExitCode {
     ExitCode::from(probe.exit_code)
 }
 
+/// CFFJ pre-state of the FOUNDATION artifact, captured before the append
+/// attempt so a failure can restore byte-exact pre-call state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FoundationBefore {
+    Absent,
+    Present(Vec<u8>),
+    Unreadable(String),
+}
+
+/// CFFJ ROLLBACK (cffj): restore exact pre-call file state after a
+/// FOUNDATION failure, reusing the inception content-addressed backup path.
+///
+/// Inception: virgin (`!report.preexisting`) -> remove the new file;
+/// replaced (`actions == 1`) -> restore the snapshot via `restore_backup`
+/// resolved through `list_backups` (sha-verified, atomic); identical rerun
+/// (`actions == 0`) -> verify untouched. Foundation: byte-compare against
+/// the captured pre-state; repair by removal (was absent) or exact
+/// write-back, verified by re-read. Every repair is verified; any repair
+/// or verification failure is a distinct typed `ROLLBACK_*` cause that
+/// never masks the original FOUNDATION error (the caller prints both).
+/// Backup snapshots created by the attempt itself are the mechanism's own
+/// working store, not residue: they are content-keyed and deduplicated, so
+/// a later retry deterministically reuses them.
+/// Returns a one-line receipt for the refusal report.
+fn rollback_composed_init(
+    destination: &std::path::Path,
+    foundation_path: &std::path::Path,
+    report: &ompo_start::inception::InitReport,
+    foundation_before: &FoundationBefore,
+) -> Result<String, ompo_start::inception::InceptionError> {
+    use ompo_start::inception::InceptionError;
+    let inception_receipt = if !report.preexisting {
+        std::fs::remove_file(destination).map_err(|error| InceptionError::Write {
+            path: destination.to_owned(),
+            detail: format!("ROLLBACK_REMOVE_FAILED {error}"),
+        })?;
+        if destination.exists() {
+            return Err(InceptionError::Write {
+                path: destination.to_owned(),
+                detail: "ROLLBACK_REMOVE_UNVERIFIED file still present after removal".to_owned(),
+            });
+        }
+        "removed"
+    } else if report.actions == 0 {
+        if !destination.exists() {
+            return Err(InceptionError::Write {
+                path: destination.to_owned(),
+                detail: "ROLLBACK_MISSING untouched inception absent after failure".to_owned(),
+            });
+        }
+        "unchanged"
+    } else {
+        let backup_path = report
+            .backup
+            .as_ref()
+            .ok_or_else(|| InceptionError::Write {
+                path: destination.to_owned(),
+                detail: "ROLLBACK_RESTORE_FAILED replaced inception has no backup snapshot"
+                    .to_owned(),
+            })?;
+        let entry = ompo_start::inception::list_backups(destination)?
+            .into_iter()
+            .find(|entry| entry.path == *backup_path)
+            .ok_or_else(|| InceptionError::Write {
+                path: destination.to_owned(),
+                detail: format!(
+                    "ROLLBACK_RESTORE_FAILED backup snapshot not listed {}",
+                    backup_path.display()
+                ),
+            })?;
+        ompo_start::inception::restore_backup(destination, &entry).map_err(|error| {
+            InceptionError::Write {
+                path: destination.to_owned(),
+                detail: format!("ROLLBACK_RESTORE_FAILED {error}"),
+            }
+        })?;
+        "restored"
+    };
+    let foundation_current = match std::fs::read(foundation_path) {
+        Ok(bytes) => FoundationBefore::Present(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => FoundationBefore::Absent,
+        Err(error) => FoundationBefore::Unreadable(error.to_string()),
+    };
+    let foundation_receipt = if foundation_current == *foundation_before {
+        "unchanged"
+    } else {
+        match foundation_before {
+            FoundationBefore::Absent => {
+                std::fs::remove_file(foundation_path).map_err(|error| InceptionError::Write {
+                    path: foundation_path.to_owned(),
+                    detail: format!("ROLLBACK_REMOVE_FAILED {error}"),
+                })?;
+                if foundation_path.exists() {
+                    return Err(InceptionError::Write {
+                        path: foundation_path.to_owned(),
+                        detail: "ROLLBACK_REMOVE_UNVERIFIED file still present after removal"
+                            .to_owned(),
+                    });
+                }
+                "removed"
+            }
+            FoundationBefore::Present(bytes) => {
+                std::fs::write(foundation_path, bytes).map_err(|error| InceptionError::Write {
+                    path: foundation_path.to_owned(),
+                    detail: format!("ROLLBACK_RESTORE_FAILED {error}"),
+                })?;
+                let reread =
+                    std::fs::read(foundation_path).map_err(|error| InceptionError::Write {
+                        path: foundation_path.to_owned(),
+                        detail: format!("ROLLBACK_RESTORE_FAILED reread failed: {error}"),
+                    })?;
+                if reread != *bytes {
+                    return Err(InceptionError::Write {
+                        path: foundation_path.to_owned(),
+                        detail: "ROLLBACK_RESTORE_UNVERIFIED reread differs from pre-call bytes"
+                            .to_owned(),
+                    });
+                }
+                "restored"
+            }
+            FoundationBefore::Unreadable(_) => {
+                return Err(InceptionError::Write {
+                    path: foundation_path.to_owned(),
+                    detail:
+                        "ROLLBACK_FAILED foundation pre-state unreadable and post-state differs"
+                            .to_owned(),
+                });
+            }
+        }
+    };
+    Ok(format!(
+        "inception={inception_receipt} foundation={foundation_receipt}"
+    ))
+}
+
 /// L2-BUILD-INCEPTION-FOUNDATION (4228): append the S1 FOUNDATION row for a
 /// just-published inception and read the linkage back. Reuses
 /// `append_s1_foundation` and `s1_rows_citing_inception` verbatim -- no second
@@ -1067,6 +1202,7 @@ fn run_parity(rest: &[String]) -> ExitCode {
 /// `INCEPTION_READBACK_FAILED` carrying the foundation path and the original
 /// cause, never a generic success/unknown, so the caller blocks init success
 /// on it with the message intact.
+
 fn append_init_foundation(
     foundation_path: &std::path::Path,
     inception_ref: &str,
@@ -1162,11 +1298,31 @@ fn run_init(rest: &[String]) -> ExitCode {
             } else {
                 destination.display().to_string()
             };
+            // CFFJ-ROLLBACK (cffj): capture the FOUNDATION pre-state BEFORE
+            // the attempt so a failure restores byte-exact pre-call state.
+            let foundation_before = match std::fs::read(&foundation_path) {
+                Ok(bytes) => FoundationBefore::Present(bytes),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    FoundationBefore::Absent
+                }
+                Err(error) => FoundationBefore::Unreadable(error.to_string()),
+            };
             let (foundation_appended, foundation_rows) =
                 match append_init_foundation(&foundation_path, &inception_ref) {
                     Ok(receipt) => receipt,
-                    Err(error) => {
-                        eprintln!("ompo init: {error}");
+                    Err(foundation_error) => {
+                        eprintln!("ompo init: {foundation_error}");
+                        match rollback_composed_init(
+                            &destination,
+                            &foundation_path,
+                            &report,
+                            &foundation_before,
+                        ) {
+                            Ok(receipt) => eprintln!("ompo init: ROLLBACK_OK {receipt}"),
+                            Err(rollback_error) => {
+                                eprintln!("ompo init: ROLLBACK_FAILED {rollback_error}")
+                            }
+                        }
                         return ExitCode::from(1);
                     }
                 };
