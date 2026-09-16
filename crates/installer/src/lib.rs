@@ -1643,6 +1643,8 @@ pub mod agent_families;
 // file, own tests), beside the roster it consumes.
 pub mod skill_install;
 
+pub mod uninstall;
+
 /// Detected agent families. Empty is unrepresentable as success.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentScan {
