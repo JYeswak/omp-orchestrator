@@ -192,6 +192,35 @@ pub enum Sha256FailureClass {
     Mismatch,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SigstoreRefusalReason {
+    CosignUnavailable,
+    CosignSpawnFailed,
+    CosignTimeout,
+    CosignVersionUnparseable,
+    CosignVersionBelowFloor,
+    InputMissing,
+    OutputMalformed,
+    VerifierNonzero,
+    BundleInvalid,
+    IdentityMismatch,
+    IssuerMismatch,
+    UnsupportedTrustMode,
+}
+
+impl SigstoreRefusalReason {
+    #[must_use]
+    pub const fn exit_code(self) -> u8 {
+        self as u8
+    }
+}
+impl fmt::Display for SigstoreRefusalReason {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstallError {
     BuildFailed {
@@ -245,6 +274,7 @@ pub enum InstallError {
     /// L0-VERIFY-SIGSTORE. Cosign version floor, keyless certificate identity,
     /// or local-key policy refused the artifact.
     SigstoreRefused {
+        reason: SigstoreRefusalReason,
         detail: String,
     },
     Sha256Refused {
@@ -372,8 +402,8 @@ impl fmt::Display for InstallError {
             Self::MinisignRefused { detail } => {
                 write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
             }
-            Self::SigstoreRefused { detail } => {
-                write!(formatter, "L0_SIGSTORE_REFUSED: {detail}")
+            Self::SigstoreRefused { reason, detail } => {
+                write!(formatter, "L0_SIGSTORE_REFUSED reason={reason} detail={detail}")
             }
             Self::Sha256Refused { detail, .. } => {
                 write!(formatter, "L0_SHA256_REFUSED: {detail}")
@@ -443,8 +473,13 @@ impl fmt::Display for InstallError {
 }
 
 /// L0-DURABILITY. Which synchronization step of a publication is being spoken
-/// about. A refusal names its stage because "publish failed" is not evidence:
-/// the four stages have different remedies and different blast radii.
+/// about. A refusal names its stage because "publish failed" is not evidence.
+/// Four stages are durability steps with different remedies and blast radii;
+/// the fifth is the fault-injection seam's identity probe (sk8h.1): it tampers
+/// the just-published bytes so the final readback mismatches, exercising the
+/// post-rename verify/restore/refuse branch deterministically. Production
+/// never selects it -- `install_binary` passes `None` and no CLI flag can
+/// set `injected_failure` -- the same invariant as every other stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DurabilityStage {
     /// The staged artifact's own bytes reach stable storage.
@@ -458,6 +493,10 @@ pub enum DurabilityStage {
     /// old name still resolving, which is the exact hazard `install(1)` leaves
     /// open (it syncs the destination fd, never its parent).
     ParentSync,
+    /// Post-rename identity divergence (test seam only): overwrite the just-
+    /// published bytes so the final readback refuses and the rollback path
+    /// runs. Never selected outside tests.
+    PostRenameTamper,
 }
 
 impl fmt::Display for DurabilityStage {
@@ -466,6 +505,7 @@ impl fmt::Display for DurabilityStage {
             Self::FileSync => "file_sync",
             Self::FullFsync => "fullfsync",
             Self::Rename => "rename",
+            Self::PostRenameTamper => "post_rename_tamper",
             Self::ParentSync => "parent_sync",
         };
         formatter.write_str(name)
@@ -1190,121 +1230,270 @@ impl SigstoreTrust {
 /// What a passing sigstore verification actually established, so a caller can
 /// assert the facts rather than infer them from the absence of an error.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SigstoreVerdict {
-    pub cosign_version: CosignVersion,
-    pub floor: CosignVersion,
-    pub trust: SigstoreTrust,
+pub struct SigstoreVerificationRequest {
+    pub cosign: Option<PathBuf>,
+    pub artifact: PathBuf,
+    pub bundle: Option<PathBuf>,
+    pub signature: Option<PathBuf>,
+    pub expected_identity: Option<String>,
+    pub expected_issuer: Option<String>,
 }
 
-/// L0-VERIFY-SIGSTORE. Cosign version floor, OIDC certificate identity, and
-/// local-key policy, all fail-closed.
-///
-/// Checks run in escalating order so the refusal names the FIRST thing wrong
-/// rather than the last: a below-floor cosign is refused before its signature is
-/// consulted, because a vulnerable verifier's verdict is not evidence.
-///
-/// NO-CLAIM: this is the POLICY, not the cryptography. `bundle_valid` is a
-/// caller-supplied input describing what a real `cosign verify` returned; this
-/// function does not execute cosign and does not check a signature. A caller
-/// that fabricates `true` gets a pass, exactly as [`verify_minisign_policy`]'s
-/// `signature_valid` does.
+/// Build explicit sigstore inputs from operator-provided environment values.
+/// Missing values remain None and are refused by the verifier; no identity,
+/// issuer, bundle, signature, or verifier path is invented here.
+pub fn sigstore_request_from_environment(artifact: PathBuf) -> SigstoreVerificationRequest {
+    let path = |name: &str| {
+        std::env::var_os(name)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    };
+    let text = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+    };
+    SigstoreVerificationRequest {
+        cosign: path("COSIGN_BIN"),
+        artifact,
+        bundle: path("COSIGN_BUNDLE"),
+        signature: path("COSIGN_SIGNATURE"),
+        expected_identity: text("COSIGN_CERTIFICATE_IDENTITY"),
+        expected_issuer: text("COSIGN_CERTIFICATE_OIDC_ISSUER"),
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SigstoreExecutionEvidence {
+    pub cosign_version: String,
+    pub exit_code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+const SIGSTORE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+
+fn sigstore_refusal(reason: SigstoreRefusalReason, detail: impl Into<String>) -> InstallError {
+    InstallError::SigstoreRefused {
+        reason,
+        detail: detail.into(),
+    }
+}
+
+fn required_sigstore_file(path: &Path, name: &str) -> Result<(), InstallError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        sigstore_refusal(
+            SigstoreRefusalReason::InputMissing,
+            format!("{name} path={} unreadable: {error}", path.display()),
+        )
+    })?;
+    if !metadata.is_file() {
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::InputMissing,
+            format!("{name} path={} is not a regular file", path.display()),
+        ));
+    }
+    std::fs::File::open(path).map_err(|error| {
+        sigstore_refusal(
+            SigstoreRefusalReason::InputMissing,
+            format!("{name} path={} cannot be opened: {error}", path.display()),
+        )
+    })?;
+    Ok(())
+}
+
+fn output_text(output: std::process::Output, step: &str) -> Result<(String, String, Option<i32>), InstallError> {
+    let stdout = String::from_utf8(output.stdout).map_err(|error| {
+        sigstore_refusal(
+            SigstoreRefusalReason::OutputMalformed,
+            format!("{step} stdout is not UTF-8: {error}"),
+        )
+    })?;
+    let stderr = String::from_utf8(output.stderr).map_err(|error| {
+        sigstore_refusal(
+            SigstoreRefusalReason::OutputMalformed,
+            format!("{step} stderr is not UTF-8: {error}"),
+        )
+    })?;
+    Ok((stdout, stderr, output.status.code()))
+}
+
+fn run_sigstore_command(
+    command: &mut Command,
+    step: &'static str,
+) -> Result<std::process::Output, InstallError> {
+    match subprocess_contract::bounded_output(command, SIGSTORE_DEADLINE) {
+        subprocess_contract::BoundedOutcome::Completed(output) => Ok(output),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(sigstore_refusal(
+            SigstoreRefusalReason::CosignTimeout,
+            format!("{step} exceeded {}s", SIGSTORE_DEADLINE.as_secs()),
+        )),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(sigstore_refusal(
+            if command.get_program() == std::ffi::OsStr::new("cosign") {
+                SigstoreRefusalReason::CosignUnavailable
+            } else {
+                SigstoreRefusalReason::CosignSpawnFailed
+            },
+            format!("{step} spawn failed program={:?}: {error}", command.get_program()),
+        )),
+    }
+}
+
+fn cosign_version_from_output(stdout: &str) -> Option<String> {
+    if let Ok(value) = serde_json::from_str::<serde_json::Value>(stdout) {
+        for key in ["gitVersion", "version"] {
+            if let Some(raw) = value.get(key).and_then(serde_json::Value::as_str) {
+                if parse_cosign_version(raw).is_some() {
+                    return Some(raw.to_owned());
+                }
+            }
+        }
+    }
+    stdout.split_whitespace().find_map(|token| {
+        let raw = token.trim_matches(|ch: char| {
+            !ch.is_ascii_alphanumeric() && !matches!(ch, '.' | '-' | '+' | 'v')
+        });
+        parse_cosign_version(raw).is_some().then(|| raw.to_owned())
+    })
+}
+
+fn verifier_failure_reason(stdout: &str, stderr: &str) -> SigstoreRefusalReason {
+    let text = format!("{stdout}\n{stderr}").to_ascii_lowercase();
+    if text.contains("issuer") || text.contains("oidc") {
+        SigstoreRefusalReason::IssuerMismatch
+    } else if text.contains("identity") || text.contains("certificate") {
+        SigstoreRefusalReason::IdentityMismatch
+    } else if text.contains("bundle") || text.contains("signature") {
+        SigstoreRefusalReason::BundleInvalid
+    } else {
+        SigstoreRefusalReason::VerifierNonzero
+    }
+}
+
+/// Verify the exact evidence produced by the detached cosign run.
+/// There is no caller-supplied bundle-validity boolean.
 pub fn verify_sigstore_policy(
-    cosign_version: Option<&str>,
-    presented: &SigstoreTrust,
+    evidence: &SigstoreExecutionEvidence,
     expected: &SigstoreTrust,
-    bundle_valid: bool,
 ) -> Result<SigstoreVerdict, InstallError> {
     let floor = parse_cosign_version(COSIGN_CVE_FLOOR)
         .expect("COSIGN_CVE_FLOOR is a compile-time constant in x.y.z form");
-    let Some(raw) = cosign_version else {
-        return Err(InstallError::SigstoreRefused {
-            detail: format!(
-                "cosign unavailable; sigstore policy requires at least {floor} for {COSIGN_CVE_ID}"
-            ),
-        });
-    };
-    let Some(version) = parse_cosign_version(raw) else {
-        return Err(InstallError::SigstoreRefused {
-            detail: format!(
-                "unparseable cosign version {raw:?}; a version that cannot be ordered \
-                 against the {COSIGN_CVE_ID} floor {floor} is never approved"
-            ),
-        });
+    let Some(version) = parse_cosign_version(&evidence.cosign_version) else {
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::CosignVersionUnparseable,
+            format!("cosign version {:?} cannot be ordered against floor {floor}", evidence.cosign_version),
+        ));
     };
     if version < floor {
-        return Err(InstallError::SigstoreRefused {
-            detail: format!(
-                "cosign {version} is below the {COSIGN_CVE_ID} floor {floor} \
-                 (presented {raw:?})"
-            ),
-        });
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::CosignVersionBelowFloor,
+            format!("cosign {version} is below {COSIGN_CVE_ID} floor {floor}"),
+        ));
     }
-    if presented.mode() != expected.mode() {
-        return Err(InstallError::SigstoreRefused {
-            detail: format!(
-                "trust mode mismatch: artifact presented {} but policy requires {}",
-                presented.mode(),
-                expected.mode()
-            ),
-        });
+    let trust_valid = match expected {
+        SigstoreTrust::CertificateIdentity { identity, issuer } => {
+            !identity.trim().is_empty() && !issuer.trim().is_empty()
+        }
+        SigstoreTrust::LocalKey { key_id } => !key_id.trim().is_empty(),
+    };
+    if !trust_valid {
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::UnsupportedTrustMode,
+            format!("expected trust mode {} has an empty policy principal", expected.mode()),
+        ));
     }
-    match (presented, expected) {
-        (
-            SigstoreTrust::CertificateIdentity { identity, issuer },
-            SigstoreTrust::CertificateIdentity {
-                identity: want_identity,
-                issuer: want_issuer,
-            },
-        ) => {
-            if identity != want_identity || issuer != want_issuer {
-                return Err(InstallError::SigstoreRefused {
-                    detail: format!(
-                        "certificate identity mismatch: presented {identity} via {issuer}, \
-                         policy requires {want_identity} via {want_issuer}"
-                    ),
-                });
-            }
-        }
-        (
-            SigstoreTrust::LocalKey { key_id },
-            SigstoreTrust::LocalKey {
-                key_id: want_key_id,
-            },
-        ) => {
-            if key_id != want_key_id {
-                return Err(InstallError::SigstoreRefused {
-                    detail: format!(
-                        "local key mismatch: presented {key_id}, policy requires {want_key_id}"
-                    ),
-                });
-            }
-        }
-        // Unreachable while `mode()` gates the pair above, and still restrictive
-        // if that guard is ever weakened: an unrecognised combination refuses.
-        (presented, expected) => {
-            return Err(InstallError::SigstoreRefused {
-                detail: format!(
-                    "unrecognised trust pairing: {} against {}",
-                    presented.mode(),
-                    expected.mode()
-                ),
-            })
-        }
+    if evidence.exit_code != Some(0) {
+        return Err(sigstore_refusal(
+            verifier_failure_reason(&evidence.stdout, &evidence.stderr),
+            format!("cosign verify-blob exit={:?} stdout={:?} stderr={:?}", evidence.exit_code, evidence.stdout, evidence.stderr),
+        ));
     }
-    if !bundle_valid {
-        return Err(InstallError::SigstoreRefused {
-            detail: format!(
-                "sigstore bundle failed verification under cosign {version} \
-                 for {}",
-                expected.mode()
-            ),
-        });
+    let combined = format!("{}\n{}", evidence.stdout, evidence.stderr);
+    if !combined.contains("Verified OK") {
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::OutputMalformed,
+            "cosign exited 0 without the required Verified OK evidence",
+        ));
     }
     Ok(SigstoreVerdict {
         cosign_version: version,
         floor,
         trust: expected.clone(),
     })
+}
+
+/// Execute cosign against explicit artifact, bundle/signature, identity, and
+/// issuer inputs, then feed only its captured evidence to the policy gate.
+pub fn verify_sigstore_artifact(
+    request: &SigstoreVerificationRequest,
+) -> Result<SigstoreVerdict, InstallError> {
+    required_sigstore_file(&request.artifact, "artifact")?;
+    let bundle = request.bundle.as_ref();
+    let signature = request.signature.as_ref();
+    if bundle.is_none() && signature.is_none() {
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::InputMissing,
+            "one of bundle or signature is required",
+        ));
+    }
+    if let Some(path) = bundle {
+        required_sigstore_file(path, "bundle")?;
+    }
+    if let Some(path) = signature {
+        required_sigstore_file(path, "signature")?;
+    }
+    let identity = request.expected_identity.as_deref().filter(|value| !value.trim().is_empty()).ok_or_else(|| {
+        sigstore_refusal(SigstoreRefusalReason::InputMissing, "expected certificate identity is missing")
+    })?;
+    let issuer = request.expected_issuer.as_deref().filter(|value| !value.trim().is_empty()).ok_or_else(|| {
+        sigstore_refusal(SigstoreRefusalReason::InputMissing, "expected certificate issuer is missing")
+    })?;
+    let cosign = request.cosign.as_ref().ok_or_else(|| {
+        sigstore_refusal(SigstoreRefusalReason::CosignUnavailable, "cosign executable path is missing")
+    })?;
+    required_sigstore_file(cosign, "cosign")?;
+
+    let mut version_command = Command::new(cosign);
+    version_command.args(["version", "--json"]);
+    let version_output = run_sigstore_command(&mut version_command, "cosign version")?;
+    let (version_stdout, version_stderr, version_exit) = output_text(version_output, "cosign version")?;
+    if version_exit != Some(0) {
+        return Err(sigstore_refusal(
+            SigstoreRefusalReason::VerifierNonzero,
+            format!("cosign version exit={version_exit:?} stderr={version_stderr:?}"),
+        ));
+    }
+    let raw_version = cosign_version_from_output(&version_stdout).ok_or_else(|| {
+        sigstore_refusal(
+            SigstoreRefusalReason::CosignVersionUnparseable,
+            format!("cosign version output is not parseable stdout={version_stdout:?} stderr={version_stderr:?}"),
+        )
+    })?;
+
+    let mut verify_command = Command::new(cosign);
+    verify_command.arg("verify-blob");
+    if let Some(path) = bundle {
+        verify_command.args(["--bundle"]).arg(path);
+    }
+    if let Some(path) = signature {
+        verify_command.args(["--signature"]).arg(path);
+    }
+    verify_command
+        .args(["--certificate-identity", identity, "--certificate-oidc-issuer", issuer])
+        .arg(&request.artifact);
+    let verify_output = run_sigstore_command(&mut verify_command, "cosign verify-blob")?;
+    let (stdout, stderr, exit_code) = output_text(verify_output, "cosign verify-blob")?;
+    verify_sigstore_policy(
+        &SigstoreExecutionEvidence {
+            cosign_version: raw_version,
+            exit_code,
+            stdout,
+            stderr,
+        },
+        &SigstoreTrust::CertificateIdentity {
+            identity: identity.to_owned(),
+            issuer: issuer.to_owned(),
+        },
+    )
 }
 
 /// Every PATH directory that already contains `binary_name`.
@@ -5262,10 +5451,29 @@ pub fn install_binary_with_durability(
         metric,
         injected_failure,
     )?;
+    // sk8h.1 TEST SEAM ONLY: diverge the just-published bytes so the final
+    // readback below mismatches deterministically. Production passes `None`
+    // and no CLI flag can select a stage, so ordinary installs never run it.
+    if injected_failure == Some(DurabilityStage::PostRenameTamper) {
+        std::fs::write(&install_path, b"post-rename-tamper sk8h.1").map_err(|error| {
+            InstallError::IoError {
+                path: install_path.display().to_string(),
+                detail: format!("tamper write failed: {error}"),
+            }
+        })?;
+    }
     let final_check = verify_identity(&install_path, head_sha, repo_ownership);
     if !final_check.consistent {
         if let Some(rollback) = rollback {
             restore_atomic(&rollback, &install_path)?;
+        } else {
+            // sk8h.1: virgin destination, so there is no prior owner to
+            // restore -- remove the mismatched publication instead of
+            // leaving residue that reads as an installed artifact.
+            std::fs::remove_file(&install_path).map_err(|error| InstallError::IoError {
+                path: install_path.display().to_string(),
+                detail: format!("mismatched publication removal failed: {error}"),
+            })?;
         }
         return Err(InstallError::IdentityMismatch {
             binary: binary_name,

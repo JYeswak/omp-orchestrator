@@ -152,7 +152,7 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
 }
 
 fn usage() {
-    eprintln!("installer [--check | --install TARGET | --delta | --version] [--bin-dir PATH] [--sha256 DIGEST] [--pane ID] [--incarnation ID]");
+    eprintln!("installer [--check | --install TARGET | --delta | --version] [--bin-dir PATH] [--sha256 DIGEST] [--pane ID] [--incarnation ID]; --install requires COSIGN_BIN, COSIGN_BUNDLE or COSIGN_SIGNATURE, COSIGN_CERTIFICATE_IDENTITY, and COSIGN_CERTIFICATE_OIDC_ISSUER");
 }
 fn dirs_home() -> Option<PathBuf> {
     std::env::var_os("HOME")
@@ -302,6 +302,27 @@ fn production_metric_inputs(
     )
 }
 
+fn verify_sigstore_for_install(
+    repo_root: &PathBuf,
+    source: PathBuf,
+    identity: &installer::AttemptIdentity,
+    manifest: &installer::InputManifest,
+) -> Result<installer::SigstoreVerdict, u8> {
+    let request = installer::sigstore_request_from_environment(source);
+    match installer::verify_sigstore_artifact(&request) {
+        Ok(verdict) => Ok(verdict),
+        Err(error) => {
+            eprintln!("INSTALLER SIGSTORE REFUSED: {error}");
+            let exit = match &error {
+                installer::InstallError::SigstoreRefused { reason, .. } => reason.exit_code(),
+                _ => 1,
+            };
+            let _ = installer::emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_SIGSTORE_REFUSED", identity, manifest);
+            Err(exit)
+        }
+    }
+}
+
 fn run_install(
     repo_root: &PathBuf,
     bin_dir: &PathBuf,
@@ -398,6 +419,16 @@ fn run_install(
     // `check` binds here (not inside the Ok arm) because the skills phase
     // and the summary report below both consume the installed identity.
     // First-aid scoping by pane=%49 for an active peer hunk; logic untouched.
+    let sigstore_verdict = match verify_sigstore_for_install(repo_root, source.clone(), identity, &manifest) {
+        Ok(verdict) => verdict,
+        Err(exit) => return ExitCode::from(exit),
+    };
+    println!(
+        "  SIGSTORE VERIFIED version={} floor={} trust={:?}",
+        sigstore_verdict.cosign_version,
+        sigstore_verdict.floor,
+        sigstore_verdict.trust
+    );
     let mut durability_metric = installer::DurabilityMetric::default();
     let check = match installer::verify_sha256_before_install(&source, expected_sha256, || {
         installer::install_binary_with_durability(

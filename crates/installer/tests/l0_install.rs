@@ -4,10 +4,12 @@ use installer::{
     catalog_artifact_dir, parse_cosign_version, publish_atomic, publish_atomic_durable,
     refuse_path_collisions, resolve_platform_triple, resolve_repo_ownership, restart_and_verify,
     running_process_start, seal_install_report, select_fallback_artifact, stage_artifact_stream,
-    probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_policy,
+    probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_artifact,
+    verify_sigstore_policy,
     AgentOutcome, ArtifactEntry, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite,
     IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
-    SigstoreTrust, COSIGN_CVE_FLOOR, COSIGN_CVE_ID,
+    SigstoreExecutionEvidence, SigstoreRefusalReason, SigstoreTrust, SigstoreVerificationRequest,
+    COSIGN_CVE_FLOOR,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -1636,12 +1638,6 @@ fn production_install_path_routes_through_the_durability_seam() {
 }
 
 // ── B05 / T05 / T06: L0 SIGSTORE COSIGN POLICY ────────────────────────────────
-//
-// MEASURED 2026-09-11 at HEAD 2774c6a: the strings cosign, sigstore,
-// L0_SIGSTORE_REFUSED and CVE-2026-22703 appeared NOWHERE under
-// crates/installer. The existing signature coverage is minisign, which is a
-// DIFFERENT mechanism — a minisign leg cannot evidence a cosign floor, and the
-// three sigstore beads' named selectors ran zero tests and exited 0.
 
 fn expected_keyless() -> SigstoreTrust {
     SigstoreTrust::CertificateIdentity {
@@ -1650,191 +1646,102 @@ fn expected_keyless() -> SigstoreTrust {
     }
 }
 
+
+
 #[test]
-fn sigstore_policy_allows_supported_cosign_and_expected_identity() {
+fn sigstore_policy_accepts_executed_verifier_evidence_at_and_above_floor() {
     let expected = expected_keyless();
-    let verdict = verify_sigstore_policy(Some(COSIGN_CVE_FLOOR), &expected, &expected, true)
-        .expect("cosign exactly AT the floor with the expected identity must pass");
+    let verdict = verify_sigstore_policy(
+        &SigstoreExecutionEvidence { cosign_version: COSIGN_CVE_FLOOR.to_owned(), exit_code: Some(0), stdout: "Verified OK\n".to_owned(), stderr: String::new() },
+        &expected,
+    )
+    .expect("cosign exactly at the floor with executed success evidence must pass");
     assert_eq!(verdict.floor.to_string(), COSIGN_CVE_FLOOR);
-    assert_eq!(verdict.cosign_version, verdict.floor, "{verdict:?}");
-    assert_eq!(verdict.trust, expected, "{verdict:?}");
+    assert_eq!(verdict.cosign_version, verdict.floor);
+    assert_eq!(verdict.trust, expected);
 
-    // ABOVE the floor passes too, so the comparison is an ordering and not an
-    // equality that would refuse every future cosign release.
-    let above = verify_sigstore_policy(Some("9.99.99"), &expected, &expected, true)
-        .expect("a cosign release above the floor must pass");
-    assert!(above.cosign_version > above.floor, "{above:?}");
-
-    // A `v` prefix and a pre-release suffix of the fixing release both parse.
-    verify_sigstore_policy(Some("v9.0.0"), &expected, &expected, true).expect("v prefix parses");
-    verify_sigstore_policy(Some("9.0.0-rc.1"), &expected, &expected, true)
-        .expect("pre-release of an above-floor release parses");
-
-    // LOCAL-KEY policy is the contract's other trust mode and it also passes.
-    let key = SigstoreTrust::LocalKey {
-        key_id: "omp-release-2026".to_owned(),
-    };
-    let key_verdict = verify_sigstore_policy(Some("9.0.0"), &key, &key, true)
-        .expect("a matching local key must pass");
-    assert_eq!(key_verdict.trust, key, "{key_verdict:?}");
+    let above = verify_sigstore_policy(
+        &SigstoreExecutionEvidence { cosign_version: "9.99.99".to_owned(), exit_code: Some(0), stdout: "Verified OK\n".to_owned(), stderr: String::new() },
+        &expected,
+    )
+    .expect("a cosign release above the floor must pass");
+    assert!(above.cosign_version > above.floor);
+    let local_key = SigstoreTrust::LocalKey { key_id: "omp-release-2026".to_owned() };
+    let local_verdict = verify_sigstore_policy(
+        &SigstoreExecutionEvidence { cosign_version: "9.0.0".to_owned(), exit_code: Some(0), stdout: "Verified OK\n".to_owned(), stderr: String::new() },
+        &local_key,
+    )
+    .expect("matching local-key policy must retain its supported mode");
+    assert_eq!(local_verdict.trust, local_key);
 }
-
 #[test]
-fn sigstore_policy_refuses_absent_unparseable_and_invalid_bundle() {
+fn sigstore_policy_refuses_missing_malformed_and_below_floor_evidence() {
     let expected = expected_keyless();
-
-    // ABSENT cosign is a refusal, never a skip: a verifier that is not there
-    // has not verified anything.
-    let error = verify_sigstore_policy(None, &expected, &expected, true)
-        .expect_err("absent cosign must refuse");
-    let text = error.to_string();
-    assert!(text.starts_with("L0_SIGSTORE_REFUSED"), "{text}");
-    assert!(text.contains(COSIGN_CVE_ID), "the refusal must name its reason: {text}");
-
-    // A version this code cannot ORDER is never approved.
-    for raw in ["", "two.four.one", "2.4", "2.4.1.5", "not-a-version"] {
-        let error = verify_sigstore_policy(Some(raw), &expected, &expected, true)
-            .expect_err("an unorderable cosign version must refuse");
-        let text = error.to_string();
-        assert!(
-            text.starts_with("L0_SIGSTORE_REFUSED") && text.contains("unparseable"),
-            "raw {raw:?} produced {text}"
-        );
-        assert_eq!(parse_cosign_version(raw), None, "raw {raw:?} must not parse");
+    for (raw, expected_reason) in [
+        ("", SigstoreRefusalReason::CosignVersionUnparseable),
+        ("two.four.one", SigstoreRefusalReason::CosignVersionUnparseable),
+        ("2.4", SigstoreRefusalReason::CosignVersionUnparseable),
+        ("2.4.1.5", SigstoreRefusalReason::CosignVersionUnparseable),
+        ("2.4.0", SigstoreRefusalReason::CosignVersionBelowFloor),
+    ] {
+        let error = verify_sigstore_policy(
+            &SigstoreExecutionEvidence { cosign_version: raw.to_owned(), exit_code: Some(0), stdout: "Verified OK\n".to_owned(), stderr: String::new() },
+            &expected,
+        )
+        .expect_err("invalid or below-floor verifier evidence must refuse");
+        assert!(matches!(&error, InstallError::SigstoreRefused { reason, .. } if *reason == expected_reason), "{error}");
     }
-
-    // An INVALID bundle under an allowed cosign and the expected identity is
-    // still a refusal — the version floor and the identity are preconditions
-    // for trusting the signature, not substitutes for it.
-    let error = verify_sigstore_policy(Some("9.0.0"), &expected, &expected, false)
-        .expect_err("an invalid bundle must refuse");
-    assert!(
-        error.to_string().starts_with("L0_SIGSTORE_REFUSED"),
-        "{error}"
-    );
+    let malformed = verify_sigstore_policy(
+        &SigstoreExecutionEvidence { cosign_version: COSIGN_CVE_FLOOR.to_owned(), exit_code: Some(0), stdout: String::new(), stderr: String::new() },
+        &expected,
+    )
+    .expect_err("exit zero without verifier evidence must refuse");
+    assert!(matches!(&malformed, InstallError::SigstoreRefused { reason, .. } if *reason == SigstoreRefusalReason::OutputMalformed), "{malformed}");
 }
 
 #[test]
-fn cosign_below_cve_floor_refuses() {
+fn sigstore_policy_classifies_restrictive_verifier_failures() {
     let expected = expected_keyless();
-    let floor = parse_cosign_version(COSIGN_CVE_FLOOR).expect("the floor constant must parse");
-
-    // One patch below the floor: the smallest possible below-floor version, so
-    // the test cannot pass by being far away from the boundary.
-    let just_below = format!("{}.{}.{}", floor.major, floor.minor, floor.patch - 1);
-    let error = verify_sigstore_policy(Some(&just_below), &expected, &expected, true)
-        .expect_err("cosign below the CVE floor must refuse");
-    let text = error.to_string();
-    assert!(
-        text.starts_with("L0_SIGSTORE_REFUSED"),
-        "the refusal must be typed: {text}"
-    );
-    // NAMING THE VERSION is the acceptance's own clause: the presented version,
-    // the floor, and the advisory all appear, so the refusal is actionable
-    // rather than a bare code.
-    assert!(text.contains(&just_below), "must name the presented version: {text}");
-    assert!(text.contains(COSIGN_CVE_FLOOR), "must name the floor: {text}");
-    assert!(text.contains(COSIGN_CVE_ID), "must name the advisory: {text}");
-    assert!(matches!(error, InstallError::SigstoreRefused { .. }), "{error:?}");
-
-    // Lower still refuses, and a below-floor PRE-RELEASE refuses too — the
-    // suffix must not become an escape hatch under the floor.
-    for raw in ["0.0.1", "1.99.99", "2.0.0", "2.4.0-rc.9"] {
-        if parse_cosign_version(raw).expect("fixture parses") >= floor {
-            continue;
-        }
-        let error = verify_sigstore_policy(Some(raw), &expected, &expected, true)
-            .expect_err("every below-floor version must refuse");
-        assert!(
-            error.to_string().contains(COSIGN_CVE_ID),
-            "raw {raw} produced {error}"
-        );
+    for (stderr, reason) in [
+        ("invalid bundle", SigstoreRefusalReason::BundleInvalid),
+        ("certificate identity mismatch", SigstoreRefusalReason::IdentityMismatch),
+        ("issuer mismatch", SigstoreRefusalReason::IssuerMismatch),
+        ("unexpected verifier failure", SigstoreRefusalReason::VerifierNonzero),
+    ] {
+        let error = verify_sigstore_policy(
+            &SigstoreExecutionEvidence { cosign_version: COSIGN_CVE_FLOOR.to_owned(), exit_code: Some(1), stdout: String::new(), stderr: stderr.to_owned() },
+            &expected,
+        )
+        .expect_err("nonzero verifier evidence must refuse");
+        assert!(matches!(&error, InstallError::SigstoreRefused { reason: actual, .. } if *actual == reason), "{error}");
+        assert!(error.to_string().contains(&format!("{reason:?}")), "{error}");
     }
-
-    // KNOWN-GOOD BOUNDARY CONTROL so the gate is not over-strict: the floor
-    // itself is ALLOWED. A test that refused everything would satisfy the
-    // assertions above while breaking every install.
-    verify_sigstore_policy(Some(COSIGN_CVE_FLOOR), &expected, &expected, true)
-        .expect("cosign exactly at the floor is allowed, not refused");
 }
 
 #[test]
-fn sigstore_identity_mismatch_refuses() {
-    let expected = expected_keyless();
-
-    // A VALID signature from the WRONG identity is not trusted. `bundle_valid`
-    // is true throughout: this test is about identity, and passing a false
-    // bundle here would let the refusal come from the wrong clause.
-    let wrong_identity = SigstoreTrust::CertificateIdentity {
-        identity: "attacker@elsewhere.invalid".to_owned(),
-        issuer: "https://token.actions.githubusercontent.com".to_owned(),
+fn sigstore_artifact_requires_explicit_verifier_and_inputs() {
+    let root = TempDir::new("sigstore-inputs");
+    let artifact = root.path().join("artifact");
+    let bundle = root.path().join("bundle.json");
+    fs::write(&artifact, b"artifact").expect("artifact fixture");
+    fs::write(&bundle, b"bundle").expect("bundle fixture");
+    let request = SigstoreVerificationRequest {
+        cosign: Some(root.path().join("missing-cosign")),
+        artifact,
+        bundle: Some(bundle),
+        signature: None,
+        expected_identity: Some("release@omp-orchestrator.invalid".to_owned()),
+        expected_issuer: Some("https://token.actions.githubusercontent.com".to_owned()),
     };
-    let error = verify_sigstore_policy(Some("9.0.0"), &wrong_identity, &expected, true)
-        .expect_err("a foreign certificate identity must refuse");
-    let text = error.to_string();
-    assert!(text.starts_with("L0_SIGSTORE_REFUSED"), "{text}");
-    assert!(
-        text.contains("attacker@elsewhere.invalid")
-            && text.contains("release@omp-orchestrator.invalid"),
-        "the refusal must name BOTH the presented and the required identity: {text}"
-    );
-
-    // THE ISSUER IS PART OF THE IDENTITY. The same identity string minted by a
-    // different issuer is a different principal, and this is the leg a
-    // field-by-field comparison of only the identity would miss.
-    let wrong_issuer = SigstoreTrust::CertificateIdentity {
-        identity: "release@omp-orchestrator.invalid".to_owned(),
-        issuer: "https://attacker-oidc.invalid".to_owned(),
-    };
-    let error = verify_sigstore_policy(Some("9.0.0"), &wrong_issuer, &expected, true)
-        .expect_err("the right identity from the wrong issuer must refuse");
-    assert!(
-        error.to_string().contains("https://attacker-oidc.invalid"),
-        "{error}"
-    );
-
-    // TRUST MODE is not a string comparison: a local key cannot satisfy a
-    // keyless policy by presenting a matching-looking value.
-    let local = SigstoreTrust::LocalKey {
-        key_id: "release@omp-orchestrator.invalid".to_owned(),
-    };
-    let error = verify_sigstore_policy(Some("9.0.0"), &local, &expected, true)
-        .expect_err("a local key cannot satisfy a keyless identity policy");
-    let text = error.to_string();
-    assert!(
-        text.contains("trust mode mismatch")
-            && text.contains("local-key")
-            && text.contains("keyless"),
-        "{text}"
-    );
-
-    // And a mismatched local key under a local-key policy refuses by key id.
-    let want_key = SigstoreTrust::LocalKey {
-        key_id: "omp-release-2026".to_owned(),
-    };
-    let error = verify_sigstore_policy(Some("9.0.0"), &local, &want_key, true)
-        .expect_err("a foreign local key must refuse");
-    assert!(
-        error.to_string().contains("local key mismatch"),
-        "{error}"
-    );
-
-    // KNOWN-GOOD CONTROL: the expected identity against itself passes, so the
-    // identity gate is not refusing everything.
-    verify_sigstore_policy(Some("9.0.0"), &expected, &expected, true)
-        .expect("the expected identity must pass");
+    let error = verify_sigstore_artifact(&request).expect_err("unspawned cosign must refuse");
+    assert!(matches!(&error, InstallError::SigstoreRefused { reason, .. } if *reason == SigstoreRefusalReason::InputMissing), "{error}");
+    let mut no_cosign = request;
+    no_cosign.cosign = None;
+    let error = verify_sigstore_artifact(&no_cosign).expect_err("missing cosign path must refuse");
+    assert!(matches!(&error, InstallError::SigstoreRefused { reason, .. } if *reason == SigstoreRefusalReason::CosignUnavailable), "{error}");
 }
 
 /// L0-B09 (bead x282): ten-agent family detection through the production
-/// roster. All ten ratified families observed -> the scan carries all ten
-/// by name. Empty observed -> typed EmptyAgentScan (L0_EMPTY_SCAN), never
-/// clean. Uses production `detect_agent_families` throughout, so the
-/// integration property is the roster's, not a copy of it.
-///
-/// KNOWN-BAD: neutralizing the empty-scan refusal (empty observed returns a
-/// clean scan) keeps the ten-proof green and reds the typed-error arm
-/// below: an installer that installs for zero families while reporting
-/// success is the defect this row exists to prevent.
 #[test]
 fn agent_detection() {
     use installer::agent_families::{detect_agent_families, SUPPORTED_AGENT_FAMILIES};
@@ -3887,4 +3794,91 @@ fn qod0_missing_threshold_is_typed_unmeasurable() {
     )
     .expect_err("missing threshold must refuse");
     assert!(error.to_string().contains("MISSING_THRESHOLD"), "{error}");
+}
+
+/// sk8h.1 VIRGIN leg (mutation target): a post-rename identity mismatch on
+/// a virgin destination refuses typed and leaves no published path. Bypassing
+/// the final restore, or moving the tamper before rename (where the staged
+/// check refuses with zero renames), must RED this leg: the first leaves the
+/// tampered file behind, the second reports zero rename attempts.
+#[test]
+fn post_rename_mismatch_removes_virgin_publication() {
+    use installer::{install_binary_with_durability, DurabilityMetric, DurabilityStage};
+    let target = TempDir::new("post-rename-virgin");
+    let dest = target.path().join("installer");
+    let mut metric = DurabilityMetric::default();
+    let error = install_binary_with_durability(
+        &built_installer(),
+        target.path(),
+        &identity_head(),
+        &RepoOwnership::ThisRepo,
+        &mut metric,
+        Some(DurabilityStage::PostRenameTamper),
+    )
+    .expect_err("post-rename mismatch must refuse");
+    assert!(
+        matches!(error, InstallError::IdentityMismatch { .. }),
+        "must be typed IdentityMismatch, got {error:?}"
+    );
+    assert_eq!(
+        metric.atomic_rename_attempts, 1,
+        "rename must have happened (post-rename, not staged refusal): {metric:?}"
+    );
+    assert!(
+        !dest.exists(),
+        "virgin mismatched publication must be absent, not residue"
+    );
+    let leftovers: Vec<_> = std::fs::read_dir(target.path())
+        .expect("read dest")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert!(
+        leftovers.is_empty(),
+        "virgin failure must leave no staged, backup, or published residue: {leftovers:?}"
+    );
+}
+
+/// sk8h.1 REPLACE leg (mutation target): a post-rename identity mismatch on
+/// a pre-existing destination restores exact prior bytes. Bypassing the final
+/// restore leaves tampered bytes and REDs the equality below; moving the
+/// tamper before rename reports zero rename attempts and REDs that pin.
+#[test]
+fn post_rename_mismatch_restores_prior_owner_byte_exact() {
+    use installer::{install_binary_with_durability, DurabilityMetric, DurabilityStage};
+    let target = TempDir::new("post-rename-replace");
+    let dest = target.path().join("installer");
+    let prior = b"prior-owner-bytes sk8h.1\n";
+    std::fs::write(&dest, prior).expect("seed prior owner");
+    let mut metric = DurabilityMetric::default();
+    let error = install_binary_with_durability(
+        &built_installer(),
+        target.path(),
+        &identity_head(),
+        &RepoOwnership::ThisRepo,
+        &mut metric,
+        Some(DurabilityStage::PostRenameTamper),
+    )
+    .expect_err("post-rename mismatch must refuse");
+    assert!(
+        matches!(error, InstallError::IdentityMismatch { .. }),
+        "must be typed IdentityMismatch, got {error:?}"
+    );
+    assert_eq!(
+        metric.atomic_rename_attempts, 1,
+        "rename must have happened (post-rename, not staged refusal): {metric:?}"
+    );
+    assert_eq!(
+        std::fs::read(&dest).expect("restored bytes"),
+        prior,
+        "pre-existing destination must be byte-exact prior owner"
+    );
+    let leftovers: Vec<_> = std::fs::read_dir(target.path())
+        .expect("read dest")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert_eq!(
+        leftovers,
+        vec![std::ffi::OsString::from("installer")],
+        "only the restored artifact may remain (backup consumed, no staged temp): {leftovers:?}"
+    );
 }
