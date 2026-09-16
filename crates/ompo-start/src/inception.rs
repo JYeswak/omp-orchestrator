@@ -902,12 +902,13 @@ pub struct TrustStatus {
     pub control_files_complete: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EpistemicKnown {
     pub claim: String,
     pub evidence_source: String,
     pub evidence_command: String,
 }
-
+#[serde(deny_unknown_fields)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EpistemicUnknown {
     pub question: String,
@@ -915,8 +916,8 @@ pub struct EpistemicUnknown {
     pub resolving_experiment: String,
     pub cost: String,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EpistemicGap {
     pub missing_capability: String,
     pub owner: String,
@@ -924,6 +925,7 @@ pub struct EpistemicGap {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EpistemicLedger {
     pub known: Vec<EpistemicKnown>,
     pub unknown: Vec<EpistemicUnknown>,

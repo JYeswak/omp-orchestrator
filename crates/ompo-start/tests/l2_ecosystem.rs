@@ -541,6 +541,7 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
         ("unknown", "owner"),
         ("gaps", "cost_if_left_open"),
     ] {
+        read_inception(&output).expect("known-good ledger control must remain readable");
         let mut mutated = original.clone();
         mutated["epistemic"][category][0][field] = Value::String(" \t".to_owned());
         std::fs::write(
@@ -556,6 +557,24 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
             }
             other => panic!("expected typed epistemic blank refusal, got {other:?}"),
         }
+    }
+
+    let mut missing_nested_field = original.clone();
+    missing_nested_field["epistemic"]["known"][0]
+        .as_object_mut()
+        .expect("known entry object")
+        .remove("claim");
+    std::fs::write(
+        &output,
+        serde_json::to_vec_pretty(&missing_nested_field).expect("missing nested field JSON"),
+    )
+    .expect("write missing nested field");
+    match read_inception(&output) {
+        Err(InceptionError::ReadbackInvalid { key, detail, .. }) => {
+            assert_eq!(key, "epistemic");
+            assert!(detail.contains("missing field"), "{detail}");
+        }
+        other => panic!("expected missing nested field refusal, got {other:?}"),
     }
 
     let mut missing = original.clone();
