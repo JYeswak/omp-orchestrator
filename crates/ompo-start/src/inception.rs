@@ -862,6 +862,7 @@ pub struct HostCapabilities {
 pub struct TrustStatus {
     pub status: String,
     pub reason_code: String,
+    pub policy_sha256: String,
     pub control_files_complete: bool,
 }
 
@@ -2491,6 +2492,12 @@ fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError>
     if !missing.is_empty() {
         return Err(InceptionError::MissingControlFiles(missing));
     }
+    let policy_path = canonical.join("AGENTS.md");
+    let policy_bytes = fs::read(&policy_path).map_err(|error| InceptionError::RepositoryUnreadable {
+        path: policy_path.clone(),
+        detail: format!("AGENTS.md policy hash failed: {error}"),
+    })?;
+    let policy_sha256 = sha256_hex(&policy_bytes);
 
     let canonical_path = canonical.display().to_string();
     let source_revision = source_revision(&canonical)?;
@@ -2518,6 +2525,7 @@ fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError>
         trust_status: TrustStatus {
             status: "unverified".to_owned(),
             reason_code: "TRUST_DECISION_REQUIRED".to_owned(),
+            policy_sha256,
             control_files_complete: true,
         },
         template_identity: None,
@@ -2657,6 +2665,12 @@ fn render_manifest(manifest: &InceptionManifest) -> String {
         output,
         "    \"reason_code\": {},",
         json_string(&manifest.trust_status.reason_code)
+    )
+    .expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "    \"policy_sha256\": {},",
+        json_string(&manifest.trust_status.policy_sha256)
     )
     .expect("writing to String cannot fail");
     writeln!(
@@ -3260,10 +3274,10 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValida
     let trust = required_object(object, "trust_status", "trust_status")?;
     reject_extra_keys(
         trust,
-        &["status", "reason_code", "control_files_complete"],
+        &["status", "reason_code", "policy_sha256", "control_files_complete"],
         "trust_status.",
     )?;
-    for field in ["status", "reason_code"] {
+    for field in ["status", "reason_code", "policy_sha256"] {
         let key = format!("trust_status.{field}");
         required_string(trust, field, &key)?;
     }

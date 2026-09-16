@@ -457,6 +457,35 @@ fn l2_named_target_initializes_and_reads_back_identity() {
     let second = initialize(repository.path(), &output).expect("second init");
     assert_eq!(second.actions, 0, "unchanged init must be idempotent");
 }
+#[test]
+fn second_init_reopens_on_policy_hash_drift() {
+    let repository = repository_fixture();
+    let output = repository.path().join(".omp-orchestrator/inception.json");
+    let first = initialize(repository.path(), &output).expect("first init");
+    let original_artifact = std::fs::read(&output).expect("first artifact bytes");
+    let first_policy_hash = first.manifest.trust_status.policy_sha256.clone();
+
+    let mut policy = std::fs::read(repository.path().join("AGENTS.md"))
+        .expect("policy bytes");
+    policy.extend_from_slice(b"\n# policy hash drift\n");
+    std::fs::write(repository.path().join("AGENTS.md"), policy)
+        .expect("changed policy bytes");
+
+    let second = initialize(repository.path(), &output).expect("policy drift repair");
+    assert_ne!(
+        second.manifest.trust_status.policy_sha256,
+        first_policy_hash,
+        "policy hash must be re-derived"
+    );
+    assert_eq!(second.actions, 1, "policy drift must reopen repair");
+    let backup = second.backup.expect("policy drift must preserve prior artifact");
+    assert_eq!(
+        std::fs::read(backup).expect("backup bytes"),
+        original_artifact,
+        "policy drift backup must preserve the prior artifact"
+    );
+    assert_eq!(second.backup_ratio_verdict, "BACKUP_RATIO_OK_1_TO_1");
+}
 
 #[cfg(unix)]
 #[test]
