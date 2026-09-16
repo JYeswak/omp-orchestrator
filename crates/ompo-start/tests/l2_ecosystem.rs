@@ -550,6 +550,7 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
         )
         .expect("write blank epistemic cell");
         let error = read_inception(&output).expect_err("blank epistemic cell must refuse");
+        assert_eq!(error.exit_code(), 3);
         match error {
             InceptionError::ReadbackInvalid { key, detail, .. } => {
                 assert_eq!(key, format!("epistemic.{category}[0].{field}"));
@@ -569,8 +570,10 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
         serde_json::to_vec_pretty(&missing_nested_field).expect("missing nested field JSON"),
     )
     .expect("write missing nested field");
-    match read_inception(&output) {
-        Err(InceptionError::ReadbackInvalid { key, detail, .. }) => {
+    let error = read_inception(&output).expect_err("missing nested field must refuse");
+    assert_eq!(error.exit_code(), 3);
+    match error {
+        InceptionError::ReadbackInvalid { key, detail, .. } => {
             assert_eq!(key, "epistemic");
             assert!(detail.contains("missing field"), "{detail}");
         }
@@ -587,9 +590,11 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
         serde_json::to_vec_pretty(&missing).expect("missing JSON"),
     )
     .expect("write missing ledger");
+    let error = read_inception(&output).expect_err("missing ledger must refuse");
+    assert_eq!(error.exit_code(), 3);
     assert!(matches!(
-        read_inception(&output),
-        Err(InceptionError::ReadbackMissingKey { key, .. }) if key == "epistemic"
+        error,
+        InceptionError::ReadbackMissingKey { key, .. } if key == "epistemic"
     ));
 
     let mut empty = original;
@@ -599,8 +604,10 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
         serde_json::to_vec_pretty(&empty).expect("empty JSON"),
     )
     .expect("write empty ledger");
-    match read_inception(&output) {
-        Err(InceptionError::ReadbackInvalid { key, detail, .. }) => {
+    let error = read_inception(&output).expect_err("empty ledger must refuse");
+    assert_eq!(error.exit_code(), 3);
+    match error {
+        InceptionError::ReadbackInvalid { key, detail, .. } => {
             assert_eq!(key, "epistemic");
             assert!(detail.contains("INCEPTION_EPISTEMIC_EMPTY"));
         }
