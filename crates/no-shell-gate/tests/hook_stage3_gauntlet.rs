@@ -22,37 +22,49 @@
 //! - `unknown_argv_never_panics_nor_hangs` — argv fuzz: exit in {0,1,2,3},
 //!   never 101 (panic), every case completes (no-hang pin via timeout).
 //! - `staged_tree_fuzz_never_panics` — staged-content fuzz: same contract.
-//! - `satisfiability_always_pass_stub_reddens_violation_leg` — /usr/bin/true
-//!   fails the violation predicate: the leg can return the other answer.
-//! - `satisfiability_always_refuse_stub_reddens_golden_leg` — /usr/bin/false
-//!   fails the golden predicate. Together the pair proves neither side of the
-//!   suite is vacuous (a gate that cannot RED is decoration).
+//! - `satisfiability_violation_leg_reddens_on_golden_input` /
+//!   `satisfiability_golden_leg_reddens_on_violation_input` — cross-input
+//!   controls through the REAL binary: each predicate fails on the other's
+//!   input (plus a same-input control proving the input was genuine), so
+//!   neither side of the suite is vacuous. No stub stands in for the hook.
 //! - `kill_drill_100_runs_no_partial_state` — seeded SIGKILL at randomized
-//!   points: fixture files byte-identical, firing ledger parses clean via the
-//!   real `query_gate` parser (a torn line ERRORS), next invocation healthy
-//!   (violation exit restored, then golden exit restored).
-//! - `latency_cold_warm_budget` — cold + warm timings printed, every run
-//!   under the documented fixture budget (hang guard, not a product SLO).
+//!   points via kill/reap/descendant-sweep/drain: fixture files (INCLUDING
+//!   the firing ledger) byte-identical, ledger parses clean via the real
+//!   `query_gate` parser, kill/early-exit counts published (an all-early
+//!   drill fails for proving nothing), next invocation healthy.
+//! - `latency_cold_warm_budget` — GENUINE states: 5 cold samples (fresh
+//!   binary path + fresh repo each) vs 5 warm repeats; medians + ranges
+//!   printed with counts; every sample under the fixture hang-guard budget.
+//!   No cold/warm ordering asserted (not guaranteed; would flake).
 //! - `scratch_home_install_self_test` — binary runs from a fake HOME with
 //!   identical decisions (HOME-independence, no settings.json involved).
+//! - `scratch_home_install_is_backup_first_and_idempotent` — pre-existing
+//!   hook preserved byte-identical beside the install; reinstall changes
+//!   nothing (bytes, backup, decisions); reinstalled hook still refuses.
 //! - `non_repo_cwd_refuses_typed_exit_2` — outside a repo: exit 2, typed,
 //!   never a panic.
 //!
+//! LIVE-HOOK INVARIANCE. Every leg stages through `stage_hook_binary`,
+//! which records each live observation and fails the staging leg on any
+//! drift from the first (sha+mtime both named). No ordering assumption:
+//! every observation is checked whenever it lands. The live file is only
+//! ever read (copy + fingerprint); the suite contains no write to it.
+//!
 //! EXECUTION MODEL. Every leg executes a SCRATCH COPY of the binary, never
-//! the live path: the live file is opened read-only (copy + fingerprint)
-//! and its mtime/sha are asserted unchanged only procedurally (before/after
-//! the run, pasted into the run record) because mtime is a filesystem fact
-//! no in-test assertion can bracket across parallel legs. All fixture repos
-//! live in per-test TempDirs with isolated `.git` state, so the gate-section
-//! lock, the firing ledger, and the index never touch a real checkout.
-//! Fixture `git commit` messages carry a standalone `[test]` level so the
-//! template commit-msg hook passes on Mac lanes and is a no-op elsewhere.
+//! the live path. Subprocess control is delegated to the
+//! `subprocess-contract` kernel (group-leader child, group-targeted
+//! TERM-then-KILL, both pipes drained, child reaped) -- no hand-rolled
+//! spawn+poll exists here for the undrained-pipe lint to refuse. All
+//! fixture repos live in per-test TempDirs with isolated `.git` state, so
+//! the gate-section lock, the firing ledger, and the index never touch a
+//! real checkout. Fixture `git commit` messages carry a standalone `[test]`
+//! level so the template commit-msg hook passes on Mac lanes and is a no-op
+//! elsewhere. forbid(unsafe_code) holds for the whole file.
 
 use no_shell_gate::firing_ledger::{default_ledger_path, query_gate};
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
 /// Fixture budget per hook invocation (measured 0.6-2.6s on a minimal
@@ -138,19 +150,55 @@ fn live_fingerprint() -> Option<(String, String)> {
     Some((sha256_hex_file(&path), mtime))
 }
 
+/// First live-hook fingerprint observed by this suite process, shared by
+/// every leg through `stage_hook_binary` (the single funnel: all legs stage
+/// through it). Later observations must equal it byte-for-byte, so a live
+/// hook that changes mid-suite -- another pane reinstalling it, a heal,
+/// clock skew on mtime -- fails at the staging call of the leg that sees
+/// the drift, with both fingerprints named. No ordering assumption: every
+/// observation is checked against the first, whenever it lands. Lanes
+/// without an installed hook never record (fresh-build path) and check
+/// nothing -- there is no artifact to drift.
+static LIVE_FIRST_SEEN: std::sync::Mutex<Option<(String, String)>> =
+    std::sync::Mutex::new(None);
+
+/// Record a live-hook observation, enforcing pairwise stability against the
+/// first observation in this process. Panics naming both fingerprints on
+/// drift. Structure-only: the mutex is never held across an assertion.
+fn record_live_observation(sha: &str, mtime: &str, case: &str) {
+    let observed = (sha.to_owned(), mtime.to_owned());
+    let mut guard = LIVE_FIRST_SEEN.lock().expect("live record lock");
+    match guard.as_ref().cloned() {
+        None => {
+            *guard = Some(observed);
+        }
+        Some(first) => assert_eq!(
+            first, observed,
+            "LIVE HOOK DRIFTED mid-suite during {case}: first sha={} mtime={} now sha={} mtime={}",
+            first.0, first.1, sha, mtime
+        ),
+    }
+}
+
 /// Stage the binary under test into `dir`: a copy of the LIVE bytes when the
 /// installed hook exists here, else a fresh build. Returns the staged path
-/// plus a provenance line printed into every leg that matters.
+/// plus a provenance line printed into every leg that matters. Every live
+/// observation is recorded for pairwise stability: a hook that changes
+/// mid-suite fails here, not silently downstream.
 fn stage_hook_binary(dir: &Path) -> (PathBuf, String) {
     let live = live_hook_path();
     let staged = dir.join("hook-under-test");
     if live.is_file() {
         std::fs::copy(&live, &staged).expect("copy live hook bytes");
-        let provenance = format!(
-            "ARTIFACT_UNDER_TEST source=live sha={}",
-            sha256_hex_file(&staged)
-        );
+        let (sha, mtime) = live_fingerprint().expect("live fingerprint of present hook");
+        record_live_observation(&sha, &mtime, "stage_hook_binary");
+        let provenance = format!("ARTIFACT_UNDER_TEST source=live sha={sha}");
         println!("{provenance}");
+        assert_eq!(
+            sha256_hex_file(&staged),
+            sha,
+            "staged bytes must equal live bytes at stage time"
+        );
         (staged, provenance)
     } else {
         println!("SKIP live-hook lane: no installed hook; using fresh build (provenance below)");
@@ -241,43 +289,31 @@ fn behavior_repo(scratch: &Path) -> PathBuf {
     );
     repo
 }
-
-/// Install the staged binary as this fixture's hook (mirrors the production
-/// layout; silences freshness legitimately with a real installation).
-fn install_fixture_hook(repo: &Path, staged: &Path) {
-    let hook = repo.join(".git/hooks/pre-commit");
-    std::fs::create_dir_all(hook.parent().expect("hook parent")).expect("hook dir");
-    std::fs::copy(staged, &hook).expect("install fixture hook");
+/// Assert no process in the tree runs the staged binary path anymore: the
+/// kill drill's survivor proof. `pgrep -f` matches the full command line, and
+/// the staged path is unique per suite run, so a hit is unambiguously ours.
+/// Grandchildren (git) inherit nothing matchable, but they die with the group
+/// the kernel signalled -- and a hook that outlives its own kill would hold
+/// the gate lock and fail the restore assertions below anyway.
+fn assert_no_staged_strays(staged: &Path, case: &str) {
+    let output = Command::new("pgrep")
+        .args(["-f", &staged.display().to_string()])
+        .output()
+        .expect("pgrep must exist on Mac and Linux lanes");
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        text.trim().is_empty(),
+        "HANG-PIN {case}: staged binary survives after kill: {}",
+        text.trim()
+    );
 }
 
-fn stage_file(repo: &Path, rel: &str, bytes: &[u8]) {
-    let path = repo.join(rel);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).expect("fixture parent dir");
-    }
-    std::fs::write(&path, bytes).expect("write staged fixture");
-    run_git(repo, &["add", "--", rel]);
-}
-
-fn run_hook(bin: &Path, repo: &Path, args: &[&str], extra_env: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(bin);
-    command.current_dir(repo).args(args);
-    for (key, value) in extra_env {
-        command.env(key, value);
-    }
-    command.output().expect("spawn hook binary")
-}
-
-fn split_output(output: &Output) -> (Option<i32>, String, String) {
-    (
-        output.status.code(),
-        String::from_utf8_lossy(&output.stdout).into_owned(),
-        String::from_utf8_lossy(&output.stderr).into_owned(),
-    )
-}
-
-/// Bounded run: the no-hang pin. A timeout is a leg FAILURE with the case
-/// named, never a silent skip; the stray child is documented, not hidden.
+/// Bounded run: the no-hang pin, delegated to the `subprocess-contract`
+/// kernel (group-leader child, group-targeted TERM-then-KILL, both pipes
+/// drained, child reaped -- never detached). A timeout is a leg FAILURE
+/// with the case named, never a silent skip; the kernel owns the kill, so
+/// there is no hand-rolled spawn+poll here for the undrained-pipe lint to
+/// (correctly) refuse.
 fn run_hook_bounded(
     bin: &Path,
     repo: &Path,
@@ -286,30 +322,20 @@ fn run_hook_bounded(
     budget: Duration,
     case: &str,
 ) -> (Option<i32>, String, String) {
-    let owned_bin = bin.to_owned();
-    let owned_repo = repo.to_owned();
-    let owned_args: Vec<String> = args.iter().map(ToString::to_string).collect();
-    let owned_env: Vec<(String, String)> = extra_env
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), v.clone()))
-        .collect();
-    let (sender, receiver) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let mut command = Command::new(&owned_bin);
-        command.current_dir(&owned_repo);
-        command.args(&owned_args);
-        for (key, value) in &owned_env {
-            command.env(key, value);
-        }
-        let _ = sender.send(command.output());
-    });
-    match receiver.recv_timeout(budget) {
-        Ok(Ok(output)) => split_output(&output),
-        Ok(Err(error)) => panic!("HANG-PIN {case}: spawn failed: {error}"),
-        Err(_) => panic!(
-            "HANG-PIN {case}: hook did not complete in {}s (stray child abandoned and documented)",
+    let mut command = Command::new(bin);
+    command.current_dir(repo).args(args);
+    for (key, value) in extra_env {
+        command.env(key, value);
+    }
+    match subprocess_contract::bounded_output(&mut command, budget) {
+        subprocess_contract::BoundedOutcome::Completed(output) => split_output(&output),
+        subprocess_contract::BoundedOutcome::TimedOut => panic!(
+            "HANG-PIN {case}: hook did not complete in {}s; kernel signalled the process group",
             budget.as_secs()
         ),
+        subprocess_contract::BoundedOutcome::Unspawned(error) => {
+            panic!("HANG-PIN {case}: spawn failed: {error}")
+        }
     }
 }
 
@@ -322,7 +348,18 @@ fn snapshot_tree_files(repo: &Path) -> BTreeMap<String, String> {
             let entry = entry.expect("fixture dir entry");
             let path = entry.path();
             if path.is_dir() {
+                // The firing ledger is load-bearing kill-drill state: a torn
+                // ledger line is exactly the partial write this snapshot must
+                // catch. Everything else under .git (objects, index, hooks)
+                // is hook-execution residue, not fixture content.
                 if path.file_name().is_some_and(|name| name == ".git") {
+                    let ledger = path.join("omp-gate-firings.jsonl");
+                    if ledger.is_file() {
+                        files.insert(
+                            ".git/omp-gate-firings.jsonl".to_owned(),
+                            sha256_hex_file(&ledger),
+                        );
+                    }
                     continue;
                 }
                 stack.push(path);
@@ -549,44 +586,51 @@ fn staged_tree_fuzz_never_panics() {
     println!("READBACK 6 staged-tree cases typed-or-clean [{provenance}]");
 }
 
+/// Satisfiability through the ACTUAL suite decision path: the violation leg
+/// fed golden input (nothing staged to refuse) must NOT satisfy the
+/// violation predicate. A leg that stays satisfied with nothing to refuse
+/// about cannot RED on any input -- vacuous. The hook binary really runs;
+/// no stub stands in for it.
 #[test]
-fn satisfiability_always_pass_stub_reddens_violation_leg() {
-    for candidate in ["/usr/bin/true", "/bin/true"] {
-        if Path::new(candidate).is_file() {
-            let scratch = tempfile::tempdir().expect("scratch dir");
-            let repo = behavior_repo(scratch.path());
-            stage_file(&repo, "check.sh", b"#!/bin/sh\necho hi\n");
-            let output = run_hook(Path::new(candidate), &repo, &[], &[]);
-            let (code, _stdout, stderr) = split_output(&output);
-            assert!(
-                !violation_holds(code, &stderr, "check.sh"),
-                "an always-pass binary must NOT satisfy the violation predicate (else the leg is vacuous)"
-            );
-            println!("READBACK always-pass stub fails violation predicate via {candidate}");
-            return;
-        }
-    }
-    panic!("no true(1) binary found for the satisfiability control");
+fn satisfiability_violation_leg_reddens_on_golden_input() {
+    let scratch = tempfile::tempdir().expect("scratch dir");
+    let (bin, provenance) = stage_hook_binary(scratch.path());
+    let repo = behavior_repo(scratch.path());
+    install_fixture_hook(&repo, &bin);
+    stage_file(&repo, "docs/note.md", b"hello\n");
+    let output = run_hook(&bin, &repo, &[], &[]);
+    let (code, _stdout, stderr) = split_output(&output);
+    assert!(
+        !violation_holds(code, &stderr, "check.sh"),
+        "golden input through the real binary must NOT satisfy the violation predicate (else the leg is vacuous) [{provenance}]: code={code:?}"
+    );
+    assert!(
+        golden_holds(code, &stderr),
+        "control: the same run satisfies the golden predicate, so the input was genuinely golden [{provenance}]"
+    );
+    println!("READBACK violation leg reddens on golden input via real binary [{provenance}]");
 }
 
+/// Mirror image: the golden leg fed violation input (a staged shell) must
+/// NOT satisfy the golden predicate, through the same real binary.
 #[test]
-fn satisfiability_always_refuse_stub_reddens_golden_leg() {
-    for candidate in ["/usr/bin/false", "/bin/false"] {
-        if Path::new(candidate).is_file() {
-            let scratch = tempfile::tempdir().expect("scratch dir");
-            let repo = behavior_repo(scratch.path());
-            stage_file(&repo, "docs/note.md", b"hello\n");
-            let output = run_hook(Path::new(candidate), &repo, &[], &[]);
-            let (code, _stdout, stderr) = split_output(&output);
-            assert!(
-                !golden_holds(code, &stderr),
-                "an always-refuse binary must NOT satisfy the golden predicate (else the leg is vacuous)"
-            );
-            println!("READBACK always-refuse stub fails golden predicate via {candidate}");
-            return;
-        }
-    }
-    panic!("no false(1) binary found for the satisfiability control");
+fn satisfiability_golden_leg_reddens_on_violation_input() {
+    let scratch = tempfile::tempdir().expect("scratch dir");
+    let (bin, provenance) = stage_hook_binary(scratch.path());
+    let repo = behavior_repo(scratch.path());
+    install_fixture_hook(&repo, &bin);
+    stage_file(&repo, "check.sh", b"#!/bin/sh\necho hi\n");
+    let output = run_hook(&bin, &repo, &[], &[]);
+    let (code, _stdout, stderr) = split_output(&output);
+    assert!(
+        !golden_holds(code, &stderr),
+        "violation input through the real binary must NOT satisfy the golden predicate (else the leg is vacuous) [{provenance}]: code={code:?}"
+    );
+    assert!(
+        violation_holds(code, &stderr, "check.sh"),
+        "control: the same run satisfies the violation predicate, so the input was genuinely violating [{provenance}]"
+    );
+    println!("READBACK golden leg reddens on violation input via real binary [{provenance}]");
 }
 
 #[test]
@@ -597,27 +641,40 @@ fn kill_drill_100_runs_no_partial_state_next_run_healthy() {
     install_fixture_hook(&repo, &bin);
     stage_file(&repo, "check.sh", b"#!/bin/sh\necho hi\n");
     let before = snapshot_tree_files(&repo);
-    let mut seed = KILL_SEED;
+    // Each run executes through the kernel deadline path: the delay doubles
+    // as the kill schedule, so every SIGKILL is delivered by
+    // `bounded_output`'s group-targeted TERM-then-KILL, never by a handrolled
+    // kill in this file. Completed vs TimedOut are counted separately so a
+    // degenerate all-early drill cannot masquerade as kill coverage.
+    let mut kills_landed = 0usize;
+    let mut early_exits = 0usize;
     for run in 0..KILL_RUNS {
         let delay_ms = xorshift(&mut seed) % KILL_DELAY_MAX_MS;
-        let mut child: Child = Command::new(&bin)
-            .current_dir(&repo)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .unwrap_or_else(|error| panic!("drill run {run}: spawn failed: {error}"));
-        std::thread::sleep(Duration::from_millis(delay_ms));
-        child.kill().unwrap_or_else(|error| {
-            if error.kind() == std::io::ErrorKind::InvalidInput {
-                // Already exited before the kill landed: a valid sample of
-                // the early-exit path, not a drill failure.
-            } else {
-                panic!("drill run {run}: kill failed: {error}");
+        let mut command = Command::new(&bin);
+        command.current_dir(&repo);
+        match subprocess_contract::bounded_output(
+            &mut command,
+            Duration::from_millis(delay_ms),
+        ) {
+            subprocess_contract::BoundedOutcome::Completed(_) => {
+                early_exits += 1;
             }
-        });
-        let _ = child.wait();
+            subprocess_contract::BoundedOutcome::TimedOut => {
+                kills_landed += 1;
+            }
+            subprocess_contract::BoundedOutcome::Unspawned(error) => {
+                panic!("drill run {run}: spawn failed: {error}");
+            }
+        }
     }
+    assert!(
+        kills_landed > 0,
+        "KILL-DRILL: zero kills landed in {KILL_RUNS} runs (all early exits); the drill proved nothing [{provenance}]"
+    );
+    println!("READBACK kill drill {kills_landed} kernel kills landed, {early_exits} early exits [{provenance}]");
+    // No survivor from any of the 100 runs may still walk the tree: the
+    // staged path is unique per suite run, so any hit is unambiguously ours.
+    assert_no_staged_strays(&bin, "kill-drill-sweep");
     // No partial fixture state: every non-git file byte-identical.
     let after = snapshot_tree_files(&repo);
     assert_eq!(
@@ -659,15 +716,49 @@ fn kill_drill_100_runs_no_partial_state_next_run_healthy() {
     println!("READBACK kill drill 100 runs clean, behavior restored [{provenance}]");
 }
 
+/// Cold-vs-warm latency with GENUINE states, not labels on one population:
+/// every cold sample executes a FRESHLY COPIED binary at a fresh path
+/// (cold dentry/inode/page for that path) against a fresh repo, while warm
+/// samples repeat the SAME binary and repo. Reported statistic is the median
+/// of each group (5 cold + 5 warm); the budget assertion applies per sample
+/// as a hang guard. NO-CLAIM inside the test's honesty bounds: without
+/// cache-drop privileges the OS page cache warms across samples, so "cold"
+/// here means cold-path, not cold-machine -- and the leg asserts budget
+/// compliance per sample, never a cold/warm ordering (ordering is not
+/// guaranteed and asserting it would be a flaky gate).
 #[test]
 fn latency_cold_warm_budget() {
+    const COLD_SAMPLES: usize = 5;
+    const WARM_SAMPLES: usize = 5;
     let scratch = tempfile::tempdir().expect("scratch dir");
     let (bin, provenance) = stage_hook_binary(scratch.path());
-    let repo = behavior_repo(scratch.path());
+    let mut cold: Vec<Duration> = Vec::with_capacity(COLD_SAMPLES);
+    for sample in 0..COLD_SAMPLES {
+        // Fresh path AND fresh repo per cold sample: nothing about this
+        // invocation has executed before on this machine state.
+        let fresh_bin = scratch
+            .path()
+            .join(format!("hook-cold-{sample}"));
+        std::fs::copy(&bin, &fresh_bin).expect("fresh cold binary copy");
+        let repo = behavior_repo(&scratch.path().join(format!("cold-repo-{sample}")));
+        install_fixture_hook(&repo, &fresh_bin);
+        stage_file(&repo, "docs/note.md", b"hello\n");
+        let start = Instant::now();
+        let output = run_hook(&fresh_bin, &repo, &[], &[]);
+        let elapsed = start.elapsed();
+        let (code, _stdout, _stderr) = split_output(&output);
+        assert_eq!(
+            code,
+            Some(0),
+            "cold sample {sample} must exit clean [{provenance}]"
+        );
+        cold.push(elapsed);
+    }
+    let repo = behavior_repo(&scratch.path().join("warm-repo"));
     install_fixture_hook(&repo, &bin);
     stage_file(&repo, "docs/note.md", b"hello\n");
-    let mut samples = Vec::new();
-    for run in 0..6 {
+    let mut warm: Vec<Duration> = Vec::with_capacity(WARM_SAMPLES);
+    for sample in 0..WARM_SAMPLES {
         let start = Instant::now();
         let output = run_hook(&bin, &repo, &[], &[]);
         let elapsed = start.elapsed();
@@ -675,19 +766,22 @@ fn latency_cold_warm_budget() {
         assert_eq!(
             code,
             Some(0),
-            "latency sample {run} must exit clean [{provenance}]"
+            "warm sample {sample} must exit clean [{provenance}]"
         );
-        samples.push(elapsed);
+        warm.push(elapsed);
     }
-    samples.sort();
-    let cold = samples[5];
-    let warm_median = samples[2];
-    println!("LATENCY cold={cold:?} warm_median={warm_median:?} all={samples:?}");
-    for (index, sample) in samples.iter().enumerate() {
-        assert!(
-            *sample < INVOCATION_BUDGET,
-            "latency sample {index} exceeds fixture budget {INVOCATION_BUDGET:?}: {sample:?} [{provenance}]"
-        );
+    cold.sort();
+    warm.sort();
+    let cold_median = cold[COLD_SAMPLES / 2];
+    let warm_median = warm[WARM_SAMPLES / 2];
+    println!("LATENCY cold_n={COLD_SAMPLES} cold_median={cold_median:?} cold_min={:?} cold_max={:?} warm_n={WARM_SAMPLES} warm_median={warm_median:?} warm_min={:?} warm_max={:?} [{provenance}]", cold[0], cold[COLD_SAMPLES - 1], warm[0], warm[WARM_SAMPLES - 1]);
+    for (group, samples) in [("cold", &cold), ("warm", &warm)] {
+        for (index, sample) in samples.iter().enumerate() {
+            assert!(
+                *sample < INVOCATION_BUDGET,
+                "latency {group}[{index}] exceeds fixture budget {INVOCATION_BUDGET:?}: {sample:?} [{provenance}]"
+            );
+        }
     }
 }
 
@@ -725,6 +819,76 @@ fn scratch_home_install_self_test() {
         "fake-HOME install must decide violation identically [{provenance}]"
     );
     println!("READBACK fake-HOME install decides identically [{provenance}]");
+}
+
+/// Backup-first wiring merge plus idempotent reinstall, still under a fake
+/// HOME: a pre-existing hook is preserved byte-identical beside the install
+/// (never overwritten in place), and running the install twice changes
+/// nothing the second time -- same bytes, same backup, same decisions.
+/// Fixture machinery for the install discipline (mirrors production
+/// install-then-verify); the decisions it installs are asserted, not the
+/// helper itself.
+#[test]
+fn scratch_home_install_is_backup_first_and_idempotent() {
+    fn install_backup_first(source: &Path, dest: &Path) -> PathBuf {
+        if dest.is_file() {
+            let backup = dest.with_extension("pre-stage3.bak");
+            if !backup.is_file() {
+                std::fs::copy(dest, &backup).expect("back up pre-existing hook");
+            }
+            let before = sha256_hex_file(dest);
+            assert_eq!(
+                sha256_hex_file(&backup),
+                before,
+                "backup must preserve the pre-existing hook byte-identical"
+            );
+        }
+        std::fs::copy(source, dest).expect("install hook bytes");
+        dest.to_owned()
+    }
+    let scratch = tempfile::tempdir().expect("scratch dir");
+    let (bin, provenance) = stage_hook_binary(scratch.path());
+    let home = scratch.path().join("fake-home-backup");
+    let bin_dir = home.join(".local/bin");
+    std::fs::create_dir_all(&bin_dir).expect("fake home bin dir");
+    let installed = bin_dir.join("hook-under-test");
+    // A foreign pre-existing hook the install must not destroy.
+    std::fs::write(&installed, b"#!/bin/sh\necho foreign hook\n").expect("foreign hook");
+    install_backup_first(&bin, &installed);
+    let backup = bin_dir.join("hook-under-test.pre-stage3.bak");
+    assert_eq!(
+        std::fs::read(&backup).expect("backup bytes"),
+        b"#!/bin/sh\necho foreign hook\n",
+        "backup-first must preserve the foreign hook [{provenance}]"
+    );
+    assert_eq!(
+        sha256_hex_file(&installed),
+        sha256_hex_file(&bin),
+        "installed bytes must equal staged bytes [{provenance}]"
+    );
+    // Second install: idempotent -- bytes, backup, and decisions unchanged.
+    install_backup_first(&bin, &installed);
+    assert_eq!(
+        sha256_hex_file(&installed),
+        sha256_hex_file(&bin),
+        "reinstall must leave identical bytes [{provenance}]"
+    );
+    assert_eq!(
+        std::fs::read(&backup).expect("backup bytes after reinstall"),
+        b"#!/bin/sh\necho foreign hook\n",
+        "reinstall must not touch the backup [{provenance}]"
+    );
+    let home_arg = home.display().to_string();
+    let repo = behavior_repo(&scratch.path().join("home-reinstall"));
+    install_fixture_hook(&repo, &installed);
+    stage_file(&repo, "check.sh", b"#!/bin/sh\necho hi\n");
+    let output = run_hook(&installed, &repo, &[], &[("HOME", home_arg.as_str())]);
+    let (code, _stdout, stderr) = split_output(&output);
+    assert!(
+        violation_holds(code, &stderr, "check.sh"),
+        "reinstalled hook must still refuse identically [{provenance}]"
+    );
+    println!("READBACK backup-first install + idempotent reinstall [{provenance}]");
 }
 
 #[test]
