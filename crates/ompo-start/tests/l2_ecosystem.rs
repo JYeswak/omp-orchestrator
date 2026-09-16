@@ -11,11 +11,11 @@ use lifecycle_event::{
 use lifecycle_monitor::{gate_claimed_write_readback, observe_layer, verify_artifact, LayerState};
 use ompo_start::inception::{
     hook_source_identity_report, initialize, initialize_gated, list_backups, read_inception,
-    restore_backup, verify_post_write_predicates, CargoWorkspaceError, HookIdentityStatus,
-    InceptionError, TrustedInitConsent, TrustedInitDecision, PROJECT_AGENTS_OWNERSHIP_STAMP,
-    SCHEMA_VERSION,
+    restore_backup, verify_post_write_predicates, CargoWorkspaceError, EpistemicGap,
+    EpistemicKnown, EpistemicLedger, EpistemicUnknown, HookIdentityStatus, InceptionError,
+    TrustedInitConsent, TrustedInitDecision, PROJECT_AGENTS_OWNERSHIP_STAMP, SCHEMA_VERSION,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
 use std::path::Path;
 use std::process::Command;
@@ -453,10 +453,142 @@ fn l2_named_target_initializes_and_reads_back_identity() {
     assert_eq!(readback.project_id, first.manifest.project_id);
     assert_eq!(readback.repo_identity, first.manifest.repo_identity);
     assert!(readback.control_files_complete);
+    assert_eq!(readback.epistemic, first.manifest.epistemic);
+    assert!(!readback.epistemic.known.is_empty());
+    assert!(!readback.epistemic.unknown.is_empty());
+    assert!(!readback.epistemic.gaps.is_empty());
 
     let second = initialize(repository.path(), &output).expect("second init");
     assert_eq!(second.actions, 0, "unchanged init must be idempotent");
 }
+
+#[test]
+fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
+    let known = EpistemicLedger {
+        known: vec![EpistemicKnown {
+            claim: "claim".to_owned(),
+            evidence_source: "source".to_owned(),
+            evidence_command: "command".to_owned(),
+        }],
+        unknown: Vec::new(),
+        gaps: Vec::new(),
+    };
+    assert_eq!(known.validate(), Ok(()));
+
+    for (ledger, expected) in [
+        (
+            EpistemicLedger {
+                known: vec![EpistemicKnown {
+                    claim: " ".to_owned(),
+                    evidence_source: "source".to_owned(),
+                    evidence_command: "command".to_owned(),
+                }],
+                unknown: Vec::new(),
+                gaps: Vec::new(),
+            },
+            "INCEPTION_EPISTEMIC_BLANK category=known index=0 field=claim",
+        ),
+        (
+            EpistemicLedger {
+                known: Vec::new(),
+                unknown: vec![EpistemicUnknown {
+                    question: "question".to_owned(),
+                    owner: "owner".to_owned(),
+                    resolving_experiment: "experiment".to_owned(),
+                    cost: " ".to_owned(),
+                }],
+                gaps: Vec::new(),
+            },
+            "INCEPTION_EPISTEMIC_BLANK category=unknown index=0 field=cost",
+        ),
+        (
+            EpistemicLedger {
+                known: Vec::new(),
+                unknown: Vec::new(),
+                gaps: vec![EpistemicGap {
+                    missing_capability: "capability".to_owned(),
+                    owner: "owner".to_owned(),
+                    cost_if_left_open: " ".to_owned(),
+                }],
+            },
+            "INCEPTION_EPISTEMIC_BLANK category=gaps index=0 field=cost_if_left_open",
+        ),
+    ] {
+        assert_eq!(ledger.validate().expect_err("blank cell must refuse").to_string(), expected);
+    }
+    assert_eq!(
+        EpistemicLedger {
+            known: Vec::new(),
+            unknown: Vec::new(),
+            gaps: Vec::new(),
+        }
+        .validate()
+        .expect_err("empty ledger must refuse")
+        .to_string(),
+        "INCEPTION_EPISTEMIC_EMPTY"
+    );
+
+    let repository = repository_fixture();
+    let output = repository.path().join(".omp-orchestrator/inception.json");
+    initialize(repository.path(), &output).expect("initial artifact");
+    let original: Value = serde_json::from_str(
+        &std::fs::read_to_string(&output).expect("artifact bytes"),
+    )
+    .expect("artifact JSON");
+
+    for (category, field) in [
+        ("known", "claim"),
+        ("unknown", "owner"),
+        ("gaps", "cost_if_left_open"),
+    ] {
+        let mut mutated = original.clone();
+        mutated["epistemic"][category][0][field] = Value::String(" \t".to_owned());
+        std::fs::write(
+            &output,
+            serde_json::to_vec_pretty(&mutated).expect("mutated JSON"),
+        )
+        .expect("write blank epistemic cell");
+        let error = read_inception(&output).expect_err("blank epistemic cell must refuse");
+        match error {
+            InceptionError::ReadbackInvalid { key, detail, .. } => {
+                assert_eq!(key, format!("epistemic.{category}[0].{field}"));
+                assert!(detail.contains("INCEPTION_EPISTEMIC_BLANK"));
+            }
+            other => panic!("expected typed epistemic blank refusal, got {other:?}"),
+        }
+    }
+
+    let mut missing = original.clone();
+    missing
+        .as_object_mut()
+        .expect("artifact object")
+        .remove("epistemic");
+    std::fs::write(
+        &output,
+        serde_json::to_vec_pretty(&missing).expect("missing JSON"),
+    )
+    .expect("write missing ledger");
+    assert!(matches!(
+        read_inception(&output),
+        Err(InceptionError::ReadbackMissingKey { key, .. }) if key == "epistemic"
+    ));
+
+    let mut empty = original;
+    empty["epistemic"] = json!({"known": [], "unknown": [], "gaps": []});
+    std::fs::write(
+        &output,
+        serde_json::to_vec_pretty(&empty).expect("empty JSON"),
+    )
+    .expect("write empty ledger");
+    match read_inception(&output) {
+        Err(InceptionError::ReadbackInvalid { key, detail, .. }) => {
+            assert_eq!(key, "epistemic");
+            assert!(detail.contains("INCEPTION_EPISTEMIC_EMPTY"));
+        }
+        other => panic!("expected typed empty-ledger refusal, got {other:?}"),
+    }
+}
+
 #[test]
 fn second_init_reopens_on_policy_hash_drift() {
     let repository = repository_fixture();
@@ -893,6 +1025,7 @@ const DECLARED_REQUIRED_KEYS: &[&str] = &[
     "control_files",
     "host_capabilities",
     "required_tools",
+    "epistemic",
     "trust_status",
 ];
 

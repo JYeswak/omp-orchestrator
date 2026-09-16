@@ -8,6 +8,7 @@
 //! returning success.
 
 use input_manifest::InputManifest;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use lifecycle_event::{
     default_repo_journal, DurableJournal, EmitOutcome, Layer, LifecycleEvent, ReasonCode,
@@ -77,6 +78,7 @@ const REQUIRED_KEYS: &[&str] = &[
     "control_files",
     "host_capabilities",
     "required_tools",
+    "epistemic",
     "trust_status",
 ];
 const OPTIONAL_KEYS: &[&str] = &["evidence", "status", "degradations", "template_identity"];
@@ -511,6 +513,29 @@ impl fmt::Display for TemplateIdentityError {
 }
 
 impl std::error::Error for TemplateIdentityError {}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EpistemicValidationError {
+    EmptyLedger,
+    BlankField {
+        category: &'static str,
+        index: usize,
+        field: &'static str,
+    },
+}
+
+impl fmt::Display for EpistemicValidationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyLedger => write!(formatter, "INCEPTION_EPISTEMIC_EMPTY"),
+            Self::BlankField { category, index, field } => write!(
+                formatter,
+                "INCEPTION_EPISTEMIC_BLANK category={category} index={index} field={field}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for EpistemicValidationError {}
 
 #[derive(Debug)]
 pub enum InceptionError {
@@ -619,6 +644,8 @@ pub enum InceptionError {
         key: String,
         detail: String,
     },
+    /// The persisted epistemic ledger is empty or contains a blank cell.
+    Epistemic(EpistemicValidationError),
 }
 
 impl fmt::Display for InceptionError {
@@ -760,11 +787,17 @@ impl fmt::Display for InceptionError {
                 "INCEPTION_READBACK_INVALID path={} key={key} detail={detail}",
                 path.display()
             ),
+            Self::Epistemic(error) => write!(formatter, "{error}"),
         }
     }
 }
 
 impl std::error::Error for InceptionError {}
+impl From<EpistemicValidationError> for InceptionError {
+    fn from(error: EpistemicValidationError) -> Self {
+        Self::Epistemic(error)
+    }
+}
 
 impl From<TemplateIdentityError> for InceptionError {
     fn from(error: TemplateIdentityError) -> Self {
@@ -781,7 +814,8 @@ impl InceptionError {
             | Self::ReadbackExtraKey { .. }
             | Self::ReadbackWrongType { .. }
             | Self::ReadbackEmpty { .. }
-            | Self::ReadbackInvalid { .. } => 3,
+            | Self::ReadbackInvalid { .. }
+            | Self::Epistemic(_) => 3,
             _ => 2,
         }
     }
@@ -795,6 +829,7 @@ pub struct InceptionManifest {
     pub control_files: BTreeMap<String, bool>,
     pub host_capabilities: HostCapabilities,
     pub required_tools: Vec<String>,
+    pub epistemic: EpistemicLedger,
     pub trust_status: TrustStatus,
     pub template_identity: Option<TemplateIdentity>,
 }
@@ -804,6 +839,7 @@ pub struct InceptionReadback {
     pub project_id: String,
     pub repo_identity: RepoIdentity,
     pub control_files_complete: bool,
+    pub epistemic: EpistemicLedger,
     pub template_identity: Option<TemplateIdentity>,
 }
 
@@ -864,6 +900,111 @@ pub struct TrustStatus {
     pub reason_code: String,
     pub policy_sha256: String,
     pub control_files_complete: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpistemicKnown {
+    pub claim: String,
+    pub evidence_source: String,
+    pub evidence_command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpistemicUnknown {
+    pub question: String,
+    pub owner: String,
+    pub resolving_experiment: String,
+    pub cost: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpistemicGap {
+    pub missing_capability: String,
+    pub owner: String,
+    pub cost_if_left_open: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EpistemicLedger {
+    pub known: Vec<EpistemicKnown>,
+    pub unknown: Vec<EpistemicUnknown>,
+    pub gaps: Vec<EpistemicGap>,
+}
+
+impl EpistemicLedger {
+    #[must_use]
+    pub fn inception_default() -> Self {
+        Self {
+            known: vec![EpistemicKnown {
+                claim: "ompo init writes inception.json and reads it back".to_owned(),
+                evidence_source: "ompo_start::inception::initialize".to_owned(),
+                evidence_command: "ompo init".to_owned(),
+            }],
+            unknown: vec![EpistemicUnknown {
+                question: "whether the host filesystem survives a crash after the inception write".to_owned(),
+                owner: "S1-L2".to_owned(),
+                resolving_experiment: "run a bounded crash-recovery write/readback fixture".to_owned(),
+                cost: "one remote fixture run plus operator review".to_owned(),
+            }],
+            gaps: vec![EpistemicGap {
+                missing_capability: "an S2 consumer enforcing epistemic completeness".to_owned(),
+                owner: "S1-L2".to_owned(),
+                cost_if_left_open: "S2 may start without a machine-readable epistemic ledger consumer".to_owned(),
+            }],
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), EpistemicValidationError> {
+        if self.known.is_empty() && self.unknown.is_empty() && self.gaps.is_empty() {
+            return Err(EpistemicValidationError::EmptyLedger);
+        }
+        for (index, entry) in self.known.iter().enumerate() {
+            for (field, value) in [
+                ("claim", entry.claim.as_str()),
+                ("evidence_source", entry.evidence_source.as_str()),
+                ("evidence_command", entry.evidence_command.as_str()),
+            ] {
+                if value.trim().is_empty() {
+                    return Err(EpistemicValidationError::BlankField {
+                        category: "known",
+                        index,
+                        field,
+                    });
+                }
+            }
+        }
+        for (index, entry) in self.unknown.iter().enumerate() {
+            for (field, value) in [
+                ("question", entry.question.as_str()),
+                ("owner", entry.owner.as_str()),
+                ("resolving_experiment", entry.resolving_experiment.as_str()),
+                ("cost", entry.cost.as_str()),
+            ] {
+                if value.trim().is_empty() {
+                    return Err(EpistemicValidationError::BlankField {
+                        category: "unknown",
+                        index,
+                        field,
+                    });
+                }
+            }
+        }
+        for (index, entry) in self.gaps.iter().enumerate() {
+            for (field, value) in [
+                ("missing_capability", entry.missing_capability.as_str()),
+                ("owner", entry.owner.as_str()),
+                ("cost_if_left_open", entry.cost_if_left_open.as_str()),
+            ] {
+                if value.trim().is_empty() {
+                    return Err(EpistemicValidationError::BlankField {
+                        category: "gaps",
+                        index,
+                        field,
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn project_id(path: &str) -> String {
@@ -2522,6 +2663,7 @@ fn build_manifest(repo_root: &Path) -> Result<InceptionManifest, InceptionError>
             .iter()
             .map(|tool| (*tool).to_owned())
             .collect(),
+        epistemic: EpistemicLedger::inception_default(),
         trust_status: TrustStatus {
             status: "unverified".to_owned(),
             reason_code: "TRUST_DECISION_REQUIRED".to_owned(),
@@ -2653,6 +2795,12 @@ fn render_manifest(manifest: &InceptionManifest) -> String {
             .expect("writing to String cannot fail");
     }
     writeln!(output, "  ],").expect("writing to String cannot fail");
+    writeln!(
+        output,
+        "  \"epistemic\": {},",
+        serde_json::to_string(&manifest.epistemic).expect("epistemic ledger is serializable")
+    )
+    .expect("writing to String cannot fail");
 
     writeln!(output, "  \"trust_status\": {{").expect("writing to String cannot fail");
     writeln!(
@@ -3116,6 +3264,63 @@ fn required_bool(
         })
 }
 
+fn parse_epistemic_ledger(
+    object: &Map<String, Value>,
+) -> Result<EpistemicLedger, ReadbackValidationError> {
+    let value = required_value(object, "epistemic", "epistemic")?;
+    let ledger = value.as_object().ok_or_else(|| ReadbackValidationError::WrongType {
+        key: "epistemic".to_owned(),
+        expected: "object",
+        found: value_type(value),
+    })?;
+    reject_extra_keys(ledger, &["known", "unknown", "gaps"], "epistemic.")?;
+
+    for (category, fields) in [
+        ("known", &["claim", "evidence_source", "evidence_command"][..]),
+        ("unknown", &["question", "owner", "resolving_experiment", "cost"][..]),
+        ("gaps", &["missing_capability", "owner", "cost_if_left_open"][..]),
+    ] {
+        let array_value = required_value(ledger, category, &format!("epistemic.{category}"))?;
+        let array = array_value.as_array().ok_or_else(|| ReadbackValidationError::WrongType {
+            key: format!("epistemic.{category}"),
+            expected: "array",
+            found: value_type(array_value),
+        })?;
+        for (index, item) in array.iter().enumerate() {
+            let item_object = item.as_object().ok_or_else(|| ReadbackValidationError::WrongType {
+                key: format!("epistemic.{category}[{index}]"),
+                expected: "object",
+                found: value_type(item),
+            })?;
+            reject_extra_keys(
+                item_object,
+                fields,
+                &format!("epistemic.{category}[{index}]."),
+            )?;
+        }
+    }
+
+    let parsed: EpistemicLedger = serde_json::from_value(value.clone()).map_err(|error| {
+        ReadbackValidationError::Invalid {
+            key: "epistemic".to_owned(),
+            detail: format!("INCEPTION_EPISTEMIC_SCHEMA detail={error}"),
+        }
+    })?;
+    parsed.validate().map_err(|error| {
+        let key = match &error {
+            EpistemicValidationError::EmptyLedger => "epistemic".to_owned(),
+            EpistemicValidationError::BlankField { category, index, field } => {
+                format!("epistemic.{category}[{index}].{field}")
+            }
+        };
+        ReadbackValidationError::Invalid {
+            key,
+            detail: error.to_string(),
+        }
+    })?;
+    Ok(parsed)
+}
+
 fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValidationError> {
     let value: Value = serde_json::from_str(contents)
         .map_err(|error| ReadbackValidationError::Malformed(error.to_string()))?;
@@ -3232,6 +3437,8 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValida
         }
     }
 
+    let epistemic = parse_epistemic_ledger(object)?;
+
     let host = required_object(object, "host_capabilities", "host_capabilities")?;
     reject_extra_keys(host, &["os", "arch", "filesystem"], "host_capabilities.")?;
     for field in ["os", "arch", "filesystem"] {
@@ -3292,6 +3499,7 @@ fn validate_readback(contents: &str) -> Result<InceptionReadback, ReadbackValida
         project_id,
         repo_identity,
         control_files_complete: true,
+        epistemic,
         template_identity,
     })
 }
@@ -4250,6 +4458,7 @@ fn initialize_inner(
         }
     };
     manifest.template_identity = template_identity;
+    manifest.epistemic.validate()?;
     let bytes = render_manifest(&manifest).into_bytes();
     // ONE pre-state read answers both questions: did the artifact exist, and
     // does its content differ. Reading twice would let the two answers come
@@ -4360,6 +4569,7 @@ fn write_inception_inner(
         }
     };
     manifest.template_identity = template_identity;
+    manifest.epistemic.validate()?;
     let bytes = render_manifest(&manifest).into_bytes();
     let should_write = match fs::read(output) {
         Ok(existing) if existing == bytes => false,
