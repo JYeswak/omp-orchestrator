@@ -531,16 +531,18 @@ fn epistemic_readback_rejects_blank_missing_and_empty_ledgers() {
     let repository = repository_fixture();
     let output = repository.path().join(".omp-orchestrator/inception.json");
     initialize(repository.path(), &output).expect("initial artifact");
-    let original: Value = serde_json::from_str(
-        &std::fs::read_to_string(&output).expect("artifact bytes"),
-    )
-    .expect("artifact JSON");
+    let original_bytes = std::fs::read_to_string(&output).expect("artifact bytes");
+    let original: Value = serde_json::from_str(&original_bytes).expect("artifact JSON");
 
     for (category, field) in [
         ("known", "claim"),
         ("unknown", "owner"),
         ("gaps", "cost_if_left_open"),
     ] {
+        // p8f2i.1: restore pristine bytes every iteration. Without this the
+        // control read observes the prior iteration's refusal bytes and the
+        // test dies on iteration 2 while proving nothing about iteration 1.
+        std::fs::write(&output, &original_bytes).expect("restore pristine ledger");
         read_inception(&output).expect("known-good ledger control must remain readable");
         let mut mutated = original.clone();
         mutated["epistemic"][category][0][field] = Value::String(" \t".to_owned());
