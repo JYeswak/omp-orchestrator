@@ -24,6 +24,8 @@ fn main() -> ExitCode {
         expected_sha256,
         pane,
         incarnation,
+        minisign_key,
+        require_minisign,
     } = match parse_cli_args(raw_args) {
         Ok(parsed) => parsed,
         Err(error) => {
@@ -52,6 +54,8 @@ fn main() -> ExitCode {
             &args[1],
             expected_sha256.as_deref(),
             &identity,
+            minisign_key.as_deref(),
+            require_minisign,
         ),
         Some("--install") => {
             eprintln!("INSTALLER ERROR: --install requires exactly one target");
@@ -87,6 +91,8 @@ struct ParsedArgs {
     expected_sha256: Option<String>,
     pane: String,
     incarnation: String,
+    minisign_key: Option<PathBuf>,
+    require_minisign: bool,
 }
 
 fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
@@ -95,6 +101,8 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
     let mut expected_sha256 = None;
     let mut pane = String::new();
     let mut incarnation = String::new();
+    let mut minisign_key: Option<PathBuf> = None;
+    let mut require_minisign = false;
     // Repeated digest flags follow --bin-dir: the last occurrence wins.
     let mut args = raw_args.into_iter();
     while let Some(arg) = args.next() {
@@ -122,14 +130,27 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
             pane = args
                 .next()
                 .ok_or_else(|| "--pane requires an id".to_owned())?;
-        } else if let Some(value) = arg.strip_prefix("--pane=") {
-            pane = value.to_owned();
         } else if arg == "--incarnation" {
             incarnation = args
                 .next()
                 .ok_or_else(|| "--incarnation requires an id".to_owned())?;
         } else if let Some(value) = arg.strip_prefix("--incarnation=") {
             incarnation = value.to_owned();
+        } else if arg == "--minisign-key" {
+            let value = args
+                .next()
+                .ok_or_else(|| "--minisign-key requires a path".to_owned())?;
+            if value.is_empty() {
+                return Err("--minisign-key requires a non-empty path".to_owned());
+            }
+            minisign_key = Some(PathBuf::from(value));
+        } else if let Some(value) = arg.strip_prefix("--minisign-key=") {
+            if value.is_empty() {
+                return Err("--minisign-key requires a non-empty path".to_owned());
+            }
+            minisign_key = Some(PathBuf::from(value));
+        } else if arg == "--require-minisign" {
+            require_minisign = true;
         } else {
             positional.push(arg);
         }
@@ -148,11 +169,12 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
         expected_sha256,
         pane,
         incarnation,
+        minisign_key,
+        require_minisign,
     })
 }
-
 fn usage() {
-    eprintln!("installer [--check | --install TARGET | --delta | --version] [--bin-dir PATH] [--sha256 DIGEST] [--pane ID] [--incarnation ID]; --install requires COSIGN_BIN, COSIGN_BUNDLE or COSIGN_SIGNATURE, COSIGN_CERTIFICATE_IDENTITY, and COSIGN_CERTIFICATE_OIDC_ISSUER");
+    eprintln!("installer [--check | --install TARGET | --delta | --version] [--bin-dir PATH] [--sha256 DIGEST] [--pane ID] [--incarnation ID] [--minisign-key PATH] [--require-minisign]; --install requires COSIGN_BIN, COSIGN_BUNDLE or COSIGN_SIGNATURE, COSIGN_CERTIFICATE_IDENTITY, and COSIGN_CERTIFICATE_OIDC_ISSUER");
 }
 fn dirs_home() -> Option<PathBuf> {
     std::env::var_os("HOME")
@@ -329,6 +351,8 @@ fn run_install(
     target: &str,
     expected_sha256: Option<&str>,
     identity: &installer::AttemptIdentity,
+    minisign_key: Option<&std::path::Path>,
+    require_minisign: bool,
 ) -> ExitCode {
     // Emit-time manifest: FULL state attested; the digest value does not
     // exist yet (verification happens downstream), so the value check
@@ -416,6 +440,50 @@ fn run_install(
             return ExitCode::from(1);
         }
     };
+    // L0-VERIFY-MINISIGN runs before sigstore. The gate is pure policy: a
+    // required gate with no key, or with a key but no proof, refuses before
+    // any spawn. With a key the executor runs and every one of its failures
+    // refuses with exit 1 -- including UNMEASURED absence, fail-closed,
+    // because an explicit --minisign-key demands verification the lane then
+    // cannot perform. Without a key and without the require bit the default
+    // is Skip, preserving unsigned installs.
+    let minisig = installer::minisig_sibling_path(&source);
+    let gate = match installer::decide_minisign_gate(
+        &source,
+        minisig.is_file(),
+        minisign_key.as_deref(),
+        require_minisign,
+    ) {
+        Ok(gate) => gate,
+        Err(error) => {
+            eprintln!("INSTALLER ERROR: {error}");
+            let _ = installer::emit_refusal(repo_root, Layer::L0, "S1.L0", "INSTALL_VERIFY_REFUSED", identity, &manifest);
+            return ExitCode::from(1);
+        }
+    };
+    if gate == installer::MinisignGate::Verify {
+        let key = minisign_key.as_deref().expect("gate verified a key is present");
+        match installer::verify_minisign_detached(
+            &source,
+            &minisig,
+            key,
+            installer::MINISIGN_VERIFY_DEADLINE,
+        ) {
+            Ok(report) => println!("  MINISIGN VERIFIED {}", report.detail),
+            Err(error) => {
+                eprintln!("INSTALLER ERROR: {error}");
+                let _ = installer::emit_refusal(
+                    repo_root,
+                    Layer::L0,
+                    "S1.L0",
+                    "INSTALL_VERIFY_REFUSED",
+                    identity,
+                    &manifest,
+                );
+                return ExitCode::from(1);
+            }
+        }
+    }
     // `check` binds here (not inside the Ok arm) because the skills phase
     // and the summary report below both consume the installed identity.
     // First-aid scoping by pane=%49 for an active peer hunk; logic untouched.

@@ -1,15 +1,15 @@
 use installer::{
-    check_build_fence, classify_agent_scan, classify_restart_postcondition, git_head,
-    git_rev_parse_short, install_binary, install_binary_with_durability, merge_hooks,
-    catalog_artifact_dir, parse_cosign_version, publish_atomic, publish_atomic_durable,
-    refuse_path_collisions, resolve_platform_triple, resolve_repo_ownership, restart_and_verify,
-    running_process_start, seal_install_report, select_fallback_artifact, stage_artifact_stream,
-    probe_build_id_string, verify_identity, verify_minisign_policy, verify_sigstore_artifact,
-    verify_sigstore_policy,
-    AgentOutcome, ArtifactEntry, DurabilityMetric, DurabilityStage, FullFsyncObservation, HookWrite,
-    IdentityCheck, InstallError, MetricVerdict, RepoOwnership, RestartPostcondition,
-    SigstoreExecutionEvidence, SigstoreRefusalReason, SigstoreTrust, SigstoreVerificationRequest,
-    COSIGN_CVE_FLOOR,
+    catalog_artifact_dir, check_build_fence, classify_agent_scan, classify_restart_postcondition,
+    decide_minisign_gate, git_head, git_rev_parse_short, install_binary,
+    install_binary_with_durability, merge_hooks, minisig_sibling_path, parse_cosign_version,
+    probe_build_id_string, publish_atomic, publish_atomic_durable, refuse_path_collisions,
+    resolve_platform_triple, resolve_repo_ownership, restart_and_verify, running_process_start,
+    seal_install_report, select_fallback_artifact, stage_artifact_stream, verify_identity,
+    verify_minisign_detached, verify_minisign_policy, verify_sigstore_artifact,
+    verify_sigstore_policy, AgentOutcome, ArtifactEntry, DurabilityMetric, DurabilityStage,
+    FullFsyncObservation, HookWrite, IdentityCheck, InstallError, MetricVerdict, MinisignGate,
+    RepoOwnership, RestartPostcondition, SigstoreExecutionEvidence, SigstoreRefusalReason,
+    SigstoreTrust, SigstoreVerificationRequest, COSIGN_CVE_FLOOR, MINISIGN_VERIFY_DEADLINE,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -3881,4 +3881,211 @@ fn post_rename_mismatch_restores_prior_owner_byte_exact() {
         vec![std::ffi::OsString::from("installer")],
         "only the restored artifact may remain (backup consumed, no staged temp): {leftovers:?}"
     );
+}
+
+// ---- L0-VERIFY-MINISIGN detached executor: real `minisign -V` runs ----
+//
+// The fixture carries PUBLIC halves only (artifact + .minisig + two public
+// keys). No secret ever enters the tree; the keys were generated test-only
+// and destroyed at fixture creation.
+
+fn minisign_fixture_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/minisign-fixture")
+}
+
+#[test]
+fn executor_known_good_passes_with_executor_detail() {
+    let fixture = minisign_fixture_dir();
+    let report = verify_minisign_detached(
+        &fixture.join("artifact.bin"),
+        &fixture.join("artifact.bin.minisig"),
+        &fixture.join("test.pub"),
+        MINISIGN_VERIFY_DEADLINE,
+    )
+    .expect("fixture signature must verify under its own key");
+    assert_eq!(report.artifact, fixture.join("artifact.bin"));
+    assert_eq!(report.minisig, fixture.join("artifact.bin.minisig"));
+    assert_eq!(report.trusted_key, fixture.join("test.pub"));
+    assert!(
+        !report.detail.is_empty(),
+        "success carries the executor's own line, never an empty verdict"
+    );
+    assert!(
+        report.detail.contains("verified"),
+        "the executor confirms verification in its own words: {}",
+        report.detail
+    );
+}
+
+#[test]
+fn executor_tampered_artifact_refuses() {
+    let fixture = minisign_fixture_dir();
+    let dir = TempDir::new("minisign-tampered");
+    let artifact = dir.path().join("artifact.bin");
+    let minisig = dir.path().join("artifact.bin.minisig");
+    fs::copy(fixture.join("artifact.bin"), &artifact).expect("stage artifact");
+    fs::copy(fixture.join("artifact.bin.minisig"), &minisig).expect("stage minisig");
+    fs::write(&artifact, b"tampered-bytes-never-signed").expect("tamper with the bytes");
+    let error = verify_minisign_detached(
+        &artifact,
+        &minisig,
+        &fixture.join("test.pub"),
+        MINISIGN_VERIFY_DEADLINE,
+    )
+    .expect_err("bytes the key never signed must refuse");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_VERIFY_MINISIGN"),
+        "typed executor refusal, never the policy classifier: {text}"
+    );
+    assert!(
+        !text.contains("UNMEASURED"),
+        "the executor RAN and refused; absence is a different verdict: {text}"
+    );
+}
+
+#[test]
+fn executor_foreign_key_refuses() {
+    let fixture = minisign_fixture_dir();
+    let error = verify_minisign_detached(
+        &fixture.join("artifact.bin"),
+        &fixture.join("artifact.bin.minisig"),
+        &fixture.join("foreign.pub"),
+        MINISIGN_VERIFY_DEADLINE,
+    )
+    .expect_err("a valid signature under another key must refuse");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_VERIFY_MINISIGN"),
+        "typed executor refusal, never the policy classifier: {text}"
+    );
+    assert!(
+        !text.contains("UNMEASURED"),
+        "the executor RAN and refused; absence is a different verdict: {text}"
+    );
+}
+
+#[test]
+fn executor_empty_path_refuses_before_spawn() {
+    let fixture = minisign_fixture_dir();
+    let error = verify_minisign_detached(
+        Path::new(""),
+        &fixture.join("artifact.bin.minisig"),
+        &fixture.join("test.pub"),
+        MINISIGN_VERIFY_DEADLINE,
+    )
+    .expect_err("an empty artifact path must refuse without spawning");
+    assert!(
+        error.to_string().starts_with("L0_VERIFY_MINISIGN"),
+        "typed executor refusal: {error}"
+    );
+}
+
+#[test]
+fn sibling_path_appends_minisig_convention() {
+    assert_eq!(
+        minisig_sibling_path(Path::new("installer")),
+        PathBuf::from("installer.minisig")
+    );
+    assert_eq!(
+        minisig_sibling_path(Path::new("/release/artifact.bin")),
+        PathBuf::from("/release/artifact.bin.minisig"),
+        "the extension appends, never replaces"
+    );
+}
+
+// ---- minisign gate quadrants: pure policy, no spawn ----
+
+#[test]
+fn gate_require_without_key_refuses() {
+    let error = decide_minisign_gate(Path::new("installer"), false, None, true)
+        .expect_err("require without a key must refuse before any spawn");
+    assert!(
+        error.to_string().starts_with("L0_MINISIGN_REFUSED"),
+        "typed policy refusal: {error}"
+    );
+}
+
+#[test]
+fn gate_require_without_proof_refuses() {
+    let key = minisign_fixture_dir().join("test.pub");
+    let error = decide_minisign_gate(Path::new("installer"), false, Some(&key), true)
+        .expect_err("require with a key but no proof must refuse before any spawn");
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_MINISIGN_REFUSED"),
+        "typed policy refusal: {text}"
+    );
+    assert!(
+        text.contains("missing .minisig"),
+        "refusal names the missing proof: {text}"
+    );
+}
+
+#[test]
+fn gate_key_verifies_regardless_of_presence() {
+    // The executor decides validity, foreignness, and absence; the gate
+    // only routes. A handed key always routes to Verify.
+    let key = minisign_fixture_dir().join("test.pub");
+    assert_eq!(
+        decide_minisign_gate(Path::new("installer"), true, Some(&key), true),
+        Ok(MinisignGate::Verify)
+    );
+    assert_eq!(
+        decide_minisign_gate(Path::new("installer"), false, Some(&key), false),
+        Ok(MinisignGate::Verify),
+        "an explicit key opts into verification even without the require bit"
+    );
+}
+
+#[test]
+fn gate_unsigned_default_skips() {
+    // No key and no require bit: unsigned installs keep the pre-executor
+    // default, whether or not a stray proof sits beside the artifact.
+    assert_eq!(
+        decide_minisign_gate(Path::new("installer"), false, None, false),
+        Ok(MinisignGate::Skip)
+    );
+    assert_eq!(
+        decide_minisign_gate(Path::new("installer"), true, None, false),
+        Ok(MinisignGate::Skip),
+        "a proof without a key verifies against nothing"
+    );
+}
+
+// ---- run_install edge: --require-minisign without --minisign-key ----
+//
+// Lane-branching by measured capability (environment class is per
+// (leg, box)): lanes with a git checkout build the target and reach the
+// minisign gate, which refuses REQUIRE-without-KEY at exit 1; lanes
+// without .git (rch workers sync the worktree only) refuse earlier at
+// INSTALL_GIT_HEAD_REFUSED exit 3. Both arms pin exact message AND exit;
+// any other outcome -- success, a different reason, a hang -- fails loud.
+
+#[test]
+fn require_without_key_refuses_or_names_missing_git() {
+    let bin = TempDir::new("minisign-require-bin");
+    let output = Command::new(built_installer())
+        .arg("--install")
+        .arg("installer")
+        .arg("--require-minisign")
+        .arg("--bin-dir")
+        .arg(bin.path())
+        .output()
+        .expect("spawn installer");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    match output.status.code() {
+        Some(1) => assert!(
+            stderr.contains("INSTALL_VERIFY_REFUSED")
+                && stderr.contains("--require-minisign without --minisign-key"),
+            "exit 1 must be the gate refusal with its reason: {stderr}"
+        ),
+        Some(3) => assert!(
+            stderr.contains("INSTALL_GIT_HEAD_REFUSED"),
+            "exit 3 must name the missing git, never a silent skip: {stderr}"
+        ),
+        other => panic!(
+            "the lane must refuse with a named verdict, got exit={other:?} stderr={stderr}"
+        ),
+    }
 }

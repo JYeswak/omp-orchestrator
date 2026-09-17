@@ -270,6 +270,13 @@ pub enum InstallError {
     MinisignRefused {
         detail: String,
     },
+    /// Real minisign executor outcome. Never a warning. UNMEASURED means the
+    /// lane could not run the executor at all (absent binary); every other
+    /// failure names its cause. Displayed as L0_VERIFY_MINISIGN, distinct
+    /// from the L0_MINISIGN_REFUSED policy classifier.
+    VerifyMinisign {
+        detail: String,
+    },
     /// Typed SHA-256 verification failure. Never a warning or skip.
     /// L0-VERIFY-SIGSTORE. Cosign version floor, keyless certificate identity,
     /// or local-key policy refused the artifact.
@@ -401,6 +408,9 @@ impl fmt::Display for InstallError {
             ),
             Self::MinisignRefused { detail } => {
                 write!(formatter, "L0_MINISIGN_REFUSED: {detail}")
+            }
+            Self::VerifyMinisign { detail } => {
+                write!(formatter, "L0_VERIFY_MINISIGN: {detail}")
             }
             Self::SigstoreRefused { reason, detail } => {
                 write!(formatter, "L0_SIGSTORE_REFUSED reason={reason} detail={detail}")
@@ -1137,6 +1147,147 @@ pub fn verify_minisign_policy(
         Err(InstallError::MinisignRefused {
             detail: "invalid minisign signature".to_owned(),
         })
+    }
+}
+
+/// Deadline for one detached minisign verification: the executor answers in
+/// milliseconds; a minute is fail-closed headroom for loaded lanes, never an
+/// invitation to wait. Test seams pass shorter deadlines explicitly.
+pub const MINISIGN_VERIFY_DEADLINE: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Evidence from a real detached verification: the exact paths decided on
+/// plus the executor's own success line. The exit code 0 IS the verdict;
+/// `detail` carries the human-readable line for operators, never a second
+/// decision procedure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MinisignVerifyReport {
+    pub artifact: std::path::PathBuf,
+    pub minisig: std::path::PathBuf,
+    pub trusted_key: std::path::PathBuf,
+    pub detail: String,
+}
+
+/// Sibling signature path for an artifact, following the minisign `<file>.minisig`
+/// convention by appending (never replacing) the extension.
+pub fn minisig_sibling_path(artifact: &std::path::Path) -> std::path::PathBuf {
+    let mut name = artifact
+        .file_name()
+        .map(|name| name.to_owned())
+        .unwrap_or_default();
+    name.push(".minisig");
+    artifact.with_file_name(name)
+}
+
+/// L0-VERIFY-MINISIGN executor: run the installed `minisign -V` binary
+/// through the bounded subprocess contract with explicit artifact, `.minisig`,
+/// and trusted-key paths. Candidate bytes travel only in argv as fixed
+/// flags plus three paths -- never a shell string, never stdin.
+///
+/// Every failure is restrictive and typed. An absent executor is
+/// `UNMEASURED` (the lane cannot run the check at all -- callers decide
+/// whether that refuses); any other failure names its cause. Empty paths
+/// refuse before spawn. Exit 0 is the only success; the success detail is
+/// the executor's own first output line.
+pub fn verify_minisign_detached(
+    artifact: &std::path::Path,
+    minisig: &std::path::Path,
+    trusted_key: &std::path::Path,
+    deadline: std::time::Duration,
+) -> Result<MinisignVerifyReport, InstallError> {
+    use std::io::ErrorKind;
+    for (label, path) in [
+        ("artifact", artifact),
+        ("minisig", minisig),
+        ("trusted-key", trusted_key),
+    ] {
+        if path.as_os_str().is_empty() {
+            return Err(InstallError::VerifyMinisign {
+                detail: format!("refusing to verify with an empty {label} path"),
+            });
+        }
+    }
+    let mut command = std::process::Command::new("minisign");
+    let trusted_key_s = trusted_key.display().to_string();
+    let artifact_s = artifact.display().to_string();
+    let minisig_s = minisig.display().to_string();
+    command.args(["-V", "-p", &trusted_key_s, "-m", &artifact_s, "-x", &minisig_s]);
+    match subprocess_contract::bounded_output(&mut command, deadline) {
+        subprocess_contract::BoundedOutcome::Completed(output) => {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let detail = stdout.lines().next().unwrap_or("").trim().to_owned();
+                if detail.is_empty() {
+                    return Err(InstallError::VerifyMinisign {
+                        detail: "executor exited 0 with empty stdout".to_owned(),
+                    });
+                }
+                Ok(MinisignVerifyReport {
+                    artifact: artifact.to_owned(),
+                    minisig: minisig.to_owned(),
+                    trusted_key: trusted_key.to_owned(),
+                    detail,
+                })
+            } else {
+                let tail = String::from_utf8_lossy(&output.stderr);
+                Err(InstallError::VerifyMinisign {
+                    detail: format!(
+                        "signature rejected exit={} stderr={}",
+                        output.status.code().unwrap_or(-1),
+                        tail.trim(),
+                    ),
+                })
+            }
+        }
+        subprocess_contract::BoundedOutcome::TimedOut => Err(InstallError::VerifyMinisign {
+            detail: format!(
+                "executor timed out after {}s",
+                deadline.as_secs(),
+            ),
+        }),
+        subprocess_contract::BoundedOutcome::Unspawned(error) if error.kind() == ErrorKind::NotFound => {
+            Err(InstallError::VerifyMinisign {
+                detail: "UNMEASURED executor=minisign not found on PATH".to_owned(),
+            })
+        }
+        subprocess_contract::BoundedOutcome::Unspawned(error) => Err(InstallError::VerifyMinisign {
+            detail: format!("executor spawn failed: {error}"),
+        }),
+    }
+}
+
+/// Whether the install proceeds to detached minisign verification. Pure
+/// policy, no spawn: the executor runs if and only if a trusted caller
+/// handed a key. A required gate with no key, or with no proof beside the
+/// key, refuses before any spawn; an absent key without the require bit
+/// skips, preserving the pre-executor default for unsigned artifacts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MinisignGate {
+    Skip,
+    Verify,
+}
+
+/// Decide the minisign gate from explicit inputs. `minisig_present` is the
+/// caller's `minisig_sibling_path(&source).is_file()`; the executor itself
+/// decides validity, foreignness, timeouts, and its own absence.
+pub fn decide_minisign_gate(
+    artifact: &std::path::Path,
+    minisig_present: bool,
+    trusted_key: Option<&std::path::Path>,
+    require_minisign: bool,
+) -> Result<MinisignGate, InstallError> {
+    if require_minisign && trusted_key.is_none() {
+        return Err(InstallError::MinisignRefused {
+            detail: "--require-minisign without --minisign-key".to_owned(),
+        });
+    }
+    if require_minisign && !minisig_present {
+        return Err(InstallError::MinisignRefused {
+            detail: format!("missing .minisig for {}", artifact.display()),
+        });
+    }
+    match trusted_key {
+        Some(_) => Ok(MinisignGate::Verify),
+        None => Ok(MinisignGate::Skip),
     }
 }
 

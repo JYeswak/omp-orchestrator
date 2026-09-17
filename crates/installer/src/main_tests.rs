@@ -328,7 +328,7 @@ fn install_unknown_target_emits_refusal_with_exit_2() {
     let repo = gj669_repo("install-refusal");
     let bin = gj669_repo("install-refusal-bin");
     assert_eq!(
-        run_install(&repo, &bin, "definitely-not-a-target", None, &fixture_identity()),
+        run_install(&repo, &bin, "definitely-not-a-target", None, &fixture_identity(), None, false),
         ExitCode::from(2),
         "the unknown target keeps its original refusal"
     );
@@ -391,4 +391,78 @@ fn delta_command_refuses_without_the_production_writer() {
         "the reachable --delta consumer must read the canonical report"
     );
     gj669_cleanup(&repo);
+}
+
+#[test]
+fn minisign_flags_thread_explicitly() {
+    // Absent by default: unsigned installs keep the pre-executor default.
+    let parsed = parse_cli_args(vec!["--check".to_owned()]).expect("check parses");
+    assert_eq!(parsed.minisign_key, None, "no key by default");
+    assert!(!parsed.require_minisign, "no require by default");
+    // Space form lands verbatim.
+    let parsed = parse_cli_args(vec![
+        "--install".to_owned(),
+        "installer".to_owned(),
+        "--minisign-key".to_owned(),
+        "/keys/deploy.pub".to_owned(),
+        "--require-minisign".to_owned(),
+    ])
+    .expect("minisign flags parse");
+    assert_eq!(
+        parsed.minisign_key,
+        Some(PathBuf::from("/keys/deploy.pub")),
+        "key threads explicitly"
+    );
+    assert!(parsed.require_minisign, "require threads explicitly");
+    // Equals form agrees.
+    let parsed = parse_cli_args(vec![
+        "--install".to_owned(),
+        "installer".to_owned(),
+        "--minisign-key=/keys/other.pub".to_owned(),
+    ])
+    .expect("equals-form key parses");
+    assert_eq!(
+        parsed.minisign_key,
+        Some(PathBuf::from("/keys/other.pub")),
+        "equals-form key threads"
+    );
+    assert!(!parsed.require_minisign, "require stays off unless passed");
+}
+
+#[test]
+fn minisign_last_key_wins_like_bin_dir() {
+    let parsed = parse_cli_args(vec![
+        "--check".to_owned(),
+        "--minisign-key=first.pub".to_owned(),
+        "--minisign-key".to_owned(),
+        "second.pub".to_owned(),
+    ])
+    .expect("repeated keys parse");
+    assert_eq!(
+        parsed.minisign_key,
+        Some(PathBuf::from("second.pub")),
+        "last key wins"
+    );
+}
+
+#[test]
+fn minisign_empty_key_refuses_before_any_run() {
+    // Both spellings refuse at parse time: an empty key path can never
+    // reach the gate, so no run decides on an empty trusted key.
+    let error = parse_cli_args(vec![
+        "--check".to_owned(),
+        "--minisign-key".to_owned(),
+        String::new(),
+    ])
+    .expect_err("empty space-form key must refuse");
+    assert!(
+        error.contains("non-empty"),
+        "refusal names the violated condition: {error}"
+    );
+    let error = parse_cli_args(vec!["--check".to_owned(), "--minisign-key=".to_owned()])
+        .expect_err("empty equals-form key must refuse");
+    assert!(
+        error.contains("non-empty"),
+        "refusal names the violated condition: {error}"
+    );
 }

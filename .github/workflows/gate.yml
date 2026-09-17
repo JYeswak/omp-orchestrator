@@ -147,6 +147,14 @@ jobs:
           rustup show active-toolchain
           cargo --version
           rustc --version
+      - name: minisign executor for L0-VERIFY-MINISIGN legs
+        # WHY THIS EXISTS: the installer crate's detached-verification legs
+        # spawn the real `minisign -V` binary. Without it every one of those
+        # legs reports UNMEASURED-absence instead of exercising the executor,
+        # and a lane without the executor cannot tell a good signature from
+        # a tampered one. ubuntu-latest does not ship minisign; install it
+        # from the distribution pocket so the legs measure the mechanism.
+        run: sudo apt-get update && sudo apt-get install -y minisign
       - name: Workspace loads
         # Its OWN step so a manifest failure is attributed to itself. Measured four times
         # in one evening: a `Cargo.toml` under the `crates/*` glob with no `src/` breaks
