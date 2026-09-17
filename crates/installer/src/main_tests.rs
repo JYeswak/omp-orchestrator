@@ -449,18 +449,22 @@ fn minisign_last_key_wins_like_bin_dir() {
 fn minisign_empty_key_refuses_before_any_run() {
     // Both spellings refuse at parse time: an empty key path can never
     // reach the gate, so no run decides on an empty trusted key.
-    let error = parse_cli_args(vec![
+    let error = match parse_cli_args(vec![
         "--check".to_owned(),
         "--minisign-key".to_owned(),
         String::new(),
-    ])
-    .expect_err("empty space-form key must refuse");
+    ]) {
+        Ok(_) => panic!("empty space-form key must refuse"),
+        Err(error) => error,
+    };
     assert!(
         error.contains("non-empty"),
         "refusal names the violated condition: {error}"
     );
-    let error = parse_cli_args(vec!["--check".to_owned(), "--minisign-key=".to_owned()])
-        .expect_err("empty equals-form key must refuse");
+    let error = match parse_cli_args(vec!["--check".to_owned(), "--minisign-key=".to_owned()]) {
+        Ok(_) => panic!("empty equals-form key must refuse"),
+        Err(error) => error,
+    };
     assert!(
         error.contains("non-empty"),
         "refusal names the violated condition: {error}"
