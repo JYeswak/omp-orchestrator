@@ -4078,8 +4078,9 @@ fn require_without_key_refuses_or_names_missing_git() {
             "exit 1 must be the gate refusal with its reason: {stderr}"
         ),
         Some(3) => assert!(
-            stderr.contains("INSTALL_GIT_HEAD_REFUSED"),
-            "exit 3 must name the missing git, never a silent skip: {stderr}"
+            stderr.starts_with("INSTALLER ERROR:")
+                && stderr.contains("is not a git repository"),
+            "exit 3 must expose the git-head refusal mechanism on stderr: {stderr}"
         ),
         other => panic!(
             "the lane must refuse with a named verdict, got exit={other:?} stderr={stderr}"
@@ -4138,8 +4139,9 @@ fn handed_key_reaches_executor_or_names_missing_git() {
             );
         }
         Some(3) => assert!(
-            stderr.contains("INSTALL_GIT_HEAD_REFUSED"),
-            "exit 3 must name the missing git, never a silent skip: {stderr}"
+            stderr.starts_with("INSTALLER ERROR:")
+                && stderr.contains("is not a git repository"),
+            "exit 3 must expose the git-head refusal mechanism on stderr: {stderr}"
         ),
         other => panic!(
             "the lane must refuse with a named verdict, got exit={other:?} stderr={stderr}"
