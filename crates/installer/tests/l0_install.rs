@@ -957,6 +957,7 @@ fn temp_git_install_fixture(label: &str) -> (TempDir, PathBuf) {
     let repo = fixture.path().join("repo");
     temp_git_repo_with_one_commit(&repo);
     fs::write(repo.join("global-config"), "").expect("create hermetic global git config");
+    (fixture, repo)
 }
 
 /// A stamped artifact the identity probe can read: `strings` finds the build id, and
