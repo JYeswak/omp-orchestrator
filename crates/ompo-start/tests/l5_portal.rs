@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
-use ompo_start::inception::{read_inception, write_atomic_observed, AtomicWriteEffect};
+use ompo_start::inception::{
+    read_inception, write_atomic_observed, AtomicWriteEffect, EpistemicLedger,
+};
 use ompo_start::liveness::SourceVerdict;
 use ompo_start::portal::{
     data_hash_without_self, gates_verdict, observability, parse_gates_aggregate, queue_depth,
@@ -756,7 +758,7 @@ fn artifact_readback_required_keys() {
     // KNOWN-GOOD control: a complete artifact reads back with its keys.
     let dir = tempfile::tempdir().expect("fixture directory");
     let destination = dir.path().join("inception.json");
-    let complete = br#"{
+    let mut complete: serde_json::Value = serde_json::from_slice(br#"{
         "schema_version": "inception.v1",
         "project_id": "vocw-fixture",
         "repo_identity": {
@@ -775,8 +777,13 @@ fn artifact_readback_required_keys() {
             "status": "trusted", "reason_code": "vocw",
             "control_files_complete": true
         }
-    }"#;
-    write_atomic_observed(&destination, complete).expect("bytes land");
+    }"#)
+    .expect("complete artifact fixture");
+    let epistemic =
+        serde_json::to_value(EpistemicLedger::inception_default()).expect("canonical epistemic");
+    complete["epistemic"] = epistemic;
+    let complete = serde_json::to_vec(&complete).expect("complete artifact JSON");
+    write_atomic_observed(&destination, &complete).expect("bytes land");
     assert!(
         destination.exists(),
         "the artifact must exist after the write"
