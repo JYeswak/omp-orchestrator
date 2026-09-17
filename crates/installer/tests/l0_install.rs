@@ -949,6 +949,15 @@ fn temp_git_repo_with_one_commit(root: &Path) -> String {
     assert_eq!(head.len(), 40, "expected a full sha, got {head:?}");
     head
 }
+/// Create the hermetic git state used by CLI install tests. The child receives
+/// this repository through GIT_DIR/GIT_WORK_TREE, so its identity check never
+/// depends on the checkout that contains the test binary.
+fn temp_git_install_fixture(label: &str) -> (TempDir, PathBuf) {
+    let fixture = TempDir::new(label);
+    let repo = fixture.path().join("repo");
+    temp_git_repo_with_one_commit(&repo);
+    fs::write(repo.join("global-config"), "").expect("create hermetic global git config");
+}
 
 /// A stamped artifact the identity probe can read: `strings` finds the build id, and
 /// the file is deliberately not executable, so the `--version` leg is absent and the
@@ -4058,6 +4067,7 @@ fn gate_unsigned_default_skips() {
 
 #[test]
 fn require_without_key_refuses_or_names_missing_git() {
+    let (_fixture, repo) = temp_git_install_fixture("minisign-require-repo");
     let bin = TempDir::new("minisign-require-bin");
     let output = Command::new(built_installer())
         .arg("--install")
@@ -4065,27 +4075,54 @@ fn require_without_key_refuses_or_names_missing_git() {
         .arg("--require-minisign")
         .arg("--bin-dir")
         .arg(bin.path())
+        .env("GIT_DIR", repo.join(".git"))
+        .env("GIT_WORK_TREE", &repo)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", repo.join("global-config"))
         .output()
         .expect("spawn installer");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    match output.status.code() {
-        Some(1) => assert!(
-            // The refusal CODE (INSTALL_VERIFY_REFUSED) is recorded to the
-            // lifecycle journal, never printed: only the INSTALLER ERROR line
-            // reaches stderr. Assert what the lane observably emits.
-            stderr.contains("L0_MINISIGN_REFUSED")
-                && stderr.contains("--require-minisign without --minisign-key"),
-            "exit 1 must be the gate refusal with its reason: {stderr}"
-        ),
-        Some(3) => assert!(
-            stderr.starts_with("INSTALLER ERROR:")
-                && stderr.contains("is not a git repository"),
-            "exit 3 must expose the git-head refusal mechanism on stderr: {stderr}"
-        ),
-        other => panic!(
-            "the lane must refuse with a named verdict, got exit={other:?} stderr={stderr}"
-        ),
-    }
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "initialized hermetic repo must reach the minisign gate: {stderr}"
+    );
+    assert!(
+        stderr.starts_with("INSTALLER ERROR:")
+            && stderr.contains("L0_MINISIGN_REFUSED")
+            && stderr.contains("--require-minisign without --minisign-key")
+            && !stderr.contains("is not a git repository"),
+        "exit 1 must expose the gate refusal, not the git-head refusal: {stderr}"
+    );
+}
+
+#[test]
+fn uninitialized_install_fixture_preserves_not_a_git_repo_refusal() {
+    let fixture = TempDir::new("minisign-uninitialized-repo");
+    let bin = TempDir::new("minisign-uninitialized-bin");
+    let output = Command::new(built_installer())
+        .arg("--install")
+        .arg("installer")
+        .arg("--require-minisign")
+        .arg("--bin-dir")
+        .arg(bin.path())
+        .env("GIT_DIR", fixture.path().join(".git"))
+        .env("GIT_WORK_TREE", fixture.path())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", fixture.path().join("global-config"))
+        .output()
+        .expect("spawn installer");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "an uninitialized fixture must stop at git identity: {stderr}"
+    );
+    assert!(
+        stderr.starts_with("INSTALLER ERROR:")
+            && stderr.contains("is not a git repository"),
+        "negative control must preserve the typed NotAGitRepo path: {stderr}"
+    );
 }
 
 #[test]
@@ -4112,10 +4149,12 @@ fn timeout_constructor_names_deadline_as_executor_refusal() {
 // the executor classifier. A mutation removing the production call skips
 // the executor and never prints that classifier, so this leg is the RED
 // arm for acceptance item 6 while executor_known_good stays GREEN.
-// Same lane branching as the require leg: gitless lanes exit 3 earlier.
+// The positive fixture keeps the gitless NotAGitRepo branch covered by the
+// uninitialized_install_fixture_preserves_not_a_git_repo_refusal control.
 
 #[test]
 fn handed_key_reaches_executor_or_names_missing_git() {
+    let (_fixture, repo) = temp_git_install_fixture("minisign-keyed-repo");
     let bin = TempDir::new("minisign-keyed-bin");
     let output = Command::new(built_installer())
         .arg("--install")
@@ -4124,27 +4163,23 @@ fn handed_key_reaches_executor_or_names_missing_git() {
         .arg(minisign_fixture_dir().join("test.pub"))
         .arg("--bin-dir")
         .arg(bin.path())
+        .env("GIT_DIR", repo.join(".git"))
+        .env("GIT_WORK_TREE", &repo)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", repo.join("global-config"))
         .output()
         .expect("spawn installer");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    match output.status.code() {
-        Some(1) => {
-            assert!(
-                stderr.contains("L0_VERIFY_MINISIGN"),
-                "exit 1 must be the executor classifier, proving the call ran: {stderr}"
-            );
-            assert!(
-                !stderr.contains("UNMEASURED"),
-                "the executor RAN and refused; absence is a different verdict: {stderr}"
-            );
-        }
-        Some(3) => assert!(
-            stderr.starts_with("INSTALLER ERROR:")
-                && stderr.contains("is not a git repository"),
-            "exit 3 must expose the git-head refusal mechanism on stderr: {stderr}"
-        ),
-        other => panic!(
-            "the lane must refuse with a named verdict, got exit={other:?} stderr={stderr}"
-        ),
-    }
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "initialized hermetic repo must reach minisign verification: {stderr}"
+    );
+    assert!(
+        stderr.starts_with("INSTALLER ERROR:")
+            && stderr.contains("L0_VERIFY_MINISIGN")
+            && !stderr.contains("UNMEASURED")
+            && !stderr.contains("is not a git repository"),
+        "exit 1 must prove the executor ran, not the git-head refusal: {stderr}"
+    );
 }
