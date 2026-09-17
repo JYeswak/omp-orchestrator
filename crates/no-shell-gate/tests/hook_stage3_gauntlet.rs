@@ -525,7 +525,15 @@ fn malformed_editmsg_refuses_typed_exit_1() {
     let repo = behavior_repo(scratch.path());
     install_fixture_hook(&repo, &bin);
     let missing = scratch.path().join("COMMIT_EDITMSG");
-    let output = run_hook(&bin, &repo, &[&missing.display().to_string()], &[]);
+    let source = scratch.path().join("msg-src.txt");
+    std::fs::write(&source, b"fix: malformed edit message [test]\n").expect("message source");
+    let source_arg = source.display().to_string();
+    let output = run_hook(
+        &bin,
+        &repo,
+        &[&missing.display().to_string()],
+        &[("OMP_MSG_SRC", source_arg.as_str())],
+    );
     let (code, _stdout, stderr) = split_output(&output);
     assert_eq!(
         code,
@@ -694,6 +702,8 @@ fn kill_drill_100_runs_no_partial_state_next_run_healthy() {
     install_fixture_hook(&repo, &bin);
     stage_file(&repo, "check.sh", b"#!/bin/sh\necho hi\n");
     let before = snapshot_tree_files(&repo);
+    let ledger = default_ledger_path(&repo);
+    let ledger_before = std::fs::read(&ledger).unwrap_or_default();
     // Each run executes through the kernel deadline path: the delay doubles
     // as the kill schedule, so every SIGKILL is delivered by
     // `bounded_output`'s group-targeted TERM-then-KILL, never by a handrolled
@@ -729,16 +739,38 @@ fn kill_drill_100_runs_no_partial_state_next_run_healthy() {
     // No survivor from any of the 100 runs may still walk the tree: the
     // staged path is unique per suite run, so any hit is unambiguously ours.
     assert_no_staged_strays(&bin, "kill-drill-sweep");
-    // No partial fixture state: every non-git file byte-identical.
+    // Keep the firing ledger in the snapshot, but apply its append-only
+    // production contract rather than pretending normal gate firings are
+    // immutable fixture bytes. Every other fixture file must remain exact.
     let after = snapshot_tree_files(&repo);
-    assert_eq!(
-        before, after,
-        "KILL-DRILL: 100 SIGKILLs must leave fixture content byte-identical [{provenance}]"
+    for (path, hash) in &before {
+        if path != ".git/omp-gate-firings.jsonl" {
+            assert_eq!(
+                after.get(path),
+                Some(hash),
+                "KILL-DRILL: fixture file changed: {path} [{provenance}]"
+            );
+        }
+    }
+    for path in after.keys() {
+        if path != ".git/omp-gate-firings.jsonl" {
+            assert!(
+                before.contains_key(path),
+                "KILL-DRILL: unexpected fixture file created: {path} [{provenance}]"
+            );
+        }
+    }
+    let ledger_after = std::fs::read(&ledger).unwrap_or_default();
+    assert!(
+        ledger_after.starts_with(&ledger_before),
+        "KILL-DRILL: firing ledger must remain append-only [{provenance}]"
     );
-    // The firing ledger parses clean through the REAL parser: a torn
-    // trailing line ERRORS here, which is the partial-write detector.
-    let ledger = default_ledger_path(&repo);
-    if ledger.is_file() {
+    if !ledger_after.is_empty() {
+        assert_eq!(
+            ledger_after.last(),
+            Some(&b'\n'),
+            "KILL-DRILL: firing ledger must end at a complete record [{provenance}]"
+        );
         query_gate(&ledger, "no-shell-gate").expect("KILL-DRILL: ledger must parse clean");
     }
     // Next invocation healthy with retry discipline: a stale gate-section
@@ -885,19 +917,19 @@ fn scratch_home_install_self_test() {
 #[test]
 fn scratch_home_install_is_backup_first_and_idempotent() {
     fn install_backup_first(source: &Path, dest: &Path) -> PathBuf {
-        if dest.is_file() {
-            let backup = dest.with_extension("pre-stage3.bak");
-            if !backup.is_file() {
-                std::fs::copy(dest, &backup).expect("back up pre-existing hook");
-            }
-            let before = sha256_hex_file(dest);
+        let backup = dest.with_extension("pre-stage3.bak");
+        if dest.is_file() && !backup.is_file() {
+            std::fs::copy(dest, &backup).expect("back up pre-existing hook");
             assert_eq!(
                 sha256_hex_file(&backup),
-                before,
+                sha256_hex_file(dest),
                 "backup must preserve the pre-existing hook byte-identical"
             );
         }
-        std::fs::copy(source, dest).expect("install hook bytes");
+        let source_sha = sha256_hex_file(source);
+        if !dest.is_file() || sha256_hex_file(dest) != source_sha {
+            std::fs::copy(source, dest).expect("install hook bytes");
+        }
         dest.to_owned()
     }
     let scratch = tempfile::tempdir().expect("scratch dir");
