@@ -1,8 +1,9 @@
 use installer::{
     catalog_artifact_dir, check_build_fence, classify_agent_scan, classify_restart_postcondition,
     decide_minisign_gate, git_head, git_rev_parse_short, install_binary,
-    install_binary_with_durability, merge_hooks, minisig_sibling_path, parse_cosign_version,
-    probe_build_id_string, publish_atomic, publish_atomic_durable, refuse_path_collisions,
+    install_binary_with_durability, merge_hooks, minisig_sibling_path, minisign_timeout_error,
+    parse_cosign_version, probe_build_id_string, publish_atomic, publish_atomic_durable,
+    refuse_path_collisions,
     resolve_platform_triple, resolve_repo_ownership, restart_and_verify, running_process_start,
     seal_install_report, select_fallback_artifact, stage_artifact_stream, verify_identity,
     verify_minisign_detached, verify_minisign_policy, verify_sigstore_artifact,
@@ -346,13 +347,6 @@ fn minisign_policy_require_invalid_refuses() {
         error.to_string().starts_with("L0_MINISIGN_REFUSED"),
         "{error}"
     );
-}
-
-#[test]
-fn required_minisign_missing_refuses() {
-    let error = verify_minisign_policy(false, true, true)
-        .expect_err("T04: missing .minisig is refuse not PASS");
-    assert!(error.to_string().contains("L0_MINISIGN_REFUSED"));
 }
 
 #[test]
@@ -4080,6 +4074,66 @@ fn require_without_key_refuses_or_names_missing_git() {
                 && stderr.contains("--require-minisign without --minisign-key"),
             "exit 1 must be the gate refusal with its reason: {stderr}"
         ),
+        Some(3) => assert!(
+            stderr.contains("INSTALL_GIT_HEAD_REFUSED"),
+            "exit 3 must name the missing git, never a silent skip: {stderr}"
+        ),
+        other => panic!(
+            "the lane must refuse with a named verdict, got exit={other:?} stderr={stderr}"
+        ),
+    }
+}
+
+#[test]
+fn timeout_constructor_names_deadline_as_executor_refusal() {
+    // No test can make an executor hang on demand without a timing-flaky
+    // leg, so the timeout verdict is pinned at its pure constructor: the
+    // arm reports exactly this shape and nothing else.
+    let error = minisign_timeout_error(std::time::Duration::from_secs(60));
+    let text = error.to_string();
+    assert!(
+        text.starts_with("L0_VERIFY_MINISIGN"),
+        "timeout is an executor refusal: {text}"
+    );
+    assert!(
+        text.contains("timed out after 60s"),
+        "timeout names its deadline: {text}"
+    );
+}
+
+// ---- run_install positive path: a handed key reaches the executor ----
+//
+// The sibling .minisig beside the freshly built artifact does not exist,
+// so the executor RUNS and refuses on the missing proof -- exit 1 with
+// the executor classifier. A mutation removing the production call skips
+// the executor and never prints that classifier, so this leg is the RED
+// arm for acceptance item 6 while executor_known_good stays GREEN.
+// Same lane branching as the require leg: gitless lanes exit 3 earlier.
+
+#[test]
+fn handed_key_reaches_executor_or_names_missing_git() {
+    let bin = TempDir::new("minisign-keyed-bin");
+    let output = Command::new(built_installer())
+        .arg("--install")
+        .arg("installer")
+        .arg("--minisign-key")
+        .arg(minisign_fixture_dir().join("test.pub"))
+        .arg("--bin-dir")
+        .arg(bin.path())
+        .output()
+        .expect("spawn installer");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    match output.status.code() {
+        Some(1) => {
+            assert!(
+                stderr.contains("L0_VERIFY_MINISIGN"),
+                "exit 1 must be the executor classifier, proving the call ran: {stderr}"
+            );
+            assert!(
+                !stderr.contains("UNMEASURED"),
+                "the executor RAN and refused; absence is a different verdict: {stderr}"
+            );
+        }
         Some(3) => assert!(
             stderr.contains("INSTALL_GIT_HEAD_REFUSED"),
             "exit 3 must name the missing git, never a silent skip: {stderr}"

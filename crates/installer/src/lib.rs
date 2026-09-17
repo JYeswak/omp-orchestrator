@@ -1238,12 +1238,7 @@ pub fn verify_minisign_detached(
                 })
             }
         }
-        subprocess_contract::BoundedOutcome::TimedOut => Err(InstallError::VerifyMinisign {
-            detail: format!(
-                "executor timed out after {}s",
-                deadline.as_secs(),
-            ),
-        }),
+        subprocess_contract::BoundedOutcome::TimedOut => Err(minisign_timeout_error(deadline)),
         subprocess_contract::BoundedOutcome::Unspawned(error) if error.kind() == ErrorKind::NotFound => {
             Err(InstallError::VerifyMinisign {
                 detail: "UNMEASURED executor=minisign not found on PATH".to_owned(),
@@ -1252,6 +1247,19 @@ pub fn verify_minisign_detached(
         subprocess_contract::BoundedOutcome::Unspawned(error) => Err(InstallError::VerifyMinisign {
             detail: format!("executor spawn failed: {error}"),
         }),
+    }
+}
+
+/// The restrictive error for a minisign executor that exceeded its
+/// deadline. A pure constructor so the timeout verdict is pinned without a
+/// timing-flaky leg: no test can make an executor hang on demand, but every
+/// caller of this arm reports exactly this shape.
+pub fn minisign_timeout_error(deadline: std::time::Duration) -> InstallError {
+    InstallError::VerifyMinisign {
+        detail: format!(
+            "executor timed out after {}s",
+            deadline.as_secs(),
+        ),
     }
 }
 
