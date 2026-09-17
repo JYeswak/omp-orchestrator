@@ -1230,6 +1230,14 @@ impl SigstoreTrust {
 /// What a passing sigstore verification actually established, so a caller can
 /// assert the facts rather than infer them from the absence of an error.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SigstoreVerdict {
+    pub cosign_version: CosignVersion,
+    pub floor: CosignVersion,
+    pub trust: SigstoreTrust,
+}
+
+/// Explicit artifact and verifier inputs supplied by the operator.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SigstoreVerificationRequest {
     pub cosign: Option<PathBuf>,
     pub artifact: PathBuf,
