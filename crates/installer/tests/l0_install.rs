@@ -4100,6 +4100,8 @@ fn require_without_key_refuses_or_names_missing_git() {
 fn uninitialized_install_fixture_preserves_not_a_git_repo_refusal() {
     let fixture = TempDir::new("minisign-uninitialized-repo");
     let bin = TempDir::new("minisign-uninitialized-bin");
+    let config = fixture.path().join("global-config");
+    fs::write(&config, "").expect("create hermetic empty global git config");
     let output = Command::new(built_installer())
         .arg("--install")
         .arg("installer")
