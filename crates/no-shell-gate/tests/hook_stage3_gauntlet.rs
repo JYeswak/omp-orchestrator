@@ -64,6 +64,7 @@
 use no_shell_gate::firing_ledger::{default_ledger_path, query_gate};
 use sha2::{Digest as _, Sha256};
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
@@ -331,6 +332,13 @@ fn assert_no_staged_strays(staged: &Path, case: &str) {
         "HANG-PIN {case}: staged binary survives after kill: {}",
         text.trim()
     );
+}
+fn split_output(output: &Output) -> (Option<i32>, String, String) {
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
 }
 
 /// Run a hook through the shared subprocess boundary with the normal fixture
@@ -691,6 +699,7 @@ fn kill_drill_100_runs_no_partial_state_next_run_healthy() {
     // `bounded_output`'s group-targeted TERM-then-KILL, never by a handrolled
     // kill in this file. Completed vs TimedOut are counted separately so a
     // degenerate all-early drill cannot masquerade as kill coverage.
+    let mut seed = KILL_SEED;
     let mut kills_landed = 0usize;
     let mut early_exits = 0usize;
     for run in 0..KILL_RUNS {
