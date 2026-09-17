@@ -908,8 +908,8 @@ pub struct EpistemicKnown {
     pub evidence_source: String,
     pub evidence_command: String,
 }
-#[serde(deny_unknown_fields)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EpistemicUnknown {
     pub question: String,
     pub owner: String,
