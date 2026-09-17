@@ -222,6 +222,31 @@ fn run_git(repo: &Path, args: &[&str]) {
         .expect("spawn git");
     assert!(status.success(), "git {args:?} failed in fixture");
 }
+/// Install the staged binary only in this throwaway fixture's hook directory.
+/// The live repository hook is never passed to this helper, so fixture setup
+/// cannot overwrite the operator's hook. Keep the installed copy executable,
+/// matching the existing real-hook test primitives.
+fn install_fixture_hook(repo: &Path, staged: &Path) {
+    let hook = repo.join(".git/hooks/pre-commit");
+    std::fs::create_dir_all(hook.parent().expect("hook parent")).expect("hook dir");
+    std::fs::copy(staged, &hook).expect("install fixture hook");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755))
+            .expect("make fixture hook executable");
+    }
+}
+
+/// Write and stage a file in a throwaway fixture repository.
+fn stage_file(repo: &Path, rel: &str, bytes: &[u8]) {
+    let path = repo.join(rel);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("fixture parent dir");
+    }
+    std::fs::write(&path, bytes).expect("write staged fixture");
+    run_git(repo, &["add", "--", rel]);
+}
 
 /// Fixture repo the real hook accepts: base + hypotheses commits with
 /// `[test]` levels (the template commit-msg hook enforces them on Mac
@@ -308,6 +333,18 @@ fn assert_no_staged_strays(staged: &Path, case: &str) {
     );
 }
 
+/// Run a hook through the shared subprocess boundary with the normal fixture
+/// budget. This returns output only when the child exits on its own; timeout
+/// and spawn failures remain typed test failures instead of fabricated hook
+/// verdicts.
+fn run_hook(bin: &Path, repo: &Path, args: &[&str], extra_env: &[(&str, &str)]) -> Output {
+    let mut command = Command::new(bin);
+    command.current_dir(repo).args(args);
+    for (key, value) in extra_env {
+        command.env(key, value);
+    }
+    run_hook_output(&mut command, INVOCATION_BUDGET, "run_hook")
+}
 /// Bounded run: the no-hang pin, delegated to the `subprocess-contract`
 /// kernel (group-leader child, group-targeted TERM-then-KILL, both pipes
 /// drained, child reaped -- never detached). A timeout is a leg FAILURE
@@ -327,8 +364,16 @@ fn run_hook_bounded(
     for (key, value) in extra_env {
         command.env(key, value);
     }
-    match subprocess_contract::bounded_output(&mut command, budget) {
-        subprocess_contract::BoundedOutcome::Completed(output) => split_output(&output),
+    let output = run_hook_output(&mut command, budget, case);
+    split_output(&output)
+}
+
+/// Execute one bounded hook command through the shared process boundary.
+/// It owns process-group setup, concurrent stdout/stderr draining, TERM/KILL
+/// escalation, and child reaping for both normal and fuzz/kill-drill legs.
+fn run_hook_output(command: &mut Command, budget: Duration, case: &str) -> Output {
+    match subprocess_contract::bounded_output(command, budget) {
+        subprocess_contract::BoundedOutcome::Completed(output) => output,
         subprocess_contract::BoundedOutcome::TimedOut => panic!(
             "HANG-PIN {case}: hook did not complete in {}s; kernel signalled the process group",
             budget.as_secs()
