@@ -4070,7 +4070,10 @@ fn require_without_key_refuses_or_names_missing_git() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     match output.status.code() {
         Some(1) => assert!(
-            stderr.contains("INSTALL_VERIFY_REFUSED")
+            // The refusal CODE (INSTALL_VERIFY_REFUSED) is recorded to the
+            // lifecycle journal, never printed: only the INSTALLER ERROR line
+            // reaches stderr. Assert what the lane observably emits.
+            stderr.contains("L0_MINISIGN_REFUSED")
                 && stderr.contains("--require-minisign without --minisign-key"),
             "exit 1 must be the gate refusal with its reason: {stderr}"
         ),

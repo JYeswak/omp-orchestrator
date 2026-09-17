@@ -130,6 +130,8 @@ fn parse_cli_args(raw_args: Vec<String>) -> Result<ParsedArgs, String> {
             pane = args
                 .next()
                 .ok_or_else(|| "--pane requires an id".to_owned())?;
+        } else if let Some(value) = arg.strip_prefix("--pane=") {
+            pane = value.to_owned();
         } else if arg == "--incarnation" {
             incarnation = args
                 .next()
