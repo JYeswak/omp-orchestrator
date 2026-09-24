@@ -393,11 +393,23 @@ async fn df_avail_kb(
 
 /// Pre-delete existence probe (leg 5): `test -e` exit 0/1. Any other exit
 /// is a probe failure, never evidence either way.
+///
+/// No `--`: POSIX `test` takes none, so `test -e -- <p>` is a malformed
+/// three-argument expression ("binary operator expected", exit 2 on every
+/// worker). The path is required absolute instead, so it can never be read
+/// as an option.
 async fn remote_exists(cx: &Cx, worker: WorkerSpec, path: &Path) -> Result<bool, ReclaimError> {
+    if !path.is_absolute() {
+        return Err(ReclaimError::Output {
+            worker: worker.id.to_owned(),
+            operation: "existence-probe",
+            detail: format!("refusing a relative probe path {}", path.display()),
+        });
+    }
     let path = path.to_string_lossy().into_owned();
     let output = run_command(
         cx,
-        ssh(worker, &["test", "-e", "--", &path]),
+        ssh(worker, &["test", "-e", &path]),
         worker.id,
         "existence-probe",
     )

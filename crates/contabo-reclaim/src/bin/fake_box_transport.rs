@@ -11,7 +11,8 @@
 //!   matching entries under the box root as `'<p>\t<y>\t<s>\n'` rows, with
 //!   `y` in {d, l} (symlink_metadata: symlink reads as a link even when its
 //!   target is gone) and `s` always 0 (retire takes honest bytes from du).
-//! - `ssh <target> test -e -- <p>` exits 0/1 on presence.
+//! - `ssh <target> test -e <p>` exits 0/1 on presence. Any other shape exits
+//!   2, as real `test` does (`test -e -- <p>` is "binary operator expected").
 //! - `ssh <target> rm -rf -- <p>` removes a file, symlink, or tree; missing
 //!   reads as success, like real `rm -rf`.
 //! - `ssh <target> pgrep -a -f <pat>` prints `$FAKE_PGREP_LINES` (default
@@ -172,10 +173,15 @@ fn main() {
                 });
             cmd_find(&base, &pattern);
         }
-        "test" => {
-            let path = command.last().cloned().unwrap_or_default();
-            std::process::exit(i32::from(!on_box(&path).exists()));
-        }
+        "test" => match command {
+            [_, flag, path] if flag.as_str() == "-e" => {
+                std::process::exit(i32::from(!on_box(path).exists()));
+            }
+            _ => {
+                eprintln!("fake-box-transport: test: binary operator expected ({command:?})");
+                std::process::exit(2);
+            }
+        },
         "rm" => {
             let path = command.last().cloned().unwrap_or_default();
             let target = on_box(&path);
