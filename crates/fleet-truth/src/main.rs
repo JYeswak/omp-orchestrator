@@ -7,6 +7,7 @@ use fleet_truth::{
     fleet_ops_alert, last_save_age_hours, parse_behind, repo_has_git, spawn_timeout, truth_row,
     unmeasured_row, FleetTruthRules, Sensors, TruthRow,
 };
+use omp_pane_context::OmpModelsCatalog;
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -188,36 +189,34 @@ fn last_bead_close(repo: &str) -> String {
     ts.pop().unwrap_or_else(|| "NONE".into())
 }
 
-fn max_context_pct(session: &str) -> String {
-    let mut cmd = Command::new(tick_monitor::NTM);
-    cmd.arg(format!("--robot-context={session}"));
-    let text = stdout_of(cmd);
-    let v: Value = match serde_json::from_str(text.trim()) {
-        Ok(v) => v,
-        Err(_) => return "UNKNOWN".into(),
+/// Highest context fill across the session's OMP panes, read from OMP's own session files.
+///
+/// This replaced `ntm --robot-context`, which estimates from pane SCROLLBACK against an assumed
+/// 128k window (`source=scrollback_estimate confidence=low`). Measured 2026-09-25 against the
+/// session files it was 2.7x to 11.7x off (control-plane bead cp-4yz11). A pane with no
+/// reading is EXCLUDED rather than counted as 0, and a session with no reading at all is
+/// `UNKNOWN` — which `truth_row` already treats as "no context signal", never as empty.
+fn max_context_pct(session: &str, catalog: &OmpModelsCatalog) -> String {
+    let Some(home) = home_dir() else {
+        return omp_pane_context::UNKNOWN.into();
     };
-    let ags = match v.get("agents").and_then(|x| x.as_array()) {
-        Some(a) => a,
-        None => return "UNKNOWN".into(),
-    };
-    if ags.is_empty() {
-        return "UNKNOWN".into();
-    }
-    // Match the python oracle: `a.get('usage_percent', 0)` — missing key is 0, not skip.
-    let mut max = 0.0f64;
-    for a in ags {
-        let p = a
-            .get("usage_percent")
-            .and_then(|x| x.as_f64())
-            .unwrap_or(0.0);
-        if p > max {
-            max = p;
+    match omp_pane_context::read_target(session, &home, catalog, child_timeout()) {
+        Ok(readings) => omp_pane_context::max_percent_text(&readings),
+        Err(error) => {
+            eprintln!("fleet-truth: context sensor for {session}: {error}");
+            omp_pane_context::UNKNOWN.into()
         }
     }
-    format!("{:.1}", (max * 10.0).round() / 10.0)
 }
 
-fn sensors_for(session: &str, since: &str, ledger: &str, stale_h: f64, now: i64) -> Sensors {
+fn sensors_for(
+    session: &str,
+    since: &str,
+    ledger: &str,
+    stale_h: f64,
+    now: i64,
+    catalog: &OmpModelsCatalog,
+) -> Sensors {
     let (repo, vstate) = derive_repo(session);
     if vstate != "OK" {
         return Sensors {
@@ -237,7 +236,7 @@ fn sensors_for(session: &str, since: &str, ledger: &str, stale_h: f64, now: i64)
     let commits = commits_in_window(&repo, since);
     let dirty = dirty_count(&repo);
     let behind = behind_count(&repo);
-    let ctx = max_context_pct(session);
+    let ctx = max_context_pct(session, catalog);
     let bclose = last_bead_close(&repo);
     let save_age = last_save_age_hours(ledger, &repo, now);
     let branch = branch_name(&repo);
@@ -472,8 +471,8 @@ fn run_register(json_out: bool, sessions: &[String], rules: &FleetTruthRules) ->
         sessions.to_vec()
     };
 
-    // PARALLEL ACROSS SESSIONS.  Each session's sensor sweep costs SIX subprocess spawns (four
-    // git, one br, one ntm), so a serial walk of 7 sessions is 42 spawns end to end -- measured
+    // PARALLEL ACROSS SESSIONS.  Each session's sensor sweep costs SEVEN subprocess spawns (four
+    // git, one br, tmux + ps for the context sensor; `omp models` is shared), so a serial walk of 7 sessions is ~49 spawns end to end -- measured
     // 2026-08-27 at load 85, that exceeded even a 180s bound while each individual child stayed
     // well inside its own.  PER-CHILD BOUNDS COMPOUND; widening them again would only move the
     // cliff.  The sessions are independent (distinct repos, read-only sensors, no shared mutable
@@ -500,15 +499,25 @@ fn run_register(json_out: bool, sessions: &[String], rules: &FleetTruthRules) ->
     // Each handle is now paired with its session NAME so the row can say which session was
     // unmeasurable, and every session yields exactly one row — see the denominator assertion
     // below, which is what makes a short table unconstructible rather than merely unlikely.
+    // ONE model catalog for the whole sweep: `omp models --json` costs ~9s per profile, and the
+    // catalog is single-flight per profile across these threads.
+    let catalog = OmpModelsCatalog::new(
+        "omp",
+        home_dir().unwrap_or_default(),
+        child_timeout(),
+    );
     let mut rows: Vec<TruthRow> = std::thread::scope(|scope| {
         let handles: Vec<_> = sess_list
             .iter()
             .map(|s| {
-                let (since, ledger) = (&since, &ledger);
+                let (since, ledger, catalog) = (&since, &ledger, &catalog);
                 (
                     s.as_str(),
                     scope.spawn(move || {
-                        truth_row(&sensors_for(s, since, ledger, stale_h, now), rules)
+                        truth_row(
+                            &sensors_for(s, since, ledger, stale_h, now, catalog),
+                            rules,
+                        )
                     }),
                 )
             })

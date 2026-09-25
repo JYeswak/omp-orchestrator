@@ -860,6 +860,7 @@ dependencies = [
  "build-stamp",
  "chrono",
  "finding",
+ "omp-pane-context",
  "serde_json",
  "subprocess-contract",
  "tick-monitor",
@@ -1566,6 +1567,17 @@ dependencies = [
  "text-structure",
  "tick-monitor",
  "worker-oracle-gate",
+]
+
+[[package]]
+name = "omp-pane-context"
+version = "0.1.0"
+dependencies = [
+ "build-stamp",
+ "serde_json",
+ "subprocess-contract",
+ "tempfile",
+ "tick-monitor",
 ]
 
 [[package]]

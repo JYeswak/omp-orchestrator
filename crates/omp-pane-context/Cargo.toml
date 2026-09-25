@@ -1,0 +1,30 @@
+[package]
+license.workspace = true
+name = "omp-pane-context"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+publish = false
+description = "Session-file context sensor for OMP panes: pane -> live omp process -> tty breadcrumb -> session JSONL -> last provider usage record. Replaces ntm's scrollback estimate."
+
+[lib]
+name = "omp_pane_context"
+path = "src/lib.rs"
+
+[[bin]]
+name = "omp-pane-context"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+subprocess-contract = { path = "../subprocess-contract" }
+tick-monitor = { path = "../tick-monitor" }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[build-dependencies]
+build-stamp = { path = "../build-stamp" }
+
+[dev-dependencies]
+tempfile = "3"

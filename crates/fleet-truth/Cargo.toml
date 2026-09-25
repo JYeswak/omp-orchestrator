@@ -15,6 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 subprocess-contract = { path = "../subprocess-contract" }
+omp-pane-context = { path = "../omp-pane-context" }
 tick-monitor = { path = "../tick-monitor" }
 finding = { path = "../finding" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
