@@ -193,18 +193,20 @@ fn last_bead_close(repo: &str) -> String {
 ///
 /// This replaced `ntm --robot-context`, which estimates from pane SCROLLBACK against an assumed
 /// 128k window (`source=scrollback_estimate confidence=low`). Measured 2026-09-25 against the
-/// session files it was 2.7x to 11.7x off (control-plane bead cp-4yz11). A pane with no
-/// reading is EXCLUDED rather than counted as 0, and a session with no reading at all is
+/// session files it was 0.56x to 9.5x off on 11 live panes (control-plane bead cp-4yz11). A pane
+/// with no reading is EXCLUDED rather than counted as 0, and a session with no reading at all is
 /// `UNKNOWN` — which `truth_row` already treats as "no context signal", never as empty.
+/// `UNMEASURED` means the sensor never reached tmux/ps/HOME: a different remedy from "no OMP
+/// reading", and equally non-numeric, so it can never score as low context.
 fn max_context_pct(session: &str, catalog: &OmpModelsCatalog) -> String {
     let Some(home) = home_dir() else {
-        return omp_pane_context::UNKNOWN.into();
+        return "UNMEASURED".into();
     };
     match omp_pane_context::read_target(session, &home, catalog, child_timeout()) {
         Ok(readings) => omp_pane_context::max_percent_text(&readings),
         Err(error) => {
             eprintln!("fleet-truth: context sensor for {session}: {error}");
-            omp_pane_context::UNKNOWN.into()
+            "UNMEASURED".into()
         }
     }
 }

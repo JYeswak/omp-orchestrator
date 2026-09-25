@@ -26,8 +26,12 @@
 //!   a conformance probe) and points at the wrong session. It is never read here.
 //! - **A breadcrumb outlives its process, and TTYs are reused.** A breadcrumb older than the
 //!   live omp process was written by a previous process on that TTY: `STALE_POINTER`, UNKNOWN.
-//! - **A breadcrumb can point outside the profile's store** (`--session <fixture>`):
+//! - **A breadcrumb can point outside the profile's store** (`--session <fixture>`, a
+//!   `sessions/../..` path, or a symlink inside `sessions/` to a file elsewhere). Containment
+//!   is checked on the CANONICAL paths and the resolved file is the one read:
 //!   `FOREIGN_SESSION_PATH`, UNKNOWN.
+//! - **A zombie `omp` row is not an agent** (`ps` STAT `Z`): it is skipped, so its pane reads
+//!   `NO_OMP_PROCESS` rather than a number from the breadcrumb it left.
 //! - **No session file is UNKNOWN, never 0.** A fresh session whose JSONL is not materialised
 //!   has no usage record; reporting 0% would read as an empty context.
 //!
@@ -38,12 +42,16 @@
 //! first term only — the provider-reported prompt at the newest anchor, minus any recorded
 //! `historyRewriteTokensRemoved`. It is therefore a FLOOR that trails OMP's live figure by at
 //! most the messages since the last assistant turn, and `read_at` says how old it is. After a
-//! compaction with no newer anchor it reports the compaction entry's `tokensAfter`.
+//! compaction with no newer anchor it reports the compaction entry's `tokensAfter`. Only the
+//! CURRENT BRANCH is read — the parent chain from the newest complete entry, which is the leaf
+//! OMP itself selects on load — so an anchor on an abandoned `/tree` branch never counts.
 //!
 //! # NO-CLAIM
 //!
-//! This reads files. It does not prove the omp process is alive beyond the `ps` row it was
-//! resolved from, and it does not tokenise the tail. `~/.omp` is read only.
+//! This reads files. It proves the omp process exists and is not a zombie at the `ps` instant,
+//! not that it is making progress, and it does not tokenise the tail. `~/.omp` is read only.
+//! A live process that navigated `/tree` without appending yet has an in-memory leaf the file
+//! does not show; this reads the leaf OMP would restore on reload.
 
 use serde_json::Value;
 use std::collections::HashMap;
@@ -132,9 +140,25 @@ pub fn terminal_id(tty: &str) -> Option<String> {
 /// Whether an argv line is an interactive `omp` launch (`omp …` or `bun …/omp …`).
 #[must_use]
 pub fn is_omp_argv(argv: &str) -> bool {
-    argv.split_whitespace()
-        .take(2)
-        .any(|token| Path::new(token).file_name().is_some_and(|name| name == "omp"))
+    let is_omp = |token: &str| {
+        Path::new(token).file_name().is_some_and(|name| name == "omp")
+            || token.ends_with("pi-coding-agent/dist/cli.js")
+    };
+    let mut tokens = argv.split_whitespace();
+    let Some(first) = tokens.next() else {
+        return false;
+    };
+    if is_omp(first) {
+        return true;
+    }
+    // `bun|node [runtime flags] <omp entry>`: the entry is the first non-flag argument.
+    let runtime = Path::new(first)
+        .file_name()
+        .is_some_and(|name| name == "bun" || name == "node");
+    runtime
+        && tokens
+            .find(|token| !token.starts_with('-'))
+            .is_some_and(is_omp)
 }
 
 /// Parse `ps` ELAPSED time: `mm:ss`, `hh:mm:ss`, or `d-hh:mm:ss`.
@@ -363,29 +387,46 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 /// Scan a session JSONL backwards for the reading OMP would anchor on.
+///
+/// # Only the CURRENT BRANCH counts
+///
+/// A session file is a tree: every entry names its `parentId`, and `/tree` navigation or a
+/// `branch_summary` starts a new branch from an older entry while the abandoned branch's lines
+/// stay in the file. On load OMP's `SessionIndex.add` makes the LAST entry the leaf
+/// (`session-manager.ts:462`) and `getBranch()` walks `parentId` from it. So the newest line
+/// in the file is the leaf, and an entry is on the branch only if the parent chain from that
+/// leaf reaches it. Parents always precede children in an append-only file, so one reverse
+/// pass following a single `wanted` id visits the branch newest-first; every other line is
+/// skipped, including a newer anchor on an abandoned branch.
+///
+/// A trailing line that does not parse (an append in progress) is skipped, so the leaf is the
+/// newest COMPLETE entry.
 pub fn last_usage_record(path: &Path) -> std::io::Result<TailScan> {
     let mut outcome = TailScan::NoUsageRecord;
+    // The next entry id on the current branch; `None` until the leaf is seen.
+    let mut wanted: Option<String> = None;
     // The newest `model_change` seen so far: the model whose window applies NOW.
     let mut latest_model: Option<(String, String)> = None;
     // A compaction newer than every anchor, waiting for a model to be attributed.
     let mut compaction: Option<(u64, String)> = None;
     for_each_line_rev(path, |raw| {
         let line = raw.strip_suffix(b"\r").unwrap_or(raw);
-        if line.is_empty() || !contains(line, b"\"type\":\"") {
-            return true;
-        }
-        let relevant = contains(line, b"\"type\":\"model_change\"")
-            || contains(line, b"\"type\":\"compaction\"")
-            || contains(line, b"\"type\":\"reset_boundary\"")
-            || (contains(line, b"\"type\":\"message\"") && contains(line, b"\"role\":\"assistant\""));
-        if !relevant {
+        if line.is_empty() || !contains(line, b"\"id\":\"") {
             return true;
         }
         let Ok(entry) = serde_json::from_slice::<Value>(line) else {
             return true;
         };
+        let Some(id) = entry.get("id").and_then(Value::as_str) else {
+            return true;
+        };
+        if wanted.is_some() && wanted.as_deref() != Some(id) {
+            // Off the current branch (or the session header).
+            return true;
+        }
+        let parent = entry.get("parentId").and_then(Value::as_str).map(str::to_owned);
         let at = str_field(&entry, "timestamp").unwrap_or_default();
-        match entry.get("type").and_then(Value::as_str) {
+        let keep_going = match entry.get("type").and_then(Value::as_str) {
             Some("model_change") => {
                 let model = entry.get("model").and_then(Value::as_str).and_then(split_model_ref);
                 if let Some((tokens, at)) = compaction.take() {
@@ -405,8 +446,13 @@ pub fn last_usage_record(path: &Path) -> std::io::Result<TailScan> {
                 true
             }
             Some("message") => {
-                let Some(message) = entry.get("message") else {
-                    return true;
+                let Some(message) = entry
+                    .get("message")
+                    .filter(|m| m.get("role").and_then(Value::as_str) == Some("assistant"))
+                else {
+                    // A user/tool turn: still on the branch, carries no usage.
+                    wanted = parent;
+                    return wanted.is_some();
                 };
                 let own = str_field(message, "provider").zip(str_field(message, "model"));
                 if let Some((tokens, at)) = compaction.take() {
@@ -421,18 +467,19 @@ pub fn last_usage_record(path: &Path) -> std::io::Result<TailScan> {
                     });
                     return false;
                 }
-                let Some(tokens) = anchor_tokens(message) else {
-                    return true;
-                };
-                let (provider, model) = latest_model.clone().or(own).unzip();
-                outcome = TailScan::Record(UsageRecord {
-                    tokens,
-                    provider,
-                    model,
-                    read_at: at,
-                    source: ReadingSource::UsageAnchor,
-                });
-                false
+                if let Some(tokens) = anchor_tokens(message) {
+                    let (provider, model) = latest_model.clone().or(own).unzip();
+                    outcome = TailScan::Record(UsageRecord {
+                        tokens,
+                        provider,
+                        model,
+                        read_at: at,
+                        source: ReadingSource::UsageAnchor,
+                    });
+                    false
+                } else {
+                    true
+                }
             }
             Some("compaction") if compaction.is_none() => {
                 match entry.get("tokensAfter").and_then(Value::as_u64) {
@@ -451,7 +498,10 @@ pub fn last_usage_record(path: &Path) -> std::io::Result<TailScan> {
                 false
             }
             _ => true,
-        }
+        };
+        wanted = parent;
+        // A missing `parentId` is the branch root: nothing older is on this branch.
+        keep_going && wanted.is_some()
     })?;
     if let Some((tokens, at)) = compaction {
         // A compaction with no model anywhere before it.
@@ -741,7 +791,34 @@ pub fn read_pane(pane: &PaneObservation, home: &Path, catalog: &dyn WindowCatalo
             format!("{} fresh={}", crumb.session_file.display(), crumb.fresh),
         );
     }
-    let record = match last_usage_record(&crumb.session_file) {
+    // The lexical check above is necessary and NOT sufficient: `Path::starts_with` compares
+    // components, so `<root>/sessions/../../x` and a symlink `<root>/sessions/f -> /tmp/x`
+    // both pass it. Resolve both sides and require containment of the REAL paths, then read
+    // the resolved path so the file checked is the file read.
+    let resolved = match (
+        std::fs::canonicalize(&crumb.session_file),
+        std::fs::canonicalize(&sessions),
+    ) {
+        (Ok(file), Ok(root)) if file.starts_with(&root) => file,
+        (Ok(file), Ok(root)) => {
+            return PaneContext::unknown(
+                UnknownReason::ForeignSessionPath,
+                format!(
+                    "observed={} resolves_to={} expected_root={}",
+                    crumb.session_file.display(),
+                    file.display(),
+                    root.display()
+                ),
+            );
+        }
+        (Err(error), _) | (_, Err(error)) => {
+            return PaneContext::unknown(
+                UnknownReason::SessionUnreadable,
+                format!("{} canonicalize: {error}", crumb.session_file.display()),
+            );
+        }
+    };
+    let record = match last_usage_record(&resolved) {
         Ok(TailScan::Record(record)) => record,
         Ok(TailScan::NoUsageRecord) => {
             return PaneContext::unknown(
@@ -831,16 +908,29 @@ fn run_text(mut command: Command, timeout: Duration) -> Result<String, String> {
 const PANE_FORMAT: &str =
     "#{pane_id}\t#{session_name}:#{window_index}.#{pane_index}\t#{pane_pid}\t#{pane_tty}";
 
-/// One `ps` row: pid, ppid, elapsed seconds, argv.
+/// One `ps` row: pid, ppid, state, elapsed seconds, argv.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProcessRow {
     pub pid: u32,
     pub ppid: u32,
+    /// `ps` STAT, e.g. `S+`, `Ss`, `Z`.
+    pub state: String,
     pub elapsed_secs: u64,
     pub argv: String,
 }
 
-/// Parse `ps -A -ww -o pid=,ppid=,etime=,command=`.
+impl ProcessRow {
+    /// A zombie has exited: its argv is still listed but no agent owns the breadcrumb.
+    #[must_use]
+    pub fn is_zombie(&self) -> bool {
+        self.state.starts_with('Z')
+    }
+}
+
+/// The `ps` column list [`parse_ps`] reads.
+pub const PS_COLUMNS: &str = "pid=,ppid=,stat=,etime=,command=";
+
+/// Parse `ps -A -ww -o pid=,ppid=,stat=,etime=,command=`.
 #[must_use]
 pub fn parse_ps(text: &str) -> Vec<ProcessRow> {
     text.lines()
@@ -848,11 +938,13 @@ pub fn parse_ps(text: &str) -> Vec<ProcessRow> {
             let mut fields = line.split_whitespace();
             let pid = fields.next()?.parse().ok()?;
             let ppid = fields.next()?.parse().ok()?;
+            let state = fields.next()?.to_owned();
             let elapsed_secs = parse_etime(fields.next()?)?;
             let argv = fields.collect::<Vec<_>>().join(" ");
             Some(ProcessRow {
                 pid,
                 ppid,
+                state,
                 elapsed_secs,
                 argv,
             })
@@ -868,7 +960,9 @@ pub fn find_omp(rows: &[ProcessRow], root_pid: u32, now_epoch: u64) -> Option<Om
     for _ in 0..=4 {
         let mut hits: Vec<&ProcessRow> = rows
             .iter()
-            .filter(|row| frontier.contains(&row.pid) && is_omp_argv(&row.argv))
+            .filter(|row| {
+                frontier.contains(&row.pid) && !row.is_zombie() && is_omp_argv(&row.argv)
+            })
             .collect();
         hits.sort_by_key(|row| row.pid);
         if let Some(row) = hits.first() {
@@ -907,7 +1001,7 @@ pub fn observe(target: &str, timeout: Duration) -> Result<Vec<PaneObservation>, 
     }
     let panes = run_text(tmux, timeout).map_err(ObserveError::Tmux)?;
     let mut ps = Command::new("ps");
-    ps.args(["-A", "-ww", "-o", "pid=,ppid=,etime=,command="]);
+    ps.args(["-A", "-ww", "-o", PS_COLUMNS]);
     let rows = parse_ps(&run_text(ps, timeout).map_err(ObserveError::Ps)?);
     let now = now_epoch();
     let observed: Vec<PaneObservation> = panes

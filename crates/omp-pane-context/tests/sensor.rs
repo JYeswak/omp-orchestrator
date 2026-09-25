@@ -69,11 +69,21 @@ impl Home {
     }
 
     fn session(&self, profile: Option<&str>, lines: &[serde_json::Value]) -> PathBuf {
+        self.named_session(profile, "2026-09-25T17-26-54-990Z_01a0d99b.jsonl", lines)
+    }
+
+    /// Write a session file whose entries form one parent chain, as OMP appends them: each
+    /// entry's `parentId` is the previous entry's `id` (the `session` header is not in the tree).
+    fn named_session(
+        &self,
+        profile: Option<&str>,
+        name: &str,
+        lines: &[serde_json::Value],
+    ) -> PathBuf {
         let dir = self.agent(profile).join("sessions").join("-Developer-jev");
         fs::create_dir_all(&dir).expect("sessions dir");
-        let path = dir.join("2026-09-25T17-26-54-990Z_01a0d99b.jsonl");
-        let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
-        fs::write(&path, text).expect("session");
+        let path = dir.join(name);
+        fs::write(&path, chain(lines)).expect("session");
         path
     }
 
@@ -90,6 +100,23 @@ impl Home {
         )
         .expect("pointer");
     }
+}
+
+fn chain(lines: &[serde_json::Value]) -> String {
+    let mut previous: Option<String> = None;
+    let mut text = String::new();
+    for (index, line) in lines.iter().enumerate() {
+        let mut entry = line.clone();
+        if entry["type"] != "session" {
+            if entry.get("id").is_none() {
+                entry["id"] = json!(format!("c{index:04}"));
+            }
+            entry["parentId"] = previous.clone().map_or(serde_json::Value::Null, |p| json!(p));
+            previous = entry["id"].as_str().map(str::to_owned);
+        }
+        text.push_str(&format!("{entry}\n"));
+    }
+    text
 }
 
 fn pane(argv: &str, started_epoch: u64) -> PaneObservation {
@@ -354,6 +381,69 @@ fn breadcrumb_parser_accepts_the_four_line_omp_18_3_shape() {
 }
 
 #[test]
+fn launcher_shapes_other_than_bun_omp_are_recognised_and_bystanders_are_not() {
+    // The trust-guard wrapper installed as `omp`, a direct node launch, runtime flags, and the
+    // resolved bundle path all start an interactive omp.
+    for argv in [
+        "/home/op/.local/bin/omp --profile claude",
+        "omp --profile=glm",
+        "node /home/op/.bun/bin/omp --profile grok",
+        "bun --smol /home/op/.bun/bin/omp --profile codex",
+        "bun /home/op/.bun/install/global/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js --profile muse",
+    ] {
+        assert!(is_omp_argv(argv), "{argv}");
+    }
+    // A pager or editor holding a file named omp, a shell, and a bun script are not omp.
+    for argv in ["less omp", "vim /tmp/omp", "bun run build", "node server.js omp", "-zsh"] {
+        assert!(!is_omp_argv(argv), "{argv}");
+    }
+    assert_eq!(
+        omp_pane_context::profile_from_argv("/home/op/.local/bin/omp --profile claude"),
+        Ok(Profile::Profiled("claude".into()))
+    );
+    assert_eq!(
+        omp_pane_context::profile_from_argv("omp --profile=glm"),
+        Ok(Profile::Profiled("glm".into()))
+    );
+}
+
+#[test]
+fn the_interactive_omp_is_the_shallowest_not_a_tool_spawned_child() {
+    let rows = parse_ps(
+        "11832  1369 Ss   1-16:14:05 -zsh\n\
+         34593 11832 S+   19:29      bun /home/op/.bun/bin/omp --profile codex\n\
+         40000 34593 S    00:05      bun /home/op/.bun/bin/omp --mode=rpc --session /tmp/x.jsonl\n",
+    );
+    let found = find_omp(&rows, 11832, 10_000).expect("omp under pane");
+    assert_eq!(found.pid, 34593);
+    assert_eq!(found.started_epoch, 10_000 - 1169);
+    assert!(find_omp(&rows, 1369, 10_000).is_some_and(|p| p.pid == 34593));
+    assert!(find_omp(&rows, 99_999, 10_000).is_none());
+}
+
+#[test]
+fn a_zombie_omp_is_not_an_agent_and_never_yields_a_reading() {
+    // The agent exited and its parent shell has not reaped it: ps still lists the argv.
+    let rows = parse_ps(
+        "11832  1369 Ss   1-16:14:05 -zsh\n\
+         34593 11832 Z+   19:29      bun /home/op/.bun/bin/omp --profile codex\n",
+    );
+    assert!(rows[1].is_zombie());
+    assert!(find_omp(&rows, 11832, 10_000).is_none());
+
+    // Its breadcrumb and session are fresh and valid, and the pane still reads UNKNOWN.
+    let home = Home::new();
+    let mut lines = header();
+    lines.push(assistant("2026-09-25T18:00:00.000Z", 456_000, "stop"));
+    let session = home.session(Some("codex"), &lines);
+    home.pointer(Some("codex"), "ttys004", &session, false);
+    let mut observation = pane(CODEX, 0);
+    observation.omp = find_omp(&rows, 11832, now());
+    let context = read_pane(&observation, home.path(), &FakeCatalog::standard());
+    assert_eq!(unknown_reason(&context), UnknownReason::NoOmpProcess);
+}
+
+#[test]
 fn terminal_ids_and_elapsed_times_parse_like_omp_and_ps() {
     assert_eq!(terminal_id("/dev/ttys004").as_deref(), Some("ttys004"));
     assert_eq!(terminal_id("/dev/pts/3").as_deref(), Some("pts-3"));
@@ -365,20 +455,6 @@ fn terminal_ids_and_elapsed_times_parse_like_omp_and_ps() {
     assert!(is_omp_argv("bun /home/op/.bun/bin/omp --profile codex"));
     assert!(!is_omp_argv("/home/op/.local/bin/omp-trust-guard"));
     assert!(!is_omp_argv("-zsh"));
-}
-
-#[test]
-fn the_interactive_omp_is_the_shallowest_not_a_tool_spawned_child() {
-    let rows = parse_ps(
-        "11832  1369 1-16:14:05 -zsh\n\
-         34593 11832 19:29      bun /home/op/.bun/bin/omp --profile codex\n\
-         40000 34593 00:05      bun /home/op/.bun/bin/omp --mode=rpc --session /tmp/x.jsonl\n",
-    );
-    let found = find_omp(&rows, 11832, 10_000).expect("omp under pane");
-    assert_eq!(found.pid, 34593);
-    assert_eq!(found.started_epoch, 10_000 - 1169);
-    assert!(find_omp(&rows, 1369, 10_000).is_some_and(|p| p.pid == 34593));
-    assert!(find_omp(&rows, 99_999, 10_000).is_none());
 }
 
 #[test]
@@ -399,4 +475,204 @@ fn session_max_excludes_unknown_panes_instead_of_counting_them_as_zero() {
         "45.6"
     );
     assert_eq!(max_percent_text(&[(none, none_context)]), UNKNOWN);
+}
+
+// ---- record selection: one expectation file, shared with the independent reader ----------
+
+/// Every synthetic session in `tests/fixtures/selection/` against `expected.json`. The same
+/// expectation file is what the out-of-tree independent reader is checked against, so a
+/// divergence between the two implementations fails one side or the other.
+#[test]
+fn selection_fixtures_match_the_shared_expectation_file() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/selection");
+    let expected: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.join("expected.json")).expect("expected.json"))
+            .expect("expected.json parses");
+    let expected = expected.as_object().expect("expected.json is an object");
+    let mut fixtures: Vec<String> = fs::read_dir(&dir)
+        .expect("fixture dir")
+        .filter_map(|entry| {
+            let name = entry.ok()?.file_name().into_string().ok()?;
+            name.strip_suffix(".jsonl").map(str::to_owned)
+        })
+        .collect();
+    fixtures.sort();
+    // Anti-vacuity: an empty or partially-described fixture set is an error, not a pass.
+    assert!(fixtures.len() >= 15, "only {} fixtures", fixtures.len());
+    let mut named: Vec<&String> = expected.keys().collect();
+    named.sort();
+    assert_eq!(fixtures.iter().collect::<Vec<_>>(), named, "fixtures and expectations differ");
+    for name in &fixtures {
+        let scan = last_usage_record(&dir.join(format!("{name}.jsonl"))).expect("scan");
+        let want = &expected[name];
+        let got = match scan {
+            TailScan::Record(r) => json!({
+                "tokens": r.tokens,
+                "source": r.source.as_str(),
+                "model": format!("{}/{}", r.provider.unwrap_or_default(), r.model.unwrap_or_default()),
+            }),
+            TailScan::NoUsageRecord => json!({"unknown": "NO_USAGE_RECORD"}),
+            TailScan::ResetWithoutUsage { .. } => json!({"unknown": "RESET_WITHOUT_USAGE"}),
+            TailScan::CompactionWithoutTokens { .. } => json!({"unknown": "COMPACTION_WITHOUT_TOKENS"}),
+        };
+        assert_eq!(&got, want, "fixture {name}");
+    }
+}
+
+// ---- the path boundary --------------------------------------------------------------------
+
+fn anchored_lines(prompt: u64) -> Vec<serde_json::Value> {
+    let mut lines = header();
+    lines.push(assistant("2026-09-25T18:00:00.000Z", prompt, "stop"));
+    lines
+}
+
+#[test]
+fn a_symlink_inside_sessions_to_a_foreign_file_is_foreign() {
+    let home = Home::new();
+    let outside = home.path().join("scratch/foreign-fixture.jsonl");
+    fs::create_dir_all(outside.parent().expect("parent")).expect("dir");
+    fs::write(&outside, chain(&anchored_lines(600_000))).expect("foreign fixture");
+    let sessions = home.agent(Some("codex")).join("sessions/-Developer-jev");
+    fs::create_dir_all(&sessions).expect("sessions");
+    let link = sessions.join("fixture.jsonl");
+    std::os::unix::fs::symlink(&outside, &link).expect("symlink");
+    home.pointer(Some("codex"), "ttys004", &link, false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    assert_eq!(unknown_reason(&context), UnknownReason::ForeignSessionPath);
+}
+
+#[test]
+fn a_symlinked_directory_and_a_dotdot_path_are_foreign_too() {
+    let home = Home::new();
+    let outside_dir = home.path().join("scratch/elsewhere");
+    fs::create_dir_all(&outside_dir).expect("dir");
+    fs::write(outside_dir.join("s.jsonl"), chain(&anchored_lines(600_000))).expect("fixture");
+    let sessions = home.agent(Some("codex")).join("sessions");
+    fs::create_dir_all(&sessions).expect("sessions");
+    std::os::unix::fs::symlink(&outside_dir, sessions.join("-Developer-evil")).expect("dir link");
+
+    home.pointer(Some("codex"), "ttys004", &sessions.join("-Developer-evil/s.jsonl"), false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    assert_eq!(unknown_reason(&context), UnknownReason::ForeignSessionPath);
+
+    // Lexically under `sessions/`, really five levels above it (sessions -> agent -> codex ->
+    // profiles -> .omp -> $HOME). The file must EXIST there, or this leg would read
+    // NO_SESSION_FILE and prove nothing about containment.
+    let dotdot = sessions.join("../../../../../scratch/elsewhere/s.jsonl");
+    assert!(dotdot.is_file(), "dot-dot target must exist: {}", dotdot.display());
+    assert!(dotdot.starts_with(&sessions), "must pass the lexical check");
+    home.pointer(Some("codex"), "ttys004", &dotdot, false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    assert_eq!(unknown_reason(&context), UnknownReason::ForeignSessionPath);
+}
+
+#[test]
+fn a_symlink_that_stays_inside_the_profile_store_is_still_read() {
+    // Positive control for the two tests above: resolving is not the same as refusing links.
+    let home = Home::new();
+    let real = home.named_session(Some("codex"), "real.jsonl", &anchored_lines(250_000));
+    let link = real.with_file_name("alias.jsonl");
+    std::os::unix::fs::symlink(&real, &link).expect("symlink");
+    home.pointer(Some("codex"), "ttys004", &link, false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    assert_eq!(measured(&context).tokens, 250_000);
+}
+
+// ---- panes and sessions ------------------------------------------------------------------------
+
+#[test]
+fn two_panes_in_one_cwd_each_read_their_own_session() {
+    let home = Home::new();
+    let first = home.named_session(Some("codex"), "a.jsonl", &anchored_lines(100_000));
+    let second = home.named_session(Some("codex"), "b.jsonl", &anchored_lines(700_000));
+    home.pointer(Some("codex"), "ttys004", &first, false);
+    home.pointer(Some("codex"), "ttys010", &second, false);
+    let mut left = pane(CODEX, now() - 60);
+    left.tty = "/dev/ttys004".into();
+    let mut right = pane(CODEX, now() - 60);
+    right.pane_id = "%32".into();
+    right.tty = "/dev/ttys010".into();
+    let catalog = FakeCatalog::standard();
+    assert_eq!(measured(&read_pane(&left, home.path(), &catalog)).tokens, 100_000);
+    assert_eq!(measured(&read_pane(&right, home.path(), &catalog)).tokens, 700_000);
+}
+
+#[test]
+fn a_resumed_or_forked_session_is_read_from_the_file_the_breadcrumb_now_names() {
+    let home = Home::new();
+    // The original session, large; then `/fork` (createBranchedSession) writes a new file with
+    // the copied path plus new turns, and rewrites the breadcrumb to it.
+    let original = home.named_session(Some("codex"), "original.jsonl", &anchored_lines(800_000));
+    let mut forked = anchored_lines(800_000);
+    forked.push(json!({"type":"compaction","id":"fc","timestamp":"2026-09-25T18:05:00.000Z","tokensBefore":800_000,"tokensAfter":90_000}));
+    forked.push(assistant("2026-09-25T18:06:00.000Z", 120_000, "stop"));
+    let fork = home.named_session(Some("codex"), "fork.jsonl", &forked);
+    home.pointer(Some("codex"), "ttys004", &original, false);
+    let before = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    assert_eq!(measured(&before).tokens, 800_000);
+    home.pointer(Some("codex"), "ttys004", &fork, false);
+    let after = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    assert_eq!(measured(&after).tokens, 120_000);
+    assert_eq!(measured(&after).session_file, fork);
+}
+
+#[test]
+fn a_session_file_being_appended_to_always_reads_a_complete_anchor() {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let home = Home::new();
+    let path = home.named_session(Some("codex"), "live.jsonl", &anchored_lines(100_000));
+    let done = Arc::new(AtomicBool::new(false));
+    let writer = {
+        let (path, done) = (path.clone(), Arc::clone(&done));
+        std::thread::spawn(move || {
+            let mut file = fs::OpenOptions::new().append(true).open(&path).expect("append");
+            let mut parent = "2026-09-25T18:00:00.000Z".to_owned();
+            for turn in 1..=400u64 {
+                let id = format!("w{turn:04}");
+                let mut entry = assistant("2026-09-25T18:10:00.000Z", 100_000 + turn, "toolUse");
+                entry["id"] = json!(id);
+                entry["parentId"] = json!(parent);
+                let line = format!("{entry}\n");
+                // Two writes per line: a reader can observe the torn half.
+                let (head, tail) = line.as_bytes().split_at(line.len() / 2);
+                file.write_all(head).expect("head");
+                file.flush().expect("flush");
+                file.write_all(tail).expect("tail");
+                parent = id;
+            }
+            done.store(true, Ordering::SeqCst);
+        })
+    };
+    let mut reads = 0u64;
+    while !done.load(Ordering::SeqCst) || reads == 0 {
+        match last_usage_record(&path).expect("scan") {
+            TailScan::Record(record) => {
+                assert!((100_000..=100_400).contains(&record.tokens), "{}", record.tokens);
+            }
+            other => panic!("mid-append read lost the anchor: {other:?}"),
+        }
+        reads += 1;
+    }
+    writer.join().expect("writer");
+    let TailScan::Record(last) = last_usage_record(&path).expect("scan") else {
+        panic!("no record")
+    };
+    assert_eq!(last.tokens, 100_400);
+}
+
+#[test]
+fn a_breadcrumb_left_by_a_process_that_since_restarted_is_stale_until_rewritten() {
+    let home = Home::new();
+    let session = home.session(Some("codex"), &anchored_lines(300_000));
+    home.pointer(Some("codex"), "ttys004", &session, false);
+    // The old process died; a new omp on the same TTY started later and has not written yet.
+    let restarted = pane(CODEX, now() + 600);
+    assert_eq!(
+        unknown_reason(&read_pane(&restarted, home.path(), &FakeCatalog::standard())),
+        UnknownReason::StalePointer
+    );
 }

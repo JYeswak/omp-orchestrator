@@ -1,0 +1,71 @@
+{
+ "abandoned_branch_is_ignored": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 100000
+ },
+ "aborted_newest_turn": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 150000
+ },
+ "anchor_after_compaction": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 120000
+ },
+ "compaction_newer_than_anchor": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "compaction_tokens_after",
+  "tokens": 91320
+ },
+ "compaction_then_model_switch": {
+  "model": "openai-codex/gpt-6-luna",
+  "source": "compaction_tokens_after",
+  "tokens": 91320
+ },
+ "compaction_without_tokens_after": {
+  "unknown": "COMPACTION_WITHOUT_TOKENS"
+ },
+ "error_newest_turn": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 150000
+ },
+ "history_rewrite_subtracted": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 250000
+ },
+ "model_switch_after_anchor": {
+  "model": "openai-codex/gpt-6-luna",
+  "source": "usage_anchor",
+  "tokens": 136000
+ },
+ "no_usage_record": {
+  "unknown": "NO_USAGE_RECORD"
+ },
+ "partial_trailing_append": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 200000
+ },
+ "plain_anchor": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 178268
+ },
+ "reset_without_usage": {
+  "unknown": "RESET_WITHOUT_USAGE"
+ },
+ "two_compactions_newest_wins": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "compaction_tokens_after",
+  "tokens": 95000
+ },
+ "usage_fallback_without_snapshot": {
+  "model": "openai-codex/gpt-5.6-luna",
+  "source": "usage_anchor",
+  "tokens": 50000
+ }
+}

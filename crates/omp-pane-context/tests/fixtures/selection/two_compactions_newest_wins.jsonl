@@ -1,0 +1,8 @@
+{"type":"session","version":3,"id":"sess-0001","timestamp":"2026-09-25T17:00:00.000Z","cwd":"/home/op/Developer/demo"}
+{"type":"model_change","id":"e0001","parentId":null,"timestamp":"2026-09-25T17:00:01.000Z","model":"openai-codex/gpt-5.6-luna"}
+{"type":"message","id":"e0002","parentId":"e0001","timestamp":"2026-09-25T17:00:02.000Z","message":{"role":"user","content":[{"type":"text","text":"do the thing"}]}}
+{"type":"message","id":"e0003","parentId":"e0002","timestamp":"2026-09-25T17:00:03.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-5.6-luna","stopReason":"toolUse","usage":{"input":600,"output":80,"cacheRead":849400,"cacheWrite":0,"totalTokens":850080},"contextSnapshot":{"promptTokens":850000,"nonMessageTokens":40000,"compactionEpoch":0}}}
+{"type":"compaction","id":"e0004","parentId":"e0003","timestamp":"2026-09-25T17:00:04.000Z","tokensBefore":850000,"method":"remote","summary":"synthetic summary","firstKeptEntryId":"e0003","tokensAfter":100000}
+{"type":"message","id":"e0005","parentId":"e0004","timestamp":"2026-09-25T17:00:05.000Z","message":{"role":"user","content":[{"type":"text","text":"do the thing"}]}}
+{"type":"message","id":"e0006","parentId":"e0005","timestamp":"2026-09-25T17:00:06.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-5.6-luna","stopReason":"toolUse","usage":{"input":600,"output":80,"cacheRead":839400,"cacheWrite":0,"totalTokens":840080},"contextSnapshot":{"promptTokens":840000,"nonMessageTokens":40000,"compactionEpoch":0}}}
+{"type":"compaction","id":"e0007","parentId":"e0006","timestamp":"2026-09-25T17:00:07.000Z","tokensBefore":840000,"method":"remote","summary":"synthetic summary","firstKeptEntryId":"e0006","tokensAfter":95000}

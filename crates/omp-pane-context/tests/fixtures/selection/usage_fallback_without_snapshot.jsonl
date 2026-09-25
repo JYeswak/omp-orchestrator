@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"sess-0001","timestamp":"2026-09-25T17:00:00.000Z","cwd":"/home/op/Developer/demo"}
+{"type":"model_change","id":"e0001","parentId":null,"timestamp":"2026-09-25T17:00:01.000Z","model":"openai-codex/gpt-5.6-luna"}
+{"type":"message","id":"e0002","parentId":"e0001","timestamp":"2026-09-25T17:00:02.000Z","message":{"role":"user","content":[{"type":"text","text":"do the thing"}]}}
+{"type":"message","id":"e0003","parentId":"e0002","timestamp":"2026-09-25T17:00:03.000Z","message":{"role":"assistant","provider":"openai-codex","model":"gpt-5.6-luna","stopReason":"stop","usage":{"input":600,"output":80,"cacheRead":49400,"cacheWrite":0,"totalTokens":50080}}}
