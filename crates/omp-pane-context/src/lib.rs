@@ -775,49 +775,73 @@ pub fn read_pane(pane: &PaneObservation, home: &Path, catalog: &dyn WindowCatalo
         return PaneContext::unknown(UnknownReason::MalformedPointer, pointer.display().to_string());
     };
     let sessions = root.join("sessions");
-    if !crumb.session_file.is_absolute() || !crumb.session_file.starts_with(&sessions) {
-        return PaneContext::unknown(
-            UnknownReason::ForeignSessionPath,
-            format!(
-                "observed={} expected_root={}",
-                crumb.session_file.display(),
-                sessions.display()
-            ),
-        );
+    let foreign = |detail: String| PaneContext::unknown(UnknownReason::ForeignSessionPath, detail);
+    if !crumb.session_file.is_absolute() {
+        return foreign(format!("observed={} (relative)", crumb.session_file.display()));
     }
-    if !crumb.session_file.is_file() {
-        return PaneContext::unknown(
-            UnknownReason::NoSessionFile,
-            format!("{} fresh={}", crumb.session_file.display(), crumb.fresh),
-        );
+    // Containment is decided on CANONICAL paths only. A lexical `Path::starts_with` both
+    // accepts escapes (`sessions/../../x`, `sessions/f -> /tmp/x`) and rejects equivalent
+    // spellings of an in-store path (a case-folded APFS component, `/var` vs `/private/var`),
+    // so it is used only to classify a path that does not exist at all.
+    match std::fs::symlink_metadata(&crumb.session_file) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if !crumb.session_file.starts_with(&sessions) {
+                return foreign(format!(
+                    "observed={} expected_root={} (absent)",
+                    crumb.session_file.display(),
+                    sessions.display()
+                ));
+            }
+            return PaneContext::unknown(
+                UnknownReason::NoSessionFile,
+                format!("{} fresh={}", crumb.session_file.display(), crumb.fresh),
+            );
+        }
+        Err(error) => {
+            return PaneContext::unknown(
+                UnknownReason::SessionUnreadable,
+                format!("{} stat: {error}", crumb.session_file.display()),
+            );
+        }
+        Ok(_) => {}
     }
-    // The lexical check above is necessary and NOT sufficient: `Path::starts_with` compares
-    // components, so `<root>/sessions/../../x` and a symlink `<root>/sessions/f -> /tmp/x`
-    // both pass it. Resolve both sides and require containment of the REAL paths, then read
-    // the resolved path so the file checked is the file read.
+    // The path exists as a directory entry. A dangling symlink or a symlink loop fails here
+    // and is SESSION_UNREADABLE: the breadcrumb names something, and it cannot be resolved.
     let resolved = match (
         std::fs::canonicalize(&crumb.session_file),
         std::fs::canonicalize(&sessions),
     ) {
         (Ok(file), Ok(root)) if file.starts_with(&root) => file,
         (Ok(file), Ok(root)) => {
-            return PaneContext::unknown(
-                UnknownReason::ForeignSessionPath,
-                format!(
-                    "observed={} resolves_to={} expected_root={}",
-                    crumb.session_file.display(),
-                    file.display(),
-                    root.display()
-                ),
-            );
+            return foreign(format!(
+                "observed={} resolves_to={} expected_root={}",
+                crumb.session_file.display(),
+                file.display(),
+                root.display()
+            ));
         }
-        (Err(error), _) | (_, Err(error)) => {
+        (Err(error), _) => {
             return PaneContext::unknown(
                 UnknownReason::SessionUnreadable,
                 format!("{} canonicalize: {error}", crumb.session_file.display()),
             );
         }
+        // The file resolves but the profile's store does not exist: it cannot be inside it.
+        (Ok(file), Err(error)) => {
+            return foreign(format!(
+                "observed={} resolves_to={} expected_root={} ({error})",
+                crumb.session_file.display(),
+                file.display(),
+                sessions.display()
+            ));
+        }
     };
+    if !resolved.is_file() {
+        return PaneContext::unknown(
+            UnknownReason::SessionUnreadable,
+            format!("{} is not a regular file", resolved.display()),
+        );
+    }
     let record = match last_usage_record(&resolved) {
         Ok(TailScan::Record(record)) => record,
         Ok(TailScan::NoUsageRecord) => {

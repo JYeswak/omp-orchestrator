@@ -579,6 +579,49 @@ fn a_symlink_that_stays_inside_the_profile_store_is_still_read() {
     assert_eq!(measured(&context).tokens, 250_000);
 }
 
+#[test]
+fn an_equivalent_spelling_of_an_in_store_path_is_measured_not_foreign() {
+    // Linux surrogate for a case-folded APFS component or `/var` vs `/private/var`: the
+    // breadcrumb spells the store through an alias that resolves INTO it.
+    let home = Home::new();
+    let real = home.named_session(Some("codex"), "real.jsonl", &anchored_lines(250_000));
+    let agent = home.agent(Some("codex"));
+    std::os::unix::fs::symlink(agent.join("sessions"), agent.join("SESSIONS")).expect("alias");
+    let spelled = agent.join("SESSIONS/-Developer-jev/real.jsonl");
+    assert!(!spelled.starts_with(agent.join("sessions")), "must fail the lexical check");
+    home.pointer(Some("codex"), "ttys004", &spelled, false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &FakeCatalog::standard());
+    let m = measured(&context);
+    assert_eq!(m.tokens, 250_000);
+    assert_eq!(fs::canonicalize(&real).expect("real"), fs::canonicalize(&spelled).expect("alias"));
+}
+
+#[test]
+fn dangling_and_looping_symlinks_are_unreadable_and_an_absent_foreign_path_is_foreign() {
+    let home = Home::new();
+    let dir = home.agent(Some("codex")).join("sessions/-Developer-jev");
+    fs::create_dir_all(&dir).expect("dir");
+    let catalog = FakeCatalog::standard();
+
+    let dangling = dir.join("dangling.jsonl");
+    std::os::unix::fs::symlink(dir.join("never-existed.jsonl"), &dangling).expect("dangling");
+    home.pointer(Some("codex"), "ttys004", &dangling, false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &catalog);
+    assert_eq!(unknown_reason(&context), UnknownReason::SessionUnreadable);
+
+    let (a, b) = (dir.join("loop-a.jsonl"), dir.join("loop-b.jsonl"));
+    std::os::unix::fs::symlink(&b, &a).expect("a");
+    std::os::unix::fs::symlink(&a, &b).expect("b");
+    home.pointer(Some("codex"), "ttys004", &a, false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &catalog);
+    assert_eq!(unknown_reason(&context), UnknownReason::SessionUnreadable);
+
+    // Absent AND outside the store: foreign, not a not-yet-written session.
+    home.pointer(Some("codex"), "ttys004", &home.path().join("scratch/gone.jsonl"), false);
+    let context = read_pane(&pane(CODEX, now() - 60), home.path(), &catalog);
+    assert_eq!(unknown_reason(&context), UnknownReason::ForeignSessionPath);
+}
+
 // ---- panes and sessions ------------------------------------------------------------------------
 
 #[test]
