@@ -1,0 +1,10 @@
+priority=0
+labels=s1,l0,installer,test,repair
+---
+WHAT: Repair unobservable git-head refusal assertions in minisign tests
+WHY: Non-author a6nx regrade at HEAD 8e8f94a proved the parser collateral fix and found two remaining subject-side test defects: require_without_key and handed_key assert journal-only INSTALL_GIT_HEAD_REFUSED on stderr, while the production emit site prints code-free INSTALLER ERROR and records the typed code only to the journal. Exit-3 behavior is correct; the tests assert a channel the product never emits, the same class 8e8f94a fixed for VERIFY_REFUSED.
+ACCEPTANCE: ACCEPTANCE
+1. In crates/installer/tests/l0_install.rs, repair exactly the require_without_key and handed_key gitless assertions to check observable exit code plus the real stderr reason/mechanism; do not require a journal-only code on stderr and do not weaken production refusal.
+2. Preserve the distinct require-without-key and handed-key scenarios, their exit=3 contract, and all parser/minisign controls. No production source change unless source inspection proves the emitter contract itself is wrong.
+3. Remote focused selectors run nonzero and green on a gitless clean archive; full l0_install reaches its denominator and remaining minisign-not-on-PATH rows are named separately. Capture Selected worker, test result lines, and Remote completion.
+4. A clean-export mutation restoring one journal-only stderr assertion REDs that exact leg while the sibling stays green; restore SHA+cmp marker zero. Tests-only EASY-CLOSE eligible; conductor closes after different-pane proof.

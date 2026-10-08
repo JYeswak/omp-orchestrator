@@ -1,0 +1,11 @@
+priority=1
+labels=s1,l2,test,repair
+---
+WHAT: [S1-L2 FIX] complete l5 portal epistemic fixture
+WHY: The current full ompo-start target is red in l5_portal::artifact_readback_required_keys because its supposedly complete inception artifact omits the now-required epistemic object. That stale fixture blocks the p8f2i parent grade and can conceal real exit-code regressions behind an unrelated missing-key panic. Repair the fixture at its canonical construction seam; do not weaken required-key validation.
+ACCEPTANCE: ACCEPTANCE
+1. The l5 portal complete-artifact fixture obtains a valid epistemic object through the existing canonical artifact/builder seam; no second hand-kept schema or production behavior change.
+2. `artifact_readback_required_keys` passes with its complete-artifact contract intact, and the p8f2i focused blank/missing/empty selector remains green.
+3. Full `cargo test -j 2 --color=never --no-fail-fast -p ompo-start --lib --tests` runs remotely with Selected worker, nonzero denominators, and Remote completion; every residual is named.
+4. In a clean export, deleting only the fixture's epistemic contribution makes the named l5 leg RED with exact missing-key message/code while the p8f2i focused selector stays GREEN; restore plain-copy+touch with SHA-256/cmp/marker0.
+5. A different pane performs the independent grade and closes; the p8f2i parent is then regraded on the repaired current tree.

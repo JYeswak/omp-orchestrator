@@ -17,3 +17,21 @@
 # Editor / OS noise
 .DS_Store
 *.swp
+
+# save-sweep 2026-10-08: local scratch residue
+/.grade-cli-axis-7/
+/.slb/
+/.beads/.br-wal-index-*/
+/grade-dist-good/
+/grade-dist-bad/
+/*.out
+/*.err
+/bv_triage.json
+/br_list.json
+/am_status.json
+/Undeclared
+/08hq3
+/NOT-FOUND"
+/SealedInstallReport::gate_install
+/observe_installed_ompo
+/gate_correlated_observability
