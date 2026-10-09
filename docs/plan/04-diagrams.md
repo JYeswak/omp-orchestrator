@@ -270,7 +270,7 @@ graph TD
     n79 --> n73
 ```
 
-**GENERATED CURRENT GRAPH.** The block above is the exact output of frankenmermaid against Cargo metadata at the recorded revision: 81 packages and 157 path-dependency edges. Every rendered edge is one path dependency from that metadata input; no edge was drawn from memory.
+**HISTORICAL SNAPSHOT AS OF 2026-09-06.** The block above is the exact output of frankenmermaid against Cargo metadata at the recorded revision: 81 packages and 157 path-dependency edges. Every rendered edge is one path dependency from that metadata input; no edge was drawn from memory.
 
 The generator's check mode compares this output byte-for-byte and returns DIAGRAM_DRIFT when an edge is hand-edited. Empty or malformed metadata is a typed DIAGRAM_INPUT error, never a zero-edge pass.
 

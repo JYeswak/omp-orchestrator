@@ -856,8 +856,8 @@ contracts (`docs/contracts/subprocess_contract.md`, `cancellation_contract.md`,
 heading inside a 21-heading file is invisible, while a missing file in a directory of eleven is one
 `ls`. Closed by `5d505f9` (`docs(coverage): map dispatch surfaces and alternatives`), which added
 [`omp_surface_coverage_ipg4.md`](../inventories/omp_surface_coverage_ipg4.md). The index still
-carries three more measurements of the same kind: 50 surfaces classified but only 12 rows in
-`docs/plan/OMP-COVERAGE-TABLE.jsonl`, and four different table schemas for one concern. — HISTORICAL as of 2026-09-02; coverage file closed `5d505f9`.
+carries three more measurements of the same kind: 50 surfaces classified but only 12 rows in `docs/plan/OMP-COVERAGE-TABLE.jsonl` — HISTORICAL as of 2026-09-02; coverage file closed `5d505f9`.
+There were also four different table schemas for one concern.
 
 **Appendix A stayed.** It is a `jsm` skill sweep about how this plan is being graded, not a surface
 classification; it belongs with the runbook's AAR material above, and moving it would have been a
