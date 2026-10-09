@@ -69,7 +69,7 @@ box = "S8"
 field = "all"
 owner_says = "crate = installer; staged-build-gate, crate_status = exists-no-caller"
 reviewer_says = "ASSERTING CORRECT on the status, with one addition: the box's headline fact should be that S8 CANNOT COMPLETE ON THIS FLEET, not that its crate lacks a caller. No enabled rch worker produces a Mach-O arm64, so install is a halted human step and every downstream consequence (paused supervisor, two stale hook gates, no arm64 ack-spine) follows from that one fact."
-evidence = "file -b on a lane-built binary -> 'ELF 64-bit LSB pie executable, x86-64' with uname -m -> arm64 ; ~/.config/rch/workers.toml -> joshs-brain and zestdata-local enabled=false, four contabo enabled=true ; the cross-compile lane compiles the whole graph incl. asupersync and fails at LINK on 'unable to find dynamic system library objc / iconv' (sor6 leg 3)"
+evidence = "file -b on a lane-built binary -> 'ELF 64-bit LSB pie executable, x86-64' with uname -m -> arm64 ; ~/.config/rch/workers.toml -> control-node and storage-node enabled=false, four contabo enabled=true ; the cross-compile lane compiles the whole graph incl. asupersync and fails at LINK on 'unable to find dynamic system library objc / iconv' (sor6 leg 3)"
 severity = "major"
 resolution = ""
 

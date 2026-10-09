@@ -7,7 +7,7 @@ box = "S1"
 field = "trigger_today.none"
 owner_says = "NONE MEASURED: no slash, no SessionStart, no launchd; hand-read only"
 reviewer_says = "Reject the absolute absence claim. Current host has SessionStart hooks and a RunAtLoad/KeepAlive launchd plist. The accurate state is: no verified S1-specific start/portal trigger; existing generic hooks and resident supervisor must remain separate edges."
-evidence = "sed -n '344,360p' /Users/josh/.claude/settings.json -> SessionStart hooks; sed -n '40,49p' /Users/josh/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist -> ProgramArguments plus RunAtLoad=true; no S1-specific portal/start invocation was established"
+evidence = "sed -n '344,360p' $HOME/.claude/settings.json -> SessionStart hooks; sed -n '40,49p' $HOME/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist -> ProgramArguments plus RunAtLoad=true; no S1-specific portal/start invocation was established"
 severity = "blocker"
 resolution = "resolved-at-7f9195a: S1.mmd distinguishes absent S1-specific slash/portal wiring from existing generic SessionStart and launchd paths; no total-absence claim remains"
 

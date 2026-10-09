@@ -149,7 +149,7 @@ against the emitting binary, not inferred from convention.
 | `XC-EXT-126` | 126 | POSIX shell | the file exists but is not executable | that it is missing | `chmod +x`, or check the interpreter line |
 | `XC-EXT-127` | 127 | POSIX shell | command not found | that the repo is missing the file. On 2026-09-01 a 127 for `bin/check.sh` was read as "untracked" when the real cause was a **stale worktree** whose tree predated the commit that added it | verify `git ls-files` in the SAME tree that produced the 127 |
 | `XC-EXT-128N` | 128+N | POSIX shell | the process died on signal N — 130 `SIGINT`, 137 `SIGKILL`/OOM, 139 `SIGSEGV` | a chosen exit. Nothing in this workspace emits above 124 | for 137, check memory and the OOM killer before the code |
-| `XC-EXT-RCH` | see note | `/Users/josh/.local/bin/rch` | a remote-compilation refusal: `[RCH] remote required; refusing local fallback [RCH-E301]` | a test result — this is §1's most expensive misread, because the refusal prints alongside cargo-shaped output | read the `[RCH]` prefix and the `RCH-Exxx` code, never the integer |
+| `XC-EXT-RCH` | see note | `$HOME/.local/bin/rch` | a remote-compilation refusal: `[RCH] remote required; refusing local fallback [RCH-E301]` | a test result — this is §1's most expensive misread, because the refusal prints alongside cargo-shaped output | read the `[RCH]` prefix and the `RCH-Exxx` code, never the integer |
 
 **On `103` specifically, and this is a correction to the session's own account.** The number was
 recorded as 103 during the incident. Two probes tonight could not reproduce it:

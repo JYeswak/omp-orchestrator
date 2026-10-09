@@ -9,7 +9,7 @@
 ## The fifth rule: the crates exist to orchestrate OMP, and today they scrape it
 
 Everything in this repo is built to drive OMP. Measured 2026-08-31 against the **installed** source
-at `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent` (v18.0.11, `dist/cli.js` 19 MB),
+at `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent` (v18.0.11, `dist/cli.js` 19 MB),
 the crates consume **none of it**. Not a thin subset, not a legacy subset — zero. Every `dist/…` path
 below is relative to that install root.
 
@@ -35,7 +35,7 @@ directories that *are* our lifecycle are named in that tree: `jsonrpc`, `tools`,
 **The zero is four greps over `crates/*/src/*`, each printed with the count it returned:**
 
 ~~~bash
-cd /Users/josh/Developer/omp-orchestrator
+cd $HOME/Developer/omp-orchestrator
 for p in 'Command::new("omp")' 'mode=rpc' 'muxConnect' 'omp/'; do
   printf '%s -> %s files\n' "$p" "$(git grep --no-index -lF "$p" -- 'crates/*/src/*' | wc -l | tr -d ' ')"
 done
@@ -133,14 +133,14 @@ against the installed binary. The reproducible figures are the **42** handler me
 Version gate and source identity:
 
   omp --version -> omp/18.0.11
-  /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js
+  $HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js
   SHA-256: a95635ad43ab85fcabcbee9bbcc593d9ea8e68ba54228b4c9fdbd1e25766281c; bytes: 19803745.
 
 This command derives the method list from the installed binary's RPC dispatch handler; it is not a
 hand-transcribed table:
 
 ~~~bash
-omp --version && bun -e 'const p="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"; const s=await Bun.file(p).text(); const start=s.indexOf("let w=async(v)=>"); const end=s.indexOf("},E=new KWt",start); const methods=[...s.slice(start,end).matchAll(/case"([^"]+)"/g)].map(x=>x[1]); console.log("RPC_COMMAND_METHODS="+methods.length); console.log(methods.join("\n"));'
+omp --version && bun -e 'const p="$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"; const s=await Bun.file(p).text(); const start=s.indexOf("let w=async(v)=>"); const end=s.indexOf("},E=new KWt",start); const methods=[...s.slice(start,end).matchAll(/case"([^"]+)"/g)].map(x=>x[1]); console.log("RPC_COMMAND_METHODS="+methods.length); console.log(methods.join("\n"));'
 ~~~
 
 Measured output: RPC_COMMAND_METHODS=42.
@@ -155,18 +155,18 @@ set_session_name, handoff, get_messages, get_messages_page, get_login_providers,
 
 ### Static production reachability (measured 2026-08-31)
 
-Scope: production Rust under /Users/josh/Developer/control-plane/crates/xtask/src/; tests, comments,
+Scope: production Rust under $HOME/Developer/control-plane/crates/xtask/src/; tests, comments,
 and compatibility tables are excluded. This command derives Rust constructor call sites and maps each
 constructor through RpcRequest::to_frame to the installed handler method:
 
 ~~~bash
 bun -e '
-const installedPath="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js";
+const installedPath="$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js";
 const installed=await Bun.file(installedPath).text();
 const handlerStart=installed.indexOf("let w=async(v)=>");
 const handlerEnd=installed.indexOf("},E=new KWt",handlerStart);
 const installedMethods=[...installed.slice(handlerStart,handlerEnd).matchAll(/case"([^"]+)"/g)].map(m=>m[1]);
-const sourcePath="/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs";
+const sourcePath="$HOME/Developer/control-plane/crates/xtask/src/omp_rpc.rs";
 const source=await Bun.file(sourcePath).text();
 const frameStart=source.indexOf("pub fn to_frame");
 const frameEnd=source.indexOf("pub fn handshake_requests",frameStart);
@@ -188,11 +188,11 @@ Measured output:
 
 installed_rpc_commands=42
 static_production_rpc_commands=5/42
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:275 negotiate_protocol
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:276 get_state
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:277 get_available_commands
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:278 get_available_models
-/Users/josh/Developer/control-plane/crates/xtask/src/omp_rpc.rs:279 set_fast_mode
+$HOME/Developer/control-plane/crates/xtask/src/omp_rpc.rs:275 negotiate_protocol
+$HOME/Developer/control-plane/crates/xtask/src/omp_rpc.rs:276 get_state
+$HOME/Developer/control-plane/crates/xtask/src/omp_rpc.rs:277 get_available_commands
+$HOME/Developer/control-plane/crates/xtask/src/omp_rpc.rs:278 get_available_models
+$HOME/Developer/control-plane/crates/xtask/src/omp_rpc.rs:279 set_fast_mode
 
 RpcRequest::CancelUiRequest at omp_rpc.rs:740 emits the separate extension_ui_response frame and is
 intentionally excluded from the inbound RpcCommand denominator.

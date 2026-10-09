@@ -389,7 +389,7 @@ CONTROL-PLANE in the then-current AGENTS.md table were not extracted; 28,779 LOC
 | `oracle-pane-state-differential` | 613 | present |
 | `oracle-compare` | 449 | present |
 
-Every one verified present at `/Users/josh/Developer/control-plane/crates/<name>` at measurement
+Every one verified present at `$HOME/Developer/control-plane/crates/<name>` at measurement
 time. At that pre-extraction measurement time, none was missing upstream; none was here.
 
 

@@ -232,7 +232,7 @@ The earlier exit-0 claim came from `tmux --version 2>&1 | head -1` (`PIPESTATUS=
 
 ### 11.1 Installed package identity
 
-`@oh-my-pi/pi-coding-agent` version `18.0.11`, repository `https://github.com/can1357/oh-my-pi.git`, package directory `packages/coding-agent`, installed root `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`.
+`@oh-my-pi/pi-coding-agent` version `18.0.11`, repository `https://github.com/can1357/oh-my-pi.git`, package directory `packages/coding-agent`, installed root `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`.
 
 `package.json` SHA-256 `dbd14cc1f445c16d485fa0571178a69100b8c485a42549d1643db390ebd2cc53`.
 

@@ -112,7 +112,7 @@ The four Phase 0 contracts in flight are the first documents held to this bar.
 ## Validation
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator && python3 - <<'PY'
+cd $HOME/Developer/omp-orchestrator && python3 - <<'PY'
 import pathlib,re
 M=pathlib.Path('/Volumes/ZestData/dicklesworthstone-mirror/asupersync/docs')
 def score(t):

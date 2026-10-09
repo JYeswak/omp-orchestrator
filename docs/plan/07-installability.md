@@ -58,7 +58,7 @@ instrument that does not measure the quantity in the sentence. `06-gates` did it
 did it with a denominator that grew 50% in one exchange, and this section did it with `fn main`.
 Every one survived multiple readings because a plausible integer reads as a measurement.
 
-**CURRENT RECHECK — pane-truth is now present in this workspace.** which pane-truth still resolves to /Users/josh/.local/bin/pane-truth, but crates/pane-truth exists and ls -1 crates | wc -l returns 50. The old GHOST conclusion was valid only for the pre-extraction snapshot; it is retired. The remaining identity question is whether the installed binary matches current HEAD, which requires the four-way identity receipt below. — HISTORICAL as of 2026-09-02.
+**CURRENT RECHECK — pane-truth is now present in this workspace.** which pane-truth still resolves to $HOME/.local/bin/pane-truth, but crates/pane-truth exists and ls -1 crates | wc -l returns 50. The old GHOST conclusion was valid only for the pre-extraction snapshot; it is retired. The remaining identity question is whether the installed binary matches current HEAD, which requires the four-way identity receipt below. — HISTORICAL as of 2026-09-02.
 **MEASURED — one of those three binaries cannot report its own identity.**
 `grep -c 'version' crates/tick-monitor/src/main.rs` returns `0`. `tick-monitor` has no `--version`
 flag and no version string anywhere in its entrypoint. Its identity is not *unmeasured*; it is
@@ -422,11 +422,11 @@ cause is classified. This measures internal buyer value without pretending that 
 or useful-work result already exists.
 
 **Becomes config.** `crates/installer/src/main.rs:Becomes` falls back to
-`PathBuf::from("/Users/josh")` when `HOME` is unset, and lines 118-119 default `CARGO` to
+`PathBuf::from("$HOME")` when `HOME` is unset, and lines 118-119 default `CARGO` to
 `~/.cargo/bin/cargo` — a deliberate bypass of the RCH shim measured at
-`/Users/josh/.rch/shims/cargo`. Both are correct behaviours for this machine and wrong as
+`$HOME/.rch/shims/cargo`. Both are correct behaviours for this machine and wrong as
 defaults. They become a config file at `$XDG_CONFIG_HOME/omp-orchestrator/config.toml` with
-per-machine overrides, and the `/Users/josh` literal becomes a hard error rather than a fallback —
+per-machine overrides, and the `$HOME` literal becomes a hard error rather than a fallback —
 an unset `HOME` is an environment we should refuse, not guess at. This is the scope the
 portability bead already owns; it is not new work invented here.
 

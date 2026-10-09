@@ -61,7 +61,7 @@
         "name": "omp_type_roots",
         "command": [
           "find",
-          "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types",
+          "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types",
           "-mindepth",
           "1",
           "-maxdepth",
@@ -72,14 +72,14 @@
         ],
         "state": "KNOWN",
         "observed": 57,
-        "output": "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/commit\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cleanse\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/hindsight\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/autoresearch\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/compress\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/advisor\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tools\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/modes\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/goals\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/config\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/security\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/autolearn\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tui\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/if-bench\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/web\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/launch\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/secrets\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/jsonrpc\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/markit\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/capability\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/exa\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/async\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/irc\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/discovery\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/utils\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/lsp\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/mcp\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cli\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/edit\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/sharpshooter\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/subprocess\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/memory-backend\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/ssh\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/auto-thinking\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/collab\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tiny\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/blob-broker\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/plan-mode\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/live\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/slash-commands\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/task\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/exec\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/registry\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/lib\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/commands\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/extensibility\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/eval\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/export\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/vibe\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/di",
+        "output": "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/commit\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cleanse\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/hindsight\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/autoresearch\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/compress\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/advisor\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tools\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/modes\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/goals\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/config\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/security\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/autolearn\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tui\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/if-bench\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/web\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/launch\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/secrets\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/jsonrpc\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/markit\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/capability\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/exa\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/async\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/irc\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/discovery\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/utils\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/lsp\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/mcp\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cli\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/edit\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/sharpshooter\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/subprocess\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/memory-backend\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/ssh\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/auto-thinking\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/collab\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tiny\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/blob-broker\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/plan-mode\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/live\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/slash-commands\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/tts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/task\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/exec\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/registry\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/lib\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/commands\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/extensibility\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/eval\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/export\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/vibe\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/di",
         "detail": "parsed type roots listing"
       },
       {
         "name": "omp_type_declarations",
         "command": [
           "find",
-          "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types",
+          "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types",
           "-mindepth",
           "1",
           "-maxdepth",
@@ -92,14 +92,14 @@
         ],
         "state": "KNOWN",
         "observed": 14,
-        "output": "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/sdk.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cursor.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cursor-bridge-tools.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cli-commands.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/telemetry-export-otlp.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/config.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/main.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/startup-splash.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cli.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/telemetry-export.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/workspace-tree.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/system-prompt.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/index.d.ts\n/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/thinking.d.ts\n",
+        "output": "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/sdk.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cursor.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cursor-bridge-tools.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cli-commands.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/telemetry-export-otlp.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/config.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/main.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/startup-splash.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/cli.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/telemetry-export.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/workspace-tree.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/system-prompt.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/index.d.ts\n$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/thinking.d.ts\n",
         "detail": "parsed declarations listing"
       },
       {
         "name": "omp_rpc_handlers",
         "command": [
           "installed",
-          "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
+          "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
           "dispatch cases"
         ],
         "state": "KNOWN",
@@ -111,7 +111,7 @@
         "name": "omp_methods",
         "command": [
           "installed",
-          "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
+          "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js",
           "omp/* strings"
         ],
         "state": "KNOWN",
@@ -144,7 +144,7 @@
         ],
         "state": "KNOWN",
         "observed": 26,
-        "output": "workspace_root=/Users/josh/Developer/omp-orchestrator packages=26",
+        "output": "workspace_root=$HOME/Developer/omp-orchestrator packages=26",
         "detail": "live cargo metadata parsed"
       }
     ],
@@ -29795,7 +29795,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/ack-spine/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/ack-spine/Cargo.toml"
         ],
         "outputs": [
           "targets=ack_spine,ack-spine,ack_detector,authorities,followup",
@@ -29826,7 +29826,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/finding/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/finding/Cargo.toml"
         ],
         "outputs": [
           "targets=finding",
@@ -29857,7 +29857,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/subprocess-contract/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/subprocess-contract/Cargo.toml"
         ],
         "outputs": [
           "targets=subprocess_contract",
@@ -29888,7 +29888,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/ack-stage/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/ack-stage/Cargo.toml"
         ],
         "outputs": [
           "targets=ack_stage",
@@ -29919,7 +29919,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/receiver-receipt/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/receiver-receipt/Cargo.toml"
         ],
         "outputs": [
           "targets=receiver_receipt,receiver-receipt",
@@ -29950,7 +29950,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/tick-monitor/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/tick-monitor/Cargo.toml"
         ],
         "outputs": [
           "targets=tick_monitor,tick-monitor,monitor",
@@ -29981,7 +29981,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/commit-build-fence/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/commit-build-fence/Cargo.toml"
         ],
         "outputs": [
           "targets=commit_build_fence,commit-build-fence,hook",
@@ -30012,7 +30012,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/composer-typed/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/composer-typed/Cargo.toml"
         ],
         "outputs": [
           "targets=composer_typed,composer-typed,differential,mutation,planted_known_bads",
@@ -30043,7 +30043,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/dispatch-claim-fence/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/dispatch-claim-fence/Cargo.toml"
         ],
         "outputs": [
           "targets=dispatch_claim_fence,claim_fence",
@@ -30074,7 +30074,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/dispatch-silence-watch/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/dispatch-silence-watch/Cargo.toml"
         ],
         "outputs": [
           "targets=dispatch_silence_watch,dispatch-silence-watch,silence",
@@ -30105,7 +30105,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/finding-dispatch/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/finding-dispatch/Cargo.toml"
         ],
         "outputs": [
           "targets=finding_dispatch,recurrence",
@@ -30136,7 +30136,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-orchestrator/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-orchestrator/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_orchestrator,omp-orchestrator,no_noop,build-script-build",
@@ -30167,7 +30167,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-rpc-session/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-rpc-session/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_rpc_session,omp-rpc-session,protocol",
@@ -30198,7 +30198,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/fleet-composite/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/fleet-composite/Cargo.toml"
         ],
         "outputs": [
           "targets=fleet_composite,fleet-composite,composite",
@@ -30229,7 +30229,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/installer/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/installer/Cargo.toml"
         ],
         "outputs": [
           "targets=installer,installer",
@@ -30260,7 +30260,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/kernel-bypass-gate/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/kernel-bypass-gate/Cargo.toml"
         ],
         "outputs": [
           "targets=kernel_bypass_gate,kernel-bypass-gate,kernel_bypass",
@@ -30291,7 +30291,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/kernel-only-operator-hook/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/kernel-only-operator-hook/Cargo.toml"
         ],
         "outputs": [
           "targets=kernel_only_operator_hook,kernel-only-operator-hook,hook",
@@ -30322,7 +30322,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/loop-queue-filter/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/loop-queue-filter/Cargo.toml"
         ],
         "outputs": [
           "targets=loop_queue_filter,loop-queue-filter,differential",
@@ -30353,7 +30353,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/no-shell-gate/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/no-shell-gate/Cargo.toml"
         ],
         "outputs": [
           "targets=no_shell_gate,no-shell-gate,pre-commit-gate,workspace-load,bead_standard,convergence,gap_propagation,gate,module_reachability,numbers,retired_figures,schemas,wired_lanes,workspace_load",
@@ -30384,7 +30384,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/path-literal-guard/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/path-literal-guard/Cargo.toml"
         ],
         "outputs": [
           "targets=path_literal_guard,repo_wide",
@@ -30415,7 +30415,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/pre-delete-citation-check/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/pre-delete-citation-check/Cargo.toml"
         ],
         "outputs": [
           "targets=pre_delete_citation_check,pre-delete-citation-check",
@@ -30446,7 +30446,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/state-wildcard-lint/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/state-wildcard-lint/Cargo.toml"
         ],
         "outputs": [
           "targets=state_wildcard_lint,state-wildcard-lint,specimens",
@@ -30477,7 +30477,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/undrained-pipe-lint/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/undrained-pipe-lint/Cargo.toml"
         ],
         "outputs": [
           "targets=undrained_pipe_lint,undrained-pipe-lint,specimens",
@@ -30508,7 +30508,7 @@
         "crate_should_own": "omp-inventory-map",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-inventory-map/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-inventory-map/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_inventory_map,omp-inventory-map,inventory",
@@ -30539,7 +30539,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-types/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-types/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_types",
@@ -30570,7 +30570,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/pane-dispatch-fence/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/pane-dispatch-fence/Cargo.toml"
         ],
         "outputs": [
           "targets=pane-dispatch-fence,admission",
@@ -69116,7 +69116,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/ack-spine/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/ack-spine/Cargo.toml"
         ],
         "outputs": [
           "targets=ack_spine,ack-spine,ack_detector,authorities,followup",
@@ -69145,7 +69145,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/finding/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/finding/Cargo.toml"
         ],
         "outputs": [
           "targets=finding",
@@ -69174,7 +69174,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/subprocess-contract/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/subprocess-contract/Cargo.toml"
         ],
         "outputs": [
           "targets=subprocess_contract",
@@ -69203,7 +69203,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/ack-stage/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/ack-stage/Cargo.toml"
         ],
         "outputs": [
           "targets=ack_stage",
@@ -69232,7 +69232,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/receiver-receipt/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/receiver-receipt/Cargo.toml"
         ],
         "outputs": [
           "targets=receiver_receipt,receiver-receipt",
@@ -69261,7 +69261,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/tick-monitor/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/tick-monitor/Cargo.toml"
         ],
         "outputs": [
           "targets=tick_monitor,tick-monitor,monitor",
@@ -69290,7 +69290,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/commit-build-fence/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/commit-build-fence/Cargo.toml"
         ],
         "outputs": [
           "targets=commit_build_fence,commit-build-fence,hook",
@@ -69319,7 +69319,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/composer-typed/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/composer-typed/Cargo.toml"
         ],
         "outputs": [
           "targets=composer_typed,composer-typed,differential,mutation,planted_known_bads",
@@ -69348,7 +69348,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/dispatch-claim-fence/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/dispatch-claim-fence/Cargo.toml"
         ],
         "outputs": [
           "targets=dispatch_claim_fence,claim_fence",
@@ -69377,7 +69377,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/dispatch-silence-watch/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/dispatch-silence-watch/Cargo.toml"
         ],
         "outputs": [
           "targets=dispatch_silence_watch,dispatch-silence-watch,silence",
@@ -69406,7 +69406,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/finding-dispatch/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/finding-dispatch/Cargo.toml"
         ],
         "outputs": [
           "targets=finding_dispatch,recurrence",
@@ -69435,7 +69435,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-orchestrator/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-orchestrator/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_orchestrator,omp-orchestrator,no_noop,build-script-build",
@@ -69464,7 +69464,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-rpc-session/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-rpc-session/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_rpc_session,omp-rpc-session,protocol",
@@ -69493,7 +69493,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/fleet-composite/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/fleet-composite/Cargo.toml"
         ],
         "outputs": [
           "targets=fleet_composite,fleet-composite,composite",
@@ -69522,7 +69522,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/installer/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/installer/Cargo.toml"
         ],
         "outputs": [
           "targets=installer,installer",
@@ -69551,7 +69551,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/kernel-bypass-gate/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/kernel-bypass-gate/Cargo.toml"
         ],
         "outputs": [
           "targets=kernel_bypass_gate,kernel-bypass-gate,kernel_bypass",
@@ -69580,7 +69580,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/kernel-only-operator-hook/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/kernel-only-operator-hook/Cargo.toml"
         ],
         "outputs": [
           "targets=kernel_only_operator_hook,kernel-only-operator-hook,hook",
@@ -69609,7 +69609,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/loop-queue-filter/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/loop-queue-filter/Cargo.toml"
         ],
         "outputs": [
           "targets=loop_queue_filter,loop-queue-filter,differential",
@@ -69638,7 +69638,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/no-shell-gate/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/no-shell-gate/Cargo.toml"
         ],
         "outputs": [
           "targets=no_shell_gate,no-shell-gate,pre-commit-gate,workspace-load,bead_standard,convergence,gap_propagation,gate,module_reachability,numbers,retired_figures,schemas,wired_lanes,workspace_load",
@@ -69667,7 +69667,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/path-literal-guard/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/path-literal-guard/Cargo.toml"
         ],
         "outputs": [
           "targets=path_literal_guard,repo_wide",
@@ -69696,7 +69696,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/pre-delete-citation-check/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/pre-delete-citation-check/Cargo.toml"
         ],
         "outputs": [
           "targets=pre_delete_citation_check,pre-delete-citation-check",
@@ -69725,7 +69725,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/state-wildcard-lint/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/state-wildcard-lint/Cargo.toml"
         ],
         "outputs": [
           "targets=state_wildcard_lint,state-wildcard-lint,specimens",
@@ -69754,7 +69754,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/undrained-pipe-lint/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/undrained-pipe-lint/Cargo.toml"
         ],
         "outputs": [
           "targets=undrained_pipe_lint,undrained-pipe-lint,specimens",
@@ -69783,7 +69783,7 @@
         "crate_should_own": "omp-inventory-map",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-inventory-map/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-inventory-map/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_inventory_map,omp-inventory-map,inventory",
@@ -69812,7 +69812,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/omp-types/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/omp-types/Cargo.toml"
         ],
         "outputs": [
           "targets=omp_types",
@@ -69841,7 +69841,7 @@
         "crate_should_own": "NONE",
         "inputs": [
           "cargo metadata --format-version 1 --no-deps",
-          "/Users/josh/Developer/omp-orchestrator/crates/pane-dispatch-fence/Cargo.toml"
+          "$HOME/Developer/omp-orchestrator/crates/pane-dispatch-fence/Cargo.toml"
         ],
         "outputs": [
           "targets=pane-dispatch-fence,admission",

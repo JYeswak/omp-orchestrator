@@ -9,7 +9,7 @@ This contract locks the process-hook boundary for the August-2026 Rust ecosystem
 ## Contract Artifacts
 
 1. **Authority registry:** `control-plane/hooks_certified.toml`, versioned with the control-plane substrate. It is the single registry for hooks present in `~/.claude/settings.json`; S1 stores references and projections, not a second hook definition.
-2. **Hook binaries:** the installed Rust substrate under `/Users/josh/.local/bin/`, with source shape in `control-plane/crates/zestgraph-hook-substrates`.
+2. **Hook binaries:** the installed Rust substrate under `$HOME/.local/bin/`, with source shape in `control-plane/crates/zestgraph-hook-substrates`.
 3. **Certification runner:** `hooks-registry-check` plus the six-stage `/hook-certification` gauntlet. A future `tests/hook_design_contract.rs` is the invariant suite; it does not exist in this wave.
 4. **Host adapters:** Claude `hookSpecificOutput` JSON and Codex command-hook output are separate serializers over one internal `HookDecision`; OMP's extension events are a different in-process API, not silently treated as the stdin process protocol.
 
@@ -21,13 +21,13 @@ The following are remeasurements, not inherited counts.
 |---|---|---|
 | `SRC-CLAUDE-21259` | Claude Code `2.1.259`; official Hooks reference: `https://code.claude.com/docs/en/hooks` | `PreToolUse` receives JSON containing `tool_name`, `tool_input`, and `tool_use_id`; structured decisions are stdout JSON with exit `0`; exit `2` is a blocking hook signal with stderr reason; a hook timeout normally continues the host permission flow. |
 | `SRC-CODEX-01521` | Codex CLI `0.152.1`; official Hooks reference: `https://developers.openai.com/codex/hooks` | `hooks.json` supplies matcher, command, timeout, and status message; exit `0` continues; exit `2` is event-specific blocking/feedback with stderr reason. Host timeout values are seconds. |
-| `SRC-OMP-1816` | OMP `18.1.6`; installed source `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/src/capability/hook.ts` and `examples/sdk/06-hooks.ts` | OMP exposes in-process `pi.on(...)` extension events such as `agent_start`, `tool_call`, and `agent_end`; a handler returning `undefined` does not block. Its `Hook` interface describes shell pre/post hooks, not Claude stdin JSON. |
+| `SRC-OMP-1816` | OMP `18.1.6`; installed source `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/src/capability/hook.ts` and `examples/sdk/06-hooks.ts` | OMP exposes in-process `pi.on(...)` extension events such as `agent_start`, `tool_call`, and `agent_end`; a handler returning `undefined` does not block. Its `Hook` interface describes shell pre/post hooks, not Claude stdin JSON. |
 | `SRC-ZESTGRAPH-54A36` | control-plane commit `54a36eb3a13e8d10ae454def6ead08a03ee3094a`; `zestgraph-hook-substrates` edition 2024 | Seven Rust binaries, direct asupersync dependency at git rev `fa3c01aec6c77c6652c7a754e8e009287daa5323`; `MAX_STDIN_BYTES=1_048_576`, child budget 9 seconds, `Cx`, `serde_json`, and `ExitCode` are present. |
-| `SRC-REGISTRY-16` | `/Users/josh/Developer/control-plane/hooks_certified.toml` | 16 rows, 0 `certified=true`, 16 `certified=false`, four event classes, and 16 unique existing binary paths. `certified=false` is commented as Stage-4 soak not run. |
-| `SRC-HOST-20` | installed `/Users/josh/.local/bin` census | 15 executable `zestgraph-*` paths plus `dcg`, `slb-guard-fail-closed`, `rch`, `skill-topology-hook`, and `skill-tracker`: 20 hook-adjacent binaries. The registry also names one shell script; it is not counted as a binary. |
-| `SRC-CLAUDE-CONFIG` | `/Users/josh/.claude/settings.json` | Four hook event keys are configured: `PreToolUse`, `PostToolUse`, `Stop`, and `SessionStart`; command hooks include shell paths and Rust adapters. |
-| `SRC-CODEX-CONFIG` | `/Users/josh/.codex/hooks.json` | `PreToolUse` command hooks use matcher, command, timeout, and status-message fields; the live file contains shell and binary commands. |
-| `SRC-HOOK-SKILLS` | `/Users/josh/.agents/skills/rust-hook-pattern/SKILL.md` and `hook-certification/SKILL.md` | The measured fail-mode ladder, Rust-binary rule, bounded stdin, direct pinned asupersync, and six-stage certification are the house practice adopted here. |
+| `SRC-REGISTRY-16` | `$HOME/Developer/control-plane/hooks_certified.toml` | 16 rows, 0 `certified=true`, 16 `certified=false`, four event classes, and 16 unique existing binary paths. `certified=false` is commented as Stage-4 soak not run. |
+| `SRC-HOST-20` | installed `$HOME/.local/bin` census | 15 executable `zestgraph-*` paths plus `dcg`, `slb-guard-fail-closed`, `rch`, `skill-topology-hook`, and `skill-tracker`: 20 hook-adjacent binaries. The registry also names one shell script; it is not counted as a binary. |
+| `SRC-CLAUDE-CONFIG` | `$HOME/.claude/settings.json` | Four hook event keys are configured: `PreToolUse`, `PostToolUse`, `Stop`, and `SessionStart`; command hooks include shell paths and Rust adapters. |
+| `SRC-CODEX-CONFIG` | `$HOME/.codex/hooks.json` | `PreToolUse` command hooks use matcher, command, timeout, and status-message fields; the live file contains shell and binary commands. |
+| `SRC-HOOK-SKILLS` | `$HOME/.agents/skills/rust-hook-pattern/SKILL.md` and `hook-certification/SKILL.md` | The measured fail-mode ladder, Rust-binary rule, bounded stdin, direct pinned asupersync, and six-stage certification are the house practice adopted here. |
 | `SRC-OMP-CONTRACT` | `docs/plan/flow/CONTRACT.md:200-204` | The declared process shape is stdin `{tool_name, tool_input}` to Claude `hookSpecificOutput`; it cites `zestgraph-danger-gate` as the live benign probe. |
 | `SRC-OPS-RULES` | this-repo `AGENTS.md`, especially the asupersync and gate sections | `&Cx` first, bounded waits, process-group kill, both pipes drained, timeout is restrictive/unknown, and a denied probe is UNKNOWN rather than a negative. |
 
@@ -147,13 +147,13 @@ One pasteable external-input validation. It deliberately does not grep this cont
 
 ```bash
 set -eu
-registry="$(bun -e 'const d=Bun.TOML.parse(await Bun.file("/Users/josh/Developer/control-plane/hooks_certified.toml").text()); const r=d.hook||[]; if(r.length!==16 || r.filter(x=>x.certified===false).length!==16 || new Set(r.map(x=>x.event)).size!==4) process.exit(1); console.log(`registry_rows=${r.length} certified_false=${r.filter(x=>x.certified===false).length} events=${new Set(r.map(x=>x.event)).size}`)')"
-zest="$(find /Users/josh/.local/bin -maxdepth 1 -type f -name 'zestgraph-*' -perm -111 -print | wc -l | tr -d ' ')"
+registry="$(bun -e 'const d=Bun.TOML.parse(await Bun.file("$HOME/Developer/control-plane/hooks_certified.toml").text()); const r=d.hook||[]; if(r.length!==16 || r.filter(x=>x.certified===false).length!==16 || new Set(r.map(x=>x.event)).size!==4) process.exit(1); console.log(`registry_rows=${r.length} certified_false=${r.filter(x=>x.certified===false).length} events=${new Set(r.map(x=>x.event)).size}`)')"
+zest="$(find $HOME/.local/bin -maxdepth 1 -type f -name 'zestgraph-*' -perm -111 -print | wc -l | tr -d ' ')"
 extra=0
-for b in dcg slb-guard-fail-closed rch skill-topology-hook skill-tracker; do test -x "/Users/josh/.local/bin/$b"; extra=$((extra+1)); done
+for b in dcg slb-guard-fail-closed rch skill-topology-hook skill-tracker; do test -x "$HOME/.local/bin/$b"; extra=$((extra+1)); done
 test "$zest" -eq 15
 test "$extra" -eq 5
-probe="$(printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"printf ok\"}}' | timeout 3 /Users/josh/.local/bin/zestgraph-danger-gate)"
+probe="$(printf '%s\n' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"printf ok\"}}' | timeout 3 $HOME/.local/bin/zestgraph-danger-gate)"
 printf '%s\n' "$probe" | jq -e '.hookSpecificOutput.permissionDecision == "allow"' >/dev/null
 printf '%s\n' "$registry"
 printf 'HOOK_DESIGN PASS registry_rows=16 certified_false=16 events=4 installed_hook_binaries=20 danger_decision=allow timeout_budget_ms=200\n'
@@ -170,15 +170,15 @@ HOOK_DESIGN PASS registry_rows=16 certified_false=16 events=4 installed_hook_bin
 
 - `https://code.claude.com/docs/en/hooks` — Claude Code `2.1.259` hook input, structured output, exit, and timeout semantics.
 - `https://developers.openai.com/codex/hooks` — Codex CLI `0.152.1` matcher, command, timeout, and exit semantics.
-- `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/src/capability/hook.ts` — OMP `18.1.6` shell pre/post Hook interface.
-- `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/examples/sdk/06-hooks.ts` — OMP extension event handlers and non-blocking undefined return.
-- `/Users/josh/Developer/control-plane/crates/zestgraph-hook-substrates/Cargo.toml` — edition 2024, seven binaries, pinned asupersync rev.
-- `/Users/josh/Developer/control-plane/crates/zestgraph-hook-substrates/src/lib.rs:12-22,34-38,50-60,81-103` — `Cx`, bounded stdin, child deadline, process handling, and decision emission.
-- `/Users/josh/Developer/control-plane/hooks_certified.toml` — 16-row authority registry, event classes, fail modes, and certification state.
-- `/Users/josh/.claude/settings.json` and `/Users/josh/.codex/hooks.json` — live host hook configuration.
+- `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/src/capability/hook.ts` — OMP `18.1.6` shell pre/post Hook interface.
+- `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/examples/sdk/06-hooks.ts` — OMP extension event handlers and non-blocking undefined return.
+- `$HOME/Developer/control-plane/crates/zestgraph-hook-substrates/Cargo.toml` — edition 2024, seven binaries, pinned asupersync rev.
+- `$HOME/Developer/control-plane/crates/zestgraph-hook-substrates/src/lib.rs:12-22,34-38,50-60,81-103` — `Cx`, bounded stdin, child deadline, process handling, and decision emission.
+- `$HOME/Developer/control-plane/hooks_certified.toml` — 16-row authority registry, event classes, fail modes, and certification state.
+- `$HOME/.claude/settings.json` and `$HOME/.codex/hooks.json` — live host hook configuration.
 - `docs/plan/flow/CONTRACT.md:200-204` — declared stdin/output contract and registry-row requirement.
-- `AGENTS.md` and `/Users/josh/.agents/skills/rust-hook-pattern/SKILL.md` — cancellation, timeout, fail-mode, and evidence rules.
-- `/Users/josh/Developer/control-plane` commit `54a36eb3a13e8d10ae454def6ead08a03ee3094a` — version-matched substrate source identity.
+- `AGENTS.md` and `$HOME/.agents/skills/rust-hook-pattern/SKILL.md` — cancellation, timeout, fail-mode, and evidence rules.
+- `$HOME/Developer/control-plane` commit `54a36eb3a13e8d10ae454def6ead08a03ee3094a` — version-matched substrate source identity.
 
 ## NO-CLAIM
 

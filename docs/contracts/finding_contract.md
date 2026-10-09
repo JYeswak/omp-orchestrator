@@ -236,7 +236,7 @@ this document must be updated, not that the code broke.
 pinned defect at least runs. Their measured status is re-derivable with one command:
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator && \
+cd $HOME/Developer/omp-orchestrator && \
   printf 'SupervisorDecision variants: %s\n' \
     "$(sed -n '14,55p' crates/finding-dispatch/src/lib.rs | grep -cE '^\s+[A-Z][A-Za-z]+')" && \
   printf 'FINDING_THRESHOLD: %s\n' \

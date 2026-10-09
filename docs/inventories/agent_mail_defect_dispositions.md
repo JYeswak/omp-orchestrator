@@ -24,7 +24,7 @@ refuted**, and the version question is settled:
 | fact | measured |
 |---|---|
 | shipped binary | `am --version` → `am 0.3.31` (`/opt/homebrew/bin/am`) |
-| working checkout `/Users/josh/Developer/mcp_agent_mail_rust` | `Cargo.toml` `version = "0.3.10"`, HEAD `88b531c0` = `v0.3.10-30` |
+| working checkout `$HOME/Developer/mcp_agent_mail_rust` | `Cargo.toml` `version = "0.3.10"`, HEAD `88b531c0` = `v0.3.10-30` |
 | **tag `v0.3.31` after `git fetch origin --tags`** | **`git show v0.3.31:Cargo.toml` → `version = "0.3.31"`** |
 | mirror `/Volumes/ZestData/dicklesworthstone-mirror/mcp_agent_mail_rust` | `version = "0.3.32"`, HEAD `c7a7083f` = `v0.3.32-7` |
 | `git grep -lF 'm.topic' v0.3.31` | **6 files** — not 0 |
@@ -416,8 +416,8 @@ $ sqlite3 "file:$LIVE?mode=ro" "select a.id,a.project_id,p.human_key,
     (select count(*) from message_recipients r where r.agent_id=a.id) recips,
     (select count(*) from message_recipients r where r.agent_id=a.id and r.read_ts is null) unread
   from agents a join projects p on p.id=a.project_id where a.name='AmberGate';"
-39|65 |/Users/josh/Developer/control-plane      |  4|  0     <-- the 0
-69|107|/Users/josh/Developer/omp-orchestrator   |113| 22     <-- the truth
+39|65 |$HOME/Developer/control-plane      |  4|  0     <-- the 0
+69|107|$HOME/Developer/omp-orchestrator   |113| 22     <-- the truth
 ```
 
 **`0` is exactly what id=39 reports.** One surface resolved `AmberGate` to the control-plane row,
@@ -547,8 +547,8 @@ listener" has some other cause is now **UNEXPLAINED and open**, not answered by 
 ## Validation
 
 ```bash
-cd /Users/josh/Developer/mcp_agent_mail_rust
-LIVE=/Users/josh/.local/share/mcp-agent-mail-rust-live/storage.sqlite3
+cd $HOME/Developer/mcp_agent_mail_rust
+LIVE=$HOME/.local/share/mcp-agent-mail-rust-live/storage.sqlite3
 
 # LEG 0 — ANTI-VACUITY: the shipped tag exists and matches the shipped binary, or FAIL.
 BIN=$(am --version | awk '{print $2}')

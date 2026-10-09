@@ -79,7 +79,7 @@ Four independent causes, each with its counter-move. All four were observed this
 ## Validation
 
 ```
-cd /Users/josh/Developer/omp-orchestrator && \
+cd $HOME/Developer/omp-orchestrator && \
 printf 'PX ids=%s phases=%s gates_wired=%s cycles=%s\n' \
   "$(grep -c '^`PX-' docs/contracts/planning_to_exhaustion.md)" \
   "$(grep -c '^`PX-P' docs/contracts/planning_to_exhaustion.md)" \

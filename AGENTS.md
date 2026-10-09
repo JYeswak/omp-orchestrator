@@ -439,7 +439,7 @@ binaries, and one of those is the binary gating every commit in this tree:
 
 ```
 installed hook  7d03b2490a2f6f57...  Mach-O 64-bit executable arm64  1283200 bytes
-                built on contabo-3 from the source committed in f194a01
+                built on worker-3 from the source committed in f194a01
 prior hook      536f4c67705f79ff...                                  1283408 bytes  (from 6d9a50c)
 ```
 
@@ -523,7 +523,7 @@ verb** — which is one `--help` away and was nearly filed as a blocker.
 
 ### AND THE WORKER'S REPO HAS *ZERO COMMITS* — NOT SHALLOW, NOT GRAFTED, NOT DIVERGENT
 
-Measured on contabo-4 via `--job`, and it retires three competing hypotheses at once:
+Measured on worker-4 via `--job`, and it retires three competing hypotheses at once:
 
 ```
 git rev-parse HEAD                    fatal: ambiguous argument 'HEAD': unknown revision …
@@ -561,7 +561,7 @@ was runnable all along is wrong, and there is now a measurement saying so rather
 inference.
 
 ⚠️ **NO-CLAIM, AND THE WORD "EVER" WAS RETRACTED FROM THIS RULE WITHIN THE HOUR.** `n=1` on the
-WORKER axis: **four consecutive `--job` probes all selected contabo-4**, so repetition cannot
+WORKER axis: **four consecutive `--job` probes all selected worker-4**, so repetition cannot
 reach a second box and `RCH_WORKER` pinning is forbidden. n=4 on the run axis for that one
 worker, plus one independent reproduction. The mechanism is transport-level and *should* be
 uniform — **but "uniform by construction" is an ARGUMENT, and this file retired four
@@ -569,7 +569,7 @@ one-sample claims the same night.** A standing prohibition over a whole class of
 deserves better than one box.
 
 **THE ZERO-COST SETTLE — DO IT AS A PIGGYBACK, NEVER SPEND A WINDOW ON IT.** The next agent whose
-build lands on a worker that is **not** contabo-4 runs one `rch exec --job -- git rev-list
+build lands on a worker that is **not** worker-4 runs one `rch exec --job -- git rev-list
 --count --all` in that same window. `0` closes the fleet axis and this caveat comes out.
 
 **And the transferable rule from how `--job` was found is not "read the help when blocked."** Its
@@ -601,8 +601,8 @@ omp-orchestrator pane1."** That is this pane. **A comment is not a gate.**
 
 **AND THAT FILE CANNOT BE READ WITH A NAIVE GREP.** It is 9,924 bytes of narration in which dead
 values outlive the settings they describe. Measured: I misread it **twice in five minutes** —
-reporting `contabo-3 enabled=false` (it is `true`; I caught a neighbouring block's trailing comment)
-and `contabo-4 slots=2` (it is `4`; I caught a `# total_slots = 2 (OOM GUARD)` comment). **Strip
+reporting `worker-3 enabled=false` (it is `true`; I caught a neighbouring block's trailing comment)
+and `worker-4 slots=2` (it is `4`; I caught a `# total_slots = 2 (OOM GUARD)` comment). **Strip
 comments first, then take last-value-wins per block.** The file documents this about itself: *"22
 comment lines mentioned darwin while exactly 1 tags line carried it. That drift cost a peer an
 evening."*
@@ -699,7 +699,7 @@ is rounding error; the pools are the whole problem**, and `rch gc`'s 12-hour idl
 active fleet never self-reclaims them.
 
 **FOURTH CLAUSE (bead `4ftow`): RETIRE AT REPORT.** When your grade is reported, retire its
-export in the same breath: `reclaim-sweep --base /Users/josh/Developer --worker <the box your
+export in the same breath: `reclaim-sweep --base $HOME/Developer --worker <the box your
 build ran on> --retire <your export basename> [--apply]` (dry run first). The verb drops
 only `.rch-target*` pools enumerated under that export on that box, refuses a busy worker
 with exit 2 (retry later -- a 0 there would report disposal that never happened), and
@@ -737,7 +737,7 @@ fails when the hand-kept copy and the derivable source disagree.
 
 ⛔ **AND THE MAC SIDE IS NOT THE LEAK — the conductor filed that premise and it was wrong within two
 minutes.** Mac-side export trees are **16 dirs × 40 MB = 320 MB, against 178 GB free.** The
-multi-GB figure is the WORKER's compiled pool; the reclaim log's leading `/Users/josh/Developer/...`
+multi-GB figure is the WORKER's compiled pool; the reclaim log's leading `$HOME/Developer/...`
 is **the worker's replica of the Mac layout**, which this file already warns about. **Acting on the
 original wording would have been 320 MB of work against a 42 GB problem.**
 
@@ -886,8 +886,8 @@ success and does nothing. Reclaim stays a standing duty until the reaper is *pro
 contract."* **There is no contract exemption.** `rch gc --dry-run` discloses its own reason:
 
 ```
-rch gc (dry-run, idle window: 12h, base: /Users/josh/Developer)
-  contabo-1: would remove 0 dir(s), freeing 0 MB      <- all four, while sitting at 90-93 %
+rch gc (dry-run, idle window: 12h, base: $HOME/Developer)
+  worker-1: would remove 0 dir(s), freeing 0 MB      <- all four, while sitting at 90-93 %
 ```
 
 **It is a 12-HOUR IDLE WINDOW.** A pool touched inside 12h never qualifies, and an active fleet
@@ -902,16 +902,16 @@ was the WINDOW and not an exemption.**
 pass, 2026-09-08:**
 
 ```
-contabo-1  91% -> 50%   40,535 MB   17 dirs
-contabo-2  90% -> 67%   22,480 MB   14 dirs
-contabo-3  93% -> 44%   48,121 MB   23 dirs
-contabo-4  91% -> 43%   46,524 MB   14 dirs
+worker-1  91% -> 50%   40,535 MB   17 dirs
+worker-2  90% -> 67%   22,480 MB   14 dirs
+worker-3  93% -> 44%   48,121 MB   23 dirs
+worker-4  91% -> 43%   46,524 MB   14 dirs
 
 Posture: local-only (0 admissible)  ->  remote-ready (ALL WORKERS HEALTHY)
 ```
 
 **Where it hides.** The lane replicates the Mac path layout on the Linux workers, so the disk is
-under **`/Users/josh/Developer`** — 57.5 G of it on one box. `du -sh /root` returns ~11 G and looks
+under **`$HOME/Developer`** — 57.5 G of it on one box. `du -sh /root` returns ~11 G and looks
 innocent. **A guessed directory list will miss it; enumerate `/*` instead.** Per-project the
 consumers are `.rch-target-<worker>-pool-<hash>` (one was **24 G alone**), `.rch-target`,
 plus orphaned `*-mut` mutation worktrees and `grade-*` scratch trees that outlive the grade.
@@ -932,7 +932,7 @@ plus orphaned `*-mut` mutation worktrees and `grade-*` scratch trees that outliv
   `$BASE/<export-shaped>/.rch-tmp`". THE NAME-SHAPE GATE IS DELETED. It matched only
   `*export*|*grade*|_grade-*` and it ran FIRST, returning KEEP before Mac-absence -- the
   sound discriminator -- was ever consulted. Measured across all four boxes: 90 caches, 22
-  name-shaped, so 68 were invisible; on contabo-3, 16 of 17 unmatched caches were ABSENT on
+  name-shaped, so 68 were invisible; on worker-3, 16 of 17 unmatched caches were ABSENT on
   the Mac and therefore provably abandoned. A WIDER NAME LIST WOULD BE THE SAME DEFECT
   SPELLED LONGER.
   THE PREDICATE IS NOW: delete `$BASE/<any>/.rch-tmp` when the parent is NOT a canonical
@@ -944,7 +944,7 @@ plus orphaned `*-mut` mutation worktrees and `grade-*` scratch trees that outliv
   being present on the Mac. Verified on the live run -- canonical PRESENT on every swept box.
 - **NEVER touches** source: `crates/`, `docs/`, `src/`, `.beads/`, `.git/`, `Cargo.toml`.
 - **REFUSES to run on a host with a live `cargo`/`rustc`.** This is not decoration — on 2026-09-08 it
-  **SKIPPED contabo-3** because a peer's build was executing, and that box was reclaimed on a second
+  **SKIPPED worker-3** because a peer's build was executing, and that box was reclaimed on a second
   pass once the build finished.
 - **Everything it deletes is regenerable by definition.** The cost of being wrong is a rebuild.
 - **`--dry-run` FIRST.** It prints a per-dir verdict and the whitelist refusals.
@@ -1254,7 +1254,7 @@ worktree must not outlive the test that made it. Nothing else may create one —
 lane, not an agent wanting a clean tree, not a "temporary" experiment.
 **CORRECTION, omp-orchestrator-9edo3 (2026-09-09; installed OMP 18.1.15):** The native OMP task
 primitive is worktree machinery, not an advisory hint. The installed declarations expose
-TaskItem.isolated?: boolean at /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/task/types.d.ts:113-118,
+TaskItem.isolated?: boolean at $HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/task/types.d.ts:113-118,
 an executor worktree?: string at .../types/task/executor.d.ts:75-83, and ensureIsolation / cleanupIsolation
 at .../types/task/worktree.d.ts:87-99. The installed bundle's task-branch capture names branches
 omp/task/<taskId> at dist/cli.js byte 12390486; its isolation backend creates the merged directory
@@ -1975,7 +1975,7 @@ NO-CLAIM: a manifest records the instrument's declared input coverage. FULL does
 ## The fifth rule: the crates exist to orchestrate OMP, and today they scrape it
 
 Everything in this repo is built to drive OMP. Measured 2026-08-31 against the **installed** source
-at `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent` (v18.0.11, `dist/cli.js` 19 MB),
+at `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent` (v18.0.11, `dist/cli.js` 19 MB),
 and re-measured 2026-09-11 at v18.1.18, the crates consume **none of it**. Not a thin subset, not a
 legacy subset — zero. Every `dist/…` path below is relative to that install root.
 
@@ -2009,7 +2009,7 @@ caught exactly this class of change on its first live run: installed 18.1.18 aga
 **The zero is four greps over `crates/*/src/*`, each printed with the count it returned:**
 
 ~~~bash
-cd /Users/josh/Developer/omp-orchestrator
+cd $HOME/Developer/omp-orchestrator
 for p in 'Command::new("omp")' 'mode=rpc' 'muxConnect' 'omp/'; do
   printf '%s -> %s files\n' "$p" "$(git grep --no-index -lF "$p" -- 'crates/*/src/*' | wc -l | tr -d ' ')"
 done
@@ -3482,8 +3482,8 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
 
 8y. **AN ENVIRONMENT CLASS IS A PROPERTY OF `(leg, box)`, NOT OF THE LEG.** Measured 2026-09-12 when
    two independent partitions of the SAME 14 lane reds disagreed on two rows — one calling them
-   ABSENT, the other FOSSIL — **and both were right about their own box**: `contabo-3` has no
-   `.git` at all, `contabo-1` has one with a stale 85-path index. The identical assertion is ABSENT
+   ABSENT, the other FOSSIL — **and both were right about their own box**: `worker-3` has no
+   `.git` at all, `worker-1` has one with a stale 85-path index. The identical assertion is ABSENT
    where there is no object database and FOSSIL where there is one lacking the history.
    **So a class NEVER transfers across boxes.** A lane ROOT-class verdict (worker runs as root, so a
    `chmod`-unreadable fixture is readable anyway) says NOTHING about the same leg in CI. **Any
@@ -3809,7 +3809,7 @@ derivation** — a derived slug was wrong twice (`8f` preserves the underscore i
    what a mutant is allowed to change, then ask on which boxes that change is observable.**
 
    ⭐ **AND A FIXTURE-INTERNAL LEG IS BOX-INDEPENDENT, WHICH IS STRONGER THAN A SAME-BOX PAIR:** the
-   mutant reddened on `contabo-1`, `-2` and `-4`, nine landed attempts, `exit=101` every time,
+   mutant reddened on `worker-1`, `-2` and `-4`, nine landed attempts, `exit=101` every time,
    **because the leg does not depend on the box's own repo shape.** That property is what makes the
    shape provable at all — and it is the answer to the confounded-cross-box class recorded above,
    not an exception to it.
@@ -4248,7 +4248,7 @@ should be unable to emit a row whose only options are the orchestrator's own ver
   correctly and being defeated by it. Measured:
 
   ```
-  command -v ompo   /Users/josh/.local/bin/ompo
+  command -v ompo   $HOME/.local/bin/ompo
   file              Mach-O 64-bit executable arm64, 896,128 B, built 2026-09-07 09:01
   ompo capabilities --json   exit 0
   ```
@@ -4448,8 +4448,8 @@ This is the clause that matters, because it names the mechanism rather than the 
 it supervised the wrong repo all night. Rather than fix one default, I hand-dispatched for hours.
 
 **CORRECTED 2026-09-02 — the kernel was FIXED and the doctrine outlived the defect.** The binary
-was rebuilt Sep 1 19:29 and now carries no `/Users/josh/Developer/*` literals at all
-(`strings … | grep -oE '/Users/josh/Developer/[a-z-]+'` returns nothing). `--plan` from this repo
+was rebuilt Sep 1 19:29 and now carries no `$HOME/Developer/*` literals at all
+(`strings … | grep -oE '$HOME/Developer/[a-z-]+'` returns nothing). `--plan` from this repo
 correctly resolves `bead=omp-orchestrator-omp-surface-map-41b`, and the `--apply` lane is cron'd at
 `8,28,48` and alive — its log reads `no idle pane both surfaces agree on — nothing to do`, which is
 the two-surface agreement rule working, not a silent failure.
@@ -4516,7 +4516,7 @@ The retired text read *"the live gap is a missing `[[bin]]` on `crates/finding`.
 
 ```
 grep -c '[[bin]]' crates/finding/Cargo.toml        1     <- name = "finding", path = "src/main.rs"
-command -v finding                    /Users/josh/.local/bin/finding
+command -v finding                    $HOME/.local/bin/finding
 finding --help                        "usage: finding <subcommand>"   rc=0
 landed                                c79524e  2026-09-07  "give the finding kernel an operator surface [test]"
 ```
@@ -4596,7 +4596,7 @@ BRANCH RE-ACQUIRES THIS DEFECT EVERY TIME SOMEONE ADDS A CASE. Each arm must ass
 precondition and the residual must be the unknown, never the pass. Fail closed in the direction
 that costs nothing.
 
-The installed rch-lane-bind binary at /Users/josh/.local/bin/rch-lane-bind is outside this repo.
+The installed rch-lane-bind binary at $HOME/.local/bin/rch-lane-bind is outside this repo.
 Its stdin probe cannot prove that the Claude PreToolUse table intercepted a live call, and this
 repo does not claim fresh-session coverage from a stale session. The measured wrapper limitation
 is named rather than hidden: timeout, nice, env, time, stdbuf, and xargs wrappers may bypass a
@@ -4614,7 +4614,7 @@ consequence the ruling has, stated once so nobody rediscovers it at 23:00 with t
 
 ```
 .git/hooks/pre-commit          Mach-O arm64   REFUSES EVERY COMMIT when it judges itself stale
-/Users/josh/.local/bin/ompo    Mach-O arm64   the operator verb every wiring proof terminates at
+$HOME/.local/bin/ompo    Mach-O arm64   the operator verb every wiring proof terminates at
 ```
 
 **Both surfaced within one hour, independently, from opposite directions** — the hook froze the
@@ -5647,7 +5647,7 @@ improve a signal, **it restored the only source of one.**
 verified independently by the conductor:**
 ```
 RCH_REQUIRE_REMOTE=1 rch exec --job -- sh -c 'test -e .git && echo PRESENT || echo ABSENT; git rev-parse HEAD'
-  cwd=/Users/josh/Developer/omp-orchestrator
+  cwd=$HOME/Developer/omp-orchestrator
   .git: ABSENT
   fatal: not a git repository (or any of the parent directories): .git
   Remote command finished: exit=0
@@ -6142,7 +6142,7 @@ and is a print statement.
 
 **Measured 2026-09-11 on a run whose gate output was valid and whose exit code was not.**
 ```
-[RCH] RCH-E327 remote compile on contabo-3 SUCCEEDED but returned executables for the WRONG
+[RCH] RCH-E327 remote compile on worker-3 SUCCEEDED but returned executables for the WRONG
       PLATFORM: this build targets aarch64-apple-darwin and the retrieved artifact(s) are ELF.
       debug/{contabo-reclaim, dispatch-silence-watch, doctrine-retirement-gate, gate-runner, …}
       The local target directory now holds unrunnable binaries. Treating as a build failure (102).
@@ -6604,14 +6604,14 @@ it.**
 **The conductor reported a residual from two rows: a worker flagged
 `disk_free_below_critical_gb` at 44.2 GB free while an unflagged one sat at 40.0 GB.** A peer
 then proposed a hypothesis that would have made the flag CORRECT and inverted that conclusion —
-**the floor scales per SLOT**, since each slot holds a target pool (`contabo-1` has 2 slots,
+**the floor scales per SLOT**, since each slot holds a target pool (`worker-1` has 2 slots,
 the rest have 4). ⭐ **Any per-slot constant between 11.05 and 20 GB fits both rows.**
 
 ⛔ **It then killed its own hypothesis before publishing, by measuring the other two:**
 ```
-contabo-3   49.7 GB   4 slots   NOT flagged
-contabo-4   44.2 GB   4 slots   FLAGGED      <- flagged BETWEEN two unflagged hosts
-contabo-2   30.2 GB   4 slots   NOT flagged
+worker-3   49.7 GB   4 slots   NOT flagged
+worker-4   44.2 GB   4 slots   FLAGGED      <- flagged BETWEEN two unflagged hosts
+worker-2   30.2 GB   4 slots   NOT flagged
 ```
 ⭐⭐ **A flagged host BETWEEN two unflagged hosts with identical slot counts rules out ANY
 MONOTONE THRESHOLD on the reported figure — not merely a uniform one, but the slot-scaled one
@@ -8230,7 +8230,7 @@ separate open problem.
 
 **`kernel_candidate` recognised `omp-orchestrator` — the crate/bin name — and NOT `ompo`, the
 name the binary is INSTALLED and INVOKED under.** The launchd row runs
-`/Users/josh/.local/bin/ompo supervise --repo …`, and the *"kernel must be the sole shell
+`$HOME/.local/bin/ompo supervise --repo …`, and the *"kernel must be the sole shell
 command"* rule is reachable **only after `kernel_candidate` returns `Some`**:
 
 ```
@@ -8445,7 +8445,7 @@ if has_cargo_test_figure(trimmed) && !has_worker_authority(trimmed) { … }
 this repo's own *a figure must declare its lane* rule, enforced at the tracker. Not a nuisance.
 
 ⛔ **AND THE OBVIOUS REMEDY IS DISQUALIFIED BY MEASUREMENT, WHICH IS THE PART WORTH KEEPING.**
-I held universal statements from two grader lanes — *"thirty-seven remote runs, contabo-1..4,
+I held universal statements from two grader lanes — *"thirty-seven remote runs, worker-1..4,
 never pinned, wrote to NO remote worker tree"* — so appending `worker=contabo` to THEIR closes
 would have been attribution rather than invention. Then I counted the closers:
 

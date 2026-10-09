@@ -97,8 +97,8 @@ re-run, and it is stronger evidence for leg 2 than the lane could have produced.
 ## Leg 2's on-lane run — UNMEASURABLE, and the gate is ENVIRONMENT-HONEST
 
 ```
-RCH_WORKER=contabo-3 … RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p no-shell-gate --test sender_identity
-exit=101  contabo-3  bypass=0   5 passed; 3 failed
+RCH_WORKER=worker-3 … RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p no-shell-gate --test sender_identity
+exit=101  worker-3  bypass=0   5 passed; 3 failed
 ```
 
 The split is perfectly clean:
@@ -137,7 +137,7 @@ fixture could not.
 ## Legs 1 and 3 — on-lane, with a mutation
 
 ```
-cargo test -j 2 -p agent-mail-native --test identity   exit=0  contabo-3  bypass=0  10 passed / 0 failed
+cargo test -j 2 -p agent-mail-native --test identity   exit=0  worker-3  bypass=0  10 passed / 0 failed
 ```
 
 Leg 1's rendered header, asserted verbatim by

@@ -19,7 +19,7 @@ sota_cite = "this-repo:crates/crate-atom-gate/src/lib.rs (Part::ALL, 9 arms; the
 skill = "/beads-workflow, /beads-bv, /beads-north-star"
 
 # PINNED, as the packet asks: this is the exact report shape S4 consumes. It is REAL — the
-# emitter is landed and its 10 legs are green on contabo-3 — but see no_claim: the BINARY
+# emitter is landed and its 10 legs are green on worker-3 — but see no_claim: the BINARY
 # has never run, so the shape is verified by test fixture and not by a live report.
 branches = [
   "report status `present` -> no bead filed",
@@ -36,7 +36,7 @@ S4 HAS NO CRATE. `ls crates/plan-materialize` -> MISSING, `ls crates/bead-lint` 
 The 23 files under `docs/plan/dag/` are the hand-run oracle and are exactly what Joshua's
 NO-GO refers to: "the plan->DAG ran by hand, not through crates".
 MY HALF IS LANDED AND UNPROVEN AT THE BOUNDARY. `crate-atom-gate --report --json` is
-implemented and its kernel has 10 green legs on contabo-3, but **the binary has never
+implemented and its kernel has 10 green legs on worker-3, but **the binary has never
 executed**: no `crate-atom-gate check` or `--report` has run over the real 69 packages. So
 the report shape above is pinned from the emitter's source and its fixtures, and the FIRST
 live report may differ in ways no test caught. n92x should treat the first run as a
@@ -70,8 +70,8 @@ by = "AmberGate"
 
 [[box.measurement]]
 claim = "the report emitter is landed and its kernel is verified, but the BINARY has never run"
-command = "grep -c '#\\[test\\]' crates/crate-atom-gate/tests/atom.rs  AND  RCH_WORKER=contabo-3 CARGO_BUILD_JOBS=1 CARGO_PROFILE_DEV_DEBUG=0 rch exec -- cargo test -j 1 -p crate-atom-gate  AND  ls target/debug/crate-atom-gate"
-value = "10 #[test] legs; 'test result: ok. 10 passed; 0 failed' on contabo-3 at 05:00:31Z; target/debug/crate-atom-gate is x86-64 ELF and cannot execute on this arm64 host"
+command = "grep -c '#\\[test\\]' crates/crate-atom-gate/tests/atom.rs  AND  RCH_WORKER=worker-3 CARGO_BUILD_JOBS=1 CARGO_PROFILE_DEV_DEBUG=0 rch exec -- cargo test -j 1 -p crate-atom-gate  AND  ls target/debug/crate-atom-gate"
+value = "10 #[test] legs; 'test result: ok. 10 passed; 0 failed' on worker-3 at 05:00:31Z; target/debug/crate-atom-gate is x86-64 ELF and cannot execute on this arm64 host"
 measured_at = "2026-09-03T05:30Z"
 by = "AmberGate"
 

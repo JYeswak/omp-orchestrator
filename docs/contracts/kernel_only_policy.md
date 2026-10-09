@@ -74,7 +74,7 @@ The source gate's own limitation is part of the contract. The five observed hand
 ## Validation
 
 ```bash
-RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- cargo test -j 2 -p no-shell-gate --test spawn_contract -- --nocapture
+RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=0 RCH_WORKER=worker-4 CARGO_BUILD_JOBS=2 rch exec -- cargo test -j 2 -p no-shell-gate --test spawn_contract -- --nocapture
 ```
 
 This runs the source-side kernel routing and allowance invariant suite without invoking the full workspace suite.
@@ -94,8 +94,8 @@ This runs the source-side kernel routing and allowance invariant suite without i
 - `docs/contracts/cancellation_contract.md` — caller-side cancellation discipline.
 - `docs/plans/plan_to_write_the_document_corpus.md` — contract corpus manifest and Phase 1 order.
 - `docs/contracts/asupersync_process_grade.md` — single-document pass bar.
-- `/Users/josh/.claude/skills/project-startup/assets/contract-template.md` — contract shape.
-- `/Users/josh/.claude/skills/project-startup/references/document-pass-bar.md` — document runner and markers.
+- `$HOME/.claude/skills/project-startup/assets/contract-template.md` — contract shape.
+- `$HOME/.claude/skills/project-startup/references/document-pass-bar.md` — document runner and markers.
 
 ## NO-CLAIM
 

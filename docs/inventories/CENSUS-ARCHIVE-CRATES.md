@@ -28,7 +28,7 @@ find crates -mindepth 1 -maxdepth 1 -type d | wc -l
 
 # names present in BOTH repos
 comm -12 <(find crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort) \
-         <(find /Users/josh/Developer/control-plane/crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+         <(find $HOME/Developer/control-plane/crates -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
 ```
 
 **One dated measurement, as evidence that the commands run — never as a figure to cite.** Measured
@@ -140,8 +140,8 @@ The dependency shape above is scoped to **the 24 rows of this table only**. The 
 is the whole source workspace, and it is larger. Derived from the resolver, not from text:
 
 ```bash
-# Run in /Users/josh/Developer/control-plane. Topology comes from cargo, never from grep.
-/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
+# Run in $HOME/Developer/control-plane. Topology comes from cargo, never from grep.
+$HOME/.cargo/bin/cargo metadata --no-deps --format-version 1 \
   | jq -r '[.packages[] | {n: .name,
                            d: ([.dependencies[] | select(.path != null) | .name] | unique | length)}] as $p
            | "members=\($p | length)",
@@ -189,9 +189,9 @@ next person disproves a claim you never made. This is the same confident-zero cl
 
 One row, made concrete, because it is the shape of the whole defect:
 
-- `/Users/josh/.local/bin/pane-truth` — **installed**, 2,489,600 bytes, Aug 31 02:22.
-- `/Users/josh/Developer/omp-orchestrator/crates/pane-truth` — **does not exist**.
-- Its only source is `/Users/josh/Developer/control-plane/crates/pane-truth`, whose HEAD is
+- `$HOME/.local/bin/pane-truth` — **installed**, 2,489,600 bytes, Aug 31 02:22.
+- `$HOME/Developer/omp-orchestrator/crates/pane-truth` — **does not exist**.
+- Its only source is `$HOME/Developer/control-plane/crates/pane-truth`, whose HEAD is
   `407ecb5` — an **unrelated history** to ours, sharing no commit with this repo.
 
 So a binary built from another repository's tree sits on `PATH` under a name this workspace
@@ -234,8 +234,8 @@ the real `oracle-pane-state-differential` crate. The three ported crates named b
 extraction scope is its original 20 rows plus those three and therefore excludes
 `oracle-pane-state-differential`. That is a real scope mismatch, not a rounding issue.
 
-- Target workspace `/Users/josh/Developer/omp-orchestrator`: 8 loaded Cargo packages.
-- Source workspace `/Users/josh/Developer/control-plane`: 58 tracked top-level crate manifests;
+- Target workspace `$HOME/Developer/omp-orchestrator`: 8 loaded Cargo packages.
+- Source workspace `$HOME/Developer/control-plane`: 58 tracked top-level crate manifests;
   Cargo loads 57 packages. The excluded top-level manifest is `crates/loop-tick/Cargo.toml`,
   which declares its own `[workspace]`; the two other tracked manifests are fixture manifests.
 - Working-tree source totals for the current 24-row table: 32,087 Rust LOC and 22 crate-level
@@ -245,16 +245,16 @@ extraction scope is its original 20 rows plus those three and therefore excludes
 The audit is re-runnable from the target repo with the source root explicit:
 
 ```bash
-# Target package count; run in /Users/josh/Developer/omp-orchestrator.
-/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
+# Target package count; run in $HOME/Developer/omp-orchestrator.
+$HOME/.cargo/bin/cargo metadata --no-deps --format-version 1 \
   | jq '[.packages[].manifest_path | select(test("/crates/[^/]+/Cargo.toml$"))] | length'
 
-# Source package count; run in /Users/josh/Developer/control-plane. The warnings are meaningful.
-/Users/josh/.cargo/bin/cargo metadata --no-deps --format-version 1 \
+# Source package count; run in $HOME/Developer/control-plane. The warnings are meaningful.
+$HOME/.cargo/bin/cargo metadata --no-deps --format-version 1 \
   | jq '[.packages[].manifest_path | select(test("/crates/[^/]+/Cargo.toml$"))] | length'
 
 # Every documented row -> source files and working-tree Rust LOC.
-bun -e 'const s=await Bun.file("AGENTS.md").text(); const start=s.indexOf("## The crates:"); const a=s.slice(start,s.indexOf(String.fromCharCode(10)+"## Use fh",start)); const ns=a.split(String.fromCharCode(10)).filter(x=>x.startsWith("| "+String.fromCharCode(96))).map(x=>x.split("|")[1].trim().slice(1,-1)); for(const n of ns){const d="/Users/josh/Developer/control-plane/crates/"+n; const p=Bun.spawnSync(["find",d,"-type","f","-name","*.rs","-print"]); const fs=new TextDecoder().decode(p.stdout).trim().split(String.fromCharCode(10)).filter(Boolean); let loc=0; for(const f of fs){const t=await Bun.file(f).text(); loc+=t.split(String.fromCharCode(10)).length-(t.endsWith(String.fromCharCode(10))?1:0)} console.log(n+String.fromCharCode(9)+loc+String.fromCharCode(9)+fs.join(","))}'
+bun -e 'const s=await Bun.file("AGENTS.md").text(); const start=s.indexOf("## The crates:"); const a=s.slice(start,s.indexOf(String.fromCharCode(10)+"## Use fh",start)); const ns=a.split(String.fromCharCode(10)).filter(x=>x.startsWith("| "+String.fromCharCode(96))).map(x=>x.split("|")[1].trim().slice(1,-1)); for(const n of ns){const d="$HOME/Developer/control-plane/crates/"+n; const p=Bun.spawnSync(["find",d,"-type","f","-name","*.rs","-print"]); const fs=new TextDecoder().decode(p.stdout).trim().split(String.fromCharCode(10)).filter(Boolean); let loc=0; for(const f of fs){const t=await Bun.file(f).text(); loc+=t.split(String.fromCharCode(10)).length-(t.endsWith(String.fromCharCode(10))?1:0)} console.log(n+String.fromCharCode(9)+loc+String.fromCharCode(9)+fs.join(","))}'
 ```
 
 **Source audit result (control-plane `src/lib.rs`/`src/main.rs`, unless noted):**
@@ -286,8 +286,8 @@ bun -e 'const s=await Bun.file("AGENTS.md").text(); const start=s.indexOf("## Th
 
 The four names shared by both repositories were checked explicitly: `composer-typed`,
 `fleet-composite`, and `loop-queue-filter` are byte-identical between
-`/Users/josh/Developer/control-plane/crates/<name>` and
-`/Users/josh/Developer/omp-orchestrator/crates/<name>`; `pane-dispatch-fence` has the same
+`$HOME/Developer/control-plane/crates/<name>` and
+`$HOME/Developer/omp-orchestrator/crates/<name>`; `pane-dispatch-fence` has the same
 purpose but differs in both `Cargo.toml` and `src/main.rs` (the target adds
 `subprocess-contract`).
 

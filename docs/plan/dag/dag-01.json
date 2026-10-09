@@ -886,7 +886,7 @@
    "id": "01.31",
    "title": "Measure the cargo shim's effect on `cargo metadata --format-version 1 --no-deps` and toolchain selection (R11 open item)",
    "lines": "L199-L205,L478-L479",
-   "what": "`cargo` resolves to /Users/josh/.rch/shims/cargo; every crate-metadata claim inherits whatever the shim does and it is unmeasured.",
+   "what": "`cargo` resolves to $HOME/.rch/shims/cargo; every crate-metadata claim inherits whatever the shim does and it is unmeasured.",
    "acceptance_seed": "Run `cargo metadata --format-version 1 --no-deps` via the shim and via ~/.cargo/bin/cargo; expect byte-identical JSON (or a recorded diff) and the resolved toolchain named; census rows carry `cargo_path`.",
    "priority": 1,
    "kind": "measurement",

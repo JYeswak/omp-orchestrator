@@ -20,7 +20,7 @@ output:
       type: string
     worker:
       metadata:
-        description: "REQUIRED. Either worker=contabo-N naming the worker that produced any cargo figure, or 'local no-cargo' when no compilation ran. Never infer a worker you did not observe in your own run log, and never write 'local' for a remote figure — that is falsified provenance and worse than an unlanded row."
+        description: "REQUIRED. Either worker=worker-N naming the worker that produced any cargo figure, or 'local no-cargo' when no compilation ran. Never infer a worker you did not observe in your own run log, and never write 'local' for a remote figure — that is falsified provenance and worse than an unlanded row."
       type: string
     proof_exit:
       metadata:

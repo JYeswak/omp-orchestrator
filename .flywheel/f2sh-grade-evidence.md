@@ -184,11 +184,11 @@ another name — would exercise them. Not a defect in this bead; a sharper leg f
 
 ```
 guard neutered (request.clause.is_none() -> false)
-   exit=101  contabo-3  bypass=0   11 passed; 1 failed
+   exit=101  worker-3  bypass=0   11 passed; 1 failed
    RED = a_clauseless_request_is_refused_with_a_named_field   ONLY
    ledger.rs:209:49  clause is mandatory: Appended { id: "HD-0001" }
 RESTORED  worktree sha == HEAD sha (dfd3440df3f4bc4a66919dbe), git status clean
-   exit=0  contabo-1  12 passed / 0 failed
+   exit=0  worker-1  12 passed / 0 failed
 ```
 
 `%6`'s reported evidence reproduces byte for byte. **One mutation, one leg**, so rule 7b's partition
@@ -199,8 +199,8 @@ requirement is satisfied without needing the disjointness argument `djfu` requir
 All figures ON-LANE: `Remote command finished: exit=` present and the `RCH BYPASS` banner absent in
 every log, checked per run. Verdict work only — **no triple passed**, per the corrected binding.
 
-The restore run was refused twice on `contabo-3` with
-`[RCH-I005] … refused (project_excluded)` and succeeded on `contabo-1` after dropping the pin.
+The restore run was refused twice on `worker-3` with
+`[RCH-I005] … refused (project_excluded)` and succeeded on `worker-1` after dropping the pin.
 **That was the right move under the corrected rule**: `active_project_exclusion` was a peer's
 in-flight build of this project, and waiting on someone else's build is wrong — request another
 worker.

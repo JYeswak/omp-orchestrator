@@ -510,7 +510,7 @@
   },
   {
    "id": "00.17",
-   "title": "R8: clean-machine install receipt proving doctor/health/repair + validate/audit/why with no /Users/josh fallback",
+   "title": "R8: clean-machine install receipt proving doctor/health/repair + validate/audit/why with no $HOME fallback",
    "lines": "L50-L51,L129,L832",
    "what": "R8 is OPEN until §07 attaches a receipt from a machine that is not this one showing the canonical CLI triads work and no home-path fallback exists (K3).",
    "acceptance_seed": "On a clean host: install from a tagged commit; `<bin> doctor`, `health`, `repair`, `validate`, `audit`, `why` each exit 0 with typed envelopes; path-literal-guard reports 0 home-path literals; receipt (host id, commit, sha256s) committed.",
@@ -2025,7 +2025,7 @@
   "br list -a --json | search ('foreign repo',): 1 hits",
   "br list -a --json | search ('doctor', 'health', 'repair'): 15 hits",
   "br list -a --json | search ('validate', 'audit', 'why'): 0 hits",
-  "br list -a --json | search ('/Users/josh', 'fallback'): 7 hits",
+  "br list -a --json | search ('$HOME', 'fallback'): 7 hits",
   "br list -a --json | search ('rubric',): 1 hits",
   "br list -a --json | search ('SOTA',): 2 hits",
   "br list -a --json | search ('seven-field',): 2 hits",

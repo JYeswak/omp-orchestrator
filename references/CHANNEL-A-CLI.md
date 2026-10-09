@@ -181,7 +181,7 @@ recursive_paths=662
 Static bundle comparison:
 
 ```bash
-B=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
+B=$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
 grep -oE '"/[a-z][a-z0-9_-]*"' "$B/dist/cli.js" | sort -u | wc -l
 ```
 

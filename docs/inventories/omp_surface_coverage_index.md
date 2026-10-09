@@ -85,7 +85,7 @@ Leg 2 diffs each document's tabulated surfaces against its bead title. Leg 3 cou
 coverage. An empty parse anywhere is a FAIL, not a silent pass.
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator
+cd $HOME/Developer/omp-orchestrator
 
 # LEG 1 — declared waves (ipg.1-11 are the surface-coverage waves) vs documents on disk
 DECL=$(jq -r 'select(.id|test("omp-coverage-mission-ipg\\.([1-9]|10|11)$"))|.id' .beads/issues.jsonl \

@@ -73,13 +73,13 @@ macOS without a macOS run: the guard goes false there, and nothing between it an
 ## LEG 3 + the two verification commands, re-run on-lane
 
 ```
-RCH_WORKER=contabo-3 … RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p subprocess-contract --test platform_scope
-  REMOTE exit=20  contabo-3  bypass=0
+RCH_WORKER=worker-3 … RCH_REQUIRE_REMOTE=1 rch exec -- cargo test -j 2 -p subprocess-contract --test platform_scope
+  REMOTE exit=20  worker-3  bypass=0
   UNMEASURED_ON_THIS_PLATFORM property=process_group_kill_and_reap platform=linux tests=4 \
     exit_code=20 retry_if=darwin-production-group-kill-reap-defect
 
 … rch exec -- cargo test -j 2 -p subprocess-contract --lib -- --nocapture
-  REMOTE exit=0   contabo-3  bypass=0     test result: ok. 12 passed; 0 failed
+  REMOTE exit=0   worker-3  bypass=0     test result: ok. 12 passed; 0 failed
   UNMEASURED lines: 4   named tests: exactly the four in item 2, no fifth, none missing
   positive control fast_child_completes_with_output_and_status … ok
 ```
@@ -204,11 +204,11 @@ each log, checked per run. **Verdict work only — no triple passed**, per the c
 `RCH_REQUIRE_REMOTE=1` on every invocation. I also implemented `%7`'s own clause: on an
 `[RCH-I005] project_excluded` refusal, query `rch queue --json` for a live row **on my project** and
 unpin if there is none, because that is stale state rather than contention. It did not fire this
-grade — contabo-3 admitted on the first attempt for all four runs.
+grade — worker-3 admitted on the first attempt for all four runs.
 
 ## NO-CLAIM
 
-- **NOTHING HERE IS EVIDENCE ABOUT DARWIN.** Every run is Linux on contabo-3. Item 5 — that the real
+- **NOTHING HERE IS EVIDENCE ABOUT DARWIN.** Every run is Linux on worker-3. Item 5 — that the real
   bodies execute unchanged on macOS — is established **statically** (the guard is an early return
   above an untouched body) and is **not** executed. A passing macOS leg is not claimed, per the
   acceptance's own prohibition.

@@ -12,7 +12,7 @@ box = "S2"
 field = "hook"
 owner_says = "The future hook is described by future_certified_id, gauntlet_stage, and note."
 reviewer_says = "The Wave 1 hook schema requires id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, and harm_class. S2's hook omits id, policy_file, source_commit, stage, and certified and uses gauntlet_stage instead of stage."
-evidence = "sed -n '145,155p' docs/plan/flow/boxes/S2.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+evidence = "sed -n '145,155p' docs/plan/flow/boxes/S2.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' $HOME/Developer/control-plane/hooks_certified.toml."
 severity = "major"
 resolution = ""
 

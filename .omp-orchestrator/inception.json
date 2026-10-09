@@ -2,10 +2,10 @@
   "schema_version": "inception.v1",
   "project_id": "omp-3d83b4276e7dcbc0",
   "repo_identity": {
-    "canonical_path": "/Users/josh/Developer/omp-orchestrator",
+    "canonical_path": "$HOME/Developer/omp-orchestrator",
     "git_marker": "directory",
     "source_revision": "6a09be67b55b3de1b9d05eac5e028bd54df2aa7e",
-    "host_identity": "Joshs-Mac-Studio.local"
+    "host_identity": "developer-machine"
   },
   "control_files": {
     "AGENTS.md": true,

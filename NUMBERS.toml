@@ -215,13 +215,13 @@ expect   = "LIVE"
 note     = "AUTHORITATIVE union command; the current result is intentionally not frozen in prose because workspace membership moves. The manifest-only, source-attribute, and both-mechanisms commands carry the component split. Earlier 16/22, 20/26, 25/26, and 26/26 values are dated historical snapshots."
 
 [figures.control_plane_unextracted_loc]
-command  = "tot=0; for c in fleet-truth oracle-compare oracle-pane-state-differential ntm-fleet-monitor fleet-monitor loop-driver fast-dispatch omp-idle-dispatch pane-dispatch-ready loop-tick fleet-reconcile wired-but-inert-guard verify-dispatch pane-truth reap-finished-panes tick-dispatch loop-coverage dispatcher-deadman refill-idle-panes pane-oracle-diff; do s=/Users/josh/Developer/control-plane/crates/$c; if [ -d $s ] && [ ! -d crates/$c ]; then tot=$((tot+$(find $s -name '*.rs' -type f -exec cat {} + 2>/dev/null | wc -l))); fi; done; echo $tot"
+command  = "tot=0; for c in fleet-truth oracle-compare oracle-pane-state-differential ntm-fleet-monitor fleet-monitor loop-driver fast-dispatch omp-idle-dispatch pane-dispatch-ready loop-tick fleet-reconcile wired-but-inert-guard verify-dispatch pane-truth reap-finished-panes tick-dispatch loop-coverage dispatcher-deadman refill-idle-panes pane-oracle-diff; do s=$HOME/Developer/control-plane/crates/$c; if [ -d $s ] && [ ! -d crates/$c ]; then tot=$((tot+$(find $s -name '*.rs' -type f -exec cat {} + 2>/dev/null | wc -l))); fi; done; echo $tot"
 expect   = "0"
 zero_is_real = true
 
 note     = "Current unextracted LOC is zero when each upstream crate has a corresponding crates/$c directory; the previous 29,512 total was the source corpus, not an unextracted count."
 [figures.ipg6_root_symbols]
-command  = "R=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types; tot=0; for r in eval if-bench hindsight debug dap autoresearch autolearn advisor; do [ -d \"$R/$r\" ] && tot=$((tot+$(grep -rhoE '^export (declare )?(type|interface|const|function|class|enum) [A-Za-z_]+' \"$R/$r\" --include='*.d.ts' 2>/dev/null | wc -l))); done; echo $tot"
+command  = "R=$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types; tot=0; for r in eval if-bench hindsight debug dap autoresearch autolearn advisor; do [ -d \"$R/$r\" ] && tot=$((tot+$(grep -rhoE '^export (declare )?(type|interface|const|function|class|enum) [A-Za-z_]+' \"$R/$r\" --include='*.d.ts' 2>/dev/null | wc -l))); done; echo $tot"
 expect   = "611"
 note     = "Re-recorded 2026-09-05: command answers 611 (was 622). Dies when the installed OMP dist types change; then re-run the command."
 

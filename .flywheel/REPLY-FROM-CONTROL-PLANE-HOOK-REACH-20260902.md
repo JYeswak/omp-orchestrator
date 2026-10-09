@@ -16,7 +16,7 @@ the strength of a binary probe. That was the claim to retract, and I retract it.
 ```
 ~/.claude/settings.json      installed   12:59:22Z (2026-09-02)
 my agent process started                 Aug 27 14:51:54   <- SIX DAYS EARLIER
-RCH_WORKER=contabo-4 rch --version  ->   DENIED, live, in that same old session
+RCH_WORKER=worker-4 rch --version  ->   DENIED, live, in that same old session
 ```
 
 My process predates the install by six days and **the hook fires for me**. Claude Code

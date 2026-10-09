@@ -543,13 +543,13 @@
       "title": "Commit path builds the committed crate, scoped to the committing agent, on the pinned lane",
       "lines": "L489-L497,L388,L100",
       "what": "Nothing in the commit path compiles the crate being committed (an uncompilable plan-assemble landed); the staged-build gate installed live cost 247s per commit holding index.lock on the wrong rch lane and was reverted; it must be bounded to the committing agent's staged paths and typed on timeout.",
-      "acceptance_seed": "A commit touching crates/<X>/** with a compile error is REFUSED naming X and the diagnostic; a scoped non-crate commit reports GATE_NOT_APPLICABLE in ~0s; the build is placed on contabo-3 with -j 2 and a timeout is a typed refusal never a skip; peers' staged paths are not built.",
+      "acceptance_seed": "A commit touching crates/<X>/** with a compile error is REFUSED naming X and the diagnostic; a scoped non-crate commit reports GATE_NOT_APPLICABLE in ~0s; the build is placed on worker-3 with -j 2 and a timeout is a typed refusal never a skip; peers' staged paths are not built.",
       "priority": 0,
       "kind": "gate",
       "existing_beads": [
         {"id": "omp-orchestrator-6fot", "status": "in_progress", "match": "exact", "evidence": "1. A commit touching crates/<X>/** cannot land unless cargo build -p <X> succeeds. Per-crate, not workspace ... 2. Bounded and typed ... A build that hangs must fail the commit CLOSED with a typed reason"},
         {"id": "omp-orchestrator-929j", "status": "in_progress", "match": "exact", "evidence": "wire staged-build-gate into pre-commit -- BLOCKED on bounding the scan to the committing agent (first live run: 603s on a shared index)"},
-        {"id": "omp-orchestrator-g5e0", "status": "open", "match": "exact", "evidence": "GATE 7 pins the lane and the job cap: RCH_WORKER=contabo-3 CARGO_BUILD_JOBS=2 cargo build -j 2 -p <crate>, and reads placement back from rch queue --json"}
+        {"id": "omp-orchestrator-g5e0", "status": "open", "match": "exact", "evidence": "GATE 7 pins the lane and the job cap: RCH_WORKER=worker-3 CARGO_BUILD_JOBS=2 cargo build -j 2 -p <crate>, and reads placement back from rch queue --json"}
       ],
       "coverage": "COVERED",
       "gap": "",

@@ -98,7 +98,7 @@ Twelve, all measured in one session, each with the instance and a **mechanical d
 ## Validation
 
 ```
-cd /Users/josh/Developer/omp-orchestrator && \
+cd $HOME/Developer/omp-orchestrator && \
 printf 'DP stable_ids=%s escape_routes=%s untracked_wave_evidence=%s kernel_bypass_crates=%s\n' \
   "$(grep -c '^`DP-' docs/contracts/dispatch_preflight.md)" \
   "$(grep -c '^`DP-E' docs/contracts/dispatch_preflight.md)" \
@@ -172,7 +172,7 @@ indistinguishable from a wedged pane, and the recovery is a human.
 ## Validation
 
 ```
-cd /Users/josh/Developer/omp-orchestrator && \
+cd $HOME/Developer/omp-orchestrator && \
 printf 'notify ids=%s installed=%s arch=%s watch_exit=%s\n' \
   "$(grep -c '^`DP-N' docs/contracts/dispatch_preflight.md)" \
   "$(command -v inbox-monitor >/dev/null && echo yes || echo NO)" \

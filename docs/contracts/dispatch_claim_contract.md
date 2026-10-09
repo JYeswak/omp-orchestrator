@@ -100,7 +100,7 @@ The command runs the existing ack-spine ledger, authority-separation, and follow
 - `crates/verify-dispatch/src/lib.rs` — current verification boundary.
 - `docs/plans/plan_to_write_the_document_corpus.md` — contract corpus manifest and Phase 1 order.
 - `docs/contracts/asupersync_process_grade.md` — single-document pass bar.
-- `/Users/josh/.claude/skills/project-startup/assets/contract-template.md` — contract shape.
+- `$HOME/.claude/skills/project-startup/assets/contract-template.md` — contract shape.
 
 ## NO-CLAIM
 

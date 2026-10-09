@@ -52,9 +52,9 @@ returns the refusals, and `--plan`/`--apply` print `SKIP bead=… reason=…`. T
 control-plane `cp-epic-fleet-work-quality-08l6.91` (progress + build measurements in its comments).
 
 Why it is not committed: every test build was SIGTERMed (rc=143) during rch's registry sync —
-contabo-3 twice, zestdata-local once — and your pre-commit staged-build-gate needs the crate to
+worker-3 twice, storage-node once — and your pre-commit staged-build-gate needs the crate to
 compile. Do NOT `git add -A` it into someone else's commit. To land: build it on a worker that
-admits you (joshs-brain is running your loop-driver tests right now, so it does), run
+admits you (control-node is running your loop-driver tests right now, so it does), run
 `cargo test -p refill-idle-panes` (expect 2 new tests green), commit `-- crates/refill-idle-panes`
 with a `[test]`/`[mutation]` tag, and install with your installer. The cron lane on control-plane
 (`8,28,48`, now `REFILL_REPO`-pinned) picks up the new binary automatically.

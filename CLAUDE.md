@@ -57,7 +57,7 @@ Tracked as epic `omp-orchestrator-omp-coverage-mission-ipg`, eleven lifecycle wa
 ## First turn
 
 1. Read `AGENTS.md` completely. It is the contract, not background.
-2. `cd /Users/josh/Developer/omp-orchestrator` — **`br` reads the cwd.** A `br` command run from
+2. `cd $HOME/Developer/omp-orchestrator` — **`br` reads the cwd.** A `br` command run from
    control-plane files into control-plane's tracker. This has already happened once.
 3. `br ready --json` — this repo's beads carry the prefix `omp-orchestrator`.
 4. Before building anything: `mcp__socraticode__codebase_search` by meaning, then

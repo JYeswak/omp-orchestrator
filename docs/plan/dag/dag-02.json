@@ -275,7 +275,7 @@
       "title": "Wire ee resume / ee pack into dispatch and grading so compaction loss is recovered by the installed tool",
       "lines": "L555-L580,L604-L605,L686",
       "what": "Pane %1413 hit 85% context, compacted, and lost its grading task while `ee resume` (installed, 0.14.2, referenced once) is exactly the recovery mechanism; ee:pack and ee:resume are the two ee WIRE rows and must be invoked from the dispatch/redispatch path with a store present.",
-      "acceptance_seed": "run `ee resume --workspace /Users/josh/Developer/omp-orchestrator --json` -> non-error envelope; run the redispatch path after a simulated compaction and expect the packet to carry the `ee pack` context and the grader's partial file; known-bad: workspace_store_missing is a typed refusal, not a skipped step",
+      "acceptance_seed": "run `ee resume --workspace $HOME/Developer/omp-orchestrator --json` -> non-error envelope; run the redispatch path after a simulated compaction and expect the packet to carry the `ee pack` context and the grader's partial file; known-bad: workspace_store_missing is a typed refusal, not a skipped step",
       "priority": 1,
       "kind": "wiring",
       "existing_beads": [

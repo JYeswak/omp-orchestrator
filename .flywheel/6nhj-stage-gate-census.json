@@ -6,8 +6,8 @@
   "defect_basis": "the prior five-of-six census measured a repository with no remote; the live repository now has a remote and a reachable-but-red CI workflow, while the six semantic stage gates remain untriggered",
   "deletion_condition": "delete when the production census emits this scope, schema, machine identity, trigger classes, and observation fields from the live executor surfaces",
   "measured_at_utc": "2026-09-08T18:58:38Z",
-  "machine": "Joshs-Mac-Studio.local",
-  "repository": "/Users/josh/Developer/omp-orchestrator",
+  "machine": "developer-machine",
+  "repository": "$HOME/Developer/omp-orchestrator",
   "head": "280903cdeba08154a5db3d21bdb3c5d2c6cce011",
   "input_manifest": {
     "status": "FULL",
@@ -180,7 +180,7 @@
   "no_claim": [
     "Static executor reachability proves a trigger exists, not that a gate ran in every cycle.",
     "The CI workflow is reachable and currently red, but no required status check, merge gate, or bead citation consumes the latest verdict.",
-    "The hook result is for Joshs-Mac-Studio.local only; .git/hooks is untracked and per-clone, so a fresh checkout elsewhere has no hook.",
+    "The hook result is for developer-machine only; .git/hooks is untracked and per-clone, so a fresh checkout elsewhere has no hook.",
     "This measurement did not run cargo, build a binary, or claim semantic correctness of any gate."
   ]
 }

@@ -48,7 +48,7 @@
       "kind": "gate",
       "existing_beads": [
         {"id": "omp-orchestrator-kxe.5", "status": "closed", "match": "exact", "evidence": "Reconcile cross-section plan authority, board arithmetic, generator acceptance, and completion claims so every cross-section statement has one current source and a runnable falsifier."},
-        {"id": "omp-orchestrator-jj7v", "status": "open", "match": "partial", "evidence": "`cargo test -p no-shell-gate --test cross_section_authority` on `joshs-brain` -> `FAILED. 0 passed; 7 failed`, every leg `CROSS-SECTION-AUTHORITY.jsonl must exist: Os { code: 2, kind: NotFound }`"}
+        {"id": "omp-orchestrator-jj7v", "status": "open", "match": "partial", "evidence": "`cargo test -p no-shell-gate --test cross_section_authority` on `control-node` -> `FAILED. 0 passed; 7 failed`, every leg `CROSS-SECTION-AUTHORITY.jsonl must exist: Os { code: 2, kind: NotFound }`"}
       ],
       "coverage": "COVERED",
       "gap": "",

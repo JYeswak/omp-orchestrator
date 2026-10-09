@@ -45,7 +45,7 @@ id = "L2"
 name = "ecosystem check"
 command = "ompo doctor --repo / ompo init"
 checks = ["git remote configured (305-commit trauma)", "AGENTS.md + CLAUDE.md present and stamped (foundry STAMP-MANIFEST)", ".beads initialized", "rust-toolchain.toml", "registries/ (claims, arrows)", ".git/hooks/pre-commit identity == HEAD", "Cargo members", "Agent Mail project registered", "rch lane row"]
-init_writes = ["AGENTS.md from /Users/josh/Developer/foundry/flywheel/AGENTS.md.template", ".omp-orchestrator/config.toml", ".omp-orchestrator/inception.json"]
+init_writes = ["AGENTS.md from $HOME/Developer/foundry/flywheel/AGENTS.md.template", ".omp-orchestrator/config.toml", ".omp-orchestrator/inception.json"]
 exists = "template exists in foundry; crate none"
 
 [[box.layer]]
@@ -183,7 +183,7 @@ event = "codex PreToolUse / PostToolUse"
 matcher = "Pre x4: Bash, Bash, Edit|Write|apply_patch|MultiEdit, Bash. Post x2: Bash, Edit|Write|apply_patch|MultiEdit. Pane-1 re-parsed ~/.codex/hooks.json 2026-09-12 (us8j). Every row matcher+command filled."
 class = "gate + advisory"
 fail_mode = "per-hook, not this bead's acceptance. kernel-only-operator-hook closed (ebq5 --capabilities). dcg/recall/capture UNKNOWN (ebq5/39l5). spawn-cap.sh and journal.sh UNKNOWN beyond stated policy. Post cannot deny."
-binary = "Pre: /Users/josh/.local/bin/dcg; /Users/josh/Developer/control-plane/bin/zeststream-cast-spawn-cap.sh; /Users/josh/.local/bin/zestgraph-recall; /Users/josh/.local/bin/kernel-only-operator-hook --shadow --compare-predecessor ~/.claude/hooks/pretooluse-bash-tmux-agent-pane-gate.sh. Post: /Users/josh/Developer/control-plane/bin/codex-command-failure-journal.sh ~/.local/bin/ee; /Users/josh/.local/bin/zestgraph-capture"
+binary = "Pre: $HOME/.local/bin/dcg; $HOME/Developer/control-plane/bin/zeststream-cast-spawn-cap.sh; $HOME/.local/bin/zestgraph-recall; $HOME/.local/bin/kernel-only-operator-hook --shadow --compare-predecessor ~/.claude/hooks/pretooluse-bash-tmux-agent-pane-gate.sh. Post: $HOME/Developer/control-plane/bin/codex-command-failure-journal.sh ~/.local/bin/ee; $HOME/.local/bin/zestgraph-capture"
 policy_file = "~/.codex/hooks.json"
 source_commit = ""
 language = "rust Mach-O x4 (dcg, zestgraph-recall, kernel-only-operator-hook, zestgraph-capture) + bash x2 (spawn-cap, journal). Language from file(1)+prior probes; us8j measured matcher+binary."
@@ -214,7 +214,7 @@ event = "launchd RunAtLoad + KeepAlive"
 matcher = "n/a"
 class = "gate"
 fail_mode = "DISABLED / NOT_LOADED — Stage 0 measured 2026-09-16: launchctl print-disabled gui/501 => disabled; launchctl print gui/501/ai.zeststream.omp-orchestrator => service not found, rc=113"
-binary = "historical plist invocation only: /Users/josh/.local/bin/ompo supervise --repo /Users/josh/Developer/omp-orchestrator --session omp-orchestrator; no live process observed"
+binary = "historical plist invocation only: $HOME/.local/bin/ompo supervise --repo $HOME/Developer/omp-orchestrator --session omp-orchestrator; no live process observed"
 policy_file = "~/Library/LaunchAgents/ai.zeststream.omp-orchestrator.plist"
 source_commit = ""
 language = "rust (historical installed ompo supervisor; launchd surface retired)"

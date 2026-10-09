@@ -27,20 +27,20 @@ metadata declaration is added; otherwise alignment becomes partial or reports an
 The current project scope is:
 
 ```text
-project:     /Users/josh/Developer/omp-orchestrator
+project:     $HOME/Developer/omp-orchestrator
 profile:     codex
 scope key:   79012643b5202611
-runtime:     /Users/josh/.omp/profiles/codex/run/daemons/79012643b5202611
+runtime:     $HOME/.omp/profiles/codex/run/daemons/79012643b5202611
 ```
 
 The four observed codex profile scope keys and their `scope.json` project paths were:
 
 | scope key | project |
 |---|---|
-| `645d18f9e7fe9f49` | `/Users/josh/Developer/control-plane` |
-| `79012643b5202611` | `/Users/josh/Developer/omp-orchestrator` |
-| `cd507419e40040de` | `/Users/josh/Developer/franken-harvest` |
-| `f1e8eab282a49088` | `/Users/josh/Developer/clutterfreespaces.ios` |
+| `645d18f9e7fe9f49` | `$HOME/Developer/control-plane` |
+| `79012643b5202611` | `$HOME/Developer/omp-orchestrator` |
+| `cd507419e40040de` | `$HOME/Developer/franken-harvest` |
+| `f1e8eab282a49088` | `$HOME/Developer/clutterfreespaces.ios` |
 
 The installed bundle contains the construction:
 
@@ -52,10 +52,10 @@ Reproduction command:
 
 ```bash
 /opt/homebrew/bin/bun -e 'const path=require("node:path"); for (const p of process.argv.slice(1)) console.log(JSON.stringify({input:p,resolved:path.resolve(p),hash:Bun.hash.wyhash(path.resolve(p)).toString(16).padStart(16,"0")}))' \
-  /Users/josh/Developer/control-plane \
-  /Users/josh/Developer/omp-orchestrator \
-  /Users/josh/Developer/franken-harvest \
-  /Users/josh/Developer/clutterfreespaces.ios
+  $HOME/Developer/control-plane \
+  $HOME/Developer/omp-orchestrator \
+  $HOME/Developer/franken-harvest \
+  $HOME/Developer/clutterfreespaces.ios
 ```
 
 Observed hashes matched the four scope directory names exactly. This makes the project path the
@@ -66,7 +66,7 @@ join key; project path and runtime profile are runtime data, not Cargo declarati
 Probe command:
 
 ```bash
-omp ps --json --dir /Users/josh/Developer/omp-orchestrator
+omp ps --json --dir $HOME/Developer/omp-orchestrator
 ```
 
 The result is an array. The project scope object has:
@@ -119,7 +119,7 @@ The Step 1 parser is `crates/ompo-doctor/src/omp_process.rs`:
 The current broker endpoint is:
 
 ```text
-/Users/josh/.omp/profiles/codex/run/daemons/79012643b5202611/broker.sock
+$HOME/.omp/profiles/codex/run/daemons/79012643b5202611/broker.sock
 ```
 
 The adjacent token file exists at `.../broker.token`. Its contents were not read or copied.
@@ -168,7 +168,7 @@ identity and do not connect to `broker.sock` without its token-authenticated pro
 **COMMAND:**
 
 ```bash
-omp ps --json --dir /Users/josh/Developer/omp-orchestrator
+omp ps --json --dir $HOME/Developer/omp-orchestrator
 ```
 
 **PROVENANCE:** `omp/18.1.14`; scope mapping and socket/source inspection measured on 2026-09-08;

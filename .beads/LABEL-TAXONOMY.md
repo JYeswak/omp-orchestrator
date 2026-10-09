@@ -592,7 +592,7 @@ Dropping the label therefore erases the only p0 assertion on that bead. Repriori
 of scope for this pass, so the label was dropped and the disagreement is recorded here instead:
 
 > `omp-orchestrator-xdx` — "rch worker-side reaper is default-OFF and aimed at /data/projects;
-> arm it on /Users/josh/Developer" — asserted `p0` by label, `priority: 2` by field.
+> arm it on $HOME/Developer" — asserted `p0` by label, `priority: 2` by field.
 > **Decision owed:** set `priority 0`, or accept `2`.
 
 ## Ratchet

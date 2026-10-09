@@ -61,7 +61,7 @@ L1 uses generated transition sequences. The mutation leg adds an illegal termina
 ## Validation
 
 ```bash
-env RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=3 FRANKEN_CARGO_TARGET_ROOT=/Volumes/ZestData/zeststream-offload-20260609/build-cache/cargo-targets /bin/bash /Users/josh/.local/bin/cargo test -p omp-types --test lifecycle_contract --offline -- --nocapture
+env RCH_ENABLED=false CARGO_MINT_MIN_CONTAINER_PCT=3 FRANKEN_CARGO_TARGET_ROOT=/Volumes/ZestData/zeststream-offload-20260609/build-cache/cargo-targets /bin/bash $HOME/.local/bin/cargo test -p omp-types --test lifecycle_contract --offline -- --nocapture
 ```
 
 ## Cross-References

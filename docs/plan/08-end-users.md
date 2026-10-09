@@ -70,7 +70,7 @@ omp-orchestrator 0.1.0 (build_id=ecdea397, target=aarch64-apple-darwin)
 
 `MEASURED` obstacle, not cosmetic. `crates/installer/src/main.rs:MEASURED` resolves the repo root from
 `env!("CARGO_MANIFEST_DIR")` — a **compile-time** constant; `:25` falls back to a literal
-/Users/josh; :12 hardcodes three binary names. Repo-wide the pattern appears **61** times across **52** files at this writing. NUMBERS.toml registers the aggregate site count as LIVE; the 52-file split is diagnostic output from the same source walk, not a separate registry figure. A shell grep -r --include= returns a false zero here — see §2.2.
+$HOME; :12 hardcodes three binary names. Repo-wide the pattern appears **61** times across **52** files at this writing. NUMBERS.toml registers the aggregate site count as LIVE; the 52-file split is diagnostic output from the same source walk, not a separate registry figure. A shell grep -r --include= returns a false zero here — see §2.2.
 An installed binary carrying a compile-time path audits the build machine's checkout, not the adopter's. **NO-CLAIM:** this is a measurement of coupling, not a claim that every occurrence is production behavior.
 
 ### 2.2 `doctor` — in a repo with none of our conventions
@@ -130,11 +130,11 @@ zero**. The search was `/usr/bin/grep -rl --include='*.rs' … ntm beads_rust`, 
 repo: the filter matched nothing there and I read structural absence as semantic absence. Re-derived
 with the harness grep and no extension filter, the same pattern returns **89 matching files**, and
 
-`MEASURED` re-derivation of that count (2026-08-31, source checkout `/Users/josh/Developer/jeff-shadow`,
+`MEASURED` re-derivation of that count (2026-08-31, source checkout `$HOME/Developer/jeff-shadow`,
 HEAD `7c28478`):
 
 ```sh
-$ cd /Users/josh/Developer/jeff-shadow
+$ cd $HOME/Developer/jeff-shadow
 $ /usr/bin/grep -rlE 'MISSING_DEPENDENCY|DependencyMissing|not_installed|NotInstalled' ntm beads_rust | wc -l
 89
 ```
@@ -399,7 +399,7 @@ section still carries zero external adoption evidence.
 
 From the adopter's side, in the order they would bite. All `PROJECTED`.
 
-**Install friction on step one.** `MEASURED`: the compile-time repo root and the literal `/Users/josh`
+**Install friction on step one.** `MEASURED`: the compile-time repo root and the literal `$HOME`
 fallback (§2.1). A tool that audits the wrong repository on first run is uninstalled in a minute.
 
 **False refusals.** `path-literal-guard` is the warning shape: 3 tests, 1 known-bad, **0 known-good** — HISTORICAL as of 2026-09-02.

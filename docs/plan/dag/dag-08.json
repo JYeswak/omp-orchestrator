@@ -218,10 +218,10 @@
       "existing_beads": [
         {"id": "omp-orchestrator-7ai", "status": "closed", "match": "partial", "evidence": "2. Repo root is DISCOVERED: walk up from cwd for a marker (.git, .beads, Cargo.toml workspace root), or take an explicit --repo flag."},
         {"id": "omp-orchestrator-io3h", "status": "in_progress", "match": "partial", "evidence": "Arrival gate: refuse a commit landing a crate with hardcoded home-path literals (7ai's invariant is not enforced on import)"},
-        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "partial", "evidence": "`08-end-users.md:69` ... `:25` falls back to a literal /Users/josh ... Zero `/Users/josh` anywhere under `crates/installer` ... delete the `:25` clause only"}
+        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "partial", "evidence": "`08-end-users.md:69` ... `:25` falls back to a literal $HOME ... Zero `$HOME` anywhere under `crates/installer` ... delete the `:25` clause only"}
       ],
       "coverage": "PARTIAL",
-      "gap": "7ai closed on /Users/josh literals; the compile-time root survives (installer/src/main.rs:29 `PathBuf::from(env!(\"CARGO_MANIFEST_DIR\"))`, 14 src files, 86 files repo-wide). io3h guards home-path literals only. No bead names CARGO_MANIFEST_DIR as the coupling to remove.",
+      "gap": "7ai closed on $HOME literals; the compile-time root survives (installer/src/main.rs:29 `PathBuf::from(env!(\"CARGO_MANIFEST_DIR\"))`, 14 src files, 86 files repo-wide). io3h guards home-path literals only. No bead names CARGO_MANIFEST_DIR as the coupling to remove.",
       "depends_on": [],
       "blocks": ["08.11", "08.17", "08.31"],
       "terminal": false,
@@ -558,7 +558,7 @@
       "title": "Cold start on a second machine: install, doctor, init, first tick with no sibling checkout or control-plane",
       "lines": "L1-L8,L63-L69,L402-L403,L429-L430",
       "what": "R9's 'another machine' half: the binary installs and runs on a host that has neither this checkout nor control-plane; the M6 cold-host proof of §09.",
-      "acceptance_seed": "On a clean host: cargo install (08.11) -> doctor --json exit 0 -> init -> tick --once exit 0, with OMP_CONTROL_PLANE_ROOT unset and no ../control-plane; receipts committed; a run that reads any /Users/josh or CARGO_MANIFEST_DIR path is RED.",
+      "acceptance_seed": "On a clean host: cargo install (08.11) -> doctor --json exit 0 -> init -> tick --once exit 0, with OMP_CONTROL_PLANE_ROOT unset and no ../control-plane; receipts committed; a run that reads any $HOME or CARGO_MANIFEST_DIR path is RED.",
       "priority": 0,
       "kind": "milestone",
       "existing_beads": [
@@ -648,7 +648,7 @@
     "'Persona A|Persona B|Persona C|solo maintainer' -> 0; 'pilot|dogfood|scorecard' -> 3 unrelated; 'refusal budget' -> 0; 'two-tier probe|family probe' -> 0; 'UnitId' -> 0; 'tmux -V' -> 0",
     "'ADDRESSABLE' -> 3 incidental (3kpc, hsv, mad1), no gate bead",
     "'INDETERMINATE' -> 15 beads (ack/receipt kernels), none the doctor timeout rule",
-    "'CARGO_MANIFEST_DIR' -> 2 beads (hk1, 844); grep -rl CARGO_MANIFEST_DIR crates/*/src -> 14 files; crates/ -> 86 files; installer/src/main.rs:29 uses env!(CARGO_MANIFEST_DIR); /Users/josh under crates/installer -> 0",
+    "'CARGO_MANIFEST_DIR' -> 2 beads (hk1, 844); grep -rl CARGO_MANIFEST_DIR crates/*/src -> 14 files; crates/ -> 86 files; installer/src/main.rs:29 uses env!(CARGO_MANIFEST_DIR); $HOME under crates/installer -> 0",
     "source: grep -cE '\"doctor\"|\"init\"' crates/omp-orchestrator/src/main.rs -> 1 (main.rs:4840, `br init` arg inside a #[test]); grep -rlE 'TrackerAdapter|WorkerAdapter|RepoAdapter' crates/ -> 0; grep -rn 'OPTED_OUT_BY_ADOPTER|NO_KNOWN_GOOD_LEG' crates/ -> 0; MIN_GAP_SECS at tick-monitor/src/lib.rs:593 (doc says :490/:202 — drifted); ack-stage TransportKind two arms confirmed at lib.rs:21-25; finding Publisher trait at lib.rs:384; installer RepoOwnership/IdentityCheck at lib.rs:165-184",
     "br show <id> --json not used; full rows read from the br list -a --json dump (descriptions + acceptance_criteria present)"
   ],

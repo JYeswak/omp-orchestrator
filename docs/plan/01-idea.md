@@ -71,7 +71,7 @@ are **zero unqualified WORKS rows**:
 | actuate | dispatch | **AVAILABLE, NOT VERIFIED** — `send_and_verify` is implemented in `crates/omp-orchestrator/src/main.rs` (`fn send_and_verify`, line at `965ba11`) and called from `fn run_cycle` (line at `965ba11`); transport and receiver receipts remain unproven. The gap is runtime verification, not source existence |
 | complete | worker says done | **AVAILABLE, NOT WIRED** — OMP exposes AgentEndEvent.willContinue on RpcSessionEventFrame; the local loop does not consume it |
 
-**Runnable verification acceptance:** before promoting this row to `VERIFIED`, run `ompo supervise --once --repo /Users/josh/Developer/omp-orchestrator --session omp-orchestrator --receiver-agent <registered-agent>`. Expect either `TRANSPORT_RECEIPT_CAPTURED` followed by a same-tick receiver outcome (`DISPATCHED` with `RECEIVER_RECEIPT`/`ACK_ACTION`) with both heartbeat rows retained, or a named typed refusal with its owner/next action; a sender-success line alone is not delivery proof.
+**Runnable verification acceptance:** before promoting this row to `VERIFIED`, run `ompo supervise --once --repo $HOME/Developer/omp-orchestrator --session omp-orchestrator --receiver-agent <registered-agent>`. Expect either `TRANSPORT_RECEIPT_CAPTURED` followed by a same-tick receiver outcome (`DISPATCHED` with `RECEIVER_RECEIPT`/`ACK_ACTION`) with both heartbeat rows retained, or a named typed refusal with its owner/next action; a sender-success line alone is not delivery proof.
 > *Upstream type for this gap: `GuestIdleReconcilerCtx` (DECLARED only). Named here because the gap-propagation gate requires the type adjacent to the claim — a section arguing an absence that has an upstream type must say so.*
 
 A single shared predicate, used to answer two different questions, produced a coherent but wrong local
@@ -96,7 +96,7 @@ The upstream sweep changes the strength of the absence claims without pretending
 
 | gap | upstream type and source | true strength | effect on the idea
 |---|---|---|
-| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:artifact_provenance) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:artifact_provenance) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` is reboot-volatile and must not be cited); capture command /Users/josh/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
+| completion | **`isTerminal` on RpcSessionEventFrame** (modes/rpc/rpc-types.d.ts:artifact_provenance) is what was OBSERVED. `AgentEndEvent.willContinue` and `SessionStopEvent` (extensibility/shared-events.d.ts:artifact_provenance) are DECLARED ONLY — see §1.2.3 | **WIRE-PROVEN for one observed frame, and for `isTerminal` only** — exact raw receipt PRESERVED IN-REPO at `.flywheel/inventory-artifacts/agent-end-raw-frame.json.gz` (hash-gated by `artifact_provenance`; the original `.flywheel/grade-evidence/agent-end-raw-frame.json.gz` is reboot-volatile and must not be cited); capture command $HOME/.local/bin/omp --mode=rpc --no-session --no-tools --no-lsp --max-time=30; artifact mtime/retrieval observed 2026-08-31T19:52:26-0600; SHA-256 d8bd80c6949b2ec48af1639b5b5e241bd90b4dce1e769483dd1690ed2be8f644 | the frame's session-specific isTerminal=true was observed; shared willContinue was absent; repeatability, semantic fit, and supervisor consumption remain UNKNOWN
 | receipts | IrcDeliveryReceipt + AsyncJobDeliverySink (tools/hub/types.d.ts:AsyncJobDeliverySink) | DECLARED ONLY — no wire path measured | the cp-z42vu transport/receipt gap remains; type existence does not replace receiver proof
 | claims | Stage1Claim / GlobalClaim with ownershipToken + inputWatermark (memories/storage.d.ts:Stage1Claim) | DECLARED ONLY — no wire path measured | local claim/ownership gap remains until reachability and semantics are proven
 | idle | GuestIdleReconcilerCtx (dist/types/collab/guest.d.ts:GuestIdleReconcilerCtx) | DECLARED ONLY — no wire path measured | the local NewlyIdle/ConfirmedIdle defect remains; the upstream split is corroboration, not a fix
@@ -153,13 +153,13 @@ re-derived):
 
 | binary | version | path |
 |---|---|---|
-| `omp` | `omp/18.0.11` | `/Users/josh/.local/bin/omp` |
-| `ntm` | `ntm version v1.30.0-1-gda270719` | `/Users/josh/.local/bin/ntm` |
-| `br` | `br 0.4.1` | `/Users/josh/.local/bin/br` |
+| `omp` | `omp/18.0.11` | `$HOME/.local/bin/omp` |
+| `ntm` | `ntm version v1.30.0-1-gda270719` | `$HOME/.local/bin/ntm` |
+| `br` | `br 0.4.1` | `$HOME/.local/bin/br` |
 | `bv` | `bv v0.20.0` | `/opt/homebrew/bin/bv` |
 | `git` | `git version 2.50.1 (Apple Git-155)` | `/usr/bin/git` |
-| `cargo` | `cargo 1.100.0-nightly (e8cb624d5 2026-08-2…)` | `/Users/josh/.rch/shims/cargo` (a shim; real cargo at `~/.cargo/bin/cargo`) |
-| `fh` | `franken-harvest 0.1.0+tree.7b0fc50c3e5a29d…` | `/Users/josh/.local/bin/fh` |
+| `cargo` | `cargo 1.100.0-nightly (e8cb624d5 2026-08-2…)` | `$HOME/.rch/shims/cargo` (a shim; real cargo at `~/.cargo/bin/cargo`) |
+| `fh` | `franken-harvest 0.1.0+tree.7b0fc50c3e5a29d…` | `$HOME/.local/bin/fh` |
 | `jsm` | `jsm 0.1.4` | `/usr/local/bin/jsm` |
 | `tmux` | rejects `--version` (`tmux: unknown option -- -`) | `/opt/homebrew/bin/tmux` |
 
@@ -199,7 +199,7 @@ untracked scratch script passes and a hard rule silently becomes advisory.
 
 **1.3.6 `cargo` — build and metadata, through a shim.** We call it for build and for
 `cargo metadata --format-version 1 --no-deps`, the flagged versioned form our crate census reads.
-Note the measured path: `cargo` resolves to `/Users/josh/.rch/shims/cargo`, **a shim**, with real
+Note the measured path: `cargo` resolves to `$HOME/.rch/shims/cargo`, **a shim**, with real
 cargo at `~/.cargo/bin/cargo`. A shim in the dependency path is a supply-chain surface — it can
 rewrite arguments, change the effective toolchain, or add latency — and the census attributes results
 to "cargo" without qualification. **Every crate-metadata claim inherits whatever the shim does, and

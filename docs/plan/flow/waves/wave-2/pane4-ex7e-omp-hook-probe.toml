@@ -13,11 +13,11 @@ no_hook_built = true
 # 4 ~/.codex/hooks.json
 # 5 control-plane/hooks_certified.toml
 
-omp_types_hooks = "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/extensibility/hooks/"
-omp_capability_hook = "/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/capability/hook.d.ts"
-omp_hook_table = "/Users/josh/.omp/profiles/<profile>/agent/config.yml"
-omp_hook_table_grok = "/Users/josh/.omp/profiles/grok/agent/config.yml"
-omp_extensions_dir = "/Users/josh/.omp/omp-extensions"
+omp_types_hooks = "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/extensibility/hooks/"
+omp_capability_hook = "$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/capability/hook.d.ts"
+omp_hook_table = "$HOME/.omp/profiles/<profile>/agent/config.yml"
+omp_hook_table_grok = "$HOME/.omp/profiles/grok/agent/config.yml"
+omp_extensions_dir = "$HOME/.omp/omp-extensions"
 project_omp_hooks_dir = "ABSENT" # this-repo .omp and .pi missing
 native_hooks_slash_dir = "ABSENT at user+project; loader still names .omp/.pi hooks/"
 
@@ -56,7 +56,7 @@ control_plane_certified_true = 0
 [[omp_extension]]
 id = "observational-tool-result"
 event = "tool_result"
-path = "/Users/josh/.omp/omp-extensions/observational-tool-result.ts"
+path = "$HOME/.omp/omp-extensions/observational-tool-result.ts"
 class = "advisory"
 language = "typescript"
 certified = "UNATTEMPTED"
@@ -64,16 +64,16 @@ certified = "UNATTEMPTED"
 [[omp_extension]]
 id = "dcg-tool-bridge"
 event = "tool_call,user_bash"
-path = "/Users/josh/.omp/omp-extensions/dcg-tool-bridge.ts"
+path = "$HOME/.omp/omp-extensions/dcg-tool-bridge.ts"
 class = "gate"
 language = "typescript"
-binary_behind = "/Users/josh/.local/bin/dcg"
+binary_behind = "$HOME/.local/bin/dcg"
 certified = "UNATTEMPTED"
 
 [[omp_extension]]
 id = "ee-failure-journal"
 event = "tool_result"
-path = "/Users/josh/.omp/omp-extensions/ee-failure-journal.ts"
+path = "$HOME/.omp/omp-extensions/ee-failure-journal.ts"
 class = "advisory"
 language = "typescript"
 certified = "UNATTEMPTED"
@@ -81,7 +81,7 @@ certified = "UNATTEMPTED"
 [[omp_extension]]
 id = "zeststream-cast-spawn-cap"
 event = "tool_call,user_bash"
-path = "/Users/josh/.omp/omp-extensions/zeststream-cast-spawn-cap.ts"
+path = "$HOME/.omp/omp-extensions/zeststream-cast-spawn-cap.ts"
 class = "gate"
 language = "typescript"
 certified = "UNATTEMPTED"
@@ -89,7 +89,7 @@ certified = "UNATTEMPTED"
 [[omp_extension]]
 id = "skill-topology-session-start"
 event = "session_start"
-path = "/Users/josh/.omp/omp-extensions/skill-topology-session-start.ts"
+path = "$HOME/.omp/omp-extensions/skill-topology-session-start.ts"
 class = "advisory"
 language = "typescript"
 certified = "UNATTEMPTED"
@@ -97,7 +97,7 @@ certified = "UNATTEMPTED"
 [[omp_extension]]
 id = "ee-ambient-session-start"
 event = "session_start"
-path = "/Users/josh/.omp/omp-extensions/ee-ambient-session-start.ts"
+path = "$HOME/.omp/omp-extensions/ee-ambient-session-start.ts"
 class = "advisory"
 language = "typescript"
 certified = "UNATTEMPTED"
@@ -105,28 +105,28 @@ certified = "UNATTEMPTED"
 [[omp_extension]]
 id = "zestgraph-danger-gate"
 event = "tool_call"
-path = "/Users/josh/.omp/omp-extensions/zestgraph-danger-gate.ts"
+path = "$HOME/.omp/omp-extensions/zestgraph-danger-gate.ts"
 class = "gate"
 language = "typescript"
-binary_behind = "/Users/josh/.local/bin/zestgraph-danger-gate"
+binary_behind = "$HOME/.local/bin/zestgraph-danger-gate"
 certified = "UNATTEMPTED"
 
 [[omp_extension]]
 id = "slb-guard-fail-closed"
 event = "tool_call"
-path = "/Users/josh/.omp/omp-extensions/slb-guard-fail-closed.ts"
+path = "$HOME/.omp/omp-extensions/slb-guard-fail-closed.ts"
 class = "gate"
 language = "typescript"
-binary_behind = "/Users/josh/.local/bin/slb-guard-fail-closed"
+binary_behind = "$HOME/.local/bin/slb-guard-fail-closed"
 certified = "UNATTEMPTED"
 
 [[omp_extension]]
 id = "rch-mutator"
 event = "tool_call"
-path = "/Users/josh/.omp/omp-extensions/rch-mutator.ts"
+path = "$HOME/.omp/omp-extensions/rch-mutator.ts"
 class = "advisory"
 language = "typescript"
-binary_behind = "/Users/josh/.local/bin/rch"
+binary_behind = "$HOME/.local/bin/rch"
 certified = "UNATTEMPTED"
 
 # API events available (HookAPI) not all wired:
@@ -138,9 +138,9 @@ certified = "UNATTEMPTED"
 # live subset: tool_call tool_result session_start user_bash
 
 # --- .sh hooks still live (geography escape; do not fix this pass) ---
-# Claude Stop: /Users/josh/.claude/scripts/finding-bead-gate.sh
-# Codex PreToolUse: /Users/josh/Developer/control-plane/bin/zeststream-cast-spawn-cap.sh
-# Codex PostToolUse: /Users/josh/Developer/control-plane/bin/codex-command-failure-journal.sh
+# Claude Stop: $HOME/.claude/scripts/finding-bead-gate.sh
+# Codex PreToolUse: $HOME/Developer/control-plane/bin/zeststream-cast-spawn-cap.sh
+# Codex PostToolUse: $HOME/Developer/control-plane/bin/codex-command-failure-journal.sh
 sh_hooks_live = 3
 
 # --- coverage levels ---
@@ -167,7 +167,7 @@ matcher = "per-extension; bash for gates; write/edit for observational"
 class = "mixed gate+advisory"
 fail_mode = "UNMEASURED-per-extension"
 binary = "9 TypeScript factories under ~/.omp/omp-extensions; several spawn ~/.local/bin/*"
-policy_file = "/Users/josh/.omp/profiles/<profile>/agent/config.yml"
+policy_file = "$HOME/.omp/profiles/<profile>/agent/config.yml"
 source_commit = "UNKNOWN"
 language = "typescript"
 stage = "live-unattempted"

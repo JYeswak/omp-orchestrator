@@ -8,7 +8,7 @@ This document classifies the seven OMP **DISPATCH** surfaces against the eight-c
 
 The machine-readable rows live in `docs/plan/OMP-COVERAGE-TABLE.jsonl`. The roll-up lives in `docs/inventories/omp_surface_coverage_index.md`. This wave was absent from that index until this document was added.
 
-The sweep was performed against `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types` and its seven named roots. It found **7 surfaces, 52 declaration files, 276 allocated KB, and 363 top-level exported declaration lines** using the source-aware counting rule retained in the command evidence. Zero surfaces is an error; the denominator is not inferred from the table length.
+The sweep was performed against `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types` and its seven named roots. It found **7 surfaces, 52 declaration files, 276 allocated KB, and 363 top-level exported declaration lines** using the source-aware counting rule retained in the command evidence. Zero surfaces is an error; the denominator is not inferred from the table length.
 
 ---
 
@@ -87,7 +87,7 @@ The dispatch alternative preserves the independent authorities that existed befo
 Derives the document's surface set from its table and compares it with the seven surfaces in the bead title. It rejects an empty side, so a missing document or malformed table cannot report success. The same command is the one pasteable validation command for this document.
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator && W=4 && \
+cd $HOME/Developer/omp-orchestrator && W=4 && \
 D=$(sed -nE 's/^\| `?([a-z0-9:_-]+)`? \|.*/\1/p' "docs/inventories/omp_surface_coverage_ipg${W}.md" \
     | grep -vE '^(surface|-+)$' | sort -u) && \
 B=$(jq -r --arg id "omp-orchestrator-omp-coverage-mission-ipg.${W}" \

@@ -76,8 +76,8 @@ is not this one.**
 ## The fix, PROVEN read-only before proposal
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator && FLEET_SESSION=omp-orchestrator \
-  /Users/josh/Developer/control-plane/bin/fleet-idle-monitor.sh --report-only
+cd $HOME/Developer/omp-orchestrator && FLEET_SESSION=omp-orchestrator \
+  $HOME/Developer/control-plane/bin/fleet-idle-monitor.sh --report-only
 ```
 
 Output, 0.09 s, nothing sent:
@@ -95,7 +95,7 @@ OK no two-capture idle panes beside ready work
 **The lane AS INSTALLED (corrected twice since first proposal):**
 
 ```cron
-8,18,28,38,48,58 * * * * cd /Users/josh/Developer/omp-orchestrator && FLEET_SESSION=omp-orchestrator timeout 480 /Users/josh/.local/bin/fleet-idle-monitor --report-only >> /Users/josh/.local/state/flywheel/omp-fleet-idle.log 2>&1
+8,18,28,38,48,58 * * * * cd $HOME/Developer/omp-orchestrator && FLEET_SESSION=omp-orchestrator timeout 480 $HOME/.local/bin/fleet-idle-monitor --report-only >> $HOME/.local/state/flywheel/omp-fleet-idle.log 2>&1
 ```
 
 **Two corrections are baked into that line and both were mine:**
@@ -143,7 +143,7 @@ fleet-idle-monitor.rs:327   .args(["ready","--json","--limit","0"])             
 **`FLEET_SESSION` selects which panes to classify. NOTHING selects which tracker to dispatch from.**
 
 **And `cd` provably does not fix it** — the lane carries
-`cd /Users/josh/Developer/omp-orchestrator &&` for exactly this purpose, and `br ready` from that
+`cd $HOME/Developer/omp-orchestrator &&` for exactly this purpose, and `br ready` from that
 cwd returns `omp-orchestrator-815`. **The nudge still carried `uds-snq`.** Why the binary ignores
 its invocation cwd is **UNMEASURED**; `47g0` item 2 owns it.
 

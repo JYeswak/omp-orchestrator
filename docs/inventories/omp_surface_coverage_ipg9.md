@@ -111,7 +111,7 @@ surface set its bead declares. It quotes neither, so it cannot go stale the way 
 does. An empty parse on either side is FAIL, never PASS.
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator && W=9 && \
+cd $HOME/Developer/omp-orchestrator && W=9 && \
 D=$(sed -nE 's/^\| `?([a-z0-9:_-]+)`? \|.*/\1/p' "docs/inventories/omp_surface_coverage_ipg${W}.md" \
     | grep -vE '^(surface|-+)$' | sort -u) && \
 B=$(jq -r --arg id "omp-orchestrator-omp-coverage-mission-ipg.${W}" \

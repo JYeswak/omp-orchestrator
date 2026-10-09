@@ -27,11 +27,11 @@ address to dial for the existing tmux server. This is `NOT-AN-ATTACH-API` for th
 problem, not evidence that the LSP implementation itself is broken.
 
 The source-side evidence is the installed bundle at
-`/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`, measured against
+`$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`, measured against
 `omp/18.1.14`. Re-derive after an OMP upgrade:
 
 ```bash
-B=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
+B=$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
 omp --version
 grep -oE '"omp/(muxConnect|muxPing|muxRestartServer)"' "$B/dist/cli.js" | sort -u
 pgrep -fl 'lsp.mux'
@@ -84,7 +84,7 @@ foreign-session paths.
 **COMMAND**
 
 ```bash
-B=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
+B=$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
 omp --version
 grep -oE '"omp/(muxConnect|muxPing|muxRestartServer)"' "$B/dist/cli.js" | sort -u
 ```

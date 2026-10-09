@@ -219,7 +219,7 @@ mentioning the word would have turned the gate green. Both scans are now scoped 
 the generated roster with a literal — the failure `LAW-UAD-ROSTER-DERIVED` exists to prevent.
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator && \
+cd $HOME/Developer/omp-orchestrator && \
 PC=$(printf 'fn resolve_adapter(n: &str) {}\n"--adapter"\n' | grep -cE 'fn +[a-z_]*adapter[a-z_]*\(|"--adapter"|adapters\b' || true) && \
 T=$(cargo metadata --format-version 1 --no-deps --offline 2>/dev/null | jq '[.packages[].targets[]|select(.kind[]=="bin")]|length') && \
 A=$(grep -rlE 'fn +[a-z_]*adapter[a-z_]*\(|"--adapter"|adapters\b' crates/ompo-doctor/src 2>/dev/null | wc -l | tr -d ' ') && \

@@ -12,7 +12,7 @@ box = "S7"
 field = "hook_schema"
 owner_says = "S7 is wired through the installed Rust/Mach-O pre-commit hook."
 reviewer_says = "Reachability is not certification. S7 names no [[box.hook]] row, so it does not identify the required hooks_certified.toml id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, or harm_class for the claimed hook."
-evidence = "2026-09-03T05:39:03Z; S7 has measurement=6, gap=19, agreement=1, diagram=1 and no hook row; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+evidence = "2026-09-03T05:39:03Z; S7 has measurement=6, gap=19, agreement=1, diagram=1 and no hook row; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' $HOME/Developer/control-plane/hooks_certified.toml."
 severity = "major"
 resolution = ""
 

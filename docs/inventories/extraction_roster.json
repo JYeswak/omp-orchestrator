@@ -1,7 +1,7 @@
 {
   "schema_version": "omp.extraction-roster.v1",
-  "source_manifest": "/Users/josh/Developer/control-plane/Cargo.toml",
-  "target_manifest": "/Users/josh/Developer/omp-orchestrator/Cargo.toml",
+  "source_manifest": "$HOME/Developer/control-plane/Cargo.toml",
+  "target_manifest": "$HOME/Developer/omp-orchestrator/Cargo.toml",
   "source_package_count": 59,
   "target_package_count": 59,
   "extraction_targets": [

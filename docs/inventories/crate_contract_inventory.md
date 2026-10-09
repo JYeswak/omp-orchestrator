@@ -140,7 +140,7 @@ The row is KEPT HERE VERBATIM rather than deleted, because it records a scan som
 The row set is generated from `cargo metadata`, never hand-listed. The invariant suite fails closed on an empty package set, missing row, duplicate row, extra row, or a planted package whose row is absent.
 
 ```bash
-RCH_WORKER=contabo-4 CARGO_BUILD_JOBS=2 rch exec -- cargo test -j 2 -p no-shell-gate --test crate_contract_inventory -- --nocapture
+RCH_WORKER=worker-4 CARGO_BUILD_JOBS=2 rch exec -- cargo test -j 2 -p no-shell-gate --test crate_contract_inventory -- --nocapture
 ```
 
 ## Cross-References

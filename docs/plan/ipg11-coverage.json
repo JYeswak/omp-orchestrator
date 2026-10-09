@@ -5,7 +5,7 @@
   "omp_version": "18.0.11",
   "socraticode_queries": 10,
   "counting_rule": {
-    "files_and_kb": "du -ck /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/<root>/*.d.ts; KB is allocated disk KB",
+    "files_and_kb": "du -ck $HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/types/<root>/*.d.ts; KB is allocated disk KB",
     "symbols": "top-level declarations matching ^export [declare] {type,interface,const,function,class,enum} NAME in *.d.ts"
   },
   "contract_columns": [

@@ -146,7 +146,7 @@ Pasteable. Fails if oaqh heartbeat 0-hits are treated as ABSENT, if missing SLO 
 python3 - <<'PY'
 import json
 from pathlib import Path
-root = Path("/Users/josh/Developer/omp-orchestrator")
+root = Path("$HOME/Developer/omp-orchestrator")
 token = "omp-orchestrator-s1-wave2-nonauthor-grade-oaqh"
 bead=None
 with (root/".beads/issues.jsonl").open() as f:

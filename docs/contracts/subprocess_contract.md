@@ -74,7 +74,7 @@ The command exercises the existing invariant suite, including large-pipe drainin
 - `crates/tick-dispatch/src/lib.rs` — existing ordered dispatch boundary and subprocess caller surface.
 - `docs/plans/plan_to_write_the_document_corpus.md` — contract-corpus manifest and Phase 1 document order.
 - `docs/contracts/asupersync_process_grade.md` — single-document pass bar and validation doctrine.
-- `/Users/josh/.claude/skills/project-startup/assets/contract-template.md` — contract document shape.
+- `$HOME/.claude/skills/project-startup/assets/contract-template.md` — contract document shape.
 
 ## NO-CLAIM
 

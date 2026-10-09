@@ -888,7 +888,7 @@
    "coverage": "PARTIAL",
    "section": "00-brief",
    "kind": "milestone",
-   "title": "R8: clean-machine install receipt proving doctor/health/repair + validate/audit/why with no /Users/josh fallback"
+   "title": "R8: clean-machine install receipt proving doctor/health/repair + validate/audit/why with no $HOME fallback"
   },
   "00.18": {
    "bead": "omp-orchestrator-kxe.1",
@@ -5185,7 +5185,7 @@
    "coverage": "PARTIAL",
    "section": "12-journey",
    "kind": "doc-fact",
-   "title": "S8 doc-fact: retire the `/Users/josh` fallback at installer main.rs:25 and compile-time roots :16-20 citations (no longer in tree)"
+   "title": "S8 doc-fact: retire the `$HOME` fallback at installer main.rs:25 and compile-time roots :16-20 citations (no longer in tree)"
   },
   "12.58": {
    "bead": "omp-orchestrator-plan-12-ibpa.8",

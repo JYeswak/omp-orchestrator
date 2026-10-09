@@ -3,7 +3,7 @@
 **Owner:** pane `%19` (`pane19-omp-luna`)
 **Artifact:** `OMP-RPC-SURFACE-MAP.md`
 **Measured:** 2026-09-08
-**Installed OMP:** `omp/18.1.14` at `/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`
+**Installed OMP:** `omp/18.1.14` at `$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`
 
 ## Protocol precondition
 
@@ -32,7 +32,7 @@ The probe must classify these separately:
 ## Group 1 results
 
 The resumed-session fixture used below was
-`/Users/josh/.local/state/zeststream/scratch/omp-orchestrator/WildStone/rpc-resume-profile/sessions/session.jsonl`.
+`$HOME/.local/state/zeststream/scratch/omp-orchestrator/WildStone/rpc-resume-profile/sessions/session.jsonl`.
 It is scratch state, not a live pane proof. Each OMP invocation can append to that fixture; total
 message counts therefore drift between probes.
 

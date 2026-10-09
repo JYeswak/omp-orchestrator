@@ -7,7 +7,7 @@ without a matching declaration. **Deletion condition:** remove this reference wh
 versioned outbound-event contract and this repository has a typed event consumer.
 
 **Provenance:** `omp --version` returned `omp/18.1.14`. The installed bundle is
-`/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`.
+`$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`.
 
 ## The six derived names
 
@@ -119,7 +119,7 @@ bundle. This bounded inspection applies the scanner's actual anchor, cluster-gap
 rules, then reports the location of `tool_stream_update`:
 
 ```bash
-node -e 'const fs=require("fs"); const p="/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"; const t=fs.readFileSync(p,"utf8"); const re=/case"([a-z][a-z0-9_]*)"/g; const s=[]; let m; while((m=re.exec(t))) s.push({name:m[1],offset:m.index}); const a=s.findIndex(x=>x.name==="negotiate_protocol"); let lo=a,hi=a; while(lo>0 && s[lo].offset-s[lo-1].offset<4000) lo--; while(hi+1<s.length && s[hi+1].offset-s[hi].offset<4000) hi++; const c=s.slice(lo,hi+1); let k=0; for(let i=1;i<c.length;i++){if(c[i].offset-c[i-1].offset>c[k+1].offset-c[k].offset) k=i-1;} console.log(JSON.stringify({all_case_sites:s.length,cluster_size:c.length,seam_index:k,seam_gap_bytes:c[k+1].offset-c[k].offset,inbound:c.slice(0,k+1).map(x=>x.name),outbound:c.slice(k+1).map(x=>x.name),tool_stream_sites:s.filter(x=>x.name==="tool_stream_update").map(x=>({offset:x.offset,cluster_index:c.findIndex(y=>y.offset==x.offset),side:c.findIndex(y=>y.offset==x.offset)<=k?"inbound":"outbound"}))},null,2));'
+node -e 'const fs=require("fs"); const p="$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"; const t=fs.readFileSync(p,"utf8"); const re=/case"([a-z][a-z0-9_]*)"/g; const s=[]; let m; while((m=re.exec(t))) s.push({name:m[1],offset:m.index}); const a=s.findIndex(x=>x.name==="negotiate_protocol"); let lo=a,hi=a; while(lo>0 && s[lo].offset-s[lo-1].offset<4000) lo--; while(hi+1<s.length && s[hi+1].offset-s[hi].offset<4000) hi++; const c=s.slice(lo,hi+1); let k=0; for(let i=1;i<c.length;i++){if(c[i].offset-c[i-1].offset>c[k+1].offset-c[k].offset) k=i-1;} console.log(JSON.stringify({all_case_sites:s.length,cluster_size:c.length,seam_index:k,seam_gap_bytes:c[k+1].offset-c[k].offset,inbound:c.slice(0,k+1).map(x=>x.name),outbound:c.slice(k+1).map(x=>x.name),tool_stream_sites:s.filter(x=>x.name==="tool_stream_update").map(x=>({offset:x.offset,cluster_index:c.findIndex(y=>y.offset==x.offset),side:c.findIndex(y=>y.offset==x.offset)<=k?"inbound":"outbound"}))},null,2));'
 ```
 
 Measured output:

@@ -1,4 +1,4 @@
-  2026-09-07T21:20:17.219535Z  INFO rch::hook: Selected worker: contabo-2 at root@94.72.121.46 (2 slots remaining after reservation, speed 50.0)
+  2026-09-07T21:20:17.219535Z  INFO rch::hook: Selected worker: worker-2 at root@192.0.2.3 (2 slots remaining after reservation, speed 50.0)
     at rch/src/hook.rs:2645 on ThreadId(1)
 
   2026-09-07T21:20:18.085468Z  INFO rch::hook::transfer_orchestration: Starting remote compilation pipeline for omp-orchestrator (hash: 807ad13fa12ec713)
@@ -7,10 +7,10 @@
   2026-09-07T21:20:18.085519Z  INFO rch::hook::transfer_orchestration: Prepared dependency sync manifest for 1 roots
     at rch/src/hook/transfer_orchestration.rs:530 on ThreadId(1)
 
-  2026-09-07T21:20:20.668755Z  INFO rch::hook::transfer_orchestration: Syncing project to worker contabo-2...
+  2026-09-07T21:20:20.668755Z  INFO rch::hook::transfer_orchestration: Syncing project to worker worker-2...
     at rch/src/hook/transfer_orchestration.rs:659 on ThreadId(1)
 
-  2026-09-07T21:20:20.668899Z  INFO rch::transfer: Syncing /Users/josh/Developer/omp-orchestrator -> /Users/josh/Developer/omp-orchestrator on contabo-2 (streaming)
+  2026-09-07T21:20:20.668899Z  INFO rch::transfer: Syncing $HOME/Developer/omp-orchestrator -> $HOME/Developer/omp-orchestrator on worker-2 (streaming)
     at rch/src/transfer.rs:3549 on ThreadId(1)
 
   2026-09-07T21:20:23.075021Z  INFO rch::hook::transfer_orchestration: Sync complete: 1779 files, 102483 bytes in 2301ms
@@ -19,7 +19,7 @@
   2026-09-07T21:20:28.787446Z  INFO rch::hook::transfer_orchestration: Executing command remotely: cargo run --quiet -p gate-runner -- --run
     at rch/src/hook/transfer_orchestration.rs:1014 on ThreadId(1)
 
-  2026-09-07T21:20:28.787544Z  INFO rch::transfer: Rewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): /Users/josh/Developer/omp-orchestrator/target -> /Users/josh/Developer/omp-orchestrator/.rch-target-contabo-2-pool-9fce9d6739375f7cae8bcfc4b2e0b25b
+  2026-09-07T21:20:28.787544Z  INFO rch::transfer: Rewriting CARGO_TARGET_DIR for remote execution (worker-scoped path): $HOME/Developer/omp-orchestrator/target -> $HOME/Developer/omp-orchestrator/.rch-target-worker-2-pool-9fce9d6739375f7cae8bcfc4b2e0b25b
     at rch/src/transfer.rs:1842 on ThreadId(1)
 
   2026-09-07T21:20:28.787564Z  INFO rch::transfer: Wrapping command with external timeout protection, kind: cargo build, timeout_secs: 3600

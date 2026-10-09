@@ -7,7 +7,7 @@ worker observations; those observations are explicitly marked `HISTORICAL`,
 made measured by repeating it. The primary inventory artifact is the built scanner
 `omp-inventory-map`, run as
 
-`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map` was run against installed `omp/18.0.11` on 2026-08-31 from repo `/Users/josh/Developer/omp-orchestrator`. The retained historical capture is `.flywheel/inventory-artifacts/inv.txt.gz`; it decompresses to 544,697 bytes, raw SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, and exit 2. The compressed artifact SHA-256 is `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`.
+`/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map` was run against installed `omp/18.0.11` on 2026-08-31 from repo `$HOME/Developer/omp-orchestrator`. The retained historical capture is `.flywheel/inventory-artifacts/inv.txt.gz`; it decompresses to 544,697 bytes, raw SHA-256 `86491732a5581a6d2e342d0db59bdf20e5f47f6da93150ae78bd2649562f5081`, and exit 2. The compressed artifact SHA-256 is `8f62893e6a4a04a9b4e8922781a5f8a687f73ca84f5c4ea9d69c5f8998ae0561`.
 
 The snapshot is historical and revision-unpinned; it is not current workspace evidence. Every derived count in §§1–5 must carry this artifact boundary, and later sections do not inherit it.
 
@@ -479,7 +479,7 @@ pre-correction figures are superseded by §9's map snapshot.
 | `omp` | 61 | yes | |
 | `git` | 44 | **no** | spawned by our crates |
 | `br` | 40 | yes | |
-| `cargo` | 31 | **no** | resolves to `/Users/josh/.rch/shims/cargo` — **a shim** |
+| `cargo` | 31 | **no** | resolves to `$HOME/.rch/shims/cargo` — **a shim** |
 | `ntm` | HISTORICAL ESTIMATE (~26; command/output receipt not retained) | **yes (§6)** | 1:many session plane; second-largest censused consumer, omitted from this table's first draft |
 | `tmux` | 29 | **no** | pane truth is read through it |
 | `bv` | 15 | yes | census was wrong — see §7.2 |

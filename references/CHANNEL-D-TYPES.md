@@ -3,7 +3,7 @@
 **Status:** measured reference, not a runtime dependency.
 
 **Provenance:** `omp --version` returned `omp/18.1.14`. The installed package is
-`/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`; the package metadata and type
+`$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`; the package metadata and type
 files were read from that installation. Counts and field shapes below must be re-derived before
 reuse.
 
@@ -11,7 +11,7 @@ reuse.
 
 ```bash
 omp --version
-B=/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
+B=$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
 find "$B/dist/types" -mindepth 1 -maxdepth 1 -type d | wc -l
 find "$B/dist/types" -mindepth 1 -maxdepth 1 -name '*.d.ts' | wc -l
 jq '{version,types,files:(.files|map(select(. == "dist/types"))),exports:{root:.exports["."],wildcard:.exports["./*"]}}' "$B/package.json"

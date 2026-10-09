@@ -27,7 +27,7 @@ The packet bodies follow verbatim, in send order.
 ## uds-sod9
 
 ```text
-Objective: complete bead uds-sod9 in /Users/josh/Developer/uds -- INSTALL ee WITH `uds apply`. This is Joshua's standing objective for the entire shift: keep the fleet on apply until all seven install. Six are in. ee is the seventh and for the first time tonight nothing measured stands in front of it.
+Objective: complete bead uds-sod9 in $HOME/Developer/uds -- INSTALL ee WITH `uds apply`. This is Joshua's standing objective for the entire shift: keep the fleet on apply until all seven install. Six are in. ee is the seventh and for the first time tonight nothing measured stands in front of it.
 Pane: %1   Agent: SageCastle   Bead: uds-sod9 (claimed to you)
 
 HAND-WRITTEN PACKET: `omp-orchestrator dispatch render` exits 101 (E0433 DispatchAdmissibility,
@@ -85,7 +85,7 @@ reproduce an uncommitted mirror edit; ee's consumer wants asupersync =0.4.8. If 
 version selection, that block is the reason, and it is a REPLAY not ambient state.
 
 ## STEP 2 — per target
-    export RCH_WORKER=zestdata-local      # the only lane producing Mach-O arm64
+    export RCH_WORKER=storage-node      # the only lane producing Mach-O arm64
     uds doctor                            # EC-PASS
     uds plan  --only <t>
     uds check --only <t>
@@ -159,7 +159,7 @@ graded like it matters.
 ## uds-o0o8
 
 ```text
-Objective: complete bead uds-o0o8 in /Users/josh/Developer/uds -- the S0 PLAN ENTRY GATE. It is the last unassigned P0 on the board.
+Objective: complete bead uds-o0o8 in $HOME/Developer/uds -- the S0 PLAN ENTRY GATE. It is the last unassigned P0 on the board.
 Pane: %3   Agent: CloudyGrove   Bead: uds-o0o8 (claimed to you)
 
 HAND-WRITTEN PACKET: omp-orchestrator dispatch render exits 101 (E0433 DispatchAdmissibility;
@@ -283,7 +283,7 @@ You are GPT-5.6-Luna; SageCastle (Opus 5) or CrimsonCarp (Grok 4.6) grades this,
 ## uds-m0bm
 
 ```text
-Objective: complete bead uds-m0bm in /Users/josh/Developer/uds. Read `br show uds-m0bm --json` IN FULL first.
+Objective: complete bead uds-m0bm in $HOME/Developer/uds. Read `br show uds-m0bm --json` IN FULL first.
 Pane: %4   Agent: CrimsonCarp   Bead: uds-m0bm (claimed to you)
 
 HAND-WRITTEN PACKET: omp-orchestrator dispatch render exits 101 (E0433 DispatchAdmissibility,
@@ -367,7 +367,7 @@ You are Grok 4.6; SageCastle (Opus 5), SapphireIsland or CloudyGrove (Luna) grad
 ## uds-1xd6
 
 ```text
-Objective: complete bead uds-1xd6 in /Users/josh/Developer/uds. Read `br show uds-1xd6 --json` IN FULL before starting; re-run it immediately before editing and STOP if the bead, owner, files, deps or acceptance changed.
+Objective: complete bead uds-1xd6 in $HOME/Developer/uds. Read `br show uds-1xd6 --json` IN FULL before starting; re-run it immediately before editing and STOP if the bead, owner, files, deps or acceptance changed.
 Pane: %4   Agent: CrimsonCarp   Bead: uds-1xd6 (already claimed to you)
 
 HAND-WRITTEN PACKET -- THE RENDERER IS DOWN AND YOU SHOULD KNOW WHAT THAT COSTS.

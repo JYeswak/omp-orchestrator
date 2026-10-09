@@ -80,12 +80,12 @@ Extracted 2026-09-07 from `AGENTS.md` at sha256 `2fffc00bfd0add3d`, by content a
    2026-09-07, measured within five minutes of the rule being written down.
 
    ```
-   [RCH-I005] refused (project_excluded); 'contabo-3' already runs this project
+   [RCH-I005] refused (project_excluded); 'worker-3' already runs this project
    rch queue --json  ->  active builds: 0
    ```
 
    **Zero active builds, so the exclusion was attributable to no live build — therefore not its
-   own.** It unpinned the worker and the run succeeded on `contabo-1` **first try**. Under the
+   own.** It unpinned the worker and the run succeeded on `worker-1` **first try**. Under the
    previous reflex — *"`active_project_exclusion` means wait for your own job"* — it had waited
    three times earlier the same evening.
 
@@ -203,9 +203,9 @@ Extracted 2026-09-07 from `AGENTS.md` at sha256 `2fffc00bfd0add3d`, by content a
      project, different pane                CONTENTION -> REROUTE to another worker
    ```
 
-   `%8` found `contabo-3` genuinely running `omp-orchestrator-38cf50d1` —
+   `%8` found `worker-3` genuinely running `omp-orchestrator-38cf50d1` —
    `cargo test -j 2 -p gate-runner --test index_probe`, which was **`%19`'s staged-file
-   experiment**. It rerouted without waiting, `contabo-1` returned `exit=0`. **Waiting would have
+   experiment**. It rerouted without waiting, `worker-1` returned `exit=0`. **Waiting would have
    been wrong**: it was not its own build, so there was nothing to duplicate.
 
    The trap is that **the queue row does not name the pane**, so it cannot distinguish case 2 from

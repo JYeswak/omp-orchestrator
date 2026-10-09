@@ -126,7 +126,7 @@ A requirement that cannot be checked is a wish. Each row states the observable t
 | R5 | Every OMP surface | **PARTIAL — pre-extraction scanner artifact records 980 discovered rows + 1 synthetic transport sentinel = 981 row records, with slash_commands=799 versus expected=136 still unresolved; current workspace metadata and scanner regeneration remain required before closure** |
 | R6 | The testing/validation/gating frameworks | **OPEN — §06's gate matrix must produce a named G1–G8 proof artifact with known-bad, known-good, mutation, anti-vacuity, and ADDRESSABLE results; no such all-legs PASS artifact is recorded** |
 | R7 | Mirror prior art at every gap | §10 gives a search command + verbatim quote or explicit not-found per gap |
-| R8 | Installability + canonical CLI scoping | **OPEN — §07 must attach a clean-machine install receipt proving doctor/health/repair + validate/audit/why, with no hard-coded /Users/josh fallback; no receipt is recorded** |
+| R8 | Installability + canonical CLI scoping | **OPEN — §07 must attach a clean-machine install receipt proving doctor/health/repair + validate/audit/why, with no hard-coded $HOME fallback; no receipt is recorded** |
 | R9 | End users orchestrating their own projects | **OPEN — §08 must attach a second-machine/clean-repo first-tick receipt naming the adapter and delivery receipt; no external-repo receipt is recorded** |
 | R10 | Idea → why → binaries → actions+negatives → map → design specs at SOTA | **OPEN — §09 must attach a rubric artifact with every SOTA dimension scored ≥4/5 and no missing action/negative mapping; no thresholded score artifact is recorded** |
 | R11 | Requirements written down before dispatch | **this file** |
@@ -152,13 +152,13 @@ session. Sections must use these figures and must not re-derive them differently
 
 | binary | version | path |
 |---|---|---|
-| `omp` | `omp/18.1.2` (host recheck; scanner snapshots remain `omp/18.0.11`) | `/Users/josh/.local/bin/omp` |
-| `ntm` | `ntm version v1.30.0-1-gda270719` | `/Users/josh/.local/bin/ntm` |
-| `br` | `br 0.4.1` | `/Users/josh/.local/bin/br` |
+| `omp` | `omp/18.1.2` (host recheck; scanner snapshots remain `omp/18.0.11`) | `$HOME/.local/bin/omp` |
+| `ntm` | `ntm version v1.30.0-1-gda270719` | `$HOME/.local/bin/ntm` |
+| `br` | `br 0.4.1` | `$HOME/.local/bin/br` |
 | `bv` | `bv v0.20.0` | `/opt/homebrew/bin/bv` |
 | `git` | `git version 2.50.1 (Apple Git-155)` | `/usr/bin/git` |
-| `cargo` | `cargo 1.100.0-nightly (e8cb624d5 2026-08-2…)` | `/Users/josh/.rch/shims/cargo` (a shim) |
-| `fh` | `franken-harvest 0.1.0+tree.7b0fc50c3e5a29d…` | `/Users/josh/.local/bin/fh` |
+| `cargo` | `cargo 1.100.0-nightly (e8cb624d5 2026-08-2…)` | `$HOME/.rch/shims/cargo` (a shim) |
+| `fh` | `franken-harvest 0.1.0+tree.7b0fc50c3e5a29d…` | `$HOME/.local/bin/fh` |
 | `jsm` | `jsm 0.1.4` | `/usr/local/bin/jsm` |
 | `tmux` | **rejects `--version`** (`tmux: unknown option -- -`) | `/opt/homebrew/bin/tmux` |
 
@@ -218,7 +218,7 @@ corrected numbers.*
 
 Produced by the built scanner: `/Volumes/BuildShared/cargo-targets/debug/omp-inventory-map`
 Round-10 capture: 544,697 bytes of JSON, exit 2, envelope status UNKNOWN; that byte count and its un-hashed output are historical/non-authoritative.
-Fresh recapture on 2026-08-31 from the exact invocation cd /Users/josh/Developer/omp-orchestrator && /Volumes/BuildShared/cargo-targets/debug/omp-inventory-map doctor > /tmp/omp-inventory-map-2026-08-31.json: exit 2, 3,032,388 bytes, SHA-256 876809f0779a81b31126564b2b166a7a883c4f5365b499561242013c7dd4c899. Input tree: that workspace working tree at capture time; OMP target: omp/18.0.11. No commit/source revision was recorded, so this is a hash-anchored artifact snapshot, not a revision-pinned source claim.
+Fresh recapture on 2026-08-31 from the exact invocation cd $HOME/Developer/omp-orchestrator && /Volumes/BuildShared/cargo-targets/debug/omp-inventory-map doctor > /tmp/omp-inventory-map-2026-08-31.json: exit 2, 3,032,388 bytes, SHA-256 876809f0779a81b31126564b2b166a7a883c4f5365b499561242013c7dd4c899. Input tree: that workspace working tree at capture time; OMP target: omp/18.0.11. No commit/source revision was recorded, so this is a hash-anchored artifact snapshot, not a revision-pinned source claim.
 The fresh artifact is the only hash-anchored scanner output in this brief. Its summary is recorded below; the older 181/183/184 arithmetic is retained only as a labelled round-10 historical snapshot.
 - **Historical round-10 node/row shape:** the seven discovered count fields summed to **181** source rows. The reported **183 rows** therefore included two synthetic records: one transport sentinel and one slash_command expectation sentinel. The slash_commands=0 field was the discovered command count; the slash_command 1 row was the synthetic mismatch sentinel, not an enumerated command. The **184 nodes** were those 183 row records plus one scanner root/envelope node. No synthetic record was counted as discovered coverage. — HISTORICAL as of 2026-09-02.
 - **Historical arithmetic:** 181 discovered rows + 2 synthetic sentinel rows = 183 row records; 183 row records + 1 root/envelope node = 184 nodes. Do not treat these round-10 values as the current census.
@@ -829,7 +829,7 @@ A kill criterion nobody can evaluate is decoration. Each names its observable.
 |---|---|---|
 | K1 | the completion signal cannot be consumed by the supervisor | **WIRE-PROVEN, ADOPTION REMAINS** — OMP ships `AgentEndEvent.willContinue` and `SessionStopEvent` (`dist/types/extensibility/shared-events.d.ts:RpcSessionEventFrame`), and a raw `agent_end` frame with `isTerminal:true` crossed `--mode=rpc` via `RpcSessionEventFrame` (`modes/rpc/rpc-types.d.ts:RpcSessionEventFrame`). The remaining kill condition is failed adoption into the supervisor, not inability to build a completion protocol |
 | RISK-002 (K2) | verification costs more than the review it replaces | **OPEN/UNVERIFIED — owner: Josh.** For a 30-day pilot, numerator = verification minutes recorded in the tick/review ledger; denominator = review minutes demonstrably replaced; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped tick ledger plus review log. Instrumentation and baseline are not yet built. **This kill criterion is separately registered from the thirteen OQ rows; it remains unmeasured.** |
-| K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `/Users/josh` as its fallback home |
+| K3 | a second machine cannot run it | §07: never attempted; installer hardcodes `$HOME` as its fallback home |
 | K4 | the gates get routed around | measurable as: any commit landing with a gate disabled and no named allowance row |
 | RISK-005 (K5) | the fleet needs more tending than the work it does | **OPEN/UNVERIFIED — owner: orchestrator.** For a 30-day pilot, numerator = operator tending minutes (reap, redispatch, unblock, or intervene); denominator = minutes of verified work completed; fire if numerator/denominator > 1.0 in two consecutive weekly windows. Source: timestamped fleet/operator ledger plus verified close receipts. The historical 4.2 hours of refused ticks is context only, not this denominator or a fire. **This kill criterion is separately registered from the thirteen OQ rows; it remains unmeasured.** |
 

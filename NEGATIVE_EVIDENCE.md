@@ -19,9 +19,9 @@ not one of them was a compile error.**
 
 | run | worker | apparent verdict | actual cause |
 |---|---|---|---|
-`cargo check --workspace --quiet` (pane 1) | contabo-4 | `error: could not compile asupersync (lib)` | **`signal: 9, SIGKILL`** — rustc OOM-killed |
-`cargo check --workspace` (AsupersyncStable) | contabo-1 | same single error line | **SIGKILL again**, `0 slots remaining after reservation` |
-`cargo check --all-targets -j 1 -p <14 CI packages>` | contabo-3 | `101`, 552s | **a tracked file the worker never received** |
+`cargo check --workspace --quiet` (pane 1) | worker-4 | `error: could not compile asupersync (lib)` | **`signal: 9, SIGKILL`** — rustc OOM-killed |
+`cargo check --workspace` (AsupersyncStable) | worker-1 | same single error line | **SIGKILL again**, `0 slots remaining after reservation` |
+`cargo check --all-targets -j 1 -p <14 CI packages>` | worker-3 | `101`, 552s | **a tracked file the worker never received** |
 
 The third is the subtlest and the most instructive. The error was:
 
@@ -161,7 +161,7 @@ artifact or the worker's `zigcc-aarch64-darwin` disappears. Check the WORKER, no
 ### The trap that survives: a correct cross-build exits 102
 
 ```
-[RCH] RCH-E327 remote compile on contabo-3 SUCCEEDED but returned executables for the WRONG
+[RCH] RCH-E327 remote compile on worker-3 SUCCEEDED but returned executables for the WRONG
 PLATFORM ... Offending file(s): debug/gate-runner (ELF), debug/no-shell-gate (ELF) ...
 Treating as a build failure (exit 102)
 ```

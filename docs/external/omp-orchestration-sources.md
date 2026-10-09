@@ -156,15 +156,15 @@ not separate them.
 
 ### 4. `rch queue` CANNOT TELL YOU WHETHER YOU ARE YOUR OWN BLOCKER
 
-Measured by `%20`. At the moment `contabo-3` refused it with *"'contabo-3' already runs this
-project"*, `rch queue --json` showed **two active builds and NO contabo-3 row at all**. The retry
-succeeded on contabo-3 sixty seconds later, so the exclusion was almost certainly its own first
+Measured by `%20`. At the moment `worker-3` refused it with *"'worker-3' already runs this
+project"*, `rch queue --json` showed **two active builds and NO worker-3 row at all**. The retry
+succeeded on worker-3 sixty seconds later, so the exclusion was almost certainly its own first
 invocation — **registered by admission and invisible to the queue.**
 
 **Why this is load-bearing:** `active_project_exclusion` reads identically to capacity loss, and the
 skill's remedy table says *"pin a DIFFERENT worker"* for one and *"wait for your own job"* for the
 other. **Requesting another worker is exactly how this repo's verdict builds scattered onto
-`contabo-1` (zeststream-cast's) and `contabo-2` (control-plane's).** The queue view cannot
+`worker-1` (zeststream-cast's) and `worker-2` (control-plane's).** The queue view cannot
 discriminate; a probe loop that waits is the correct response.
 
 ---

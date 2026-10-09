@@ -728,8 +728,8 @@ Three answers, one command, all real:
 
 ```
 local, fail-fast       (bypass, darwin arm64)    11 targets    33 passed /  3 failed
-lane,  fail-fast       (contabo-2, exit 101)      9 targets    23 passed /  2 failed
-lane,  --no-fail-fast  (contabo-2, exit 101)     52 targets   251 passed / 55 failed
+lane,  fail-fast       (worker-2, exit 101)      9 targets    23 passed /  2 failed
+lane,  --no-fail-fast  (worker-2, exit 101)     52 targets   251 passed / 55 failed
 ```
 
 **`cargo test` stops at the first failing TARGET, and the stop point is environment-dependent.** The
@@ -810,8 +810,8 @@ This is the clause that matters, because it names the mechanism rather than the 
 it supervised the wrong repo all night. Rather than fix one default, I hand-dispatched for hours.
 
 **CORRECTED 2026-09-02 — the kernel was FIXED and the doctrine outlived the defect.** The binary
-was rebuilt Sep 1 19:29 and now carries no `/Users/josh/Developer/*` literals at all
-(`strings … | grep -oE '/Users/josh/Developer/[a-z-]+'` returns nothing). `--plan` from this repo
+was rebuilt Sep 1 19:29 and now carries no `$HOME/Developer/*` literals at all
+(`strings … | grep -oE '$HOME/Developer/[a-z-]+'` returns nothing). `--plan` from this repo
 correctly resolves `bead=omp-orchestrator-omp-surface-map-41b`, and the `--apply` lane is cron'd at
 `8,28,48` and alive — its log reads `no idle pane both surfaces agree on — nothing to do`, which is
 the two-surface agreement rule working, not a silent failure.
@@ -944,7 +944,7 @@ have caught it at the point of the mistake is `omp-orchestrator-pre-delete-citat
 > `git log --all --diff-filter=D --name-only -- 'crates/close-evidence-gate/*'` → **0**, so it was
 > never deleted either; `grep -rn CITED_PATH crates/` → **0 occurrences anywhere in this repo**.
 >
-> It lives at `/Users/josh/Developer/control-plane/crates/close-evidence-gate/src/blob.rs`. **The
+> It lives at `$HOME/Developer/control-plane/crates/close-evidence-gate/src/blob.rs`. **The
 > readings below are REAL — of the wrong repository.** They were published here as "this repo's
 > close-evidence extractor" by the same agent that wrote the fifth rule about not confusing the two
 > boundaries. **A BORROWED CLAIM INHERITS ITS AUTHOR'S BURDEN applies to a borrowed REPOSITORY too**,

@@ -20,7 +20,7 @@ A `.sh` (or `.py`) becomes a crate here **iff all three hold**:
 
 |id|predicate|command|eligible when|
 |---|---|---|---|
-|`EE-P1`|**Concern is ours.** The script serves the OMP orchestration lifecycle — observe, select, claim, dispatch, verify, close.|`grep -rhoE '/Users/[a-z]+/(\.claude\|Developer/[a-z-]+)' <src>` |names no OTHER repo as its subject|
+|`EE-P1`|**Concern is ours.** The script serves the OMP orchestration lifecycle — observe, select, claim, dispatch, verify, close.|`grep -rhoE '$HOME]+/(\.claude\|Developer/[a-z-]+)' <src>` |names no OTHER repo as its subject|
 |`EE-P2`|**It is a PORT, not a wrapper.** The crate implements the logic in Rust and never routes a `.sh`/`.py` into `Command::new`, an argv vector, or `fs::read*`.|see `EE-P5` — the naive string count over-reports|`0` real sites|
 
 `EE-P2` is the load-bearing one and the one that was missing.
@@ -51,7 +51,7 @@ Extraction batch 1 then imported **six more instances of the same shape.** Exec-
 |`br-comment-form-check`|1|control-plane `bin/`|
 
 `zestgraph-hook-substrates` is the decisive case. Its literals are
-`const SCRIPT: &str = "/Users/josh/.claude/hooks/accretive-write-gate.sh"` and five siblings. All
+`const SCRIPT: &str = "$HOME/.claude/hooks/accretive-write-gate.sh"` and five siblings. All
 six targets **exist**, all are `.sh`, and **every one lives outside this repository** — in the
 user's home and in the `foundry` project. There is **no repo-relative form**, so the marker-walk
 repair prescribed by bead `7ai` cannot resolve them. It is not a portability defect. It is an
@@ -109,7 +109,7 @@ ERROR**, never a pass.
 
 - **The reference shape itself carries a literal.** `omp-idle-dispatch` — named in three dispatch
   packets as the canonical `REPO_MARKERS`/`REPO_ENV`/`ConfigError` exemplar — has
-  `DEFAULT_PATH = "/opt/homebrew/bin:/Users/josh/.local/bin:…"` at `src/main.rs:39`. **The exemplar
+  `DEFAULT_PATH = "/opt/homebrew/bin:$HOME/.local/bin:…"` at `src/main.rs:39`. **The exemplar
   for literal-free resolution would fail the guard it exemplifies.** An agent copying it faithfully
   would have imported a literal.
 - **A vendored `#[path]` module can add a wrapper edge invisibly.** `coordinator-reservation-preflight`
@@ -140,7 +140,7 @@ Run from the repository root. Each command is the predicate, not a proxy for it.
 grep -rhoE '"[^"]*\.(sh|py)"' ../control-plane/crates/<name>/src/ | wc -l
 
 # EE-P1 — whose concern. A foreign repo in the output means TERMINAL.
-grep -rhoE '/Users/[a-z]+/(\.claude|Developer/[a-z-]+)' ../control-plane/crates/<name>/src/ | sort -u
+grep -rhoE '$HOME]+/(\.claude|Developer/[a-z-]+)' ../control-plane/crates/<name>/src/ | sort -u
 
 # EE-P3 — does anything here need it.
 grep -rl '<name>' crates/*/src/*.rs | wc -l

@@ -21,7 +21,7 @@ box = "S4"
 field = "hook_schema"
 owner_says = "The bead-label-schema-gate row uses future_certified_id and gauntlet_stage."
 reviewer_says = "The Wave 1 certified Rust hook schema requires id, event, matcher, class, fail_mode, binary, policy_file, source_commit, language, stage, certified, and harm_class. S4 uses non-schema future_certified_id, omits policy_file/source_commit/certified, and does not provide the required stage field."
-evidence = "sed -n '160,171p' docs/plan/flow/boxes/S4.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' /Users/josh/Developer/control-plane/hooks_certified.toml."
+evidence = "sed -n '160,171p' docs/plan/flow/boxes/S4.toml; sed -n '98,104p' docs/plan/flow/CONTRACT.md; sed -n '1,20p' $HOME/Developer/control-plane/hooks_certified.toml."
 severity = "major"
 resolution = ""
 

@@ -598,17 +598,17 @@
       "id": "07.34",
       "title": "Move machine literals to $XDG_CONFIG_HOME/omp-orchestrator/config.toml; unset HOME is a hard error",
       "lines": "L424-L431",
-      "what": "The /Users/josh HOME fallback and the ~/.cargo/bin/cargo default become config with per-machine overrides; an unset HOME is refused, not guessed.",
+      "what": "The $HOME HOME fallback and the ~/.cargo/bin/cargo default become config with per-machine overrides; an unset HOME is refused, not guessed.",
       "acceptance_seed": "run the installer with HOME unset and no config; expect a typed refusal naming HOME/config; with config.toml present the CARGO path comes from it (assert via a fixture path).",
       "priority": 1,
       "kind": "crate",
       "existing_beads": [
         {"id": "omp-orchestrator-7ai", "status": "closed", "match": "partial", "evidence": "Home-relative paths (ledgers, state, tmux socket) come from the environment or a documented default, never a literal."},
         {"id": "omp-orchestrator-io3h", "status": "in_progress", "match": "partial", "evidence": "refuse a commit that lands a crate carrying hardcoded home-path literals, so extraction cannot re-open bead 7ai's closed invariant."},
-        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "partial", "evidence": "two sections asserting a /Users/josh fallback that no longer exists"}
+        {"id": "omp-orchestrator-round22-drifted-figures-844", "status": "in_progress", "match": "partial", "evidence": "two sections asserting a $HOME fallback that no longer exists"}
       ],
       "coverage": "PARTIAL",
-      "gap": "Literal removal is covered (7ai closed, io3h gate); the XDG config.toml file, per-machine overrides, and HOME-unset hard error are unrepresented (search 'XDG' -> 0). 844 says the /Users/josh fallback is already gone — L424-L425 is stale.",
+      "gap": "Literal removal is covered (7ai closed, io3h gate); the XDG config.toml file, per-machine overrides, and HOME-unset hard error are unrepresented (search 'XDG' -> 0). 844 says the $HOME fallback is already gone — L424-L425 is stale.",
       "depends_on": ["external:omp-orchestrator-io3h", "external:omp-orchestrator-k4sc"],
       "blocks": ["07.36"],
       "terminal": false,

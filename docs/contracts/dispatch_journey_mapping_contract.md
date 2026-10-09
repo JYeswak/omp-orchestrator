@@ -175,7 +175,7 @@ be cited as corroborated until a second primary source is recorded here.
 ## Validation
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator
+cd $HOME/Developer/omp-orchestrator
 D=docs/contracts/dispatch_journey_mapping_contract.md
 # shape: <25000 bytes, >= 8 DJ-* ids, and each of the 6 required headings exactly once
 wc -c "$D"; grep -oE 'DJ-[A-Z][A-Z-]+' "$D" | sort -u | wc -l

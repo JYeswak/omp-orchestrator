@@ -70,7 +70,7 @@ This is what `%8` could not get. Same command both times, one variable:
     CARGO_BUILD_JOBS=2 RCH_REQUIRE_REMOTE=1 RCH_VISIBILITY=verbose \
       rch exec -- cargo test -j 2 --release -p subprocess-contract
 
-AFTER (tree as committed, sha256 `eed862e…`), worker contabo-1, no retry:
+AFTER (tree as committed, sha256 `eed862e…`), worker worker-1, no retry:
 
     Remote command finished: exit=0 in 684904ms
     test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.16s
@@ -91,7 +91,7 @@ The four messages VERBATIM — the known-bad leg asserts the MESSAGE, not the ex
 is cargo's generic failure and goes red on any unrelated breakage:
 
     lib.rs:704  grandchild survived the group kill and touched
-                /Users/josh/Developer/omp-orchestrator/.rch-tmp/bs-grandchild-423859
+                $HOME/Developer/omp-orchestrator/.rch-tmp/bs-grandchild-423859
                 - the signal went to the pid, not the group
     lib.rs:455  bounded_output must not wait out the child's full runtime
     lib.rs:529  killed group leader 423881 still alive: the kill path is broken
@@ -117,20 +117,20 @@ went through the edit path instead and is proven by the sha, not by the denied c
 ## Leg 4 — `%8`'s UNKNOWN was NOT the os-gate. I reproduced the real cause.
 
 The dispatch premise was that `o3eb`'s UNKNOWN was the phantom os-gate refusal. Half right. `%8`
-reported two causes: contabo-3 `RCH-I001` (the os-gate, now fixed) AND "Contabo 4 lost the remote
+reported two causes: worker-3 `RCH-I001` (the os-gate, now fixed) AND "Contabo 4 lost the remote
 source-lock connection during process-kill tests". The second is REAL, REPRODUCIBLE, and I hit it —
-on contabo-1, on the BEFORE run, verbatim:
+on worker-1, on the BEFORE run, verbatim:
 
-    Connection to 89.117.22.43 closed by remote host.
-    WARN rch::hook: Remote execution failed on contabo-1: remote source-authority lock on contabo-1
-      exited unexpectedly: exit status: 255; stderr=Connection to 89.117.22.43 closed by remote host.;
+    Connection to 192.0.2.2 closed by remote host.
+    WARN rch::hook: Remote execution failed on worker-1: remote source-authority lock on worker-1
+      exited unexpectedly: exit status: 255; stderr=Connection to 192.0.2.2 closed by remote host.;
       will retry on another worker if available
-    WARN rch::hook: Remote build remote execution failed on contabo-1; retrying on higher-capacity
-      worker contabo-2 (attempt 2/3)
+    WARN rch::hook: Remote build remote execution failed on worker-1; retrying on higher-capacity
+      worker worker-2 (attempt 2/3)
 
 It dropped after `running 12 tests` and five oks — i.e. inside the process-kill tests, exactly where
-`%8` lost contabo-4. What produced a terminal receipt for me and not for `%8` is rch's own
-retry-on-another-worker: attempt 2/3 on contabo-2 ran the full suite and returned the `8 passed;
+`%8` lost worker-4. What produced a terminal receipt for me and not for `%8` is rch's own
+retry-on-another-worker: attempt 2/3 on worker-2 ran the full suite and returned the `8 passed;
 4 failed` above. No refusal line appears in either log; `no admissible workers`, `os_gate_excluded`,
 `no_free_slots` and `active_project_exclusion` are all ABSENT from both runs, and the queue was idle
 at dispatch (`slots_available: 12`, `workers_offline: 0`, one unrelated `uds` build).
@@ -152,7 +152,7 @@ Probed against a pgid proven absent; no live group was signalled.
 
 ## Leg 6 — tick-monitor (acceptance 8, second half) — WORKTREE, not HEAD
 
-    rch exec -- cargo test -j 2 --release -p tick-monitor      contabo-1, exit=101 in 42719ms
+    rch exec -- cargo test -j 2 --release -p tick-monitor      worker-1, exit=101 in 42719ms
     test result: FAILED. 25 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out
 
 Sole failure, and it is an INPUT defect, not a kill assertion:
@@ -195,6 +195,6 @@ for the BEFORE arm, and an UNRUN is never a pass.
   independent of this bead, and neither its green count nor its red is attributable to `7b4ac63`.
 * No `Compiling asupersync v` line appeared in either subprocess-contract run, so the dependency
   build revision is unattributed — as `%7` and `%9` also recorded.
-* The contabo-1 source-authority drop is UNFIXED and now reproduced twice by two panes. It is
+* The worker-1 source-authority drop is UNFIXED and now reproduced twice by two panes. It is
   survivable only because rch retries on another worker; a run pinned to one worker can still lose
   its terminal receipt. Worth its own bead.

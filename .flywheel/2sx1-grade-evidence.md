@@ -32,7 +32,7 @@ matters here because two OTHER files in the crate are dirty — see the `br_publ
 |6 name what stays locked|**PASS**|commit body splits 9 lib-only crates into 5 libraries-by-design and 4 ACTION kernels still unreachable|
 
 Baseline, my own run: `cargo test -j 2 -p finding --test operator_surface` — **exit=0, 6 passed /
-0 failed, contabo-4**, `manifest_err=0`. Reproduces `%20`'s reported figure exactly.
+0 failed, worker-4**, `manifest_err=0`. Reproduces `%20`'s reported figure exactly.
 
 ## Both mutations re-run by me, and both are attributable
 
@@ -40,7 +40,7 @@ Baseline, my own run: `cargo test -j 2 -p finding --test operator_surface` — *
 the matched variant.
 
 ```
-exit=101  contabo-1   4 passed... no: 5 passed; 1 failed
+exit=101  worker-1   4 passed... no: 5 passed; 1 failed
 RED    a_dead_publisher_is_a_distinct_cause_from_an_incomplete_finding
 green  the other five
 ```
@@ -63,7 +63,7 @@ form is BOTH**, and this leg pins both. M1 is the evidence that the pairing is n
 `FINDING_PENDING_EMPTY` and returns SUCCESS.
 
 ```
-exit=101  contabo-4   4 passed; 2 failed
+exit=101  worker-4   4 passed; 2 failed
 RED    an_unreadable_spool_is_never_silently_an_empty_sweep
        "an absent dir must be UNREADABLE, not empty"
 RED    a_well_formed_finding_files_and_drains_the_pending_sweep
@@ -78,7 +78,7 @@ anti-vacuity leg AND the known-good leg is showing they share a discriminator** 
 
 **Restore verified twice over:** `08ba1dc96f45846447bb4da3adcc56880ab48bc5adda9829656badbb84756406`
 byte-identical to `%20`'s reported sha, `git status` clean against HEAD, and the suite back to
-**exit=0, 6 passed** on contabo-4.
+**exit=0, 6 passed** on worker-4.
 
 ## `br_publisher` — UNMEASURABLE ON LANE, confirmed, and OUT OF SCOPE
 
@@ -111,7 +111,7 @@ present and rejected the row."
 
 **This is the same defect class I fixed earlier tonight** in
 `crates/pre-delete-citation-check/tests/mirror_oracle.rs`, where an absent `.beads` mirror on
-contabo-4 read as a failing oracle until a positive discriminator was added so absence reports
+worker-4 read as a failing oracle until a positive discriminator was added so absence reports
 UNMEASURED. Two independent instances in one session, both caused by worker environments lacking
 repo-local tooling and data. Recommend a separate bead; I did not edit the file.
 
@@ -172,7 +172,7 @@ Two measured facts worth carrying:
   OCCUPANCY is not satisfiable when admission refuses — verbose only affects the remote-exec phase,
   which never starts. The summary line is all there is.
 - **`active_project_exclusion` was PEERS, not me.** `rch queue --json` showed two live
-  `omp-orchestrator-38cf50d1` builds on contabo-1 and contabo-2 with heartbeats 0–4 s while I had
+  `omp-orchestrator-38cf50d1` builds on worker-1 and worker-2 with heartbeats 0–4 s while I had
   nothing in flight. The correct move was to wait, and waiting worked. Pinning another worker or
   passing a flag would not have.
 - One attempt logged `Selected worker:` with **no** `Remote command finished: exit=` line — a

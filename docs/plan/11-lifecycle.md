@@ -111,7 +111,7 @@ dispatch path is a designed/source-level property, not measured runtime use.
 Name:        dispatch
 Description: ZestStream controller dispatch packet — bounded assignment with proof obligations
              and a named …
-Path:        /Users/josh/.config/ntm/templates/dispatch.md
+Path:        $HOME/.config/ntm/templates/dispatch.md
 Variables:
   - objective (required)   ONE outcome, stated as a result not an activity
   - target    (required)   Absolute repo/worktree path, and the bead ID

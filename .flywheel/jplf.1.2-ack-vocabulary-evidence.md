@@ -33,7 +33,7 @@ half remains landed in `eea218d`.
 Remote lane, unchanged pin and default feature set:
 
 ```text
-RCH_WORKER=contabo-3 CARGO_BUILD_JOBS=2 RCH_REQUIRE_REMOTE=1
+RCH_WORKER=worker-3 CARGO_BUILD_JOBS=2 RCH_REQUIRE_REMOTE=1
 RCH_VISIBILITY=quiet rch exec -- cargo test -j 2 -p omp-types --lib
 
 running 5 tests
@@ -53,7 +53,7 @@ The five tests include:
 Inventory compatibility:
 
 ```text
-RCH_WORKER=contabo-3 CARGO_BUILD_JOBS=2 RCH_REQUIRE_REMOTE=1
+RCH_WORKER=worker-3 CARGO_BUILD_JOBS=2 RCH_REQUIRE_REMOTE=1
 RCH_VISIBILITY=quiet rch exec -- cargo test -j 2 -p omp-inventory-map --lib
 
 test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out

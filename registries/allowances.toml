@@ -31,7 +31,7 @@
 #
 # PROVENANCE OF THESE CEILINGS, and their one weakness: they were computed by a SECOND
 # instrument (an independent census applying the same predicates) because the gate's own
-# binary could not be built when this registry was seeded — `[RCH-I002] contabo-3 refused
+# binary could not be built when this registry was seeded — `[RCH-I002] worker-3 refused
 # (unavailable); failed admission under critical pressure (memory_pressure_critical)`, and
 # a lane build yields x86-64 ELF on an arm64 host. So the first real `crate-atom-gate check`
 # is expected to REFUSE with `CEILING_HAS_SLACK` or `CEILING_BREACHED` on any part where the

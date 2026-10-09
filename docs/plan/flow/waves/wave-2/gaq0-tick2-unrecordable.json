@@ -19,14 +19,14 @@
     },
     {
       "command": "launchctl list | grep -i zeststream; ps -o args -p 38194",
-      "figure": "ai.zeststream.omp-orchestrator is NOT loaded; the one live supervisor is --repo /Users/josh/Developer/control-plane, 12h44m, ppid 1"
+      "figure": "ai.zeststream.omp-orchestrator is NOT loaded; the one live supervisor is --repo $HOME/Developer/control-plane, 12h44m, ppid 1"
     },
     {
       "command": "crontab -l | grep -E 'controller-tick|fast-dispatch|loop-driver|refill-idle|fleet-monitor|reap-finished|challenge'",
       "figure": "0 matches - all seven orchestration cron lanes absent"
     },
     {
-      "command": "cd /Users/josh/Developer/omp-orchestrator && fleet-monitor --self --report-only",
+      "command": "cd $HOME/Developer/omp-orchestrator && fleet-monitor --self --report-only",
       "figure": "scanned control-plane panes 1-4; ADMISSION_VERDICT rc=1; check.sh overall=FAIL; UNRUN shellcheck/drift/tests/mutation"
     },
     {

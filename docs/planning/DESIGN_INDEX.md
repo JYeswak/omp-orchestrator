@@ -11,7 +11,7 @@ cross-companion identifier register. It does not add product scope. Every canoni
 below is a deterministic alias for a row, heading, or decision already present at the cited
 source authority; `source_id` is retained so the alias can be replayed.
 
-**Source pin:** `/Users/josh/.claude/skills/planning-arc/references/sources.lock.json`, generated
+**Source pin:** `$HOME/.claude/skills/planning-arc/references/sources.lock.json`, generated
 `2026-09-04T16:49:58.989598Z`, SHA-256
 `60f44bb0a17e62bd0b9a963827f9ba378d3c5b3c523b236cd644e42fa18949d4`, 134 pinned repositories.
 The replay rule is `git clone --filter=blob:none <url> && git checkout <head_sha>` before using

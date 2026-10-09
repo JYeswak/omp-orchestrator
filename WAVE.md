@@ -60,13 +60,13 @@ drop `-7ai`'s work.
 
 **Ordering is not advice.** The gate lands before any crate is copied, or the repo starts dirty and
 the gate gets weakened to make the build pass. Portability lands before extraction, or the new repo
-inherits `/Users/josh/Developer/control-plane` — which **compiles** after a move and then silently
+inherits `$HOME/Developer/control-plane` — which **compiles** after a move and then silently
 reads the wrong repo.
 
 ## Resident supervisor — live state
 
 `omp-orchestrator-kxe` is no longer a paper lane. The Studio LaunchAgent
-`ai.zeststream.omp-orchestrator` runs `/Users/josh/.local/bin/omp-orchestrator` against this repo/session.
+`ai.zeststream.omp-orchestrator` runs `$HOME/.local/bin/omp-orchestrator` against this repo/session.
 Its environment pins the tmux socket, `br`, `ntm`, `tick-monitor`, the worker exclusions `%1396,%1397`,
 an isolated tick-monitor state file, and a durable supervisor heartbeat. The checked-in source is
 `launchd/ai.zeststream.omp-orchestrator.plist`; the loaded job is the separate live claim.
@@ -99,7 +99,7 @@ check an inbox — a hope, not a mechanism.
 
 Agent Mail is healthy as of 2026-08-31 (`127.0.0.1:8765/health` → `status: ready`).
 
-**Reserve before editing.** `file_reservation_paths(project_key="/Users/josh/Developer/omp-orchestrator",
+**Reserve before editing.** `file_reservation_paths(project_key="$HOME/Developer/omp-orchestrator",
 agent_name=<yours>, paths=[...], reason="<bead-id>")`. Reserve the **narrow** set you will actually
 edit — never `**/*`, which serialises the whole wave. Release when done.
 
@@ -151,7 +151,7 @@ refuses them and the refusal scrolls past unnoticed. Read the status back to con
 **Commits are path-scoped:** `git commit -- <explicit paths>`. Never `-A`. Messages carry a
 verification-level tag.
 
-**`br` reads the cwd.** `cd /Users/josh/Developer/omp-orchestrator` before any bead command, or you
+**`br` reads the cwd.** `cd $HOME/Developer/omp-orchestrator` before any bead command, or you
 will file into control-plane's tracker — which is exactly what happened once already.
 
 ---
@@ -589,7 +589,7 @@ scraping its terminal. That is the one thing a packet can get wrong without any 
 because a screen-scrape compiles, passes its tests, and ships.
 
 Measured 2026-08-31 against the **installed** source —
-`/Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`, v18.0.11, `dist/cli.js` 19M — and
+`$HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent`, v18.0.11, `dist/cli.js` 19M — and
 against every crate's `src` in this repo:
 
 | OMP surface | Exists | We consume |
@@ -610,7 +610,7 @@ The 39: `acp`, `agents`, `auth-broker`, `auth-gateway`, `bench`, `browser-relay`
 correction, not a rounding.** Print the commands beside the number:
 
 ```bash
-cd /Users/josh/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
+cd $HOME/.local/lib/node_modules/@oh-my-pi/pi-coding-agent
 find dist/types -maxdepth 1 -mindepth 1 -type d       | wc -l   # 57
 find dist/types -maxdepth 1 -mindepth 1 -name '*.d.ts' | wc -l   # 14
 ```
@@ -633,7 +633,7 @@ names that belong on the **file** side of the split, caught while writing this p
 **The zero is four greps, and it is re-derivable in under a second:**
 
 ```bash
-cd /Users/josh/Developer/omp-orchestrator
+cd $HOME/Developer/omp-orchestrator
 grep -rlF 'Command::new("omp")' crates/*/src | wc -l   # 0
 grep -rlF 'mode=rpc'            crates/*/src | wc -l   # 0
 grep -rlF 'muxConnect'          crates/*/src | wc -l   # 0
